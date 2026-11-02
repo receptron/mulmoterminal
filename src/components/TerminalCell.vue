@@ -34,6 +34,7 @@ import CellLaunchForm from "./CellLaunchForm.vue";
 import GitBranchChip from "./GitBranchChip.vue";
 import WorkItemChip from "./WorkItemChip.vue";
 import WorktreeEnvChip from "./WorktreeEnvChip.vue";
+import PeerNameChip from "./PeerNameChip.vue";
 import CellTidyPrompt from "./CellTidyPrompt.vue";
 import WorkCommentNotice from "./WorkCommentNotice.vue";
 import ModelContextBadge from "./ModelContextBadge.vue";
@@ -276,6 +277,15 @@ const aiTitle = ref<string | null>(null);
 // The name the person gave with Claude Code's `/rename`. It outranks the AI title, and arrives with the
 // detail fetch rather than the live push, so a push that omits it leaves it standing.
 const customTitle = ref<string | null>(null);
+const peerName = ref<string | null>(null);
+// A claude registers itself a few seconds after its cell starts, so a fresh cell's first detail
+// answer says nobody answers to the id yet, and the next ask would otherwise be the end of its
+// first turn. Ask again a few times, spaced, and then stop: a claude that never registers (an
+// older Claude Code) must not keep the busiest route busy.
+const PEER_NAME_RETRY_MS = 4000;
+const PEER_NAME_RETRIES = 3;
+let peerRetriesLeft = PEER_NAME_RETRIES;
+let peerRetryTimer: ReturnType<typeof setTimeout> | undefined;
 // The user's own one-line note on this session (#1084). It outranks both of the above in the
 // header: they say what the agent said, this says what the cell is FOR — the question six open
 // cells stop answering. Null until the server pushes one.
@@ -447,8 +457,22 @@ function applyCustomTitle(data: Record<string, unknown>) {
   if (data.customTitle === null || typeof data.customTitle === "string") customTitle.value = data.customTitle;
 }
 
+// What the other Claude Code sessions on this machine call this one (#3237), read off Claude Code's
+// own registry by the route. It belongs to the PROCESS, which `/clear` leaves running, so it is
+// applied whatever the clear generation says; an explicit null means no claude answers to this id.
+function applyPeerName(data: Record<string, unknown>) {
+  if (data.peerName === null || typeof data.peerName === "string") peerName.value = data.peerName;
+  if (data.peerName !== null || agent.value !== "claude" || peerRetriesLeft === 0) return;
+  peerRetriesLeft--;
+  clearTimeout(peerRetryTimer);
+  peerRetryTimer = setTimeout(() => void refreshUsage(), PEER_NAME_RETRY_MS);
+}
+onUnmounted(() => clearTimeout(peerRetryTimer));
+
 async function loadInitial(id: string) {
   const seedId = ++latestSeed;
+  peerRetriesLeft = PEER_NAME_RETRIES; // a new session gets its own tries
+  clearTimeout(peerRetryTimer);
   const badgeReq = ++latestBadgeReq;
   const genBeforeFetch = activityGen;
   const clearGenBeforeFetch = clearGen;
@@ -465,6 +489,7 @@ async function loadInitial(id: string) {
     // The name is read off the transcript like the badges, and can change between two reads, so it
     // follows their token: an older read resolving late must not put a name back.
     if (clearGen === clearGenBeforeFetch) applyCustomTitle(data);
+    applyPeerName(data);
   }
   // Not guarded by either token: it is a fact about how the session began, so every answer for
   // this id carries the same one and there is no older-vs-newer to lose.
@@ -482,6 +507,7 @@ async function refreshUsage() {
   if (!data || badgeReq !== latestBadgeReq) return;
   applyBadges(data);
   if (clearGen === clearGenBeforeFetch) applyCustomTitle(data);
+  applyPeerName(data);
 }
 
 // Canvas output this cell has produced that nobody has looked at. The grid is a TRIAGE board,
@@ -817,6 +843,8 @@ function teardown() {
   lastPrompt.value = null;
   aiTitle.value = null;
   customTitle.value = null;
+  peerName.value = null;
+  clearTimeout(peerRetryTimer);
   // The memo belongs to the SESSION, not to the cell — it stays on disk and comes back when that
   // session is resumed. What must not survive is showing it against whatever this cell runs next.
   memo.value = null;
@@ -883,7 +911,15 @@ async function restartWith(reap: (sessionId: string) => Promise<boolean>): Promi
         working.value = false;
         waiting.value = false;
         activityEvent.value = null;
+        // So did the name other sessions messaged it by: it belongs to the process, and the
+        // replacement registers under its own a few seconds in. Forget it, and ask again with the
+        // fresh cell's tries, since the remount below is not a reconnect of the pub/sub socket and
+        // re-seeds nothing by itself.
+        peerName.value = null;
+        clearTimeout(peerRetryTimer);
+        peerRetriesLeft = PEER_NAME_RETRIES;
         connectKey.value++;
+        void refreshUsage();
       },
     });
     // Nothing was reconnected and the old agent is probably still running, which looks identical to
@@ -1538,6 +1574,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                 <GitBranchChip v-if="chip.builtin === 'git'" :status="gitStatus" :hide-dirty="isWorktreeCell" />
                 <WorkItemChip v-else-if="chip.builtin === 'work'" :item="workItem" />
                 <WorktreeEnvChip v-else-if="chip.builtin === 'env'" :values="worktreeEnv" />
+                <PeerNameChip v-else-if="chip.builtin === 'peer'" :name="peerName" />
                 <button
                   v-else-if="chip.builtin === 'diff' && showDiffBadge && diff"
                   type="button"

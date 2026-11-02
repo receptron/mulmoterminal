@@ -1168,6 +1168,114 @@ describe("TerminalCell", () => {
     expect(promptText(w)).toBe("Parser rewrite");
   });
 
+  // The name other Claude Code sessions message this cell by (#3237) rides on the same detail fetch.
+  // It belongs to the process, so /clear — which ends the conversation, not the claude — leaves it.
+  it("shows the peer-name chip from the detail fetch, and keeps it across /clear", async () => {
+    const id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      if (u.includes(`/api/session/${id}`)) {
+        return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: "p", aiTitle: null, peerName: "proj-7f" }) };
+      }
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    }) as unknown as typeof fetch;
+
+    const w = mountCell(id);
+    expect(w.find('[data-testid="cell-peer-chip"]').exists()).toBe(false);
+    await flushPromises();
+    const chip = w.get('[data-testid="cell-peer-chip"]');
+    expect(chip.attributes("data-tip")).toContain("proj-7f");
+
+    captured?.({ id, working: false, waiting: false, lastPrompt: "", aiTitle: null }); // the /clear sentinel
+    await nextTick();
+    expect(w.find('[data-testid="cell-peer-chip"]').exists()).toBe(true);
+  });
+
+  // A claude registers itself a few seconds after its cell starts, so the first answer of a fresh
+  // cell is "nobody yet". The cell asks again, spaced, and stops once named — or after a few tries.
+  it("asks again a few times while a fresh cell's claude has not registered itself yet", async () => {
+    vi.useFakeTimers();
+    try {
+      const id = "dddddddd-dddd-dddd-dddd-dddddddddddd";
+      let detailCalls = 0;
+      globalThis.fetch = vi.fn(async (url: string) => {
+        const u = String(url);
+        if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+        if (u.includes(`/api/session/${id}`)) {
+          detailCalls++;
+          return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null, peerName: detailCalls >= 3 ? "proj-7f" : null }) };
+        }
+        return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+      }) as unknown as typeof fetch;
+
+      const w = mountCell(id);
+      await flushPromises();
+      expect(w.find('[data-testid="cell-peer-chip"]').exists()).toBe(false);
+      await vi.advanceTimersByTimeAsync(4000);
+      await flushPromises();
+      expect(w.find('[data-testid="cell-peer-chip"]').exists()).toBe(false); // the second answer is still null
+      await vi.advanceTimersByTimeAsync(4000);
+      await flushPromises();
+      expect(w.find('[data-testid="cell-peer-chip"]').exists()).toBe(true); // the third names it
+      await vi.advanceTimersByTimeAsync(60000);
+      await flushPromises();
+      expect(detailCalls).toBe(3); // named: no more asking
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops asking after a few tries when no claude ever registers", async () => {
+    vi.useFakeTimers();
+    try {
+      const id = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+      let detailCalls = 0;
+      globalThis.fetch = vi.fn(async (url: string) => {
+        const u = String(url);
+        if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+        if (u.includes(`/api/session/${id}`)) {
+          detailCalls++;
+          return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null, peerName: null }) };
+        }
+        return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+      }) as unknown as typeof fetch;
+
+      mountCell(id);
+      await flushPromises();
+      await vi.advanceTimersByTimeAsync(60000);
+      await flushPromises();
+      expect(detailCalls).toBe(4); // the first ask and three more
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("drops the peer-name chip when the detail says no claude answers to the id", async () => {
+    const id = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+    let call = 0;
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      if (u.includes(`/api/session/${id}`)) {
+        const mine = call++;
+        return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: "p", peerName: mine === 0 ? "proj-7f" : null }) };
+      }
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    }) as unknown as typeof fetch;
+
+    const w = mountCell(id);
+    await flushPromises();
+    expect(w.find('[data-testid="cell-peer-chip"]').exists()).toBe(true);
+
+    captured?.({ id, working: true, waiting: false, lastPrompt: "p" });
+    await nextTick();
+    captured?.({ id, working: false, waiting: false, lastPrompt: "p" }); // the turn ends: a second read
+    await flushPromises();
+    await nextTick();
+    expect(w.find('[data-testid="cell-peer-chip"]').exists()).toBe(false);
+  });
+
   it("drops the /rename name when /clear ends the conversation it was given to", async () => {
     const id = "88888888-8888-8888-8888-888888888888";
     globalThis.fetch = vi.fn(async (url: string) => {

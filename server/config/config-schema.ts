@@ -48,7 +48,7 @@ import { MAX_MOBILE_FILE_DIRS, MOBILE_FILE_EXTENSION_PATTERN, normalizeMobileFil
 // ---- shared constants ---------------------------------------------------------------------
 
 export const RUN_TYPES = ["shell", "input", "open", "action"] as const;
-export const BUILTIN_CHIPS = ["dir", "git", "work", "ctx", "usage", "status", "diff", "tools", "env"] as const;
+export const BUILTIN_CHIPS = ["dir", "git", "work", "ctx", "usage", "status", "diff", "tools", "env", "peer"] as const;
 
 export const NAME_MAX_CHARS = 40;
 // Runtime caps (sanitizeButtons / sanitizeChips truncate past these), mirrored by the JSON Schema

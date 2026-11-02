@@ -33,7 +33,7 @@ describe("HeaderChipsEditor", () => {
   it("lists the default set when unconfigured, says so, and offers no reset", () => {
     const wrapper = mountEditor();
     expect(wrapper.find('[data-testid="header-chips-default"]').exists()).toBe(true);
-    expect(rows(wrapper)).toHaveLength(6);
+    expect(rows(wrapper)).toHaveLength(7);
     expect(wrapper.find('[data-testid="header-chips-reset"]').exists()).toBe(false);
     // Every built-in is already shown, so the menu offers only your own text.
     expect(wrapper.findAll('[data-testid="header-chip-kind"] option')).toHaveLength(1);
