@@ -31,7 +31,7 @@ async function runInCell(dir: string, cwd: string, script: string): Promise<stri
   const out = path.join(dir, "out.txt");
   const env = sanitizePtyEnv(process.env, path.delimiter);
   const socket = path.join(dir, "s");
-  const command = `sh -c '${script} > ${out}.tmp 2>&1; mv ${out}.tmp ${out}'`;
+  const command = `sh -c '{ ${script}; } > ${out}.tmp 2>&1; mv ${out}.tmp ${out}'`;
   const started = await spawnCaptureAsync("tmux", ["-S", socket, "new-session", "-d", "-s", "cell", "-c", cwd, command], { env });
   expect(started.status).toBe(0);
   try {
@@ -67,7 +67,7 @@ describe.skipIf(!ENABLED)("a cell under `volta run`", () => {
 
   it("resolves node and npm through Volta's shims, not an image dir", () =>
     withScratchDir(async (dir) => {
-      const report = await runInCell(dir, dir, "command -v node npm");
+      const report = await runInCell(dir, dir, "command -v node; command -v npm");
       expect(report).not.toContain(path.join("tools", "image"));
       expect(report.trim().split("\n")).toHaveLength(2);
     }));
