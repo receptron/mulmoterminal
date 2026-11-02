@@ -1556,6 +1556,10 @@ and refused, where before it could be confirmed away — which detached whoever 
 `mulmoterminal` process on this machine: the server answers from its own PTY table plus
 tmux, not from what one page can see.
 
+Once that list is long, a **filter box** sits above it: every word you type has to be in a
+conversation's title, in any order, and the box empties when you change the directory or
+the agent.
+
 **Change the directory and those lists empty immediately**, replaced by a single
 `Loading this directory's sessions, worktrees and scripts…` row until the new ones arrive.
 Everything the launch form offers below the field — **OR RESUME HERE**, the worktrees and
@@ -2486,12 +2490,14 @@ A session's display **title** is derived by scanning its JSONL for, in order of
 preference:
 
 1. the **session note** the user wrote (see below),
-2. else a live **AI title** the server generated for the session this run (see below),
-3. else the latest `ai-title` record's `aiTitle` (e.g. written by MulmoClaude),
-4. else the latest `last-prompt` record's `lastPrompt`,
-5. else the first real user message (slash/local-command wrappers like
+2. else the name the user gave with `/rename` (the latest `custom-title` record; an
+   empty one clears it),
+3. else a live **AI title** the server generated for the session this run (see below),
+4. else the latest `ai-title` record's `aiTitle` (e.g. written by MulmoClaude),
+5. else the latest `last-prompt` record's `lastPrompt`,
+6. else the first real user message (slash/local-command wrappers like
    `<local-command-…>` are skipped),
-6. else `"(untitled session)"`.
+7. else `"(untitled session)"`.
 
 In-memory sessions not yet persisted show as `"New session"` until their file
 appears, at which point the on-disk title takes over.

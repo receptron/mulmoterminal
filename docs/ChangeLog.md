@@ -8,6 +8,42 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@11.6.0 — 2026-11-02
+
+> **Setup guide:** [11.6.0 — Panes stack, and a conversation keeps the name you gave it](https://receptron.github.io/mulmoterminal/guide/en/v11.6.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v11.6.0.html))
+
+### The right pane's panes stack (#3217, #3221, #3224, #3227)
+
+A cell's right pane is still one slot on screen, but the panes opened in it now stack: closing the one on screen shows the one it covered, so the conversation opened over Files and then closed brings Files back, with its tabs, expanded folders and scroll (#3213). Opening a pane already in the stack moves it to the top, so each pane is in it once. The question pane is not stacked: it covers the top pane while its question is open, and is not remembered across a reload. `localStorage["pane_open_by_session"]` holds a stack per session; a value stored by an earlier build reads as a stack of one. The conversation takes the full row whenever it becomes the pane on screen, and no other pane inherits that. Files is saved before anything unmounts it, a question covering it included. The rules are the pure module `src/components/rightPaneStack.ts` (#3217).
+
+Three races in the same code, all older than the stack, were fixed with it. Several right-pane actions await the Files pane's save before they commit, and a later one could finish first and then be overwritten by the older one: the re-root watcher (which moves the pane to the enlarged cell) and the pane requests (`toggleRightPane`, `openPaneFor`, `openCanvasFor`) now carry run counters and commit only while they are the latest (#3221). A conversation taken full width on one cell made the next cell's Tools cover its terminal after a zoom move; the watcher now clears full width when it moves the pane, except for a conversation asked for on a cell that is not enlarged, where the takeover is the request (#3224). A Files close whose save finished after a pane pressed meanwhile was dropped, leaving Files under Tools in the stack: `FilesPane` now emits `closing` with the save while still mounted, and the grid applies both the press and the close whichever lands first (#3227).
+
+### The name from `/rename` is the session's name (#3226, #3231)
+
+Claude Code's `/rename` writes a `custom-title` record into the transcript, and nothing here read it (#3211). It is now a title tier on every surface: the resume list and the command palette (#3226), then the grid cell header, the roster row and the palette's recently-closed entries (#3231). Order: memo, `/rename` name, live AI title, on-disk `ai-title`, last prompt, first user message. The last `custom-title` wins and an empty one clears the name; a `/clear`ed session reads none. `customTitleOfRecord` in `server/session/transcript/transcript.ts` is the one rule both folds use, and the summary fold's sidecar version is bumped so sidecars written before are refolded rather than read as "no name". A large transcript whose tail window holds no custom title is scanned once for the record type as raw bytes, and the answer cached. The cell header takes the name from the detail fetch (mount, reconnect, turn end), so a rename typed while a cell is open shows on the next fetch rather than at once.
+
+### A filter box on the resume list (#3232)
+
+The launch form's resume list can hold dozens of conversations and had no way to narrow it (#3230). From `RESUME_FILTER_MIN_ROWS` rows up it has a filter box above it: every space-separated word must be in the title, in any order, case-insensitive, plain text; an empty result shows a one-line message. The query is cleared when the directory or agent changes and kept when the same list reloads. `filterResumable` in `src/components/resumeFilter.ts` is pure, and the fetch and the server are unchanged.
+
+### A switch for the "Viewing history" banner (#3223)
+
+Settings gains **Show the "Viewing history" banner** under Terminal scroll speed, stored per browser like the scroll speed and return-on-submit switches (#3212). Unticked, the yellow banner shown while a pane is in tmux copy-mode is not drawn; copy-mode detection, the Back to input button and `q` are untouched, and the default stays shown. The copy-mode strings moved to `src/i18n/terminalCopyMode/`.
+
+### Files: Reload re-reads every folder already read (#3228)
+
+The Files pane's Reload button re-read the root only, and the listing carry-over kept every folder already read, so a file added to an expanded or once-opened folder from a terminal or an agent never appeared (#3215). `useFilesTree` gains `refreshAll()`: the root, then every directory already read under it, parents before children, open or collapsed; a folder never opened is read when it is opened, as before. Reading stops when the root cannot be read or the pane moves to another root meanwhile, and when two reads of one directory are in flight at once (the button's and a file operation's) only the latest lands, in the root generation it was asked in.
+
+### Mermaid fences in the PDF export (#3216)
+
+A `mermaid` fence the Canvas draws as a diagram went to the PDF as a code block (#3214). `exportPdf`'s non-Marp branch now goes through `server/backends/plugins/markdown-pdf.ts`: each fence becomes the Markdown Preview's placeholder, mermaid's single-file build is put into the headless page from the installed package, and the Preview's own drawing text runs there before `page.pdf()`. On paper a drawn diagram stands alone; a fence mermaid cannot parse keeps its code block under the error line. A drawing that does not settle within `DIAGRAM_DRAW_TIMEOUT_MS`, or cannot run at all, is logged, the page navigates to `about:blank`, and the document is printed as the blocks it always was. Maths and the Marp branch are unchanged.
+
+### Under the hood (#3210, #3222, #3208)
+
+- The launcher and bot-job ptys go through the shared pty relay (`wireAgentPtyRelay`, with `loggedAs` for the exit line's word), which closes code-scanning alert #233; the old and new code were run side by side over generated inputs with no difference (#3210).
+- The generated-input specs share one 32-bit seeded generator, `test/helpers/seededRandom.ts`: the hand-rolled steps in doubles had collapsed onto a short period, so three specs repeated about half of the cases they counted. Its spec pins a golden vector and fails if the multiplier is spelled in any other spec file (#3222).
+- The 11.5.0 setup guide gained its screenshots (#3208).
+
 ## mulmoterminal@11.5.0 — 2026-10-28
 
 > **Setup guide:** [11.5.0 — The usage gauge works wherever you start](https://receptron.github.io/mulmoterminal/guide/en/v11.5.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v11.5.0.html))

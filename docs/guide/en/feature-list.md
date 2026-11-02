@@ -4,7 +4,7 @@ nav_title: Feature list
 layout: default
 parent: English
 nav_order: 6.5
-as_of: 11.5.0
+as_of: 11.6.0
 description: "Every capability MulmoTerminal has today, one line each with the release it arrived in, grouped by area (as of 9.1.0)."
 ---
 
@@ -17,6 +17,9 @@ Every capability MulmoTerminal has as of 9.1.0, one line each, grouped by area. 
 {:toc}
 
 ## Grid and cells
+- The panes opened beside a terminal stack: closing the one on screen shows the one it covered, a pane opened again moves to the top, and the stack survives a reload (v11.6.0)
+- A conversation named with Claude Code's /rename shows that name on the cell header, the roster row, the resume list, the command palette and its recently-closed entries; your own note still comes first (v11.6.0)
+- The launch form's resume list has a filter box once it is long: every word you type must be in a title, in any order (v11.6.0)
 
 More: [Basics](basics.html)
 
@@ -259,6 +262,7 @@ More: [Configuration](config.html)
 - A keymap binds keys to actions such as zoom-toggle and next-attention; copy and paste in 2.2, send in 2.5.3 (v2.0.0)
 
 ## Settings and appearance
+- The yellow "Viewing history" banner shown while a shell cell is scrolled back can be switched off per browser, under Terminal scroll speed; q still returns (v11.6.0)
 
 More: [Configuration](config.html)
 
