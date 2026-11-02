@@ -14,6 +14,7 @@ const ENABLED = process.env.MULMO_VOLTA_E2E === "1";
 const PINNED_YARN = "1.22.22";
 const POLL_INTERVAL_MS = 200;
 const POLL_TIMEOUT_MS = 120_000;
+const TEST_TIMEOUT_MS = POLL_TIMEOUT_MS + 30_000;
 
 async function waitForFile(file: string): Promise<string> {
   const deadline = Date.now() + POLL_TIMEOUT_MS;
@@ -77,8 +78,9 @@ describe.skipIf(!ENABLED)("a cell under `volta run`", () => {
       const project = path.join(dir, "project");
       mkdirSync(project);
       writeFileSync(path.join(project, "package.json"), JSON.stringify({ name: "volta-cell", volta: { node: process.versions.node, yarn: PINNED_YARN } }));
-      const report = await runInCell(dir, project, 'yarn -v; echo "marker=${_VOLTA_TOOL_RECURSION:-unset}"');
-      expect(report).toContain(PINNED_YARN);
+      const report = await runInCell(dir, project, 'yarn -v; echo "yarn=$?"; echo "marker=${_VOLTA_TOOL_RECURSION:-unset}"');
+      expect(report.split("\n")).toContain(PINNED_YARN);
+      expect(report).toContain("yarn=0");
       expect(report).toContain("marker=unset");
-    }));
+    }, TEST_TIMEOUT_MS));
 });
