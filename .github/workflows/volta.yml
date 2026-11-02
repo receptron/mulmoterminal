@@ -45,10 +45,9 @@ jobs:
       # fallback "next yarn on PATH" would find it and hide the failure.
       - name: Remove the system yarn
         run: |
-          which -a yarn || true
-          sudo rm -f /usr/local/bin/yarn /usr/local/bin/yarnpkg /usr/bin/yarn /usr/bin/yarnpkg
-          sudo rm -f "$(dirname "$(command -v node)")"/yarn "$(dirname "$(command -v node)")"/yarnpkg
-          which -a yarn || echo "no yarn left outside Volta"
+          which -a yarn yarnpkg || true
+          which -a yarn yarnpkg | grep -vi volta | sort -u | xargs -r sudo rm -f
+          which -a yarn yarnpkg
 
       # `volta run` is what puts the marker and the image dirs in the environment, which is the
       # launch the issue describes. The spec itself checks that the marker arrived.
