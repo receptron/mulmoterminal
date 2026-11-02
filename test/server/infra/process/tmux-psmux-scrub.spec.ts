@@ -59,9 +59,10 @@ describe("the startup scrub of a running server", () => {
     expect(removed()).toContain("_VOLTA_TOOL_RECURSION");
   });
 
-  it("leaves it on a running real tmux", async () => {
+  // Not only psmux: a real tmux server keeps the client's environment for life too (#3233).
+  it("takes it from a running real tmux as well", async () => {
     await startWith("tmux 3.8\n");
-    expect(removed()).not.toContain("_VOLTA_TOOL_RECURSION");
+    expect(removed()).toContain("_VOLTA_TOOL_RECURSION");
   });
 });
 

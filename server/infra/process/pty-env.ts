@@ -21,6 +21,7 @@ const REMOVED_NAMES = new Set([
   "npm_execpath",
   "npm_node_execpath",
   "npm_command",
+  "_volta_tool_recursion", // `volta run` marks its node; a shim that sees it skips Volta's version choice (#3233)
 ]);
 
 const REMOVED_PREFIXES = ["npm_config_", "npm_package_", "npm_lifecycle_"];
