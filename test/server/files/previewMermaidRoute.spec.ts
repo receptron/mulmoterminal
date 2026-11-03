@@ -67,11 +67,14 @@ describe("GET /api/files/browse/md with a mermaid fence", () => {
     });
   });
 
-  it("keeps the plain document free of the placeholder, the disclosure and any script", async () => {
+  // The tab runs one script of its own, the toolbar's (#3238), and still draws no diagram.
+  it("keeps the tab's document free of the placeholder, the disclosure and the diagram script", async () => {
     await withMd(DIAGRAM, async (call, query) => {
       const res = await call(`/api/files/browse/md?${query}`);
-      expect(res.headers["content-security-policy"]).toBe("sandbox");
-      expect(res.text).not.toContain("<script");
+      expect(res.headers["content-security-policy"]).toMatch(/^sandbox allow-scripts; script-src 'nonce-/);
+      expect(res.text.split("<script")).toHaveLength(2);
+      expect(res.text).not.toContain('type="module"');
+      expect(res.text).not.toContain("mermaid.esm");
       expect(res.text).not.toContain("data-mermaid-pending");
       expect(res.text).not.toContain("mermaid-source");
       expect(res.text).toContain('<pre data-code-block="0"><code class="language-mermaid">graph TD');

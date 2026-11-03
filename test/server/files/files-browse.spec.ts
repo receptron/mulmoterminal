@@ -8,6 +8,9 @@ import { routeCall, jsonPost } from "../../helpers/routeCall";
 import { currentVersion, listEntries, mdToHtmlDoc, mountFilesBrowseRoutes, MAX_EDIT_BYTES } from "../../../server/files/files-browse";
 import { backupDirFor } from "../../../server/files/backup-store";
 
+/** What the tab's document renders, without the toolbar before it and the source after it. */
+const renderingOf = (html: string): string => /<div id="tab-rendered">([\s\S]*)<\/div><pre id="tab-source"/.exec(html)?.[1] ?? "";
+
 const tmp = () => makeTempDir("mt-files-");
 
 /** The browse routes over one directory, with backups kept inside it. Shared by the route-level
@@ -438,16 +441,18 @@ describe("GET /api/files/browse/index", () => {
 });
 
 // #2264. Front matter is metadata; rendered as Markdown, its closing `---` makes the whole block a
-// heading under a rule. Both documents the route serves start at the body.
+// heading under a rule. Both documents the route serves start at the body — the tab's beside the
+// source as it is, which does show it (#3238), so there the rendering is judged on its own.
 describe("GET /api/files/browse/md — front matter", () => {
   it.each([[""], ["&embed=1"]])("does not render the front matter as body (%s)", async (param) => {
     const dir = tmp();
     writeFileSync(path.join(dir, "a.md"), "---\ntitle: Basics\nlayout: default\n---\n\n# Body\n");
     try {
       const res = await routeCall(serveProject(dir))(`/api/files/browse/md?cwd=${encodeURIComponent(dir)}&path=a.md${param}`);
-      expect(res.text).toContain("<h1>Body</h1>");
-      expect(res.text).not.toContain("title: Basics");
-      expect(res.text).not.toContain("<hr>");
+      const rendering = param ? res.text : renderingOf(res.text);
+      expect(rendering).toContain("<h1>Body</h1>");
+      expect(rendering).not.toContain("title: Basics");
+      expect(rendering).not.toContain("<hr>");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -608,8 +613,9 @@ describe("GET /api/files/browse/backups and /backup", () => {
   });
 });
 
-// #2559. The Files pane shows a CSV through the table route and passes the theme on its URL. The
-// table has no script, so the plain document takes it; a new tab sends none and follows the system.
+// #2559. The Files pane shows a CSV through the table route and passes the theme on its URL, with
+// `embed=1` to say it is the pane (#3238): that document has no script and takes the bare sandbox.
+// A new tab sends neither and follows the system — with the toolbar, under the nonce'd policy.
 describe("GET /api/files/browse/table — the app's theme", () => {
   const THEME = "bg=%231a1a2e&fg=%23e6e6f0&muted=%23a0a0b8&subtle=%23232342&border=%2333335a&link=%234a8cff";
   const serve = async (extra: string) => {
@@ -623,20 +629,21 @@ describe("GET /api/files/browse/table — the app's theme", () => {
   };
 
   it("paints the table in the theme it was given, still under the sandbox", async () => {
-    const res = await serve(`&${THEME}`);
+    const res = await serve(`&embed=1&${THEME}`);
     expect(res.text).toContain("thead th{background:#1a1a2e}");
     expect(res.text).toContain("<th>a</th>");
     expect(res.headers["content-security-policy"]).toBe("sandbox");
+    expect(res.text).not.toContain("data-copy=");
   });
 
   it("ignores a theme with a value that is not a hex colour", async () => {
-    const text = (await serve(`&${THEME.replace("%234a8cff", "%23000%3B%7Dbody%7Bdisplay%3Anone")}`)).text;
+    const text = (await serve(`&embed=1&${THEME.replace("%234a8cff", "%23000%3B%7Dbody%7Bdisplay%3Anone")}`)).text;
     expect(text).not.toContain("background:#1a1a2e");
     expect(text).not.toContain("display:none");
   });
 
   it("leaves a table with no theme on the system colours", async () => {
-    expect((await serve("")).text).not.toContain("thead th{background:#1a1a2e}");
+    expect((await serve("&embed=1")).text).not.toContain("thead th{background:#1a1a2e}");
   });
 });
 
@@ -651,25 +658,6 @@ describe("GET /api/files/browse/md", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   };
-
-  // The new tab a clicked `.md` in terminal output opens. Its containment is the sandbox, and it
-  // is what the embeddable document must not disturb.
-  it("serves the plain document under the policy that runs nothing", async () => {
-    await withMd(HOSTILE, async (call, query) => {
-      const res = await call(`/api/files/browse/md?${query}`);
-      expect(res.headers["content-security-policy"]).toBe("sandbox");
-      expect(res.text).not.toContain("nonce");
-    });
-  });
-
-  // The opt-in has to be the exact value, or a policy is loosened by a parameter nobody wrote.
-  it.each([["embed=0"], ["embed=true"], ["embed="], ["embedded=1"]])("serves the plain document for ?%s", async (param) => {
-    await withMd("# hi\n", async (call, query) => {
-      const res = await call(`/api/files/browse/md?${query}&${param}`);
-      expect(res.headers["content-security-policy"]).toBe("sandbox");
-      expect(res.text).not.toContain("<script");
-    });
-  });
 
   it("serves the embeddable document with scripts allowed and no origin", async () => {
     await withMd("# hi\n", async (call, query) => {
@@ -728,22 +716,15 @@ describe("GET /api/files/browse/md", () => {
     });
   });
 
-  // The embeddable document is the plain one plus one element — not a second rendering with its
-  // own rules. A difference here is a difference the reader sees between the two views.
-  it("renders the same document as the plain one", async () => {
-    await withMd("# hi\n\n[x](y)\n", async (call, query) => {
-      const plain = await call(`/api/files/browse/md?${query}`);
-      const embedded = await call(`/api/files/browse/md?${query}&embed=1`);
-      expect(embedded.text.replace(/<script nonce="[^"]*">[\s\S]*?<\/script>/, "")).toBe(plain.text);
-    });
-  });
-
-  // Embedding is per route, not a parameter the whole family answers to.
+  // Embedding is per route, not a parameter the whole family answers to: on a route without an
+  // embeddable document it means only "the pane is asking", which keeps the toolbar off (#3238).
   it("does not let ?embed=1 loosen the other rendered views", async () => {
     const dir = tmp();
     writeFileSync(path.join(dir, "a.json"), '{"a":1}');
     const res = await routeCall(serveProject(dir))(`/api/files/browse/json?cwd=${encodeURIComponent(dir)}&path=a.json&embed=1`);
     expect(res.headers["content-security-policy"]).toBe("sandbox");
+    expect(res.text).not.toContain("<script");
+    expect(res.text).not.toContain("data-copy=");
     rmSync(dir, { recursive: true, force: true });
   });
 });

@@ -182,9 +182,9 @@ than as bytes:
 
 | A clicked … | opens as |
 |---|---|
-| `.md` `.markdown` | **rendered** markdown in a new tab — the same sandboxed `…/md` HTML the Files preview renders, minus the scripts the preview needs (the one that reports where you are reading, and the one that draws mermaid diagrams — so a mermaid fence stays a code block here). It follows your system light/dark setting, since under the sandbox CSP it can't ask the app which theme is on |
-| `.json` | **indented** in a new tab (Chrome and Safari otherwise show one long line) |
-| `.csv` `.tsv` | a **table** in a new tab, with a sticky header that scrolls inside its own box |
+| `.md` `.markdown` | **rendered** markdown in a new tab — the same sandboxed `…/md` HTML the Files preview renders, with a **toolbar** at the top that switches between the preview and the file's **source** and has a copy button for each (the source as it is; the preview as text and as HTML, so a rich editor keeps the headings). That toolbar is the one script the tab runs, admitted by a per-response nonce the way the pane's scroll reporter is, and nothing in the file runs; the two scripts the preview needs are still absent (the one that reports where you are reading, and the one that draws mermaid diagrams — so a mermaid fence stays a code block here). It follows your system light/dark setting and your browser's language, since under the sandbox it can't ask the app which theme or language is on |
+| `.json` | **indented** in a new tab (Chrome and Safari otherwise show one long line), with the same toolbar: switch to the file as it is, copy either |
+| `.csv` `.tsv` | a **table** in a new tab, with a sticky header that scrolls inside its own box, and the same toolbar: switch to the file as it is, copy either |
 | source, config, logs, and `.txt` — 46 extensions | the app's own **Files** view (`/files?path=`), where CodeMirror highlights it, the tree is right there, and it can be edited |
 | `.html` `.htm` | the **rendered page** in a new tab, under the same sandboxed policy as the Files pane's Preview: its scripts run at an opaque origin with no fetch or XHR (so they cannot reach the app or its API), and an image beside it loads by its relative path (a relative stylesheet or script does not). The raw route answers `.html` as plain text, so opening one there showed its source |
 | images, PDF, SVG, video, audio | raw bytes in a new tab, which the browser renders better than an editor would |

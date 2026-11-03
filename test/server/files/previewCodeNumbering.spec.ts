@@ -140,7 +140,10 @@ describe("the Preview's code-block numbers", () => {
     try {
       const query = `/api/files/browse/md?cwd=${encodeURIComponent(dir)}&path=a.md`;
       expect((await routeCall(app)(`${query}&embed=1`)).text).toContain("pre[data-code-block]");
-      expect((await routeCall(app)(query)).text).not.toContain("<script");
+      // The tab runs the toolbar's script and nothing for the blocks (#3238).
+      const tab = (await routeCall(app)(query)).text;
+      expect(tab).not.toContain("pre[data-code-block]");
+      expect(tab.split("<script")).toHaveLength(2);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
