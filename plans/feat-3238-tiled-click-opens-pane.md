@@ -41,20 +41,22 @@ issue の目標の規則: **クリックしたファイルは、ペインが表�
 - `src/components/settings/TerminalKeysSection.vue`: 切り替えを一つ。文言は
   `src/i18n/settingsControls/*.ts`（主要なロケールファイルは行数の上限にあるため）。
 - `src/composables/filesPaneOpener.ts`: `FilesPaneOpener` と `tryOpenInPane` に `session` を足す。
-- `src/composables/terminalFileLinks.ts`: `registerFilePathLinks(term, getCwd, getSession)`。
-  `openInPane` と右クリックの要求（`LinkMenuRequest.session`）にセッションを添える。
-  `useTerminalConnections.ts` は `() => c.sessionId` を渡す。
+- `src/composables/terminalFileLinks.ts`: `registerFilePathLinks(term, origin)`。`origin` は `cwd` と `session` を
+  それぞれ返す関数を持つ一つのオブジェクト（`LinkOrigin`。呼び出し側の `useTerminalConnections.ts` が行数の上限に
+  あり、引数を二つ足すと整形で複数行に割れるため）。`openInPane` と右クリックの要求
+  （`LinkMenuRequest.session`）にセッションを添える。`useTerminalConnections.ts` は接続の `knownSessionId` を渡す。
 - `src/composables/terminalLinkActions.ts`: `openLinkInPane` がセッションを opener に渡す。
-- `src/components/paneClickTarget.ts`: `clickOpensPaneBeside(state, cell, cwd)` — タイル表示で、
-  設定 ON で、クリックの出所のセルが分かり、そのセルの `cwd` がリンクの `cwd` と一致するとき true。
-- `src/components/TerminalGrid.vue`: `openClickedPath` が先に `clickOpensPaneBeside` を問い、true なら
+- `src/components/paneClickTarget.ts`: `paneToOpenBeside(state, cell, cwd)` — タイル表示で、
+  設定 ON で、クリックの出所のセルが分かり、そのセルの `cwd` がリンクの `cwd` と一致するとき、横に開く
+  セルの uid を返す。それ以外は null。
+- `src/components/TerminalGrid.vue`: `openClickedPath` が先に `paneToOpenBeside` を問い、uid が返れば
   `showClickedPathBeside(uid, …)`（`openPaneFor` → 再ルート待ち → `openFile`）。それ以外は従来の
   `paneCanShowClick`。
 
 ## 試験
 
-- `paneClickTarget.spec.ts`: `clickOpensPaneBeside` の各条件（拡大中は false、設定 OFF は false、
-  セル不明は false、cwd 不一致は false、揃えば true）。
+- `paneClickTarget.spec.ts`: `paneToOpenBeside` の各条件（拡大中は null、設定 OFF は null、
+  セル不明は null、cwd 不一致は null、揃えばそのセルの uid）。
 - 新しい `gridClickOpensPane.spec.ts`（グリッドをタイルで組み、`openInFilesPane` を直接呼ぶ）:
   クリックしたタイルの横にペインが開きそのディレクトリに根付き、`openFile` が呼ばれ、拡大は要求
   されない。ペインが別のタイルの横にあれば移って開く（去るペインの保存を待ってから `openFile`）。
