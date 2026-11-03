@@ -75,8 +75,10 @@ fetch goes out with `Origin: null` and needs `Access-Control-Allow-Origin` on th
 server serves mermaid's own ESM build under `/api/files/mermaid/<version>/…` with that header
 (`server/files/mermaidAssets.ts`), and the embedded document ends with a nonce'd module script
 that imports it and draws each fence, folding the numbered code block under the diagram
-(`server/files/previewMermaid.ts`). The plain `…/md` document a new tab opens is served under a
-bare `sandbox` and runs nothing, so there the fence stays a code block.
+(`server/files/previewMermaid.ts`). The `…/md` document a new tab opens is served under the same
+nonce'd `sandbox allow-scripts` and runs one script of its own — the toolbar that switches to the
+source and copies either (#3238, `server/files/renderedTabTools.ts`) — but imports no mermaid, so
+there the fence stays a code block.
 
 Maths takes the other road (#3017), because it can: MathJax runs in Node, so `$…$` and `$$…$$` are
 typeset to SVG while the server builds the document (`server/files/previewMath.ts`), in both the
@@ -132,9 +134,10 @@ A consequence: in the full-screen view on a base that is not a session directory
 opens and the picture, PDF, player or page does not — the same answer the raw route has always given there.
 
 A CSV / TSV table Preview (#2559) is on the other side of this line. Like Markdown it is a document
-the server renders from the file's text — `/api/files/browse/table`, escaped cells under a bare
-`sandbox` CSP, no script — so it takes the browse routes' base and previews wherever the text opens,
-the full-screen view included.
+the server renders from the file's text — `/api/files/browse/table`, escaped cells; as the pane
+embeds it (`?embed=1`) under a bare `sandbox` CSP with no script, and in a tab of its own with the
+toolbar and the nonce'd policy every tab document has (#3238) — so it takes the browse routes' base
+and previews wherever the text opens, the full-screen view included.
 
 ## A clicked file outside every served directory gets a one-file grant
 

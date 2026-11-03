@@ -118,8 +118,8 @@ describe("previewSrcFor", () => {
     expect(previewSrcFor("html", null, "report.html", "v1", null)).toBe("");
   });
 
-  // #2559. The table route, with the version and the theme but nothing of the Markdown wire: a table
-  // has no script to report with, so it is not the embeddable document and carries no token.
+  // #2559. The table route, with the version and the theme, and `embed` to say the pane is asking
+  // (#3238) — but nothing of the Markdown wire: a table has no script to report with, so no token.
   it("renders a CSV through the table route, themed and versioned", () => {
     const theme = { bg: "#1a1a2e", fg: "#e6e6f0", muted: "#a0a0b8", subtle: "#232342", border: "#33335a", link: "#4a8cff" };
     const src = previewSrcFor("table", "/proj", "data/rows.csv", "v1", theme, "token-1");
@@ -131,7 +131,7 @@ describe("previewSrcFor", () => {
     expect(params.get("v")).toBe("v1");
     expect(params.get("bg")).toBe("#1a1a2e");
     expect(params.get("link")).toBe("#4a8cff");
-    expect(src).not.toContain("embed");
+    expect(params.get("embed")).toBe("1");
     expect(src).not.toContain("token-1");
   });
 
@@ -145,13 +145,13 @@ describe("previewSrcFor", () => {
     expect(params.get("path")).toBe("data/x.json");
     expect(params.get("v")).toBe("v1");
     expect(params.get("bg")).toBe("#1a1a2e");
-    expect(src).not.toContain("embed");
+    expect(params.get("embed")).toBe("1");
     expect(src).not.toContain("token-1");
   });
 
   it("changes a table's src when the file does", () => {
     expect(previewSrcFor("table", "/proj", "a.csv", "v1", null)).not.toBe(previewSrcFor("table", "/proj", "a.csv", "v2", null));
-    expect(previewSrcFor("table", "/proj", "a.csv", null, null)).toBe("/api/files/browse/table?cwd=%2Fproj&path=a.csv");
+    expect(previewSrcFor("table", "/proj", "a.csv", null, null)).toBe("/api/files/browse/table?cwd=%2Fproj&path=a.csv&embed=1");
   });
 
   it("draws an SVG from the raw route", () => {

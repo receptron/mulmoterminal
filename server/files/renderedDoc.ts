@@ -4,8 +4,9 @@
 //
 //   - no script, no external stylesheet, no webfont — a sandboxed document cannot run the
 //     first and should not need a request for the others. That is a rule about what THIS shell
-//     emits, and it has not changed: the Markdown route appends one nonce'd script of its own
-//     for the Files pane to hear scrolling through, under a policy of its own (#2157),
+//     emits: a route that needs a script appends one nonce'd script of its own under a policy of
+//     its own — the Files pane's scroll reporter (#2157) and the tab's toolbar (#3238,
+//     renderedTabTools.ts) — and the shell stays a shell,
 //   - colours follow the READER's system theme, since the page cannot ask the app which
 //     theme is on — except in the Files pane, which says so on the URL (#2263, themeStyle),
 //   - and every value taken from the file is escaped, because "the sandbox will catch it"
@@ -119,11 +120,23 @@ export function htmlDoc(bodyHtml: string, title: string, extraStyle = ""): strin
   return `<!doctype html><html><head>${head}</head><body>${bodyHtml}</body></html>`;
 }
 
+/** A rendering and the style it needs, for whichever shell shows it: the plain one the Files pane
+ *  embeds, or the tab's with its toolbar (renderedTabTools.ts). */
+export interface RenderedParts {
+  html: string;
+  style: string;
+}
+
 /** A JSON file, indented. Unparseable text is shown AS IT IS rather than replaced by an
  *  error: a file that fails to parse is exactly when someone needs to look at it. With a theme —
  *  the Files pane's Preview (#3137) — it takes the app's colours, as a table does. */
+export function jsonHtmlParts(text: string, theme: PreviewTheme | null = null): RenderedParts {
+  return { html: `<pre><code>${escapeHtml(prettyJson(text))}</code></pre>`, style: theme ? themeStyle(theme) : "" };
+}
+
 export function jsonHtmlDoc(text: string, title: string, theme: PreviewTheme | null = null): string {
-  return htmlDoc(`<pre><code>${escapeHtml(prettyJson(text))}</code></pre>`, title, theme ? themeStyle(theme) : "");
+  const { html, style } = jsonHtmlParts(text, theme);
+  return htmlDoc(html, title, style);
 }
 
 function prettyJson(text: string): string {
@@ -141,13 +154,18 @@ const tableThemeStyle = (theme: PreviewTheme): string => `thead th{background:${
 /** A delimited file as a table, first row as the header. An empty file renders as a note,
  *  not an empty table — "nothing here" reads better than a bare frame. With a theme — the Files
  *  pane's Preview (#2559) — it takes the app's colours instead of the reader's system ones. */
-export function tableHtmlDoc(text: string, title: string, delimiter: string, theme: PreviewTheme | null = null): string {
+export function tableHtmlParts(text: string, title: string, delimiter: string, theme: PreviewTheme | null = null): RenderedParts {
   const style = theme ? `${TABLE_STYLE}${themeStyle(theme)}${tableThemeStyle(theme)}` : TABLE_STYLE;
   const rows = parseDelimited(text, delimiter);
   const [header, ...body] = rows;
-  if (!header) return htmlDoc(`<p>${escapeHtml(title)} is empty.</p>`, title, style);
+  if (!header) return { html: `<p>${escapeHtml(title)} is empty.</p>`, style };
   const cells = (values: string[], tag: "th" | "td") => values.map((v) => `<${tag}>${escapeHtml(v)}</${tag}>`).join("");
   const bodyRows = body.map((r) => `<tr>${cells(r, "td")}</tr>`).join("");
   const table = `<table><thead><tr>${cells(header, "th")}</tr></thead><tbody>${bodyRows}</tbody></table>`;
-  return htmlDoc(`<div class="wrap">${table}</div>`, title, style);
+  return { html: `<div class="wrap">${table}</div>`, style };
+}
+
+export function tableHtmlDoc(text: string, title: string, delimiter: string, theme: PreviewTheme | null = null): string {
+  const { html, style } = tableHtmlParts(text, title, delimiter, theme);
+  return htmlDoc(html, title, style);
 }

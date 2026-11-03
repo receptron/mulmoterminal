@@ -22,7 +22,8 @@ import { browseEntryOf, type BrowseEntry } from "./browseEntry.js";
 import { answered, modeFromProbe, parseSearchOutput, searchArgv, SEARCH_TIMEOUT_MS } from "./file-search.js";
 import { CONTEXT_RADIUS_LINES, isSearchable, lineWindow, type SearchRequest, type SearchResult } from "../../common/fileSearch.js";
 import { git } from "../git/worktrees.js";
-import { htmlDoc, jsonHtmlDoc, tableHtmlDoc, themeStyle } from "./renderedDoc.js";
+import { htmlDoc, jsonHtmlParts, tableHtmlParts, themeStyle, type RenderedParts } from "./renderedDoc.js";
+import { renderedTabDoc, tabToolLabelsFor, TAB_TOOL_LANGUAGES, type RenderedKind } from "./renderedTabTools.js";
 import { delimiterForExtension } from "../../common/delimited.js";
 import { fenceColourer } from "./codeHighlight.js";
 import { numberedCodeRenderer } from "./previewCodeFence.js";
@@ -130,9 +131,10 @@ function containedForChange(req: Request, res: Response, defaultCwd: string): st
   return abs;
 }
 
-/** `theme` is the app's colours when the Files pane asked for them (#2263), else null: a document
- *  that has no use for them ignores it. */
-type RenderDoc = (text: string, title: string, doc: ServedDoc, theme: PreviewTheme | null) => string | Promise<string>;
+/** The rendering of a file and its style, for whichever shell the request gets. `theme` is the
+ *  app's colours when the Files pane asked for them (#2263), else null: a rendering that has no
+ *  use for them ignores it. */
+type RenderedBody = (text: string, title: string, doc: ServedDoc, theme: PreviewTheme | null) => RenderedParts | Promise<RenderedParts>;
 
 /** The same document for a host that will embed it, carrying the nonce the one permitted script
  *  has to declare. A route that has no reason to be embedded does not define one. */
@@ -178,14 +180,23 @@ function readTextOr4xx(res: Response, abs: string): string | null {
 }
 
 // A rendered view (#808): read the file the same guarded way, answer with a self-contained
-// document under the sandbox CSP. Only the rendering differs between routes, so that is all
-// the caller supplies.
+// document. Only the rendering differs between routes, so that is all the caller supplies — and
+// one route serves three documents built on it, told apart by `?embed=1`:
 //
-// `embed` is the Files pane asking for the same document with the scroll reporter in it (#2157),
-// and a route without one simply ignores `?embed=1`. It is opt-in per route and per request so
-// that the document every OTHER caller gets — the new tab a clicked `.md` in terminal output
-// opens — keeps the policy it has always had, byte for byte.
-function mountRenderedRoute(app: Express, routePath: string, defaultCwd: string, render: RenderDoc, embed?: EmbedDoc): void {
+//   - `?embed=1` on a route with an `embed` document: the Files pane's Markdown Preview, the same
+//     rendering with the scroll reporter in it (#2157), under the nonce'd policy that lets that one
+//     script run.
+//   - `?embed=1` on a route without one (JSON, a table): still the Files pane, whose Preview has
+//     the pane's own toolbar beside it. It gets the bare rendering under the bare `sandbox`, byte
+//     for byte what it always got.
+//   - no `?embed`: a tab of its own — the one a clicked path in terminal output opens. It gets the
+//     toolbar that switches to the file's source and copies either (#3238), and so the same policy
+//     as the pane's Markdown: `sandbox allow-scripts` admitting the toolbar's script by nonce and
+//     nothing the file contains.
+//
+// The pane says `embed=1` on every Preview URL (filesPreviewSrc.ts) so that no document it shows
+// carries a toolbar it did not ask for.
+function mountRenderedRoute(app: Express, routePath: string, defaultCwd: string, kind: RenderedKind, body: RenderedBody, embed?: EmbedDoc): void {
   app.get(routePath, async (req, res) => {
     const abs = containedFor(req, res, defaultCwd);
     if (!abs) return;
@@ -195,7 +206,8 @@ function mountRenderedRoute(app: Express, routePath: string, defaultCwd: string,
     res.setHeader("X-Content-Type-Options", "nosniff");
     const title = path.basename(abs);
     const doc = servedDoc(req, defaultCwd);
-    if (embed && wantsMdPreviewEmbed(req.query[MD_PREVIEW_EMBED_PARAM])) {
+    const embedding = wantsMdPreviewEmbed(req.query[MD_PREVIEW_EMBED_PARAM]);
+    if (embed && embedding) {
       // One nonce per response, never reused and never derived from anything in the file: it is
       // what separates the one script this server wrote from every script the file contains.
       //
@@ -218,8 +230,18 @@ function mountRenderedRoute(app: Express, routePath: string, defaultCwd: string,
       res.send(await embed(text, title, nonce, doc, previewThemeFromQuery(req.query), isPreviewToken(token) ? token : null));
       return;
     }
-    res.setHeader("Content-Security-Policy", "sandbox");
-    res.send(await render(text, title, doc, previewThemeFromQuery(req.query)));
+    const { html, style } = await body(text, title, doc, previewThemeFromQuery(req.query));
+    if (embedding) {
+      res.setHeader("Content-Security-Policy", "sandbox");
+      res.send(htmlDoc(html, title, style));
+      return;
+    }
+    // The tab's nonce is minted and cached-against exactly as the embeddable document's is (above):
+    // the body carries it, so no 304 can answer this response with a header that no longer matches.
+    const nonce = newPreviewNonce();
+    res.setHeader("Content-Security-Policy", mdPreviewEmbedCsp(nonce));
+    const labels = tabToolLabelsFor(req.acceptsLanguages(...TAB_TOOL_LANGUAGES), kind);
+    res.send(renderedTabDoc({ html, source: text, title, style, nonce, labels }));
   });
 }
 
@@ -412,10 +434,10 @@ const mdRender = async (text: string, doc: ServedDoc, withDiagrams: boolean): Pr
   return { html, diagrams: fences.drawn(), style: math ? MATH_STYLE : "" };
 };
 
-/** The Markdown document every caller has always had. */
-const renderMd = async (text: string, title: string, doc: ServedDoc): Promise<string> => {
+/** The Markdown rendering without diagrams, for the documents that run no module script. */
+const mdBody: RenderedBody = async (text, _title, doc) => {
   const { html, style } = await mdRender(text, doc, false);
-  return htmlDoc(html, title, style);
+  return { html, style };
 };
 
 /** The same document with the scroll reporter as its last body element (#2157) — followed by the
@@ -430,6 +452,18 @@ const embedMdWith =
     const style = (theme ? themeStyle(theme) : "") + (diagrams ? MERMAID_STYLE : "") + mathStyle;
     return htmlDoc(html + mdPreviewReporterTag(nonce, token) + diagramsScript, title, style);
   };
+
+/** The three rendered views (#808): Markdown, indented JSON and a delimited file as a table. */
+function mountRenderedRoutes(app: Express, defaultCwd: string): void {
+  const serveRendered = (routePath: string, kind: RenderedKind, body: RenderedBody, embed?: EmbedDoc) =>
+    mountRenderedRoute(app, routePath, defaultCwd, kind, body, embed);
+  serveRendered("/api/files/browse/md", "markdown", mdBody, embedMdWith(mountMermaidAssetRoute(app, installedMermaid())));
+  serveRendered("/api/files/browse/json", "json", (text, _title, _doc, theme) => jsonHtmlParts(text, theme));
+  // The delimiter comes from the file's own extension, so one route serves .csv and .tsv.
+  serveRendered("/api/files/browse/table", "table", (text, title, _doc, theme) =>
+    tableHtmlParts(text, title, delimiterForExtension(path.extname(title)), theme),
+  );
+}
 
 export function mountFilesBrowseRoutes(app: Express, deps: BrowseDeps): void {
   const { defaultCwd, backupRoot } = deps;
@@ -507,13 +541,7 @@ export function mountFilesBrowseRoutes(app: Express, deps: BrowseDeps): void {
     }
   });
 
-  const serveRendered = (routePath: string, render: RenderDoc, embed?: EmbedDoc) => mountRenderedRoute(app, routePath, defaultCwd, render, embed);
-
-  serveRendered("/api/files/browse/md", renderMd, embedMdWith(mountMermaidAssetRoute(app, installedMermaid())));
-  serveRendered("/api/files/browse/json", (text, title, _doc, theme) => jsonHtmlDoc(text, title, theme));
-  // The delimiter comes from the file's own extension, so one route serves .csv and .tsv.
-  serveRendered("/api/files/browse/table", (text, title, _doc, theme) => tableHtmlDoc(text, title, delimiterForExtension(path.extname(title)), theme));
-
+  mountRenderedRoutes(app, defaultCwd);
   mountWriteRoute(app, deps);
   mountFilesTreeRoutes(app, { base: (cwd) => namedBase(typeof cwd === "string" ? cwd : null, defaultCwd, os.homedir()) });
   mountBackupRoute(app, deps);
