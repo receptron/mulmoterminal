@@ -80,7 +80,8 @@ const TAB_ROUTE_BY_KIND: Partial<Record<FilePreviewKind, string>> = {
 };
 
 /** The open file's Preview as a tab of its own, or null when it has none — or when the pane has no
- *  root, since the routes answer only under one. Only `cwd` and `path` ride on it: not `embed`,
+ *  root: the routes would fall back to the server's default directory for a URL without `cwd`, and
+ *  a tab the pane opens must name the pane's own root. Only `cwd` and `path` ride on it: not `embed`,
  *  which asks for the toolbar-less document the iframe wants; not `v` or the theme, which exist to
  *  make the frame refetch; and never the token, which must not leave the frame's own URL. */
 export function previewTabUrl(kind: FilePreviewKind, cwd: string | null, pathRel: string): string | null {

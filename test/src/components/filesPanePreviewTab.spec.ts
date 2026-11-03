@@ -18,22 +18,34 @@ vi.mock("../../../src/components/cmEditor", async (orig) => {
 });
 
 const FILES = ["a.md", "b.ts", "c.csv", "d.json", "page.html"];
+const NOT_TEXT = 415;
 
-function serve(): void {
-  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+/** The server behind the pane: a listing of FILES, and each one's text — or the refusal the server
+ *  gives a file it will not serve as text, for the names in `notText`. */
+function serve(notText: ReadonlySet<string> = new Set()): void {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "https://x");
-    if (url.pathname.includes("/list")) return { ok: true, json: async () => ({ entries: FILES.map((name) => ({ name, dir: false, size: 7 })) }) };
-    if (url.pathname.includes("/text")) return { ok: true, json: async () => ({ text: "# hello", version: "v1" }) };
-    return { ok: true, json: async () => ({ ok: true }) };
-  }) as unknown as typeof fetch;
+    if (url.pathname.includes("/list")) return json({ entries: FILES.map((name) => ({ name, dir: false, size: 7 })) });
+    if (url.pathname.includes("/text")) {
+      const name = url.searchParams.get("path") ?? "";
+      return notText.has(name) ? json({ error: "not text" }, NOT_TEXT) : json({ text: "# hello", version: "v1" });
+    }
+    return json({ ok: true });
+  });
 }
 
-const mountOn = async (path: string) => {
-  const w = mount(FilesPane, { props: { cwd: "/proj", initialState: oneFile(path) }, attachTo: document.body });
+const mountOn = async (path: string, cwd: string | null = "/proj") => {
+  const w = mount(FilesPane, { props: { cwd, initialState: oneFile(path) }, attachTo: document.body });
   await flushPromises();
   return w;
 };
-const button = (w: Awaited<ReturnType<typeof mountOn>>) => w.find('[data-testid="files-preview-tab"]');
+type Pane = Awaited<ReturnType<typeof mountOn>>;
+const button = (w: Pane) => w.find('[data-testid="files-preview-tab"]');
+/** The header names the open file — the proof that a test about an ABSENT button is looking at a
+ *  pane with a file open, not at an empty one. */
+const headerNames = (w: Pane, name: string) => w.findAll("header span").some((span) => span.text() === name);
 
 describe("the Files pane's button that opens the Preview in a tab of its own (#3238)", () => {
   let open: MockInstance<typeof window.open>;
@@ -43,7 +55,7 @@ describe("the Files pane's button that opens the Preview in a tab of its own (#3
     open = vi.spyOn(window, "open").mockImplementation(() => null);
   });
   afterEach(() => {
-    open.mockRestore();
+    vi.restoreAllMocks();
     document.body.innerHTML = "";
   });
 
@@ -74,5 +86,34 @@ describe("the Files pane's button that opens the Preview in a tab of its own (#3
     expect(button(await mountOn("b.ts")).exists()).toBe(false);
     document.body.innerHTML = "";
     expect(button(await mountOn("page.html")).exists()).toBe(false);
+  });
+
+  // The routes would fall back to the server's default directory for a URL with no `cwd`; the pane
+  // never sends one, because a tab it opens must name the pane's own root and nothing else.
+  it("offers no button while the pane has no root, even with the file open", async () => {
+    const w = await mountOn("a.md", null);
+    expect(headerNames(w, "a.md")).toBe(true);
+    expect(button(w).exists()).toBe(false);
+  });
+
+  it("offers no button for a file the server will not serve as text", async () => {
+    vi.restoreAllMocks();
+    serve(new Set(["a.md"]));
+    vi.spyOn(window, "open").mockImplementation(() => null);
+    const w = await mountOn("a.md");
+    expect(headerNames(w, "a.md")).toBe(true);
+    expect(button(w).exists()).toBe(false);
+  });
+
+  it("follows the file in front when another is opened from the tree", async () => {
+    const w = await mountOn("a.md");
+    await w
+      .findAll('[data-testid="files-row"]')
+      .find((row) => row.text().includes("c.csv"))
+      ?.trigger("click");
+    await flushPromises();
+    expect(headerNames(w, "c.csv")).toBe(true);
+    await button(w).trigger("click");
+    expect(open).toHaveBeenLastCalledWith("/api/files/browse/table?cwd=%2Fproj&path=c.csv", "_blank", "noopener,noreferrer");
   });
 });
