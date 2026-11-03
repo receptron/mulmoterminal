@@ -107,7 +107,8 @@ export function tabToolLabelsFor(language: unknown, kind: RenderedKind): TabTool
 // lands inside the rendering, and raw HTML in Markdown can close the rendering's wrapper and put
 // elements of its own beside it, repeating any id or class. What the file cannot do is put anything
 // BEFORE the wrapper, so the shell emits the toolbar, the source and the wrapper first and the
-// script reads them as the first three children of <body>, and finds itself as `currentScript`.
+// script reads them as the first four children of <body> — itself the third, which it checks against
+// `currentScript`.
 /** The source as a JSON string in a data block, for the copies to read: the <pre> that SHOWS it
  *  goes through the HTML parser, which turns CRLF into LF and U+0000 into U+FFFD before any script
  *  can read it, so a file is copied "as it is" only from text the parser never touches. A data
@@ -163,7 +164,18 @@ const COPIED_NOTICE_MS = 1500;
  *  address) or a refused write still has. For the source that selection is a textarea holding the
  *  exact text: selecting the element's contents instead ends at its last character and loses the
  *  file's final newline. A view the reader is not looking at has no layout and so no line breaks
- *  in its text, so it is shown for the moment of the read. */
+ *  in its text, and a clone of it carries its `hidden`, so what the script hid is shown for the
+ *  moment of the read.
+ *
+ *  What is hidden is hidden by an inline `display: none !important` as well as by `hidden`: raw HTML
+ *  in the file can carry a stylesheet, and an author `[hidden]{display:block}` beats the browser's
+ *  default rule, which would leave both views on screen. The script touches only what IT hid: the
+ *  element's own style attribute and its own `hidden`, if the file gave it one, are recorded when it
+ *  is hidden and put back as they were, and an element the file itself hid is left alone — in the
+ *  switch, in the copies, byte for byte. The elements beside the wrapper are the file's, and a <form> among them
+ *  shadows any property or method with an <input name=…> of that name (DOM clobbering: `el.style`
+ *  is then the input), so they are read and written through the prototypes, never through the
+ *  element. */
 const TOOLS_SCRIPT = `(() => {
   const script = document.currentScript;
   const ready = () => {
@@ -175,14 +187,36 @@ const TOOLS_SCRIPT = `(() => {
   if (!status || !data) return;
   const sourceText = JSON.parse(data.textContent ?? '""');
   if (typeof sourceText !== "string") return;
+  const getter = (proto, name) => Object.getOwnPropertyDescriptor(proto, name).get;
+  const nextElement = getter(Element.prototype, "nextElementSibling");
+  const innerTextOf = getter(HTMLElement.prototype, "innerText");
+  const textContentOf = getter(Node.prototype, "textContent");
+  const { getAttribute, setAttribute, removeAttribute, hasAttribute } = Element.prototype;
   const renderedNodes = () => {
     const nodes = [];
-    for (let el = rendered; el; el = el.nextElementSibling) nodes.push(el);
+    for (let el = rendered; el; el = nextElement.call(el)) nodes.push(el);
     return nodes;
   };
+  const own = new Map();
+  own.set(source, [null, false]);
+  const setHidden = (el, hide) => {
+    if (hide) {
+      if (!own.has(el)) own.set(el, [getAttribute.call(el, "style"), hasAttribute.call(el, "hidden")]);
+      const [style] = own.get(el);
+      setAttribute.call(el, "style", (style ? style + ";" : "") + "display:none !important");
+      setAttribute.call(el, "hidden", "");
+      return;
+    }
+    const was = own.get(el);
+    if (!was) return;
+    own.delete(el);
+    if (was[0] === null) removeAttribute.call(el, "style");
+    else setAttribute.call(el, "style", was[0]);
+    if (!was[1]) removeAttribute.call(el, "hidden");
+  };
   const show = (name) => {
-    source.hidden = name !== "source";
-    for (const el of renderedNodes()) el.hidden = name !== "rendered";
+    setHidden(source, name !== "source");
+    for (const el of renderedNodes()) setHidden(el, name !== "rendered");
     for (const b of toolbar.querySelectorAll("[data-show]")) b.setAttribute("aria-pressed", String(b.dataset.show === name));
   };
   let timer = 0;
@@ -192,9 +226,9 @@ const TOOLS_SCRIPT = `(() => {
     timer = setTimeout(() => { status.textContent = ""; }, ${COPIED_NOTICE_MS});
   };
   const whileShown = (els, read) => {
-    const hidden = els.map((el) => el.hidden);
-    els.forEach((el) => { el.hidden = false; });
-    try { return read(); } finally { els.forEach((el, i) => { el.hidden = hidden[i]; }); }
+    const lifted = els.filter((el) => own.has(el));
+    lifted.forEach((el) => setHidden(el, false));
+    try { return read(); } finally { lifted.forEach((el) => setHidden(el, true)); }
   };
   const renderedRange = () => {
     const range = document.createRange();
@@ -202,14 +236,14 @@ const TOOLS_SCRIPT = `(() => {
     range.setEnd(document.body, document.body.childNodes.length);
     return range;
   };
-  const renderedHtml = () => {
+  const renderedHtml = () => whileShown(renderedNodes(), () => {
     const box = document.createElement("div");
     box.append(renderedRange().cloneContents());
     return box.innerHTML;
-  };
+  });
   const renderedText = () => {
     const nodes = renderedNodes();
-    return whileShown(nodes, () => nodes.map((el) => el.innerText).join("\\n"));
+    return whileShown(nodes, () => nodes.map((el) => (el instanceof HTMLElement ? innerTextOf : textContentOf).call(el)).join("\\n"));
   };
   const copySelection = (select) => {
     const selection = getSelection();
@@ -264,14 +298,15 @@ export interface RenderedTabDoc {
   labels: TabToolLabels;
 }
 
-/** The tab's document: the toolbar, the source (hidden until asked for), the one script and then
+/** The tab's document: the toolbar, the source (hidden until asked for — by the attribute and by an
+ *  inline display the file's own stylesheet cannot undo, see TOOLS_SCRIPT), the one script and then
  *  the rendering, in the shared shell. The order is the script's contract (see TOOLS_SCRIPT):
  *  everything the shell owns comes before the first byte of the file's rendering, the script
  *  included. */
 export function renderedTabDoc({ html, source, title, style, nonce, labels }: RenderedTabDoc): string {
   const body = [
     toolbarHtml(labels, source),
-    `<pre id="tab-source" hidden><code>${escapeHtml(source)}</code></pre>`,
+    `<pre id="tab-source" hidden style="display:none !important"><code>${escapeHtml(source)}</code></pre>`,
     `<script nonce="${nonce}">${TOOLS_SCRIPT}</script>`,
     `<div id="tab-rendered">${html}</div>`,
   ].join("");

@@ -42,7 +42,7 @@ describe("renderedTabDoc", () => {
     const html = doc();
     const order = [
       'class="tab-tools"',
-      '<pre id="tab-source" hidden><code># hi\n</code></pre>',
+      '<pre id="tab-source" hidden style="display:none !important"><code># hi\n</code></pre>',
       '<script nonce="n0nce">',
       '<div id="tab-rendered"><h1>hi</h1></div>',
     ].map((part) => html.indexOf(part));
@@ -130,7 +130,7 @@ describe("renderedTabDoc", () => {
     [
       "treats everything from the wrapper to the end of body as the rendering",
       [
-        "for (let el = rendered; el; el = el.nextElementSibling)",
+        "for (let el = rendered; el; el = nextElement.call(el))",
         "range.setStartBefore(rendered);",
         "range.setEnd(document.body, document.body.childNodes.length);",
       ],
@@ -141,14 +141,41 @@ describe("renderedTabDoc", () => {
       ['toolbar.querySelector("script[data-tab-source]")', "const sourceText = JSON.parse(data.textContent", "navigator.clipboard.writeText(sourceText)"],
     ],
     ["falls back to a textarea for the source", ['document.createElement("textarea")', "area.value = sourceText", "area.select()"]],
+    // An author `[hidden]{display:block}` in the file beats the browser's rule, so hiding also sets
+    // an inline display with priority — and the HTML copy clones the rendering while it is shown, or
+    // the payload carries `hidden` (CodeRabbit on #3252).
+    [
+      "hides by an inline display with priority as well as by hidden, and clones the rendering shown",
+      [
+        'setAttribute.call(el, "style", (style ? style + ";" : "") + "display:none !important")',
+        'setAttribute.call(el, "hidden", "")',
+        "const renderedHtml = () => whileShown(renderedNodes(), () => {",
+      ],
+    ],
+    // The script lifts only what it hid, so an element the file hid keeps its own attributes.
+    ["touches only the elements it hid itself", ["own.set(source, [null, false]);", "const lifted = els.filter((el) => own.has(el));", "if (!was) return;"]],
+    // A <form> the file put beside the wrapper shadows `el.style`, `el.hidden`, `el.nextElementSibling`
+    // with an <input name=…> of that name, so the file's elements are reached through the prototypes.
+    [
+      "reaches the file's elements through the prototypes, never through the element",
+      [
+        "Object.getOwnPropertyDescriptor(proto, name).get",
+        'getter(Element.prototype, "nextElementSibling")',
+        "nextElement.call(el)",
+        "const { getAttribute, setAttribute, removeAttribute, hasAttribute } = Element.prototype;",
+      ],
+    ],
   ])("%s", (_what, parts) => {
     const script = scriptOf(doc());
     parts.forEach((part) => expect(script).toContain(part));
   });
 
-  it.each(["getElementById", "document.querySelector(", "document.querySelectorAll("])("never looks an element up with %s", (lookup) => {
-    expect(scriptOf(doc())).not.toContain(lookup);
-  });
+  it.each(["getElementById", "document.querySelector(", "document.querySelectorAll(", "el.hidden", "el.style", "el.nextElementSibling", "el.innerText"])(
+    "never reaches for %s",
+    (lookup) => {
+      expect(scriptOf(doc())).not.toContain(lookup);
+    },
+  );
 
   it("keeps the route's style and adds the toolbar's", () => {
     const html = doc({ style: "body{max-width:none}" });
