@@ -14,10 +14,13 @@ CodeRabbit がマージ直前に二件の軽微な指摘を残していた。
 
 ## 方針
 
-- 隠すときは `hidden` に加えてインラインの `display: none !important` を付ける。インラインの `!important` は
-  作者スタイルシートの `!important` にも勝つ。見せるときは、その要素が元から持っていたインラインの display
-  （ファイルの生 HTML が `style="display:flex"` を付けていた場合など）を戻す。覚えておくのはスクリプト内の
-  `Map`（要素 → 元の値と優先度）。
+- 隠すときは `hidden` 属性に加えて `style` 属性へ `display:none !important` を足す。インラインの `!important` は
+  作者スタイルシートの `!important` にも勝つ。見せるときは、その要素が元から持っていた `style` 属性の文字列
+  （ファイルの生 HTML が `style="display:flex"` を付けていた場合など）をそのまま戻す。覚えておくのはスクリプト内の
+  `Map`（要素 → 元の `style` 属性）。
+- ラッパーの外に並ぶ要素はファイルのもの。そこに `<form>` があると `<input name="style">` のような名前の入力が
+  `el.style` / `el.hidden` / `el.nextElementSibling` / `el.innerText` を上書きする（DOM の上書き）。だから
+  ファイル側の要素には要素のプロパティで触らず、`Element.prototype` の属性メソッドと取得子を `.call` で使う。
 - ソースの `<pre>` は HTML の時点で属性とインラインの display の両方を持って出す（スクリプトが動く前の一瞬や、
   スクリプトが動かなかった場合にも効く）。
 - `whileShown` は「隠れている要素だけ」を一時的に見せて戻す（見えている要素のインライン display を消さない）。
@@ -26,10 +29,12 @@ CodeRabbit がマージ直前に二件の軽微な指摘を残していた。
 ## 仕様書
 
 - `test/server/files/renderedTabTools.spec.ts`: 文書の並び（`<pre>` の属性とインライン display）と、
-  スクリプト本文に優先度付きの `setProperty` と `whileShown` で包んだ `renderedHtml` があること。
+  スクリプト本文が属性で隠し、原型経由でファイル側の要素に触り、`whileShown` で包んだ `renderedHtml` を持つこと。
+  `el.hidden` などの直接の読み書きが本文に無いことも固定する。
 - `test/src/renderedTabToolsScript.spec.ts`（新規、jsdom）: 生成した文書にスクリプトを実際に走らせ、
   初期状態、切替（優先度付きで隠れる・元の display が戻る）、ソース表示中の「プレビューをコピー」で
   `ClipboardItem` の `text/html` に `hidden` も `display` も無く、コピー後も描画が隠れたままであること。
+  名前を上書きする入力を持つ `<form>` が横にあっても、切替が例外を出さず、入力の中へ降りないこと。
 
 ## 検証
 

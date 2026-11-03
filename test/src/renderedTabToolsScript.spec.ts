@@ -117,6 +117,34 @@ describe("the rendered tab's script", () => {
     expect(inlineDisplay(element("#tab-source"))).toBe("none important");
   });
 
+  // DOM clobbering: a <form> beside the wrapper answers `el.style`, `el.hidden`, `el.nextElementSibling`
+  // and `el.innerText` with its inputs of those names. The switch must neither throw nor walk into
+  // the form, and the copy must still read text.
+  it("is not thrown off by a form whose inputs shadow the properties it uses", async () => {
+    mountTab(
+      '<h1>hi</h1></div><form id="trap"><input name="style"><input name="hidden"><input name="nextElementSibling"><input name="innerText"></form><p id="after">tail</p>',
+    );
+    const trap = element("#trap");
+    const after = element("#after");
+    element('[data-show="source"]').click();
+    expect([trap, after].map((el) => [el.hasAttribute("hidden"), el.getAttribute("style")])).toEqual([
+      [true, "display:none !important"],
+      [true, "display:none !important"],
+    ]);
+    expect([...trap.querySelectorAll("input")].some((input) => input.hasAttribute("hidden"))).toBe(false);
+    element('[data-copy="rendered"]').click();
+    await flush();
+    const [item] = written[0] ?? [];
+    if (!item) throw new Error("expected a clipboard item");
+    expect(await blobText(item.parts["text/plain"])).toContain("tail");
+    expect(await blobText(item.parts["text/html"])).not.toContain("hidden=");
+    element('[data-show="rendered"]').click();
+    expect([trap, after].map((el) => [el.hasAttribute("hidden"), el.getAttribute("style")])).toEqual([
+      [false, null],
+      [false, null],
+    ]);
+  });
+
   it("copies the rendering as HTML without hidden from the Source view, and leaves it hidden after", async () => {
     mountTab("<h1>hi</h1><p>there</p>");
     element('[data-show="source"]').click();

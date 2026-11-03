@@ -167,8 +167,11 @@ const COPIED_NOTICE_MS = 1500;
  *
  *  What is hidden is hidden by an inline `display: none !important` as well as by `hidden`: raw HTML
  *  in the file can carry a stylesheet, and an author `[hidden]{display:block}` beats the browser's
- *  default rule, which would leave both views on screen. An element's own inline display comes back
- *  when it is shown again. */
+ *  default rule, which would leave both views on screen. An element's own style attribute comes back
+ *  when it is shown again. The elements beside the wrapper are the file's, and a <form> among them
+ *  shadows any property or method with an <input name=…> of that name (DOM clobbering: `el.style`
+ *  is then the input), so they are read and written through the prototypes, never through the
+ *  element. */
 const TOOLS_SCRIPT = `(() => {
   const script = document.currentScript;
   const ready = () => {
@@ -180,23 +183,30 @@ const TOOLS_SCRIPT = `(() => {
   if (!status || !data) return;
   const sourceText = JSON.parse(data.textContent ?? '""');
   if (typeof sourceText !== "string") return;
+  const getter = (proto, name) => Object.getOwnPropertyDescriptor(proto, name).get;
+  const nextElement = getter(Element.prototype, "nextElementSibling");
+  const innerTextOf = getter(HTMLElement.prototype, "innerText");
+  const textContentOf = getter(Node.prototype, "textContent");
+  const { getAttribute, setAttribute, removeAttribute, hasAttribute } = Element.prototype;
   const renderedNodes = () => {
     const nodes = [];
-    for (let el = rendered; el; el = el.nextElementSibling) nodes.push(el);
+    for (let el = rendered; el; el = nextElement.call(el)) nodes.push(el);
     return nodes;
   };
-  const ownDisplay = new Map();
+  const ownStyle = new Map();
   const setHidden = (el, hide) => {
-    el.hidden = hide;
     if (hide) {
-      if (!ownDisplay.has(el)) ownDisplay.set(el, [el.style.getPropertyValue("display"), el.style.getPropertyPriority("display")]);
-      el.style.setProperty("display", "none", "important");
+      if (!ownStyle.has(el)) ownStyle.set(el, getAttribute.call(el, "style"));
+      const own = ownStyle.get(el);
+      setAttribute.call(el, "style", (own ? own + ";" : "") + "display:none !important");
+      setAttribute.call(el, "hidden", "");
       return;
     }
-    const own = ownDisplay.get(el);
-    ownDisplay.delete(el);
-    if (own && own[0]) el.style.setProperty("display", own[0], own[1]);
-    else el.style.removeProperty("display");
+    const own = ownStyle.get(el);
+    ownStyle.delete(el);
+    if (own) setAttribute.call(el, "style", own);
+    else removeAttribute.call(el, "style");
+    removeAttribute.call(el, "hidden");
   };
   const show = (name) => {
     setHidden(source, name !== "source");
@@ -210,7 +220,7 @@ const TOOLS_SCRIPT = `(() => {
     timer = setTimeout(() => { status.textContent = ""; }, ${COPIED_NOTICE_MS});
   };
   const whileShown = (els, read) => {
-    const wereHidden = els.filter((el) => el.hidden);
+    const wereHidden = els.filter((el) => hasAttribute.call(el, "hidden"));
     wereHidden.forEach((el) => setHidden(el, false));
     try { return read(); } finally { wereHidden.forEach((el) => setHidden(el, true)); }
   };
@@ -227,7 +237,7 @@ const TOOLS_SCRIPT = `(() => {
   });
   const renderedText = () => {
     const nodes = renderedNodes();
-    return whileShown(nodes, () => nodes.map((el) => el.innerText).join("\\n"));
+    return whileShown(nodes, () => nodes.map((el) => (el instanceof HTMLElement ? innerTextOf : textContentOf).call(el)).join("\\n"));
   };
   const copySelection = (select) => {
     const selection = getSelection();
