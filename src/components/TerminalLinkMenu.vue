@@ -29,15 +29,27 @@ const menu = useTemplateRef<HTMLElement>("menu");
 const pos = ref<MenuPoint>({ top: 0, left: 0 });
 const canCopy = clipboardAvailable();
 
-/** What the last copy did, shown for a moment where the menu was: the menu has closed by then, and
- *  a refused write would otherwise look like a copy that happened (CodeRabbit on #3256). */
+/** What the last copy did, shown for a moment below where the menu was: the menu has closed by
+ *  then, and a refused write would otherwise look like a copy that happened (CodeRabbit on #3256).
+ *  Below the pointer, not under it, so the link it was opened on stays clickable; and selectable,
+ *  since after a refused write the notice is where the path is. */
 const NOTICE_MS = 2500;
+const NOTICE_OFFSET_PX = 28;
 const notice = ref<{ text: string; point: MenuPoint } | null>(null);
 let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 function say(text: string, point: MenuPoint): void {
   clearTimeout(noticeTimer);
-  notice.value = { text, point };
+  notice.value = { text, point: { top: point.top + NOTICE_OFFSET_PX, left: point.left } };
   noticeTimer = setTimeout(() => (notice.value = null), NOTICE_MS);
+}
+
+/** What had the focus before the menu took it — the terminal, as a rule — to give it back on
+ *  close: the first item is focused on open, and a closed menu would otherwise leave keystrokes
+ *  going nowhere until the terminal is clicked (CodeRabbit on #3256). */
+let focusedBefore: HTMLElement | null = null;
+function restoreFocus(): void {
+  if (focusedBefore?.isConnected) focusedBefore.focus();
+  focusedBefore = null;
 }
 
 // Placed once it has rendered, since only then is its size known: a right-click near an edge
@@ -69,10 +81,14 @@ function unlisten(): void {
 }
 watch(linkMenuRequest, (request, previous) => {
   if (request) {
-    if (!previous) listen();
+    if (!previous) {
+      focusedBefore = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      listen();
+    }
     void place(request.point);
   } else if (previous) {
     unlisten();
+    restoreFocus();
   }
 });
 onBeforeUnmount(() => {
@@ -140,7 +156,7 @@ async function copyPath(link: HoveredLink, point: MenuPoint): Promise<void> {
       data-testid="terminal-link-notice"
       role="status"
       aria-live="polite"
-      class="pointer-events-none fixed z-[60] max-w-[420px] rounded-md border border-border bg-panel px-2.5 py-1.5 text-[12px] text-fg shadow-lg"
+      class="fixed z-[60] max-w-[420px] select-text rounded-md border border-border bg-panel px-2.5 py-1.5 text-[12px] text-fg shadow-lg"
       :style="{ top: `${notice.point.top}px`, left: `${notice.point.left}px` }"
     >
       {{ notice.text }}

@@ -84,8 +84,33 @@ describe("TerminalLinkMenu", () => {
     await nextTick();
     const notice = document.body.querySelector<HTMLElement>("[data-testid=terminal-link-notice]");
     expect(notice?.textContent?.trim()).toBe("Path copied");
-    expect(notice?.style.top).toBe("40px");
+    // Below the pointer, so the link it was opened on stays clickable while it shows.
+    expect(notice?.style.top).toBe("68px");
+    expect(notice?.className).not.toContain("pointer-events-none");
     wrapper.unmount();
+  });
+
+  // The terminal had the focus; the menu takes it for its first item and gives it back on close,
+  // whether an item was picked or the menu was dismissed.
+  it("gives the focus back to what had it, on a pick and on Escape", async () => {
+    const box = document.createElement("textarea");
+    document.body.append(box);
+    box.focus();
+    expect(document.activeElement).toBe(box);
+    const wrapper = await open("docs/a.md");
+    expect(document.activeElement).not.toBe(box);
+    item("link-copy-path")?.click();
+    await nextTick();
+    expect(document.activeElement).toBe(box);
+    requestLinkMenu({ text: "docs/a.md", cwd: "/proj", location: undefined, point: { top: 1, left: 1 } });
+    await nextTick();
+    await nextTick();
+    expect(document.activeElement).not.toBe(box);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await nextTick();
+    expect(document.activeElement).toBe(box);
+    wrapper.unmount();
+    box.remove();
   });
 
   // The menu has closed by the time a write is refused, so the refusal has to be said — with the
