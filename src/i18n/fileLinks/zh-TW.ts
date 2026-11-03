@@ -12,6 +12,8 @@ export const fileLinksZhTW = {
     openInTab: "在新分頁中開啟",
     openInFiles: "在 Files 檢視中開啟",
     copyPath: "複製路徑",
+    copied: "已複製路徑",
+    copyFailed: "無法複製路徑：{path}",
   },
   outsideFile: {
     missing: "找不到 {path}。",

@@ -12,6 +12,8 @@ export const fileLinksKo = {
     openInTab: "새 탭에서 열기",
     openInFiles: "Files 뷰에서 열기",
     copyPath: "경로 복사",
+    copied: "경로를 복사했습니다",
+    copyFailed: "경로를 복사할 수 없습니다: {path}",
   },
   outsideFile: {
     missing: "{path}을(를) 찾을 수 없습니다.",

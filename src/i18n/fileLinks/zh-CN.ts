@@ -12,6 +12,8 @@ export const fileLinksZhCN = {
     openInTab: "在新标签页中打开",
     openInFiles: "在 Files 视图中打开",
     copyPath: "复制路径",
+    copied: "已复制路径",
+    copyFailed: "无法复制路径：{path}",
   },
   outsideFile: {
     missing: "找不到 {path}。",

@@ -14,6 +14,8 @@ export const fileLinksEn = {
     openInTab: "Open in a new tab",
     openInFiles: "Open in the Files view",
     copyPath: "Copy the path",
+    copied: "Path copied",
+    copyFailed: "The path could not be copied: {path}",
   },
   outsideFile: {
     missing: "{path} is not there anymore.",

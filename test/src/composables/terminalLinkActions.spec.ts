@@ -2,7 +2,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { absolutePathOf, openLinkInFiles, openLinkInPane, openLinkInTab, type LinkActionDeps } from "../../../src/composables/terminalLinkActions";
 import type { HoveredLink } from "../../../src/composables/terminalLinkMenu";
-import { filesPageUrl } from "../../../common/filesPage";
 
 const deps = (over: Partial<LinkActionDeps> = {}): LinkActionDeps => ({
   openUrl: vi.fn(),
@@ -32,18 +31,26 @@ describe("openLinkInPane", () => {
 });
 
 describe("openLinkInTab", () => {
-  it("opens a rendered document through its route", () => {
+  // A rendered document goes to its route; a document outside the cell is read against its own
+  // directory; a backslash in a name on a POSIX cwd rides encoded in the Files view's query
+  // rather than as a path segment a route would refuse (CodeRabbit on #3256).
+  it.each([
+    ["docs/a.md", "/api/files/browse/md?cwd=%2Fproj&path=docs%2Fa.md"],
+    ["/elsewhere/notes.md", "/api/files/browse/md?cwd=%2Felsewhere&path=notes.md"],
+    ["src/lib\\a.ts", "/files?cwd=%2Fproj&path=src%2Flib%5Ca.ts"],
+  ])("opens %s at %s", (text, url) => {
     const d = deps();
-    openLinkInTab(link("docs/a.md"), d);
-    expect(d.openUrl).toHaveBeenCalledWith("/api/files/browse/md?cwd=%2Fproj&path=docs%2Fa.md");
+    openLinkInTab(link(text), d);
+    expect(d.openUrl).toHaveBeenCalledWith(url);
+    expect(d.openInFiles).not.toHaveBeenCalled();
   });
 
-  // A click sends source to the in-app Files view; "a new tab" means the Files page in a tab of its own.
-  it("opens a source file as the Files page in a tab, never in this one", () => {
+  // A click sends source to the in-app Files view; "a new tab" means that view in a tab of its own,
+  // addressed by query like a click's navigation — never the HTML page route, which serves pages.
+  it("opens a source file as the Files view in a tab, with the line, never in this one", () => {
     const d = deps();
-    openLinkInTab(link("src/a.ts"), d);
-    expect(d.openUrl).toHaveBeenCalledWith(filesPageUrl("/proj", "src/a.ts"));
-    expect(filesPageUrl("/proj", "src/a.ts")).toContain("src/a.ts");
+    openLinkInTab(link("src/a.ts", "/proj", { line: 42, col: 7 }), d);
+    expect(d.openUrl).toHaveBeenCalledWith("/files?cwd=%2Fproj&path=src%2Fa.ts&line=42&col=7");
     expect(d.openInFiles).not.toHaveBeenCalled();
   });
 
@@ -52,12 +59,6 @@ describe("openLinkInTab", () => {
     openLinkInTab(link("/elsewhere/shot.png"), d);
     expect(d.openOutside).toHaveBeenCalledWith("/elsewhere/shot.png");
     expect(d.openUrl).not.toHaveBeenCalled();
-  });
-
-  it("reads a document outside the cell against its own directory", () => {
-    const d = deps();
-    openLinkInTab(link("/elsewhere/notes.md"), d);
-    expect(d.openUrl).toHaveBeenCalledWith("/api/files/browse/md?cwd=%2Felsewhere&path=notes.md");
   });
 });
 

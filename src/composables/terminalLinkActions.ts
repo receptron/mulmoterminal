@@ -3,14 +3,13 @@
 //
 // "Open in the pane" is what a click does: the pane first, the route after it declines. "Open in a
 // new tab" is the route without the pane, and for a source file — which a click sends to the
-// in-app Files view — the Files page in a tab of its own. "Open in the Files view" is that view
-// in this tab. "Copy the path" is the absolute path, which is what a prompt or an issue wants.
+// in-app Files view — that view in a tab of its own. "Open in the Files view" is that view in this
+// tab. "Copy the path" is the absolute path, which is what a prompt or an issue wants.
 import { fileLinkTarget, openLinkByRoute, resolveLinkPath, type LinkRouteDeps } from "./terminalFilePathLinkProvider";
 import { isWindowsRoot } from "./pathWithinCwd";
 import { joinedPath } from "./grantedTab";
 import { grantKind } from "../../common/fileGrant";
-import { filesPageUrl } from "../../common/filesPage";
-import type { FileLocation } from "./filePathLocation";
+import { locationQuery, type FileLocation } from "./filePathLocation";
 import type { HoveredLink } from "./terminalLinkMenu";
 
 export interface LinkActionDeps extends LinkRouteDeps {
@@ -22,6 +21,12 @@ export function openLinkInPane(link: HoveredLink, deps: LinkActionDeps): void {
   openLinkByRoute(link.text, link.cwd, link.location, deps);
 }
 
+/** The Files view's own URL for a file, the way `filesGotoFile` addresses it — by query, so a name
+ *  with any character in it (a `\` on a POSIX cwd included) rides encoded rather than as a path
+ *  segment a route would refuse. */
+export const filesViewUrl = (cwd: string, pathRel: string, location: FileLocation | undefined): string =>
+  `/files?${new URLSearchParams({ cwd, path: pathRel, ...locationQuery(location) }).toString()}`;
+
 export function openLinkInTab(link: HoveredLink, deps: LinkRouteDeps): void {
   const { base, rel, outside } = resolveLinkPath(link.text, link.cwd);
   if (outside && grantKind(rel) !== null) {
@@ -29,7 +34,7 @@ export function openLinkInTab(link: HoveredLink, deps: LinkRouteDeps): void {
     return;
   }
   const target = fileLinkTarget(rel, base);
-  deps.openUrl(target.kind === "url" ? target.url : filesPageUrl(base, rel));
+  deps.openUrl(target.kind === "url" ? target.url : filesViewUrl(base, rel, link.location));
 }
 
 export function openLinkInFiles(link: HoveredLink, deps: LinkRouteDeps): void {

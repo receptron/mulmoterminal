@@ -29,6 +29,17 @@ const menu = useTemplateRef<HTMLElement>("menu");
 const pos = ref<MenuPoint>({ top: 0, left: 0 });
 const canCopy = clipboardAvailable();
 
+/** What the last copy did, shown for a moment where the menu was: the menu has closed by then, and
+ *  a refused write would otherwise look like a copy that happened (CodeRabbit on #3256). */
+const NOTICE_MS = 2500;
+const notice = ref<{ text: string; point: MenuPoint } | null>(null);
+let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+function say(text: string, point: MenuPoint): void {
+  clearTimeout(noticeTimer);
+  notice.value = { text, point };
+  noticeTimer = setTimeout(() => (notice.value = null), NOTICE_MS);
+}
+
 // Placed once it has rendered, since only then is its size known: a right-click near an edge
 // opens the menu inward rather than off-screen.
 async function place(want: MenuPoint): Promise<void> {
@@ -67,20 +78,25 @@ watch(linkMenuRequest, (request, previous) => {
 onBeforeUnmount(() => {
   unlisten();
   closeLinkMenu();
+  clearTimeout(noticeTimer);
 });
 
 // Every item closes the menu, then acts on the link it was opened for.
-function pick(act: (link: HoveredLink) => void): void {
-  const link = linkMenuRequest.value;
+function pick(act: (link: HoveredLink, point: MenuPoint) => void): void {
+  const request = linkMenuRequest.value;
   closeLinkMenu();
-  if (link) act(link);
+  if (request) act(request, request.point);
 }
-async function copyPath(link: HoveredLink): Promise<void> {
+// The item is offered only where the browser gives a clipboard (clipboardAvailable), as the
+// pane's copy is; a write it then refuses — no focus, no permission — is said, with the path, so
+// the reader can take it by hand.
+async function copyPath(link: HoveredLink, point: MenuPoint): Promise<void> {
+  const text = absolutePathOf(link.text, link.cwd);
   try {
-    await navigator.clipboard.writeText(absolutePathOf(link.text, link.cwd));
+    await navigator.clipboard.writeText(text);
+    say(t("linkMenu.copied"), point);
   } catch {
-    // The browser refused the write; the item is only offered where a clipboard exists, and a
-    // refusal here has nothing the menu could say that the browser did not.
+    say(t("linkMenu.copyFailed", { path: text }), point);
   }
 }
 </script>
@@ -108,9 +124,26 @@ async function copyPath(link: HoveredLink): Promise<void> {
       <button type="button" role="menuitem" data-testid="link-open-files" :class="ITEM_CLASS" @click="pick((link) => openLinkInFiles(link, deps))">
         <span :class="ICON_CLASS" aria-hidden="true">folder_open</span> {{ t("linkMenu.openInFiles") }}
       </button>
-      <button v-if="canCopy" type="button" role="menuitem" data-testid="link-copy-path" :class="ITEM_CLASS" @click="pick((link) => void copyPath(link))">
+      <button
+        v-if="canCopy"
+        type="button"
+        role="menuitem"
+        data-testid="link-copy-path"
+        :class="ITEM_CLASS"
+        @click="pick((link, point) => void copyPath(link, point))"
+      >
         <span :class="ICON_CLASS" aria-hidden="true">content_copy</span> {{ t("linkMenu.copyPath") }}
       </button>
+    </div>
+    <div
+      v-if="notice"
+      data-testid="terminal-link-notice"
+      role="status"
+      aria-live="polite"
+      class="pointer-events-none fixed z-[60] max-w-[420px] rounded-md border border-border bg-panel px-2.5 py-1.5 text-[12px] text-fg shadow-lg"
+      :style="{ top: `${notice.point.top}px`, left: `${notice.point.left}px` }"
+    >
+      {{ notice.text }}
     </div>
   </Teleport>
 </template>

@@ -12,6 +12,8 @@ export const fileLinksJa = {
     openInTab: "新しいタブで開く",
     openInFiles: "Files ビューで開く",
     copyPath: "パスをコピー",
+    copied: "パスをコピーしました",
+    copyFailed: "パスをコピーできませんでした: {path}",
   },
   outsideFile: {
     missing: "{path} は見つかりません。",

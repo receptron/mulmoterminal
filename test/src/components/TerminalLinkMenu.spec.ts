@@ -76,10 +76,27 @@ describe("TerminalLinkMenu", () => {
     wrapper.unmount();
   });
 
-  it("copies the absolute path", async () => {
+  it("copies the absolute path and says so where the menu was", async () => {
     const wrapper = await open("docs/a.md");
     item("link-copy-path")?.click();
     expect(writeText).toHaveBeenCalledWith("/proj/docs/a.md");
+    await nextTick();
+    await nextTick();
+    const notice = document.body.querySelector<HTMLElement>("[data-testid=terminal-link-notice]");
+    expect(notice?.textContent?.trim()).toBe("Path copied");
+    expect(notice?.style.top).toBe("40px");
+    wrapper.unmount();
+  });
+
+  // The menu has closed by the time a write is refused, so the refusal has to be said — with the
+  // path, so it can be taken by hand — not swallowed.
+  it("says when the clipboard refuses the write, and shows the path", async () => {
+    writeText.mockRejectedValueOnce(new Error("NotAllowedError"));
+    const wrapper = await open("docs/a.md");
+    item("link-copy-path")?.click();
+    await nextTick();
+    await nextTick();
+    expect(document.body.querySelector("[data-testid=terminal-link-notice]")?.textContent?.trim()).toBe("The path could not be copied: /proj/docs/a.md");
     wrapper.unmount();
   });
 
