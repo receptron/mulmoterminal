@@ -81,6 +81,15 @@ describe("absolutePathOf", () => {
     ["../other/b.ts", "/proj", "/other/b.ts"],
     ["src\\a.ts", "C:\\work", "C:\\work\\src\\a.ts"],
     ["C:\\other\\a.ts", "C:\\work", "C:\\other\\a.ts"],
+    // Resolved, not just joined: a `.` or `..` inside the cell, and a `..` out of it in a Windows
+    // cell, come out as the filesystem would spell them (Codex on #3256).
+    ["src/../a.ts", "/proj", "/proj/a.ts"],
+    ["./a.ts", "/proj", "/proj/a.ts"],
+    ["../../x.ts", "/proj", "/x.ts"],
+    ["a.ts", "/", "/a.ts"],
+    ["..\\other\\a.ts", "C:\\work", "C:\\other\\a.ts"],
+    ["src/a.ts", "C:\\work", "C:\\work\\src\\a.ts"],
+    ["src/lib\\a.ts", "/proj", "/proj/src/lib\\a.ts"],
   ])("%s printed in %s is %s", (text, cwd, abs) => {
     expect(absolutePathOf(text, cwd)).toBe(abs);
   });

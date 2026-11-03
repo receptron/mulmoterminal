@@ -44,15 +44,26 @@ export function openLinkInFiles(link: HoveredLink, deps: LinkRouteDeps): void {
 
 const POSIX_ABSOLUTE = /^[/~]/;
 const WINDOWS_ABSOLUTE = /^(?:[A-Za-z]:[\\/]|\\\\)/;
+const WINDOWS_SEPARATORS = /[\\/]/;
 
-/** The path as a prompt or an issue wants it: absolute. A printed absolute path is itself; a
- *  relative one is joined to the cell's directory — with the separator that directory uses, since
- *  a Windows cell prints `\`-separated paths (#3236). A `..` is resolved by the rebasing the routes
- *  use, which puts the file in its own directory. */
+/** Segments as a filesystem resolves them: a `.` is nothing, a `..` climbs — never above the root,
+ *  which is the first segment (empty for `/`, the drive for `C:`). */
+function resolvedSegments(parts: string[]): string[] {
+  return parts.reduce<string[]>((out, segment, index) => {
+    if (index === 0) return [segment];
+    if (segment === "" || segment === ".") return out;
+    if (segment === "..") return out.length > 1 ? out.slice(0, -1) : out;
+    return [...out, segment];
+  }, []);
+}
+
+/** The path as a prompt or an issue wants it: absolute, `.` and `..` resolved, in the separator the
+ *  cell prints (#3236). In a Windows cell both separators are read and `\` is written, since there a
+ *  `\` cannot be part of a name; on any other root only `/` separates, so a `\` printed in a name
+ *  stays one. A printed absolute path is itself. */
 export function absolutePathOf(text: string, cwd: string): string {
   if (POSIX_ABSOLUTE.test(text) || WINDOWS_ABSOLUTE.test(text)) return text;
-  const { base, rel, outside } = resolveLinkPath(text, cwd);
-  if (outside) return joinedPath(base, rel);
-  const separator = isWindowsRoot(cwd) ? "\\" : "/";
-  return cwd.endsWith(separator) ? `${cwd}${text}` : `${cwd}${separator}${text}`;
+  const windows = isWindowsRoot(cwd);
+  const split = (path: string): string[] => path.split(windows ? WINDOWS_SEPARATORS : "/");
+  return resolvedSegments([...split(cwd), ...split(text)]).join(windows ? "\\" : "/");
 }
