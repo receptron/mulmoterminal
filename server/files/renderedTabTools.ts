@@ -103,9 +103,11 @@ export function tabToolLabelsFor(language: unknown, kind: RenderedKind): TabTool
   };
 }
 
-// The script finds every element it touches as a direct child of <body> (or under one), never by
-// id alone: the file's own HTML lands INSIDE the rendered view, so an id it happens to repeat is a
-// descendant and `body > #…` never answers with it.
+// The script never looks an element up by id or class across the document: the file's own HTML
+// lands inside the rendering, and raw HTML in Markdown can close the rendering's wrapper and put
+// elements of its own beside it, repeating any id or class. What the file cannot do is put anything
+// BEFORE the wrapper, so the shell emits the toolbar, the source and the wrapper first and the
+// script reads them as the first three children of <body>, and finds itself as `currentScript`.
 const toolbarHtml = (labels: TabToolLabels): string =>
   [
     `<div class="tab-tools" role="toolbar" aria-label="${escapeHtml(labels.toolbar)}">`,
@@ -135,20 +137,35 @@ const COPIED_NOTICE_MS = 1500;
 /** The toolbar's script, as it is written into the document. One constant: nothing from the file
  *  and no label is interpolated, so the only thing a response adds to it is the nonce on its tag.
  *
+ *  Its elements are the first three children of <body> — the toolbar, the source, the rendering's
+ *  wrapper — checked for the shell's own marks, and the script itself is `currentScript`. Buttons
+ *  are looked for inside the toolbar only. The rendering is every element from the wrapper up to
+ *  the script: raw HTML in the file may have closed the wrapper early, and what follows it is
+ *  still the rendering, shown and hidden and copied with it.
+ *
  *  Copying tries the Clipboard API first — `write` with both the text as shown and the HTML, so a
- *  rich editor keeps the headings and a plain field gets the words — and falls back to selecting
- *  the element and `execCommand("copy")`, which is what a page without a clipboard (plain http on
- *  a LAN address) or a refused write still has. A view the reader is not looking at has no layout
- *  and so no line breaks in its text, so it is shown for the moment of the read. */
+ *  rich editor keeps the headings and a plain field gets the words — and falls back to a selection
+ *  and `execCommand("copy")`, which is what a page without a clipboard (plain http on a LAN
+ *  address) or a refused write still has. For the source that selection is a textarea holding the
+ *  exact text: selecting the element's contents instead ends at its last character and loses the
+ *  file's final newline. A view the reader is not looking at has no layout and so no line breaks
+ *  in its text, so it is shown for the moment of the read. */
 const TOOLS_SCRIPT = `(() => {
-  const rendered = document.querySelector("body > #tab-rendered");
-  const source = document.querySelector("body > #tab-source");
-  const status = document.querySelector("body > .tab-tools .tab-tools-status");
-  if (!rendered || !source || !status) return;
-  const views = { rendered, source };
+  const script = document.currentScript;
+  const [toolbar, source, rendered] = document.body.children;
+  if (!script || !toolbar || !source || !rendered) return;
+  if (!toolbar.classList.contains("tab-tools") || source.id !== "tab-source" || rendered.id !== "tab-rendered") return;
+  const status = toolbar.querySelector(".tab-tools-status");
+  if (!status) return;
+  const renderedNodes = () => {
+    const nodes = [];
+    for (let el = rendered; el && el !== script; el = el.nextElementSibling) nodes.push(el);
+    return nodes;
+  };
   const show = (name) => {
-    for (const [key, el] of Object.entries(views)) el.hidden = key !== name;
-    for (const b of document.querySelectorAll("body > .tab-tools [data-show]")) b.setAttribute("aria-pressed", String(b.dataset.show === name));
+    source.hidden = name !== "source";
+    for (const el of renderedNodes()) el.hidden = name !== "rendered";
+    for (const b of toolbar.querySelectorAll("[data-show]")) b.setAttribute("aria-pressed", String(b.dataset.show === name));
   };
   let timer = 0;
   const say = (text) => {
@@ -156,26 +173,50 @@ const TOOLS_SCRIPT = `(() => {
     clearTimeout(timer);
     timer = setTimeout(() => { status.textContent = ""; }, ${COPIED_NOTICE_MS});
   };
-  const whileShown = (el, read) => {
-    const hidden = el.hidden;
-    el.hidden = false;
-    try { return read(); } finally { el.hidden = hidden; }
+  const whileShown = (els, read) => {
+    const hidden = els.map((el) => el.hidden);
+    els.forEach((el) => { el.hidden = false; });
+    try { return read(); } finally { els.forEach((el, i) => { el.hidden = hidden[i]; }); }
   };
-  const selectAndCopy = (el) => whileShown(el, () => {
+  const renderedRange = () => {
+    const range = document.createRange();
+    range.setStartBefore(rendered);
+    range.setEndBefore(script);
+    return range;
+  };
+  const renderedHtml = () => {
+    const box = document.createElement("div");
+    box.append(renderedRange().cloneContents());
+    return box.innerHTML;
+  };
+  const renderedText = () => {
+    const nodes = renderedNodes();
+    return whileShown(nodes, () => nodes.map((el) => el.innerText).join("\\n"));
+  };
+  const copySelection = (select) => {
     const selection = getSelection();
     if (!selection) return false;
-    const range = document.createRange();
-    range.selectNodeContents(el);
     selection.removeAllRanges();
-    selection.addRange(range);
+    select(selection);
     try { return document.execCommand("copy"); } finally { selection.removeAllRanges(); }
-  });
+  };
+  const selectAndCopy = (name) => {
+    if (name === "source") {
+      const area = document.createElement("textarea");
+      area.value = source.textContent ?? "";
+      area.setAttribute("aria-hidden", "true");
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.append(area);
+      try { return copySelection(() => area.select()); } finally { area.remove(); }
+    }
+    return whileShown(renderedNodes(), () => copySelection((selection) => selection.addRange(renderedRange())));
+  };
   const write = (name) => {
-    const el = views[name];
-    if (name === "source") return navigator.clipboard.writeText(el.textContent ?? "");
-    const text = whileShown(el, () => el.innerText);
+    if (name === "source") return navigator.clipboard.writeText(source.textContent ?? "");
+    const text = renderedText();
     if (typeof ClipboardItem !== "function") return navigator.clipboard.writeText(text);
-    const item = new ClipboardItem({ "text/plain": new Blob([text], { type: "text/plain" }), "text/html": new Blob([el.innerHTML], { type: "text/html" }) });
+    const item = new ClipboardItem({ "text/plain": new Blob([text], { type: "text/plain" }), "text/html": new Blob([renderedHtml()], { type: "text/html" }) });
     return navigator.clipboard.write([item]);
   };
   const copy = async (name) => {
@@ -183,11 +224,11 @@ const TOOLS_SCRIPT = `(() => {
       await write(name);
       say(status.dataset.copied ?? "");
     } catch {
-      say(selectAndCopy(views[name]) ? status.dataset.copied ?? "" : status.dataset.failed ?? "");
+      say(selectAndCopy(name) ? status.dataset.copied ?? "" : status.dataset.failed ?? "");
     }
   };
-  for (const b of document.querySelectorAll("body > .tab-tools [data-show]")) b.addEventListener("click", () => show(b.dataset.show));
-  for (const b of document.querySelectorAll("body > .tab-tools [data-copy]")) b.addEventListener("click", () => { void copy(b.dataset.copy); });
+  for (const b of toolbar.querySelectorAll("[data-show]")) b.addEventListener("click", () => show(b.dataset.show));
+  for (const b of toolbar.querySelectorAll("[data-copy]")) b.addEventListener("click", () => { void copy(b.dataset.copy); });
 })();`;
 
 export interface RenderedTabDoc {
@@ -202,13 +243,14 @@ export interface RenderedTabDoc {
   labels: TabToolLabels;
 }
 
-/** The tab's document: the toolbar, the rendering, the source (hidden until asked for) and the one
- *  script, in the shared shell. */
+/** The tab's document: the toolbar, the source (hidden until asked for), the rendering and the one
+ *  script, in the shared shell. The order is the script's contract (see TOOLS_SCRIPT): everything
+ *  the shell owns comes before the first byte of the file's rendering. */
 export function renderedTabDoc({ html, source, title, style, nonce, labels }: RenderedTabDoc): string {
   const body = [
     toolbarHtml(labels),
-    `<div id="tab-rendered">${html}</div>`,
     `<pre id="tab-source" hidden><code>${escapeHtml(source)}</code></pre>`,
+    `<div id="tab-rendered">${html}</div>`,
     `<script nonce="${nonce}">${TOOLS_SCRIPT}</script>`,
   ].join("");
   return htmlDoc(body, title, style + TOOLS_STYLE);

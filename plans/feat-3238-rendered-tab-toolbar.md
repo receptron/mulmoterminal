@@ -26,15 +26,23 @@
 
 - `server/files/renderedTabTools.ts`（新規、純関数）: ラベル表と言語の選択、ツールバーの HTML、ソース表示の
   `<pre>`、スクリプト（定数一本。ファイル由来の値もラベルも埋め込まない。ラベルは文書の属性から読む）。
-  要素は `body > …` で構造的に引く（ファイルの中に同じ id があっても乗っ取られない）。
+  Markdown の生 HTML は描画の包みを閉じて、同じ id やクラスの偽物を `body` の直下に置けるので、要素は id や
+  クラスで探さない。外殻はツールバー・ソース・描画の包み・スクリプトの順に出し（ファイルの中身より前に
+  サーバー側の三要素が必ず来る）、スクリプトは `body` の先頭三子を位置で取り、自分は `currentScript` で
+  見つけ、ボタンの検索はツールバーの中に限る。描画は「包みからスクリプトまでの兄弟全部」として扱う
+  （ファイルが包みを早く閉じても、残りも一緒に隠し、一緒にコピーする）。
+- 後退経路のコピー: ソースは正確な文字列を入れた一時的な `textarea` を選択してコピーする（要素の中身の
+  選択は最後の文字で終わり、末尾の改行が落ちる）。描画は範囲選択のまま（書式が目的）。
 - `server/files/renderedDoc.ts`: JSON と表の本文と見た目を外殻から分け、ペイン用の外殻とタブ用の外殻の両方が
   同じ本文を使えるようにする。既存の `jsonHtmlDoc` / `tableHtmlDoc` はその薄い包み。
 - `server/files/files-browse.ts`: `mountRenderedRoute` が三つの形を返す。埋め込み文書のある経路の `embed=1`
   （従来どおり）、埋め込み文書の無い経路の `embed=1`（素の文書、従来どおり）、それ以外（タブ: ツールバー付き、
   nonce 付き CSP）。
 - `src/components/filesPreviewSrc.ts`: JSON と表の Preview の URL にも `embed=1`。
-- 仕様書: `renderedTabTools.spec.ts`（新規）、`files-browse.spec.ts` / `files-browse-json.spec.ts` /
-  `previewMermaidRoute.spec.ts` の素の文書の断定を更新、`filesPreviewSrc.spec.ts`。
+- 仕様書: `renderedTabTools.spec.ts`（新規）、`renderedTabToolsDom.spec.ts`（新規、jsdom で敵対的な文書を
+  解析し、先頭三子がサーバー側の要素であること）、`files-browse-tab.spec.ts`（新規、タブの文書）、
+  `files-browse.spec.ts` / `files-browse-json.spec.ts` / `previewMermaidRoute.spec.ts` / `previewMathRoute.spec.ts` /
+  `previewCodeNumbering.spec.ts` の素の文書の断定を更新、`filesPreviewSrc.spec.ts`。
 - 文書: README の "Clicking a file path" の行、`docs/guide/{en,ja}/features.md`、`docs/terminal-notes.md`、
   `docs/file-surfaces.md`、`renderedDoc.ts` と `filesPreviewSrc.ts` の冒頭コメント。
 

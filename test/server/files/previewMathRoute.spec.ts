@@ -38,7 +38,7 @@ describe("GET /api/files/browse/md with maths", () => {
       expect(res.text).toContain('<span class="math"><mjx-container');
       expect(res.text).toContain("mjx-assistive-mml{position:absolute");
       // The tab shows the source as it is beside the rendering (#3238), so only the rendering is judged.
-      expect(res.text.split('<pre id="tab-source"')[0]).not.toContain("$a^2+b^2$");
+      expect(res.text.split('<div id="tab-rendered">').pop()).not.toContain("$a^2+b^2$");
     });
   });
 

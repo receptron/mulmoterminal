@@ -35,12 +35,14 @@ describe("tabToolLabelsFor", () => {
 });
 
 describe("renderedTabDoc", () => {
-  it("puts the toolbar first, then the rendering, then the source hidden, then the script", () => {
+  // The order is the script's contract: the file's rendering comes last, so nothing the file
+  // contains can precede the three elements the script reads by position.
+  it("puts the toolbar first, then the source hidden, then the rendering, then the script", () => {
     const html = doc();
     const order = [
       'class="tab-tools"',
-      '<div id="tab-rendered"><h1>hi</h1></div>',
       '<pre id="tab-source" hidden><code># hi\n</code></pre>',
+      '<div id="tab-rendered"><h1>hi</h1></div>',
       '<script nonce="n0nce">',
     ].map((part) => html.indexOf(part));
     expect(order.every((at) => at >= 0)).toBe(true);
@@ -84,20 +86,37 @@ describe("renderedTabDoc", () => {
     expect(b).toContain('<script nonce="other">');
   });
 
-  // The file's own HTML lands inside the rendering, so an id it repeats is a descendant; the script
-  // reaches its elements as children of <body> and never by a bare id.
-  it("finds its elements structurally, not by an id the file could repeat", () => {
+  // What the one script must be made of, read off its text. Raw HTML in the file can close the
+  // rendering's wrapper and repeat any id or class beside it, so the script reads its three elements
+  // by POSITION — the first children of <body>, which the file cannot precede — checks the shell's
+  // marks on them, finds itself as currentScript, and looks for buttons inside the toolbar only. What
+  // follows a wrapper the file closed early is still the rendering (the elements from the wrapper up
+  // to the script). And the SOURCE's fallback copy selects a textarea holding the exact text, since
+  // selecting an element's contents ends at its last character and loses the file's final newline;
+  // the rendering keeps the selection, which is what carries its formatting.
+  it.each([
+    [
+      "reads its elements by position",
+      [
+        "const [toolbar, source, rendered] = document.body.children;",
+        "const script = document.currentScript;",
+        'source.id !== "tab-source" || rendered.id !== "tab-rendered"',
+      ],
+    ],
+    ["looks for buttons inside the toolbar only", ['toolbar.querySelectorAll("[data-show]")', 'toolbar.querySelectorAll("[data-copy]")']],
+    [
+      "treats everything between the wrapper and the script as the rendering",
+      ["for (let el = rendered; el && el !== script; el = el.nextElementSibling)", "range.setStartBefore(rendered);", "range.setEndBefore(script);"],
+    ],
+    ["copies the rendering as text and as HTML, and falls back to a selection", ['"text/plain"', '"text/html"', 'execCommand("copy")']],
+    ["falls back to a textarea for the source", ['document.createElement("textarea")', "area.value = source.textContent", "area.select()"]],
+  ])("%s", (_what, parts) => {
     const script = scriptOf(doc());
-    expect(script).toContain('querySelector("body > #tab-rendered")');
-    expect(script).toContain('querySelector("body > #tab-source")');
-    expect(script).not.toContain("getElementById");
+    parts.forEach((part) => expect(script).toContain(part));
   });
 
-  it("copies the rendering as text and as HTML, and falls back to selecting it", () => {
-    const script = scriptOf(doc());
-    expect(script).toContain('"text/plain"');
-    expect(script).toContain('"text/html"');
-    expect(script).toContain('execCommand("copy")');
+  it.each(["getElementById", "document.querySelector(", "document.querySelectorAll("])("never looks an element up with %s", (lookup) => {
+    expect(scriptOf(doc())).not.toContain(lookup);
   });
 
   it("keeps the route's style and adds the toolbar's", () => {
