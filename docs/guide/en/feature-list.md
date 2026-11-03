@@ -4,7 +4,7 @@ nav_title: Feature list
 layout: default
 parent: English
 nav_order: 6.5
-as_of: 11.6.0
+as_of: 11.7.0
 description: "Every capability MulmoTerminal has today, one line each with the release it arrived in, grouped by area (as of 9.1.0)."
 ---
 
@@ -45,6 +45,7 @@ More: [Basics](basics.html)
 - The roster, sidebar and tab bar colour waiting rows amber and unread finished rows green (v2.9.0)
 - An empty cell's launch row offers Shell, opening your default OS shell with no configuration (v2.8.0)
 - A pencil in the cell header adds your own one-line note per session, shown in the roster and on the phone (v2.7.0)
+- A Claude cell's header shows, as a small chip that copies it, the name other Claude Code sessions on this machine message it by; a session a program drives from inside the cell is passed over (v11.7.0)
 - Dividers in an enlarged cell can be dragged or moved by keyboard, and the widths survive reload (v2.7.0)
 - Dropping a file onto a terminal uploads it and inserts the saved path; pasting an image does too since 2.8 (v2.7.0)
 - Background workers (scheduled or spawned) sit behind a Background filter, and ones that died mid-turn show failed (v2.7.0)
@@ -201,6 +202,9 @@ More: [Feature reference](features.html)
 - Leaving an open file saves it automatically (v2.2.0)
 - Clicked files open by kind: rendered Markdown, indented JSON, CSV as a table (v1.11.0)
 - File paths in terminal output are clickable and open a preview (v1.8.0)
+- A right-click on a file path in terminal output opens a menu: open in the pane, open in a new tab, open in the Files view, or copy the absolute path; a right-click no longer opens the file the way a click does (v11.7.0)
+- A Markdown, JSON or table document opened in a tab of its own has a toolbar that switches between the rendering and the file's source and copies either (v11.7.0)
+- In a Windows cell, backslash-separated and drive-letter paths printed in terminal output are links too (v11.7.0)
 - A full-screen file explorer with a CodeMirror editor and Markdown preview, linkable by ?path= since 1.11 (v0.6.2)
 
 ## Git, worktrees and PRs
