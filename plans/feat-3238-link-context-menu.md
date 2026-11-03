@@ -23,7 +23,8 @@ Cmd / Ctrl を押したクリックは新しい Files タブ（#3005）。開き
 ## 仕組み
 
 - `terminalFilePathLinkProvider.ts`: xterm の `ILink` に `hover` / `leave` を付け、指しているリンクを
-  呼び出し側に知らせる。クリックの後半（経路で開く）を `openLinkByRoute` に切り出し、クリックとメニューで
+  呼び出し側に知らせる。xterm はどのボタンの `mouseup` でもリンクを発火させるので、`activate` は主ボタン
+  以外を無視する（右クリックでリンクが勝手に開いていた既存の挙動もこれで消える）。クリックの後半（経路で開く）を `openLinkByRoute` に切り出し、クリックとメニューで
   共用する。`resolveLinkPath` で基点と相対パスの解決も共用。
 - `terminalFileLinks.ts`: ホバー中のリンクを覚え、`term.element` の `contextmenu` で
   `requestLinkMenu` に渡す（ターミナル一つにつき一回だけ配線される）。

@@ -82,6 +82,7 @@ const ROUTE_BY_EXTENSION: Record<string, string> = {
 };
 
 const RAW_ROUTE = "/api/files/raw";
+const MAIN_BUTTON = 0;
 
 // Source: nothing a browser tab can do with it beyond showing the bytes, which is what the
 // app's own Files view does better — CodeMirror highlights it, the tree is right there, and
@@ -225,6 +226,8 @@ export function createFilePathLinkProvider(term: Terminal, getCwd: () => string 
         range: { start: { x: link.startX, y: bufferLineNumber }, end: { x: link.endX, y: bufferLineNumber } },
         decorations: { pointerCursor: true, underline: true },
         activate: (event: MouseEvent) => {
+          // xterm activates a link on any button's mouseup; a right-click is the menu's (#3238).
+          if (event.button !== MAIN_BUTTON) return;
           if (openInPane(link.text, cwd, link.location, wantsNewTab(event))) return;
           openLinkByRoute(link.text, cwd, link.location, { openUrl, openInFiles, openOutside });
         },

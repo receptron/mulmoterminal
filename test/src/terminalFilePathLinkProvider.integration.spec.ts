@@ -191,6 +191,25 @@ describe("createFilePathLinkProvider against real xterm", () => {
     expect(hovered[1]).toBeNull();
   });
 
+  // xterm hands activate() the mouseup of ANY button; a right-click is the menu's, and must not
+  // also open the file the way a left click would (found by the real-app check on #3256).
+  it("ignores an activation from a button other than the main one", async () => {
+    const term = new Terminal({ cols: 120, rows: 10, allowProposedApi: true });
+    term.open(document.createElement("div"));
+    await writeLine(term, "see docs/a.md and src/a.ts");
+    const opened: string[] = [];
+    const links = provideLinks(
+      term,
+      "/proj",
+      (url) => opened.push(url),
+      (filePath) => opened.push(`files:${filePath}`),
+    );
+    links?.forEach((link) => link.activate(new MouseEvent("mouseup", { button: 2 }), link.text));
+    expect(opened).toEqual([]);
+    links?.forEach((link) => link.activate(new MouseEvent("click", { button: 0 }), link.text));
+    expect(opened).toHaveLength(2);
+  });
+
   it("provides no links when the session cwd is unknown", async () => {
     const term = new Terminal({ cols: 80, rows: 10, allowProposedApi: true });
     term.open(document.createElement("div"));
