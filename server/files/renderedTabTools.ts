@@ -107,7 +107,8 @@ export function tabToolLabelsFor(language: unknown, kind: RenderedKind): TabTool
 // lands inside the rendering, and raw HTML in Markdown can close the rendering's wrapper and put
 // elements of its own beside it, repeating any id or class. What the file cannot do is put anything
 // BEFORE the wrapper, so the shell emits the toolbar, the source and the wrapper first and the
-// script reads them as the first three children of <body>, and finds itself as `currentScript`.
+// script reads them as the first four children of <body> — itself the third, which it checks against
+// `currentScript`.
 /** The source as a JSON string in a data block, for the copies to read: the <pre> that SHOWS it
  *  goes through the HTML parser, which turns CRLF into LF and U+0000 into U+FFFD before any script
  *  can read it, so a file is copied "as it is" only from text the parser never touches. A data

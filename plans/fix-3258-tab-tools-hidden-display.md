@@ -17,7 +17,7 @@ CodeRabbit がマージ直前に二件の軽微な指摘を残していた。
 - 隠すときは `hidden` 属性に加えて `style` 属性へ `display:none !important` を足す。インラインの `!important` は
   作者スタイルシートの `!important` にも勝つ。見せるときは、その要素が元から持っていた `style` 属性の文字列
   （ファイルの生 HTML が `style="display:flex"` を付けていた場合など）をそのまま戻す。覚えておくのはスクリプト内の
-  `Map`（要素 → 元の `style` 属性）。
+  `Map`（要素 → 元の `style` 属性と、元から `hidden` だったか）。
 - ラッパーの外に並ぶ要素はファイルのもの。そこに `<form>` があると `<input name="style">` のような名前の入力が
   `el.style` / `el.hidden` / `el.nextElementSibling` / `el.innerText` を上書きする（DOM の上書き）。だから
   ファイル側の要素には要素のプロパティで触らず、`Element.prototype` の属性メソッドと取得子を `.call` で使う。
