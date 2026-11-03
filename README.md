@@ -691,9 +691,10 @@ there is no terminal to start it again in. A stop you asked for is still a stop:
 managed to bind is not restarted either — the reason it printed is the answer, and
 retrying would bury it. Repeated failures give up rather than respawn forever.
 
-**Not on Windows**, where it is not yet possible: Node has no real signals there, so every
-way of stopping the server terminates it outright, and the launcher cannot tell that from
-a crash. Windows keeps the old behaviour — the launcher ends when its server does.
+**Not on Windows**, where it is not yet possible: Node has no real signals there, so a
+`taskkill` (or a `stop` the server did not answer) terminates it outright, and the launcher
+cannot tell that from a crash. Windows keeps the old behaviour — the launcher ends when its
+server does.
 
 **No tmux? No problem** — terminals fall back to plain (non-persistent) PTYs, exactly as
 before. An explicit close (a cell's ✕) ends the tmux session; a machine reboot does not

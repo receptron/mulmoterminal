@@ -23,6 +23,8 @@ import { portOwners } from "./port-owner.js";
 // a server that was merely mid-shutdown would send the user hunting for a problem that isn't there.
 const GRACE_MS = 5000;
 const POLL_MS = 100;
+// How long the server has to answer the stop request before the signal is used instead.
+const REQUEST_TIMEOUT_MS = 2000;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -50,20 +52,55 @@ export async function confirmInstance(instance, deps = {}) {
   return pids !== null && pids.includes(instance.pid);
 }
 
+/** Why the signal could not be sent, or null when it was. ESRCH means the process ended between the
+ *  registry being read and now — success, just not ours. Anything else (EPERM: another user's
+ *  process) is a refusal the user has to see. */
+function signalRefusal(kill, pid) {
+  try {
+    kill(pid);
+    return null;
+  } catch (err) {
+    return err?.code ?? "failed";
+  }
+}
+
+/**
+ * Ask a server to stop the way the browser's Stop button does: POST /api/shutdown on its own port,
+ * which runs the same shutdown Ctrl+C runs. True when it said it is stopping.
+ *
+ * Not a signal first, because on Windows a signal to another process is TerminateProcess: the
+ * server never ran its shutdown, and the session state it flushes on the way out was lost (#3234).
+ * The Origin is the one the browser sends, which the same-origin gate admits.
+ */
+export async function askServerToStop(instance, { fetchImpl = fetch, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
+  const url = `http://127.0.0.1:${instance.port}/api/shutdown`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetchImpl(url, { method: "POST", headers: { Origin: `http://localhost:${instance.port}` }, signal: controller.signal });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Ask every instance to stop, and report which did.
  *
- * SIGTERM, not SIGKILL: it lands on the server's own handler and runs the same shutdown Ctrl+C
- * runs, which is the whole promise of this command. The effects are injected so the waiting and
- * the reporting can be tested without spawning anything.
+ * Over HTTP first (`askServerToStop`), SIGTERM when that is not answered: the signal lands on the
+ * server's own handler on macOS and Linux, and is the only way left to a server that has stopped
+ * answering. The effects are injected so the waiting and the reporting can be tested without
+ * spawning anything.
  *
- * Note for Windows: Node has no real signals there, so this terminates the process outright rather
- * than running its handler. Nothing is lost by it — the only thing that shutdown path cleans up is
- * the whisper sidecar, which exists on macOS alone.
+ * `--force` skips the request and only signals: the pid is not confirmed to own the port then, so
+ * the server answering on it may be a different one.
  */
 export async function stopInstances(instances, effects = {}) {
   const {
     kill = (pid) => process.kill(pid, "SIGTERM"),
+    request = askServerToStop,
     isAlive = isProcessAlive,
     sleep = wait,
     graceMs = GRACE_MS,
@@ -81,14 +118,9 @@ export async function stopInstances(instances, effects = {}) {
       unconfirmed.push(instance);
       continue;
     }
-    try {
-      kill(instance.pid);
-      asked.push(instance);
-    } catch (err) {
-      // ESRCH means it ended between the registry being read and now — which is success, just not
-      // ours. Anything else (EPERM: another user's process) is a refusal the user has to see.
-      if (err?.code !== "ESRCH") stubborn.push({ ...instance, reason: err?.code ?? "failed" });
-    }
+    const refusal = !force && (await request(instance)) ? null : signalRefusal(kill, instance.pid);
+    if (refusal === null) asked.push(instance);
+    else if (refusal !== "ESRCH") stubborn.push({ ...instance, reason: refusal });
   }
 
   for (let waited = 0; waited < graceMs && asked.some((i) => isAlive(i.pid)); waited += POLL_MS) {

@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { EventEmitter } from "node:events";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // vi.mock is hoisted above every const in the file, so the spy has to be hoisted with it.
@@ -6,7 +7,7 @@ const { stopWhisperSidecar, drainPersistQueues } = vi.hoisted(() => ({ stopWhisp
 vi.mock("../../../../server/backends/media/whisper.js", () => ({ stopWhisperSidecar }));
 vi.mock("../../../../server/session/reaping/persist-drain.js", () => ({ drainPersistQueues }));
 
-import { installShutdownHandlers } from "../../../../server/infra/process/shutdown.js";
+import { installShutdownHandlers, requestShutdown } from "../../../../server/infra/process/shutdown.js";
 
 // Registering a signal listener is what SUPPRESSES Node's own termination, so a signal this module
 // forgets is a MulmoTerminal that no longer dies from Ctrl+C. That failure is invisible to every
@@ -26,6 +27,8 @@ const SIGNALS = ["SIGINT", "SIGTERM"] as const;
 
 describe("installShutdownHandlers", () => {
   let registered: OnceArgs[] = [];
+  // The parent's IPC channel. A stand-in, because the real one in a vitest worker is vitest's.
+  let channel = new EventEmitter();
 
   beforeEach(() => {
     registered = [];
@@ -36,7 +39,8 @@ describe("installShutdownHandlers", () => {
       registered.push(args);
       return process;
     });
-    installShutdownHandlers();
+    channel = new EventEmitter();
+    installShutdownHandlers(channel);
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -137,5 +141,36 @@ describe("installShutdownHandlers", () => {
     listenerFor("SIGINT")?.("SIGINT");
     await settleEverythingPending();
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("lost"));
+  });
+
+  // #3234. On Windows a parent's signal is TerminateProcess, so the launcher and `yarn dev` ask over
+  // the channel instead — and that request has to run the very same drain-then-exit.
+  it("runs the same drain and exit when a parent asks over the channel", async () => {
+    const exit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    channel.emit("message", { type: "shutdown" });
+    await settleEverythingPending();
+    expect(stopWhisperSidecar).toHaveBeenCalledTimes(1);
+    expect(drainPersistQueues).toHaveBeenCalledTimes(1);
+    expect(exit).toHaveBeenCalledWith(0);
+  });
+
+  it.each([[{ type: "listening" }], ["shutdown"], [null], [{}]])("ignores a message that is not the request: %j", async (message) => {
+    const exit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    channel.emit("message", message);
+    await settleEverythingPending();
+    expect(drainPersistQueues).not.toHaveBeenCalled();
+    expect(exit).not.toHaveBeenCalled();
+  });
+
+  // One Ctrl+C on POSIX arrives twice — the terminal signals the whole group, and the launcher
+  // also sends its message — and the browser's button can race a Ctrl+C. Each must drain once.
+  it("drains once however many ways the stop is asked for", async () => {
+    vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    listenerFor("SIGINT")?.("SIGINT");
+    channel.emit("message", { type: "shutdown" });
+    requestShutdown();
+    listenerFor("SIGTERM")?.("SIGTERM");
+    await settleEverythingPending();
+    expect(drainPersistQueues).toHaveBeenCalledTimes(1);
   });
 });

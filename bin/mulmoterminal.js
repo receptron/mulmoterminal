@@ -47,6 +47,7 @@ import { agentBin, AGENT_BIN_SPEC } from "./agent-bins.js";
 import { configuredDefaultAgent, gateFor, isKnownAgent, missingAgentMessage, parseAgentArg, resolveDeclaredAgent } from "./default-agent.js";
 import { setProcessTitle } from "./process-title.js";
 import { nodeUpgradeGuide } from "./node-install.js";
+import { installParentShutdown } from "./child-shutdown.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = join(__dirname, "..");
@@ -705,44 +706,6 @@ Options:
 function notePortFromEnvironment(port) {
   log(`Port ${port} comes from the PORT environment variable — that is the port MulmoTerminal is asking for.`);
   log(`  Terminals inside cells inherit that PORT too, as in any shell you exported it from.`);
-}
-
-const CHILD_EXIT_GRACE_MS = 2000;
-
-/** Ctrl+C reaches the child too (the signal goes to the whole process group), and the child now
- *  flushes queued session state before it exits (#2161). Exiting here the instant we have
- *  signalled would hand the shell back first and, when the terminal then goes away, cut that
- *  flush short — so we wait for the child's own exit.
- *
- *  Capped, because a child that will not die must not leave the user unable to get their prompt
- *  back. Past the cap we go and leave it orphaned, which is what used to happen every time.
- *
- *  `getChild` rather than the child itself: it is replaced across restarts and bind-retries, and
- *  the handler is registered once. */
-export function installParentShutdown(
-  getChild,
-  { graceMs = CHILD_EXIT_GRACE_MS, exit = (code) => process.exit(code), on = (sig, fn) => process.on(sig, fn) } = {},
-) {
-  let shuttingDown = false;
-  const shutdown = () => {
-    const child = getChild();
-    // A second Ctrl+C means "stop waiting", not "signal twice".
-    if (shuttingDown || !child) return exit(0);
-    // A child that has already gone emits no further `close`, so waiting for one would spend the
-    // whole grace period doing nothing — Ctrl+C after a crash would feel like a hang (Codex on
-    // #2195 called this bounded and escapable; it is, and it is also free to avoid).
-    if (child.exitCode !== null || child.signalCode !== null) return exit(0);
-    shuttingDown = true;
-    const giveUp = setTimeout(() => exit(0), graceMs);
-    giveUp.unref?.();
-    child.once("close", () => {
-      clearTimeout(giveUp);
-      exit(0);
-    });
-    child.kill("SIGTERM");
-  };
-  on("SIGINT", shutdown);
-  on("SIGTERM", shutdown);
 }
 
 async function main() {

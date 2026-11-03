@@ -20,6 +20,7 @@ import { watch } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveWatchDirs, shouldSchedule, isReloadableChange, restartPlan, isListeningMessage } from "./dev-server-config.js";
+import { CHILD_EXIT_GRACE_MS, installParentShutdown, stopChildWithin } from "../bin/child-shutdown.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Which dirs a source change reloads on (server/ + the common/ and bin/ the backend imports),
@@ -118,7 +119,8 @@ function onChange(filename) {
     if (child) {
       log(`change detected (${filename}) — restarting backend`);
       killedForRestart = true;
-      child.kill("SIGTERM");
+      // Asked, so it flushes what it owes the disk first; its exit handler above brings up the next.
+      stopChildWithin(child, CHILD_EXIT_GRACE_MS);
     } else {
       log(`change detected (${filename}) — starting backend`);
       scheduleBringUp(MIN_DELAY_MS);
@@ -134,14 +136,14 @@ for (const dir of WATCH_DIRS) {
   }
 }
 
-// Clean teardown so Ctrl-C / concurrently's kill actually stops the backend.
-for (const sig of ["SIGINT", "SIGTERM"]) {
-  process.on(sig, () => {
+// Clean teardown so Ctrl-C / concurrently's kill actually stops the backend — by ASKING it and
+// waiting, the way the launcher does: on Windows a signal to the child is TerminateProcess, which
+// ended it before it could flush queued session state (#3234).
+installParentShutdown(() => child, {
+  onStopping: () => {
     shuttingDown = true;
-    if (child) child.kill(sig);
-    process.exit(0);
-  });
-}
+  },
+});
 
 log("starting backend with crash-restart + reload-on-change");
 bringUp();
