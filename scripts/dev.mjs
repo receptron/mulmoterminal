@@ -11,12 +11,12 @@ const CONCURRENTLY = path.join(ROOT, "node_modules", ".bin", "concurrently");
 
 const plan = devRunPlan(process.platform, process.env);
 
-// No shell for `concurrently`: its arguments hold spaces. The direct commands need one, so `vite`
-// resolves through the PATH yarn set up, `.cmd` shim included.
+// No shell anywhere: `concurrently`'s arguments hold spaces, and a shell on Windows is the batch
+// prompt dev-plan.js describes.
 const children =
   plan.kind === "concurrently"
     ? [spawn(CONCURRENTLY, plan.args, { cwd: ROOT, stdio: "inherit" })]
-    : plan.commands.map(({ command }) => spawn(command, { cwd: ROOT, stdio: "inherit", shell: true }));
+    : plan.scripts.map(({ script }) => spawn(process.execPath, [path.resolve(ROOT, script)], { cwd: ROOT, stdio: "inherit" }));
 
 // Ctrl+C reaches every process in the terminal, these children included, and each stops itself —
 // the backend only after it has flushed what it owes the disk. So it is not passed on, and this

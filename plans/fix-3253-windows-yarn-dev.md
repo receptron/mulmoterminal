@@ -9,7 +9,9 @@ leave its children alone on a signal (`--kill-signal` changes nothing there).
 
 ## Fix
 
-- `scripts/dev-plan.js` (pure): on Windows the two commands are started directly; elsewhere
+- `scripts/dev-plan.js` (pure): on Windows the two scripts are started as `node <script>` — no
+  shell, since `vite` there is `vite.cmd` and a batch file answers Ctrl+C with "Terminate batch job
+  (Y/N)?"; elsewhere
   `concurrently` runs with exactly the arguments `yarn dev` had, so macOS and Linux keep the
   prefixed, coloured output.
 - `scripts/dev.mjs` (`yarn dev` now runs it): starts the plan, does NOT pass a Ctrl+C on — every

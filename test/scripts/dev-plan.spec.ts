@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect, afterEach } from "vitest";
-import { combinedExitCode, devRunPlan, DEV_COMMANDS } from "../../scripts/dev-plan.js";
+import { combinedExitCode, devRunPlan, DEV_SCRIPTS } from "../../scripts/dev-plan.js";
 
 describe("devRunPlan", () => {
   // macOS and Linux keep exactly what `yarn dev` ran before: the same concurrently line.
@@ -18,9 +18,17 @@ describe("devRunPlan", () => {
 
   // #3253. concurrently ends its children with `taskkill /T /F` there, killing the backend before
   // it flushes; the commands are started directly instead.
-  it("starts the commands directly on Windows", () => {
-    expect(devRunPlan("win32")).toEqual({ kind: "direct", commands: DEV_COMMANDS });
-    expect(DEV_COMMANDS.map((c) => c.command)).toEqual(["node scripts/dev-server.mjs", "vite"]);
+  it("starts the scripts directly on Windows, with no batch file in between", () => {
+    expect(devRunPlan("win32")).toEqual({ kind: "direct", scripts: DEV_SCRIPTS });
+    expect(DEV_SCRIPTS.map((s) => s.script)).toEqual(["scripts/dev-server.mjs", "node_modules/vite/bin/vite.js"]);
+  });
+
+  // The script path has to stay where the vite package says its CLI is, or the Windows run starts nothing.
+  it("names the CLI the installed vite declares", () => {
+    const pkg: unknown = JSON.parse(readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../node_modules/vite/package.json"), "utf8"));
+    const bin =
+      typeof pkg === "object" && pkg !== null && "bin" in pkg && typeof pkg.bin === "object" && pkg.bin !== null && "vite" in pkg.bin ? pkg.bin.vite : null;
+    expect(`node_modules/vite/${String(bin)}`).toBe(DEV_SCRIPTS[1]?.script);
   });
 });
 
@@ -38,17 +46,17 @@ describe("combinedExitCode", () => {
 
 describe("devRunPlan's test override", () => {
   it("runs the given commands directly", () => {
-    expect(devRunPlan("darwin", { DEV_RUN_COMMANDS: '["a", "b c"]' })).toEqual({
+    expect(devRunPlan("darwin", { DEV_RUN_SCRIPTS: '["a.mjs", "b c.mjs"]' })).toEqual({
       kind: "direct",
-      commands: [
-        { name: "command0", command: "a" },
-        { name: "command1", command: "b c" },
+      scripts: [
+        { name: "script0", script: "a.mjs" },
+        { name: "script1", script: "b c.mjs" },
       ],
     });
   });
 
-  it.each(["", "not json", "{}", "[1]"])("ignores %j", (value) => {
-    expect(devRunPlan("darwin", { DEV_RUN_COMMANDS: value }).kind).toBe("concurrently");
+  it.each(["", "not json", "{}", "[1]", "[]"])("ignores %j", (value) => {
+    expect(devRunPlan("darwin", { DEV_RUN_SCRIPTS: value }).kind).toBe("concurrently");
   });
 });
 
@@ -90,7 +98,7 @@ describe.skipIf(process.platform === "win32")("the dev runner", () => {
         "setInterval(() => {}, 1000);",
       ].join("\n"),
     );
-    return `"${process.execPath}" "${file}"`;
+    return file;
   }
   const logOf = (name: string): string[] => {
     const file = path.join(dir, `${name}.log`);
@@ -101,8 +109,8 @@ describe.skipIf(process.platform === "win32")("the dev runner", () => {
   // Wrapped, because an async function returning a promise would wait for the runner to exit.
   async function started(): Promise<{ exited: Promise<number | null> }> {
     dir = mkdtempSync(path.join(tmpdir(), "dev-runner-"));
-    const commands = JSON.stringify([stub("a", 0), stub("b", 3)]);
-    const proc = spawn(process.execPath, [RUNNER], { env: { ...process.env, DEV_RUN_COMMANDS: commands }, stdio: "ignore" });
+    const scripts = JSON.stringify([stub("a", 0), stub("b", 3)]);
+    const proc = spawn(process.execPath, [RUNNER], { env: { ...process.env, DEV_RUN_SCRIPTS: scripts }, stdio: "ignore" });
     runner = proc;
     const exited = new Promise<number | null>((resolve) => proc.on("exit", (code) => resolve(code)));
     for (let waited = 0; waited < STARTUP_MS && !(pidOf("a") && pidOf("b")); waited += POLL_MS) await wait(POLL_MS);
