@@ -117,6 +117,26 @@ describe("the rendered tab's script", () => {
     expect(inlineDisplay(element("#tab-source"))).toBe("none important");
   });
 
+  // An element the FILE hid is the file's business: a copy from the Preview view must not touch it,
+  // and a trip through the Source view must put its own `hidden` and style back byte for byte
+  // (Codex on #3259).
+  it("leaves an element the file itself hid exactly as it was, through a copy and a switch", async () => {
+    mountTab('<h1>hi</h1></div><div id="own" hidden style="display:flex">x</div>');
+    const own = element("#own");
+    const attributes = (): string[] => [...own.attributes].map((a) => `${a.name}="${a.value}"`);
+    const before = attributes();
+    element('[data-copy="rendered"]').click();
+    await flush();
+    expect(written).toHaveLength(1);
+    expect(attributes()).toEqual(before);
+    element('[data-show="source"]').click();
+    expect(own.getAttribute("style")).toBe("display:flex;display:none !important");
+    element('[data-copy="rendered"]').click();
+    await flush();
+    element('[data-show="rendered"]').click();
+    expect(attributes()).toEqual(before);
+  });
+
   // DOM clobbering: a <form> beside the wrapper answers `el.style`, `el.hidden`, `el.nextElementSibling`
   // and `el.innerText` with its inputs of those names. The switch must neither throw nor walk into
   // the form, and the copy must still read text.

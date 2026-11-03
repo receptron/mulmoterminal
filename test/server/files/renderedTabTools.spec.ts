@@ -147,11 +147,13 @@ describe("renderedTabDoc", () => {
     [
       "hides by an inline display with priority as well as by hidden, and clones the rendering shown",
       [
-        'setAttribute.call(el, "style", (own ? own + ";" : "") + "display:none !important")',
+        'setAttribute.call(el, "style", (style ? style + ";" : "") + "display:none !important")',
         'setAttribute.call(el, "hidden", "")',
         "const renderedHtml = () => whileShown(renderedNodes(), () => {",
       ],
     ],
+    // The script lifts only what it hid, so an element the file hid keeps its own attributes.
+    ["touches only the elements it hid itself", ["own.set(source, [null, false]);", "const lifted = els.filter((el) => own.has(el));", "if (!was) return;"]],
     // A <form> the file put beside the wrapper shadows `el.style`, `el.hidden`, `el.nextElementSibling`
     // with an <input name=…> of that name, so the file's elements are reached through the prototypes.
     [

@@ -163,12 +163,15 @@ const COPIED_NOTICE_MS = 1500;
  *  address) or a refused write still has. For the source that selection is a textarea holding the
  *  exact text: selecting the element's contents instead ends at its last character and loses the
  *  file's final newline. A view the reader is not looking at has no layout and so no line breaks
- *  in its text, and a clone of it carries its `hidden`, so it is shown for the moment of the read.
+ *  in its text, and a clone of it carries its `hidden`, so what the script hid is shown for the
+ *  moment of the read.
  *
  *  What is hidden is hidden by an inline `display: none !important` as well as by `hidden`: raw HTML
  *  in the file can carry a stylesheet, and an author `[hidden]{display:block}` beats the browser's
- *  default rule, which would leave both views on screen. An element's own style attribute comes back
- *  when it is shown again. The elements beside the wrapper are the file's, and a <form> among them
+ *  default rule, which would leave both views on screen. The script touches only what IT hid: the
+ *  element's own style attribute and its own `hidden`, if the file gave it one, are recorded when it
+ *  is hidden and put back as they were, and an element the file itself hid is left alone — in the
+ *  switch, in the copies, byte for byte. The elements beside the wrapper are the file's, and a <form> among them
  *  shadows any property or method with an <input name=…> of that name (DOM clobbering: `el.style`
  *  is then the input), so they are read and written through the prototypes, never through the
  *  element. */
@@ -193,20 +196,22 @@ const TOOLS_SCRIPT = `(() => {
     for (let el = rendered; el; el = nextElement.call(el)) nodes.push(el);
     return nodes;
   };
-  const ownStyle = new Map();
+  const own = new Map();
+  own.set(source, [null, false]);
   const setHidden = (el, hide) => {
     if (hide) {
-      if (!ownStyle.has(el)) ownStyle.set(el, getAttribute.call(el, "style"));
-      const own = ownStyle.get(el);
-      setAttribute.call(el, "style", (own ? own + ";" : "") + "display:none !important");
+      if (!own.has(el)) own.set(el, [getAttribute.call(el, "style"), hasAttribute.call(el, "hidden")]);
+      const [style] = own.get(el);
+      setAttribute.call(el, "style", (style ? style + ";" : "") + "display:none !important");
       setAttribute.call(el, "hidden", "");
       return;
     }
-    const own = ownStyle.get(el);
-    ownStyle.delete(el);
-    if (own) setAttribute.call(el, "style", own);
-    else removeAttribute.call(el, "style");
-    removeAttribute.call(el, "hidden");
+    const was = own.get(el);
+    if (!was) return;
+    own.delete(el);
+    if (was[0] === null) removeAttribute.call(el, "style");
+    else setAttribute.call(el, "style", was[0]);
+    if (!was[1]) removeAttribute.call(el, "hidden");
   };
   const show = (name) => {
     setHidden(source, name !== "source");
@@ -220,9 +225,9 @@ const TOOLS_SCRIPT = `(() => {
     timer = setTimeout(() => { status.textContent = ""; }, ${COPIED_NOTICE_MS});
   };
   const whileShown = (els, read) => {
-    const wereHidden = els.filter((el) => hasAttribute.call(el, "hidden"));
-    wereHidden.forEach((el) => setHidden(el, false));
-    try { return read(); } finally { wereHidden.forEach((el) => setHidden(el, true)); }
+    const lifted = els.filter((el) => own.has(el));
+    lifted.forEach((el) => setHidden(el, false));
+    try { return read(); } finally { lifted.forEach((el) => setHidden(el, true)); }
   };
   const renderedRange = () => {
     const range = document.createRange();
