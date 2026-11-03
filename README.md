@@ -1153,7 +1153,7 @@ show are left as they are, and a file that isn't a JSON object is not touched �
 ```bash
 yarn install            # postinstall fixes node-pty prebuilt binary perms
 
-yarn dev                # backend (:34567) + Vite UI (:6856), concurrently — open http://localhost:6856
+yarn dev                # backend (:34567) + Vite UI (:6856), concurrently (on Windows started directly, unprefixed) — open http://localhost:6856
 # or individually:
 yarn dev:server         # backend only  (node --import tsx --env-file-if-exists=.env server/index.ts)
 yarn dev:client         # Vite dev server only
