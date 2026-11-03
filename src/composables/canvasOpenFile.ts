@@ -20,6 +20,7 @@
 //                    sentence as still true is what kept a repository deck on the rooted wire
 //                    path, which is #1970.)
 import { TOOL_NAME as DOCUMENT_TOOL, isDocumentPath } from "@mulmoclaude/markdown-plugin/vue";
+import { isOutsidePath } from "../components/filesOutsidePath";
 import { TOOL_NAME as HTML_TOOL, isPresentableHtmlPath, isHtmlArtifactPath, htmlArtifactPreviewUrl, htmlFileUrl } from "@mulmoclaude/html-plugin";
 import { TOOL_NAME as STORY_TOOL } from "@mulmoclaude/mulmoscript-plugin";
 import { TOOL_NAME as SHAPE_TOOL, isPresentableShapePath } from "@gui-chat-plugin/shapescript";
@@ -140,7 +141,8 @@ export function canvasCardForFile(path: string): CanvasCard | null {
  * `htmlFileUrl` normalises a mixed one — verified against `C:\\Users\\me\\proj/docs/design.md`.
  */
 export function absoluteUnder(cwd: string | null, relative: string): string {
-  if (!cwd) return relative;
+  // A file outside the root is open by its absolute path already (#3238).
+  if (!cwd || isOutsidePath(relative)) return relative;
   // Sliced rather than matched: a trailing-separator regex with a quantifier backtracks, and one
   // separator is the only case a directory path actually produces.
   const base = cwd.endsWith("/") || cwd.endsWith("\\") ? cwd.slice(0, -1) : cwd;

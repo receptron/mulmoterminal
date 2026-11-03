@@ -194,7 +194,12 @@ The same tab is one button away from the Files pane: on a Markdown, JSON or CSV/
 open-in-new button opens that document, toolbar included, in a tab of its own.
 
 **A path outside the session's working directory opens too** — absolute, `~/…`, or `../` climbing out.
-Markdown, JSON, tables and source open against the file's own directory. An HTML page, an image, a PDF,
+Markdown, JSON, tables and source open **in the Files pane on their own**: the tree stays on the cell's
+directory and the file has no row in it, an arrow mark before its name says it is outside (hover for the
+path), and it is read, previewed and saved against its own directory with the same conditional save as
+any other file. History and Changes are not offered for it, and a link in its Preview is not followed.
+With no pane to take the click, they open against the file's own directory in a tab or the Files view
+as before. An HTML page, an image, a PDF,
 an SVG, a video or an audio file opens in a new tab through a **one-file link**: the app asks the server
 for it with a same-origin POST, and only that file is served under it — not its directory, and not the
 image an HTML page links beside itself. The link lasts until the server restarts (or until many newer links push it out); seeking a video works.

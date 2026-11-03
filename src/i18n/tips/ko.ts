@@ -216,6 +216,7 @@ export const tipsKo: Messages["tips"] = {
     fileTabs: "열린 파일",
     closeTab: "이 탭 닫기",
     closeTabNamed: "{name} 닫기",
+    outsideFile: "이 패널 폴더 바깥의 파일: {path}. 이 파일만 표시합니다(트리는 그대로이고, 기록과 변경은 여기서 제공되지 않습니다)",
     searchInFiles: "파일에서 검색",
     matchCase: "대소문자 구분",
     matchCaseTip: "대소문자 구분(구분하지 않으면 소문자 검색어가 양쪽 모두와 일치합니다)",

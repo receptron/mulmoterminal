@@ -21,6 +21,7 @@ differ as a consequence of that, not as a design of their own.
 | surface | root | what it may reach | who chose the path |
 |---|---|---|---|
 | **Right pane** (`TerminalGrid` → `FilesPane`, `canvas-target` set) | the directory of the cell it is on (the enlarged one, or the tile that opened it) | that directory's subtree | the user, by zooming a cell, opening the pane from its menu, or clicking a path that cell printed (#3238) |
+| **One file in the right pane** (an outside path clicked, #3238) | none of its own: the file's directory is the base the browse routes are handed | what the pane offers of that one file — its text, its Preview, a save; no listing, no tree, no history. The routes under that base answer as they do for the full screen | the user, by clicking a path the cell printed |
 | **Full screen** (`/files?cwd=`, `FilesOverlay` → `FilesPane`) | whatever `?cwd=` says | that base's subtree | a browser, through a query string |
 | **Watched documents** (`containForWatching`) | the workspace + every live session directory | those subtrees | a browser, checked against roots the server already serves |
 | **`presentDocument` / `presentHtml` / …** (`backends/files/openPath.ts`) | **none** | any file of the right extension, anywhere | an agent the user launched |
@@ -33,6 +34,24 @@ when the root changes and it has already cleared that with the user. `TerminalGr
 pane to the cell it is on — the one being zoomed, or on the tiled grid the tile whose menu opened
 it or whose printed path was clicked (#3238) — which is why the right pane is bound to a directory
 the user picked by zooming a cell, opening the pane from it, or clicking in it.
+
+### A file outside the cell opens in the pane on its own
+
+A path an agent printed can be outside the cell's directory — absolute, `~/…`, or `../` climbing
+out. Clicked, a text file there (Markdown, JSON, a table, source, or a type a tab would only
+download) opens in the right pane **on its own** (#3238): its tab path is absolute, and every request
+the pane makes for it is built by `browseQuery` from the file's own directory and name
+(`src/components/filesOutsidePath.ts`), so it is read, previewed and saved against that directory
+with the same conditional write and 409 as a file under the root. The tree does not move, the file
+has no row in it, and the pane offers none of the root's extras for it — no History or Changes (the
+root's git), no entry among the folder's recent files, no link out of its Preview.
+
+Who chose it is what sets the reach: the user, by clicking that one printed path. The server side is
+the browse routes', whose base is an input exactly as for the full screen — the pane sends the file's
+directory, as a tab opened from the same click already did — so this adds a surface for a choice
+already available, not a wider base. A page, a picture, a PDF or media outside the cell is not shown
+this way: the pane draws those from the raw and page routes, which serve only the workspace and live
+session directories, so they keep the one-file grant below.
 
 ### The full screen takes its base from the URL
 

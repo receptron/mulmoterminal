@@ -71,3 +71,21 @@ describe("previewLinkTarget", () => {
     expect(previewLinkTarget("docs/a.md", href)).toEqual(NONE);
   });
 });
+
+// #3238, part 5. A document outside the root is open on its own, and the one file is all the pane
+// reaches from it: a sibling, a child, the root itself — every path is outside. An anchor or another
+// scheme is still nothing to open, as in any document.
+describe("a document outside the root", () => {
+  it("has every path link pointing outside", () => {
+    expect(previewLinkTarget("/elsewhere/report.md", "./notes.md")).toEqual({ kind: "outside" });
+    expect(previewLinkTarget("/elsewhere/report.md", "sub/a.md")).toEqual({ kind: "outside" });
+    expect(previewLinkTarget("/elsewhere/report.md", "/README.md")).toEqual({ kind: "outside" });
+    expect(previewLinkTarget("~/notes/a.md", "b.md")).toEqual({ kind: "outside" });
+  });
+
+  it("still opens nothing for an anchor, another scheme or a folder", () => {
+    expect(previewLinkTarget("/elsewhere/report.md", "#heading")).toEqual({ kind: "none" });
+    expect(previewLinkTarget("/elsewhere/report.md", "https://example.com/")).toEqual({ kind: "none" });
+    expect(previewLinkTarget("/elsewhere/report.md", "sub/")).toEqual({ kind: "none" });
+  });
+});

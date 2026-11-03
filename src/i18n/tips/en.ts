@@ -215,6 +215,7 @@ export const tipsEn = {
     fileTabs: "Open files",
     closeTab: "Close this tab",
     closeTabNamed: "Close {name}",
+    outsideFile: "Outside this pane's folder: {path}. Shown on its own: the tree stays where it is, and History and Changes are not offered here",
     searchInFiles: "Search in files",
     matchCase: "Match case",
     matchCaseTip: "Match case (otherwise a lower-case query matches either case)",

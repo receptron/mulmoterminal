@@ -215,6 +215,7 @@ export const tipsZhTW: Messages["tips"] = {
     fileTabs: "開啟的檔案",
     closeTab: "關閉此分頁",
     closeTabNamed: "關閉 {name}",
+    outsideFile: "此窗格資料夾之外的檔案：{path}。只顯示這個檔案（目錄樹保持不變，這裡不提供歷史與變更）",
     searchInFiles: "在檔案中搜尋",
     matchCase: "區分大小寫",
     matchCaseTip: "區分大小寫（否則小寫的查詢可符合任一大小寫）",

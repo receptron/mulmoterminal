@@ -217,6 +217,7 @@ export const tipsJa: Messages["tips"] = {
     fileTabs: "開いているファイル",
     closeTab: "このタブを閉じる",
     closeTabNamed: "{name} を閉じる",
+    outsideFile: "このペインのフォルダの外のファイル: {path}。このファイルだけを表示しています（ツリーはそのまま。履歴と変更はここでは出ません）",
     searchInFiles: "ファイル内を検索",
     matchCase: "大文字と小文字を区別",
     matchCaseTip: "大文字と小文字を区別（区別しないときは、小文字の検索語がどちらにも一致します）",

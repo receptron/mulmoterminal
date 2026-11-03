@@ -85,11 +85,42 @@ describe("tryOpenInPane", () => {
     expect(opener).toHaveBeenLastCalledWith(CWD, "src/main.ts", undefined, false, null);
   });
 
-  it("declines a path outside the cell's directory — the pane cannot walk above its root", () => {
+  // #3238, part 5. A text file outside the cell is handed over by its ABSOLUTE path — joined the way
+  // the routes take it — and the pane shows it on its own, the tree staying on the cell's directory.
+  it("hands a text file outside the cell's directory over by its absolute path", () => {
     const opener = vi.fn(() => true);
     setFilesPaneOpener(opener);
-    expect(tryOpenInPane("/etc/hosts.ts", CWD, undefined, false, "s1")).toBe(false);
+    expect(tryOpenInPane("/etc/hosts.ts", CWD, undefined, false, "s1")).toBe(true);
+    expect(opener).toHaveBeenLastCalledWith(CWD, "/etc/hosts.ts", undefined, false, "s1");
+    expect(tryOpenInPane("../other/report.md", CWD, { line: 3, col: null }, true, "s1")).toBe(true);
+    expect(opener).toHaveBeenLastCalledWith(CWD, "/Users/me/other/report.md", { line: 3, col: null }, true, "s1");
+    expect(tryOpenInPane("~/notes/a.md", CWD, undefined, false, "s1")).toBe(true);
+    expect(opener).toHaveBeenLastCalledWith(CWD, "~/notes/a.md", undefined, false, "s1");
+  });
+
+  it("joins a Windows cell's outside path with the separator the routes take", () => {
+    const opener = vi.fn(() => true);
+    setFilesPaneOpener(opener);
+    expect(tryOpenInPane("C:\\other\\a.ts", "C:\\work\\app", undefined, false, "s1")).toBe(true);
+    expect(opener).toHaveBeenLastCalledWith("C:\\work\\app", "C:/other/a.ts", undefined, false, "s1");
+  });
+
+  // A page, a picture, a PDF or media outside the cell keeps its one-file grant in a tab: the pane
+  // draws those from the raw and page routes, which serve only served directories.
+  it.each(["/tmp/shot.png", "../out/report.html", "~/Movies/clip.mp4", "/tmp/paper.pdf", "/tmp/chart.svg"])("leaves %s outside the cell to its tab", (name) => {
+    const opener = vi.fn(() => true);
+    setFilesPaneOpener(opener);
+    expect(tryOpenInPane(name, CWD, undefined, false, "s1")).toBe(false);
     expect(opener).not.toHaveBeenCalled();
+  });
+
+  // A tab would only download these; the pane names the file and offers to open it in the app that
+  // owns it, outside the cell as inside.
+  it("takes a file outside the cell that a tab would only download", () => {
+    const opener = vi.fn(() => true);
+    setFilesPaneOpener(opener);
+    expect(tryOpenInPane("/tmp/book.xlsx", CWD, undefined, false, "s1")).toBe(true);
+    expect(opener).toHaveBeenLastCalledWith(CWD, "/tmp/book.xlsx", undefined, false, "s1");
   });
 
   // The grid declines when there is no room for the pane, or when the pane trails the zoom. Its "no"

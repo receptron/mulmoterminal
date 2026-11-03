@@ -215,6 +215,7 @@ export const tipsZhCN: Messages["tips"] = {
     fileTabs: "打开的文件",
     closeTab: "关闭此标签页",
     closeTabNamed: "关闭 {name}",
+    outsideFile: "此面板文件夹之外的文件：{path}。只显示这个文件（目录树保持不变，这里不提供历史和更改）",
     searchInFiles: "在文件中搜索",
     matchCase: "区分大小写",
     matchCaseTip: "区分大小写（否则小写的查询可匹配任一大小写）",

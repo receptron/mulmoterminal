@@ -738,3 +738,13 @@ describe("a root nested inside another", () => {
     expect(storyWirePath(deck, { ...NESTED, roots: [...NESTED.roots].reverse() })).toEqual(storyWirePath(deck, NESTED));
   });
 });
+
+// #3238. A file outside the root is open by its absolute path already: joining it under the root
+// would name a path that does not exist, and Open in OS and the Canvas gate would act on it.
+describe("absoluteUnder with an outside path", () => {
+  it("passes an absolute path through, whatever the root", () => {
+    expect(absoluteUnder("/proj", "/elsewhere/report.md")).toBe("/elsewhere/report.md");
+    expect(absoluteUnder("/proj", "~/notes/a.md")).toBe("~/notes/a.md");
+    expect(absoluteUnder("C:\\work", "C:/other/a.ts")).toBe("C:/other/a.ts");
+  });
+});

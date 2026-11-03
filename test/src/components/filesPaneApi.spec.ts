@@ -37,6 +37,15 @@ describe("browseQuery", () => {
     expect(browseQuery(null, "a&b=c.ts")).toBe("path=a%26b%3Dc.ts");
   });
 
+  // #3238. A file outside the root, open on its own, is handed over as its own directory and name —
+  // whatever root the pane has, since the file is not under it.
+  it("hands an outside file over as its own directory and name, ignoring the pane's root", () => {
+    expect(browseQuery("/proj", "/elsewhere/report.md")).toBe("cwd=%2Felsewhere&path=report.md");
+    expect(browseQuery(null, "/elsewhere/report.md")).toBe("cwd=%2Felsewhere&path=report.md");
+    expect(browseQuery("/proj", "~/notes/a.md")).toBe("cwd=%7E%2Fnotes&path=a.md");
+    expect(browseQuery("/proj", "C:/other/a.md")).toBe("cwd=C%3A%2Fother&path=a.md");
+  });
+
   it("asks about the root itself with an empty path", () => {
     expect(browseQuery("/proj", "")).toBe("cwd=%2Fproj&path=");
   });
