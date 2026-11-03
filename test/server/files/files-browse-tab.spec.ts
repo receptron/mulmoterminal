@@ -22,7 +22,7 @@ const serveProject = (dir: string) => {
 const TAB_POLICY = /^sandbox allow-scripts; script-src 'nonce-[A-Za-z0-9_-]+'$/;
 const nonceOf = (csp: string): string => /nonce-([A-Za-z0-9_-]+)/.exec(csp)?.[1] ?? "";
 /** What the tab's document renders, without the toolbar before it and the source after it. */
-const renderingOf = (html: string): string => /<div id="tab-rendered">([\s\S]*)<\/div><script nonce=/.exec(html)?.[1] ?? "";
+const renderingOf = (html: string): string => /<div id="tab-rendered">([\s\S]*)<\/div><\/body>/.exec(html)?.[1] ?? "";
 
 const HOSTILE = '# title\n\n<script>document.title = "ran"</script>\n\n<img src=x onerror="document.title = \'ran\'">\n';
 const withMd = async (body: string, run: (call: ReturnType<typeof routeCall>, query: string) => Promise<void>) => {
@@ -79,7 +79,8 @@ describe("GET /api/files/browse/md — the tab", () => {
       const text = (await call(`/api/files/browse/md?${query}`)).text;
       const at = (part: string) => text.indexOf(part);
       expect(at('<div class="tab-tools"')).toBeLessThan(at('<pre id="tab-source" hidden>'));
-      expect(at('<pre id="tab-source" hidden>')).toBeLessThan(at('<div id="tab-rendered">'));
+      expect(at('<pre id="tab-source" hidden>')).toBeLessThan(at('<script nonce="'));
+      expect(at('<script nonce="')).toBeLessThan(at('<div id="tab-rendered">'));
       // the file's tag as marked passes it through — the escaped copy in the source comes earlier
       expect(at('<div id="tab-rendered">')).toBeLessThan(at('<pre id="tab-source"><code>attacker'));
     });

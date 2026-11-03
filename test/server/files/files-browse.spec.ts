@@ -9,7 +9,7 @@ import { currentVersion, listEntries, mdToHtmlDoc, mountFilesBrowseRoutes, MAX_E
 import { backupDirFor } from "../../../server/files/backup-store";
 
 /** What the tab's document renders, without the toolbar before it and the source after it. */
-const renderingOf = (html: string): string => /<div id="tab-rendered">([\s\S]*)<\/div><script nonce=/.exec(html)?.[1] ?? "";
+const renderingOf = (html: string): string => /<div id="tab-rendered">([\s\S]*)<\/div><\/body>/.exec(html)?.[1] ?? "";
 
 const tmp = () => makeTempDir("mt-files-");
 

@@ -146,13 +146,16 @@ const COPIED_NOTICE_MS = 1500;
 /** The toolbar's script, as it is written into the document. One constant: nothing from the file
  *  and no label is interpolated, so the only thing a response adds to it is the nonce on its tag.
  *
- *  Its elements are the first three children of <body> — the toolbar, the source, the rendering's
- *  wrapper — checked for the shell's own marks, and the script itself is `currentScript`. Buttons
- *  and the source's data block are looked for inside the toolbar only. The rendering is every
- *  element from the wrapper up to the script: raw HTML in the file may have closed the wrapper
- *  early, and what follows it is still the rendering, shown and hidden and copied with it. The
- *  text both source copies hand over comes from the data block, never from the <pre> (see
- *  sourceDataHtml).
+ *  Its elements are the first four children of <body> — the toolbar, the source, this script, the
+ *  rendering's wrapper — checked for the shell's own marks, and the script knows itself as
+ *  `currentScript`. It sits BEFORE the rendering so that no raw HTML in the file can swallow it:
+ *  an unclosed <textarea>, <style> or <title> turns everything after itself into text, and a
+ *  script placed after the rendering would never run. Being before the rendering, it waits for
+ *  the parser to finish before it looks. Buttons and the source's data block are looked for
+ *  inside the toolbar only. The rendering is every element from the wrapper to the end of <body>:
+ *  raw HTML in the file may have closed the wrapper early, and what follows it is still the
+ *  rendering, shown and hidden and copied with it. The text both source copies hand over comes
+ *  from the data block, never from the <pre> (see sourceDataHtml).
  *
  *  Copying tries the Clipboard API first — `write` with both the text as shown and the HTML, so a
  *  rich editor keeps the headings and a plain field gets the words — and falls back to a selection
@@ -163,8 +166,9 @@ const COPIED_NOTICE_MS = 1500;
  *  in its text, so it is shown for the moment of the read. */
 const TOOLS_SCRIPT = `(() => {
   const script = document.currentScript;
-  const [toolbar, source, rendered] = document.body.children;
-  if (!script || !toolbar || !source || !rendered) return;
+  const ready = () => {
+  const [toolbar, source, self, rendered] = document.body.children;
+  if (!script || self !== script || !toolbar || !source || !rendered) return;
   if (!toolbar.classList.contains("tab-tools") || source.id !== "tab-source" || rendered.id !== "tab-rendered") return;
   const status = toolbar.querySelector(".tab-tools-status");
   const data = toolbar.querySelector("script[data-tab-source]");
@@ -173,7 +177,7 @@ const TOOLS_SCRIPT = `(() => {
   if (typeof sourceText !== "string") return;
   const renderedNodes = () => {
     const nodes = [];
-    for (let el = rendered; el && el !== script; el = el.nextElementSibling) nodes.push(el);
+    for (let el = rendered; el; el = el.nextElementSibling) nodes.push(el);
     return nodes;
   };
   const show = (name) => {
@@ -195,7 +199,7 @@ const TOOLS_SCRIPT = `(() => {
   const renderedRange = () => {
     const range = document.createRange();
     range.setStartBefore(rendered);
-    range.setEndBefore(script);
+    range.setEnd(document.body, document.body.childNodes.length);
     return range;
   };
   const renderedHtml = () => {
@@ -243,6 +247,9 @@ const TOOLS_SCRIPT = `(() => {
   };
   for (const b of toolbar.querySelectorAll("[data-show]")) b.addEventListener("click", () => show(b.dataset.show));
   for (const b of toolbar.querySelectorAll("[data-copy]")) b.addEventListener("click", () => { void copy(b.dataset.copy); });
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready);
+  else ready();
 })();`;
 
 export interface RenderedTabDoc {
@@ -257,15 +264,16 @@ export interface RenderedTabDoc {
   labels: TabToolLabels;
 }
 
-/** The tab's document: the toolbar, the source (hidden until asked for), the rendering and the one
- *  script, in the shared shell. The order is the script's contract (see TOOLS_SCRIPT): everything
- *  the shell owns comes before the first byte of the file's rendering. */
+/** The tab's document: the toolbar, the source (hidden until asked for), the one script and then
+ *  the rendering, in the shared shell. The order is the script's contract (see TOOLS_SCRIPT):
+ *  everything the shell owns comes before the first byte of the file's rendering, the script
+ *  included. */
 export function renderedTabDoc({ html, source, title, style, nonce, labels }: RenderedTabDoc): string {
   const body = [
     toolbarHtml(labels, source),
     `<pre id="tab-source" hidden><code>${escapeHtml(source)}</code></pre>`,
-    `<div id="tab-rendered">${html}</div>`,
     `<script nonce="${nonce}">${TOOLS_SCRIPT}</script>`,
+    `<div id="tab-rendered">${html}</div>`,
   ].join("");
   return htmlDoc(body, title, style + TOOLS_STYLE);
 }

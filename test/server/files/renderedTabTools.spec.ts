@@ -36,14 +36,15 @@ describe("tabToolLabelsFor", () => {
 
 describe("renderedTabDoc", () => {
   // The order is the script's contract: the file's rendering comes last, so nothing the file
-  // contains can precede the three elements the script reads by position.
-  it("puts the toolbar first, then the source hidden, then the rendering, then the script", () => {
+  // contains can precede the elements the script reads by position — nor swallow the script, which
+  // an unclosed raw-text element after it would.
+  it("puts the toolbar first, then the source hidden, then the script, then the rendering", () => {
     const html = doc();
     const order = [
       'class="tab-tools"',
       '<pre id="tab-source" hidden><code># hi\n</code></pre>',
-      '<div id="tab-rendered"><h1>hi</h1></div>',
       '<script nonce="n0nce">',
+      '<div id="tab-rendered"><h1>hi</h1></div>',
     ].map((part) => html.indexOf(part));
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
@@ -72,7 +73,10 @@ describe("renderedTabDoc", () => {
   it("carries the source as JSON in the toolbar, with no < the file could use to end the block", () => {
     const html = doc({ source: "a\r\nb\u0000c</script><!--x" });
     const block = /<script type="application\/json" data-tab-source>([^]*?)<\/script>/.exec(html)?.[1] ?? "";
-    expect(block).toBe(String.raw`"a\r\nb\u0000c\u003c/script>\u003c!--x"`);
+    expect(block).not.toContain("<");
+    expect(block).toContain("\\u003c/script>");
+    expect(block).toContain("\\r\\n");
+    expect(block).toContain("\\u0000");
     expect(html.indexOf(block)).toBeLessThan(html.indexOf('class="tab-tools-view"'));
     expect(JSON.parse(block)).toBe("a\r\nb\u0000c</script><!--x");
   });
@@ -98,33 +102,45 @@ describe("renderedTabDoc", () => {
   });
 
   // What the one script must be made of, read off its text. Raw HTML in the file can close the
-  // rendering's wrapper and repeat any id or class beside it, so the script reads its three elements
-  // by POSITION — the first children of <body>, which the file cannot precede — checks the shell's
-  // marks on them, finds itself as currentScript, and looks for buttons inside the toolbar only. What
-  // follows a wrapper the file closed early is still the rendering (the elements from the wrapper up
-  // to the script). And the SOURCE's fallback copy selects a textarea holding the exact text, since
-  // selecting an element's contents ends at its last character and loses the file's final newline;
-  // the rendering keeps the selection, which is what carries its formatting.
+  // rendering's wrapper and repeat any id or class beside it, so the script reads its elements by
+  // POSITION — the first children of <body>, which the file cannot precede — checks the shell's
+  // marks on them, finds itself as currentScript, and looks for buttons inside the toolbar only. It
+  // sits before the rendering, so an unclosed raw-text element in the file cannot swallow it, and
+  // therefore waits for the parser before it looks. What follows a wrapper the file closed early is
+  // still the rendering (the elements from the wrapper to the end of body). The SOURCE's text comes
+  // from the data block, never from the <pre> the parser rewrote; its fallback copy selects a
+  // textarea holding that text, since selecting an element's contents ends at its last character
+  // and loses the file's final newline. The rendering keeps the selection, which carries its
+  // formatting.
   it.each([
     [
       "reads its elements by position",
       [
-        "const [toolbar, source, rendered] = document.body.children;",
+        "const [toolbar, source, self, rendered] = document.body.children;",
         "const script = document.currentScript;",
+        "self !== script",
         'source.id !== "tab-source" || rendered.id !== "tab-rendered"',
       ],
     ],
+    [
+      "waits for the parser, since it runs before the rendering exists",
+      ['if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready);', "else ready();"],
+    ],
     ["looks for buttons inside the toolbar only", ['toolbar.querySelectorAll("[data-show]")', 'toolbar.querySelectorAll("[data-copy]")']],
     [
-      "treats everything between the wrapper and the script as the rendering",
-      ["for (let el = rendered; el && el !== script; el = el.nextElementSibling)", "range.setStartBefore(rendered);", "range.setEndBefore(script);"],
+      "treats everything from the wrapper to the end of body as the rendering",
+      [
+        "for (let el = rendered; el; el = el.nextElementSibling)",
+        "range.setStartBefore(rendered);",
+        "range.setEnd(document.body, document.body.childNodes.length);",
+      ],
     ],
     ["copies the rendering as text and as HTML, and falls back to a selection", ['"text/plain"', '"text/html"', 'execCommand("copy")']],
-    ["falls back to a textarea for the source", ['document.createElement("textarea")', "area.value = sourceText", "area.select()"]],
     [
       "copies the source from the data block, never from the <pre>",
       ['toolbar.querySelector("script[data-tab-source]")', "const sourceText = JSON.parse(data.textContent", "navigator.clipboard.writeText(sourceText)"],
     ],
+    ["falls back to a textarea for the source", ['document.createElement("textarea")', "area.value = sourceText", "area.select()"]],
   ])("%s", (_what, parts) => {
     const script = scriptOf(doc());
     parts.forEach((part) => expect(script).toContain(part));
