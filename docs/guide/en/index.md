@@ -8,8 +8,9 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **11.6.0 is out.** The panes beside a terminal now stack, so closing one brings back the one under
-> it, and a conversation keeps the name you gave it with `/rename`. [Setup guide](v11.6.0.html)
+> **11.7.0 is out.** Right-click a file path in terminal output to choose how it opens, a document
+> opened in a tab of its own can show its source and copy either, and a Claude cell shows the name
+> other sessions message it by. [Setup guide](v11.7.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 
