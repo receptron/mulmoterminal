@@ -190,6 +190,9 @@ than as bytes:
 | images, PDF, SVG, video, audio | raw bytes in a new tab, which the browser renders better than an editor would |
 | everything else — `.xlsx`, `.docx`, `.zip`, a `Makefile` | the app's own **Files** view. A tab cannot display these, so opening one there is not a view — it is a download starting with no warning. The pane names the file and offers **Open in OS**, which hands it to the application that owns it (Excel for an `.xlsx`) |
 
+The same tab is one button away from the Files pane: on a Markdown, JSON or CSV/TSV file, the header's
+open-in-new button opens that document, toolbar included, in a tab of its own.
+
 **A path outside the session's working directory opens too** — absolute, `~/…`, or `../` climbing out.
 Markdown, JSON, tables and source open against the file's own directory. An HTML page, an image, a PDF,
 an SVG, a video or an audio file opens in a new tab through a **one-file link**: the app asks the server

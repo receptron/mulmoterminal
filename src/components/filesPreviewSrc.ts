@@ -70,6 +70,25 @@ export function previewSrcFor(
   return version ? `${page}?v=${encodeURIComponent(version)}` : page;
 }
 
+/** The route that renders each kind for a tab of its own — the document with the toolbar that
+ *  switches to the source and copies (#3238). The kinds absent here have no such document: an HTML
+ *  page or an SVG is the file itself in a tab. */
+const TAB_ROUTE_BY_KIND: Partial<Record<FilePreviewKind, string>> = {
+  markdown: "/api/files/browse/md",
+  table: "/api/files/browse/table",
+  json: "/api/files/browse/json",
+};
+
+/** The open file's Preview as a tab of its own, or null when it has none — or when the pane has no
+ *  root, since the routes answer only under one. Only `cwd` and `path` ride on it: not `embed`,
+ *  which asks for the toolbar-less document the iframe wants; not `v` or the theme, which exist to
+ *  make the frame refetch; and never the token, which must not leave the frame's own URL. */
+export function previewTabUrl(kind: FilePreviewKind, cwd: string | null, pathRel: string): string | null {
+  const route = TAB_ROUTE_BY_KIND[kind];
+  if (!route || !cwd) return null;
+  return `${route}?${browseQuery(cwd, pathRel)}`;
+}
+
 /** The table and JSON routes' query: `v` and the theme for `previewQuery`'s reasons, and `embed`
  *  for one of them — it says this is the pane asking, so the document comes without the tab's
  *  toolbar (#3238). Neither document carries a script to report with, so the wire's token stays
