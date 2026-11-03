@@ -199,6 +199,7 @@ export const tipsJa: Messages["tips"] = {
     sideBySide: "エディタと Preview を並べて表示（Preview は編集中の見出しについてくる）",
     insertSelection: "選択した行を {'@'}ファイル#L10-20 の形でターミナルの入力に差し込む（未保存の編集は先に保存。選択が無ければファイルだけ）",
     copyText: "このファイルの本文をすべてコピー（未保存の編集も含む）",
+    previewTab: "Preview を新しいタブで開く（ソース表示とコピーのボタン付き。保存済みの内容）",
     fileTree: "ファイルツリー",
     git: {
       modified: "変更あり",

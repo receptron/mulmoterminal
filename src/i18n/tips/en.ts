@@ -197,6 +197,7 @@ export const tipsEn = {
     sideBySide: "Editor and Preview side by side; the Preview follows the heading you are editing",
     insertSelection: "Put {'@'}file#L10-20 for the selected lines at the terminal's prompt (saves unsaved edits first; the file alone with nothing selected)",
     copyText: "Copy the whole text of this file, unsaved edits included",
+    previewTab: "Open the Preview in a new tab, with a Source view and copy buttons of its own (the file as saved)",
     fileTree: "File tree",
     git: {
       modified: "Modified",

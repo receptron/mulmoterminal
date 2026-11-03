@@ -197,6 +197,7 @@ export const tipsZhTW: Messages["tips"] = {
     sideBySide: "編輯器與 Preview 並排顯示（Preview 跟隨正在編輯的標題）",
     insertSelection: "把選取的行以 {'@'}檔案#L10-20 的形式放到終端機的輸入處（先儲存未儲存的編輯；未選取時只放檔案）",
     copyText: "複製此檔案的全部內文（包括未儲存的編輯）",
+    previewTab: "在新分頁中開啟 Preview（附原始碼檢視與複製按鈕，顯示已儲存的內容）",
     fileTree: "檔案樹",
     git: {
       modified: "已修改",

@@ -197,6 +197,7 @@ export const tipsZhCN: Messages["tips"] = {
     sideBySide: "编辑器与 Preview 并排显示（Preview 跟随正在编辑的标题）",
     insertSelection: "把选中的行以 {'@'}文件#L10-20 的形式放到终端的输入处（先保存未保存的编辑；未选中时只放文件）",
     copyText: "复制此文件的全部正文（包括未保存的编辑）",
+    previewTab: "在新标签页中打开 Preview（带源码视图和复制按钮，显示已保存的内容）",
     fileTree: "文件树",
     git: {
       modified: "已修改",

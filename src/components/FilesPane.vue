@@ -54,6 +54,7 @@ import { useI18n } from "vue-i18n";
 import { useFileOutline } from "../composables/useFileOutline";
 import FilesOutlineMenu from "./FilesOutlineMenu.vue";
 import FilesViewModeButtons from "./FilesViewModeButtons.vue";
+import { previewTabUrl } from "./filesPreviewSrc";
 import FilesCanvasView from "./FilesCanvasView.vue";
 import FilesCanvasButton from "./FilesCanvasButton.vue";
 import FilesGallery from "./FilesGallery.vue";
@@ -107,6 +108,11 @@ const tree = useFilesTree(() => props.cwd);
 // every way it is written back. Destructured because the template names these directly.
 const file = useOpenFile(() => props.cwd);
 const { openPath, openName, dirty, editSeq, saving, fileError, unpreviewable, conflict, showPreview, previewKind, previewSrc, dirConfigReport } = file;
+// The open file's Preview as a tab of its own, with the toolbar the pane has no need of (#3238).
+const previewTab = computed(() => (openPath.value && previewKind.value ? previewTabUrl(previewKind.value, props.cwd, openPath.value) : null));
+const openPreviewTab = (): void => {
+  if (previewTab.value) window.open(previewTab.value, "_blank", "noopener,noreferrer");
+};
 const { mediaKind, mediaSrc } = openFileMedia(file, () => props.cwd);
 const { flush, save, overwrite, discardAndReload, openInOs } = file;
 // Which files are open as tabs, and which is in front (#2267). Every open below goes through it, so
@@ -499,6 +505,13 @@ defineExpose({
         v-bind="{ showPreview, canPreview: !showCanvas, saving, canSideBySide: sideBySide.offered.value, sideBySide: sideBySide.active.value }"
         @toggle-preview="carried.choose(() => file.togglePreview())"
         @toggle-side-by-side="sideBySide.toggle()"
+      />
+      <FilesToolbarButton
+        v-if="previewTab && !unpreviewable"
+        icon="open_in_new"
+        :label="t('tips.panes.previewTab')"
+        test-id="files-preview-tab"
+        @click="openPreviewTab"
       />
       <FilesChangesButton
         v-if="openPath && head.hasOriginal.value && layout.editor && !unpreviewable"

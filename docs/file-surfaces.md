@@ -64,6 +64,12 @@ none of the plugin's renderers** — it drops a YAML front matter block, points 
 the raw route, numbers code blocks for the copy button, and the embedded document hands external
 link clicks to the pane. Maths is typeset by that same server (#3017), below.
 
+The right pane can also hand the open document to a **tab of its own** — the header's open-in-new
+button (#3238). The URL it builds names the pane's root and the file's path under it, so the tab
+opens on what the pane was showing. It is the pane's choice of directory that sets that reach, not
+the URL: the browse routes accept any existing directory as `cwd`, as they do for the full-screen
+view, so a tab URL edited by hand reaches what that view would.
+
 A mermaid fence is the one diagram the preview draws itself (#2991), and how it does so is set by
 the sandbox. The preview is served under `sandbox allow-scripts; script-src 'nonce-…'` with no
 `allow-same-origin`: that keeps a previewed file's own scripts inert and blocks any external

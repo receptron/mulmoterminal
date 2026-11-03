@@ -198,6 +198,7 @@ export const tipsKo: Messages["tips"] = {
     sideBySide: "편집기와 Preview를 나란히 표시(Preview가 편집 중인 제목을 따라감)",
     insertSelection: "선택한 줄을 {'@'}파일#L10-20 형식으로 터미널 입력에 넣기(저장하지 않은 편집은 먼저 저장, 선택이 없으면 파일만)",
     copyText: "이 파일의 본문 전체를 복사(저장하지 않은 편집 포함)",
+    previewTab: "Preview를 새 탭에서 열기(소스 보기와 복사 버튼 포함, 저장된 내용 기준)",
     fileTree: "파일 트리",
     git: {
       modified: "수정됨",
