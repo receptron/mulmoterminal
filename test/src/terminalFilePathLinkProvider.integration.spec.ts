@@ -191,6 +191,45 @@ describe("createFilePathLinkProvider against real xterm", () => {
     expect(hovered[1]).toBeNull();
   });
 
+  // The hover is cleared by the hovered link's own leave or release, and by the cwd going unknown
+  // (no links, so nothing is under the pointer) — never by another link's release: xterm releases a
+  // line's cached links when the line changes, which may be a link the pointer left long ago.
+  it("clears the hover only for the hovered link, and whenever the cwd becomes unknown", async () => {
+    const term = new Terminal({ cols: 120, rows: 10, allowProposedApi: true });
+    term.open(document.createElement("div"));
+    await writeLine(term, "see docs/a.md and src/a.ts");
+    const hovered: unknown[] = [];
+    let cwd: string | null = "/proj";
+    const provider = createFilePathLinkProvider(term, () => cwd, {
+      openUrl: () => {},
+      openInFiles: () => {},
+      openInPane: () => false,
+      openOutside: () => {},
+      onHover: (link) => hovered.push(link),
+    });
+    const provide = (): ILink[] | undefined => {
+      let links: ILink[] | undefined;
+      provider.provideLinks(1, (found) => {
+        links = found;
+      });
+      return links;
+    };
+    const [doc, source] = provide() ?? [];
+    if (!doc || !source) throw new Error("expected two links");
+    doc.hover?.(new MouseEvent("mousemove"), doc.text);
+    source.leave?.(new MouseEvent("mousemove"), source.text);
+    source.dispose?.();
+    expect(hovered).toEqual([{ text: "docs/a.md", cwd: "/proj", location: undefined }]);
+    doc.dispose?.();
+    expect(hovered).toEqual([{ text: "docs/a.md", cwd: "/proj", location: undefined }, null]);
+    doc.hover?.(new MouseEvent("mousemove"), doc.text);
+    cwd = null;
+    expect(provide()).toBeUndefined();
+    expect(hovered).toHaveLength(4);
+    expect(hovered[3]).toBeNull();
+    term.dispose();
+  });
+
   // xterm hands activate() the mouseup of ANY button; a right-click is the menu's, and must not
   // also open the file the way a left click would (found by the real-app check on #3256).
   it("ignores an activation from a button other than the main one", async () => {

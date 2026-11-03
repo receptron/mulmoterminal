@@ -10,10 +10,25 @@ import type { Terminal } from "@xterm/xterm";
 import { createFilePathLinkProvider } from "./terminalFilePathLinkProvider";
 import { openOutsideFile, tryOpenInPane } from "./filesPaneOpener";
 import { filesGotoFile } from "./useFilesView";
-import { requestLinkMenu, type HoveredLink } from "./terminalLinkMenu";
+import { closeLinkMenu, linkMenuRequest, requestLinkMenu, type HoveredLink, type LinkMenuRequest } from "./terminalLinkMenu";
+
+/** What a terminal's links left behind, to forget when the terminal goes: the hover, and the menu
+ *  if it is the one this terminal asked for — never another terminal's. */
+const forgetters = new WeakMap<Terminal, () => void>();
+
+export function forgetFilePathLinks(term: Terminal): void {
+  forgetters.get(term)?.();
+  forgetters.delete(term);
+}
 
 export function registerFilePathLinks(term: Terminal, getCwd: () => string | null): void {
   let hovered: HoveredLink | null = null;
+  let asked: LinkMenuRequest | null = null;
+  forgetters.set(term, () => {
+    hovered = null;
+    if (asked !== null && linkMenuRequest.value === asked) closeLinkMenu();
+    asked = null;
+  });
   term.registerLinkProvider(
     createFilePathLinkProvider(term, getCwd, {
       openUrl: (url) => window.open(url, "_blank", "noopener,noreferrer"),
@@ -30,6 +45,7 @@ export function registerFilePathLinks(term: Terminal, getCwd: () => string | nul
   term.element?.addEventListener("contextmenu", (event) => {
     if (!hovered) return;
     event.preventDefault();
-    requestLinkMenu({ ...hovered, point: { top: event.clientY, left: event.clientX } });
+    asked = { ...hovered, point: { top: event.clientY, left: event.clientX } };
+    requestLinkMenu(asked);
   });
 }

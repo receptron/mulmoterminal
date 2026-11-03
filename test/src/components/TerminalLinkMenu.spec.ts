@@ -24,6 +24,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   closeLinkMenu();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   writeText.mockClear();
   paneOpener.mockClear();
@@ -113,6 +114,19 @@ describe("TerminalLinkMenu", () => {
     box.remove();
   });
 
+  it("takes the notice down again on its own", async () => {
+    const wrapper = await open("docs/a.md");
+    vi.useFakeTimers();
+    item("link-copy-path")?.click();
+    await nextTick();
+    await nextTick();
+    expect(document.body.querySelector("[data-testid=terminal-link-notice]")).not.toBeNull();
+    vi.runAllTimers();
+    await nextTick();
+    expect(document.body.querySelector("[data-testid=terminal-link-notice]")).toBeNull();
+    wrapper.unmount();
+  });
+
   // The menu has closed by the time a write is refused, so the refusal has to be said — with the
   // path, so it can be taken by hand — not swallowed.
   it("says when the clipboard refuses the write, and shows the path", async () => {
@@ -122,6 +136,33 @@ describe("TerminalLinkMenu", () => {
     await nextTick();
     await nextTick();
     expect(document.body.querySelector("[data-testid=terminal-link-notice]")?.textContent?.trim()).toBe("The path could not be copied: /proj/docs/a.md");
+    wrapper.unmount();
+  });
+
+  // A `role="menu"` is driven from the keyboard the way the other menus are: the arrows walk the
+  // items and wrap, Home and End jump, and Tab leaves it rather than wandering off with it open.
+  it("walks the items with the arrow keys, Home and End, and leaves on Tab", async () => {
+    const wrapper = await open();
+    const items = [...document.body.querySelectorAll<HTMLElement>("[data-testid=terminal-link-menu] [role=menuitem]")];
+    const press = (key: string): KeyboardEvent => {
+      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      document.activeElement?.dispatchEvent(event);
+      return event;
+    };
+    expect(document.activeElement).toBe(items[0]);
+    expect(press("ArrowDown").defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(items[1]);
+    press("End");
+    expect(document.activeElement).toBe(items[3]);
+    press("ArrowDown");
+    expect(document.activeElement).toBe(items[0]);
+    press("ArrowUp");
+    expect(document.activeElement).toBe(items[3]);
+    press("Home");
+    expect(document.activeElement).toBe(items[0]);
+    expect(press("Tab").defaultPrevented).toBe(true);
+    await nextTick();
+    expect(panel()).toBeNull();
     wrapper.unmount();
   });
 

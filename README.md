@@ -206,7 +206,7 @@ to and simply opens as itself. A route that renders the file in a new tab (`.md`
 keyboard stays in the terminal; the full-screen Files view, with no terminal beside it,
 puts it in the editor. (ESLint's default output puts the path on a line of its own, with no line number to follow.)
 
-**A right-click on the path opens a menu** instead of the browser's: open it in the pane (what a plain click does), open it in a **new tab** (the rendered document for Markdown, JSON and tables, the Files page for source, the one-file link for a picture or a PDF outside the cell), open it in the **Files view**, or **copy the path** as an absolute path, ready for a prompt or an issue. Off a link the right-click is the browser's as before. Cmd/Ctrl+click still opens a new Files tab.
+**A right-click on the path opens a menu** instead of the browser's: open it in the pane (what a plain click does), open it in a **new tab** (the rendered document for Markdown, JSON and tables, the Files page for source, the one-file link for a picture or a PDF outside the cell), open it in the **Files view**, or **copy the path** as an absolute path, ready for a prompt or an issue. A right-click only opens the menu; it no longer also opens the file the way a click does (it used to, under the browser's menu). Off a link the right-click is the browser's as before. Cmd/Ctrl+click still opens a new Files tab.
 
 **While a grid cell is enlarged, or a pane is open beside the tiled grid, the [Files pane](#files-view-browse--edit) takes the click first** — every
 row above, since the pane is the same editor with a Preview for Markdown, HTML and SVG, shows an

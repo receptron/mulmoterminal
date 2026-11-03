@@ -27,12 +27,18 @@ Cmd / Ctrl を押したクリックは新しい Files タブ（#3005）。開き
   以外を無視する（右クリックでリンクが勝手に開いていた既存の挙動もこれで消える）。クリックの後半（経路で開く）を `openLinkByRoute` に切り出し、クリックとメニューで
   共用する。`resolveLinkPath` で基点と相対パスの解決も共用。
 - `terminalFileLinks.ts`: ホバー中のリンクを覚え、`term.element` の `contextmenu` で
-  `requestLinkMenu` に渡す（ターミナル一つにつき一回だけ配線される）。
+  `requestLinkMenu` に渡す（ターミナル一つにつき一回だけ配線される）。ターミナルが破棄されるとき
+  （再構築・セルの解放）は `forgetFilePathLinks` でホバーを忘れ、そのターミナルが要求したメニューなら
+  閉じる。別のターミナルが開いたメニューは閉じない（要求オブジェクトの同一性で判定）。
+- 提供側のホバーは「指しているリンク自身」の `leave` / `dispose` でだけ消す。xterm は行が変わると
+  その行のリンクを `dispose` するので、とうに離れたリンクの解放で現在のホバーを消さないため。
+  cwd が不明になった（リンクを出せない）ときはホバーも消す。
 - `terminalLinkMenu.ts`: 要求を持つモジュール単位の状態。提供側は接続ごと、メニューは全体で一つなので、
   `filesPaneOpener.ts` と同じ形で結ぶ。
 - `terminalLinkActions.ts`: 四つの動作を純関数に。
 - `TerminalLinkMenu.vue`: `App.vue` に一つ。ポインタ位置に開き（画面の端では内側へ）、最初の項目に焦点を
-  移し、Esc と外側のポインタダウンとスクロールで閉じる。閉じるときは開く前に焦点のあった要素（通常は
+  移し、Esc と外側のポインタダウンとスクロールで閉じる。矢印キーで項目を巡り（端で折り返す）、Home / End で
+  端へ、Tab は閉じる（他のメニューと同じ `menuFocusMove`）。閉じるときは開く前に焦点のあった要素（通常は
   ターミナル）へ焦点を戻す。コピーの結果通知はポインタの一行下に出し、選択できる。
 - 文言は `src/i18n/fileLinks/*.ts` の `linkMenu`（五言語）。
 
@@ -40,9 +46,10 @@ Cmd / Ctrl を押したクリックは新しい Files タブ（#3005）。開き
 
 - `test/src/composables/terminalLinkActions.spec.ts`: 四つの動作と絶対パスの組み立て。
 - `test/src/composables/terminalFileLinks.spec.ts`: 実物の xterm で、リンク上の右クリックだけがメニューを
-  要求し、既定の動作を止めること。
-- `test/src/components/TerminalLinkMenu.spec.ts`: 表示位置、四項目、各動作、閉じ方。
-- `test/src/terminalFilePathLinkProvider.integration.spec.ts`: `hover` / `leave` の通知。
+  要求し、既定の動作を止めること。破棄したターミナルのホバーとメニューは忘れ、別のターミナルのメニューは残すこと。
+- `test/src/components/TerminalLinkMenu.spec.ts`: 表示位置、四項目、各動作、閉じ方、キー操作。
+- `test/src/terminalFilePathLinkProvider.integration.spec.ts`: `hover` / `leave` の通知、主ボタン以外の無視、
+  ホバー解除が指しているリンク自身の解放と cwd 不明のときだけ起きること。
 
 ## 検証
 

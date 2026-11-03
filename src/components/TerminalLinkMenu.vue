@@ -7,6 +7,7 @@ import { nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { fitMenu, type MenuPoint } from "./rowMenu";
 import { clipboardAvailable } from "./codeBlockCopy";
+import { menuFocusMove } from "./filesRowActions";
 import { closeLinkMenu, linkMenuRequest, type HoveredLink } from "../composables/terminalLinkMenu";
 import { absolutePathOf, openLinkInFiles, openLinkInPane, openLinkInTab, type LinkActionDeps } from "../composables/terminalLinkActions";
 import { openOutsideFile, tryOpenInPane } from "../composables/filesPaneOpener";
@@ -69,6 +70,23 @@ function onOutside(event: PointerEvent): void {
 function onKeydown(event: KeyboardEvent): void {
   if (event.key === "Escape") closeLinkMenu();
 }
+// Inside the panel: the arrow keys walk the items and Tab leaves, as the other menus' do.
+function onMenuKeydown(event: KeyboardEvent): void {
+  if (event.key === "Tab") {
+    event.preventDefault();
+    closeLinkMenu();
+    return;
+  }
+  const items = [...(menu.value?.querySelectorAll<HTMLElement>("[role=menuitem]") ?? [])];
+  const next = menuFocusMove(
+    event.key,
+    items.findIndex((el) => el === document.activeElement),
+    items.length,
+  );
+  if (next === null) return;
+  event.preventDefault();
+  items[next]?.focus({ preventScroll: true });
+}
 function listen(): void {
   window.addEventListener("pointerdown", onOutside);
   window.addEventListener("keydown", onKeydown);
@@ -129,6 +147,7 @@ async function copyPath(link: HoveredLink, point: MenuPoint): Promise<void> {
       :style="{ top: `${pos.top}px`, left: `${pos.left}px` }"
       @pointerdown.stop
       @contextmenu.prevent
+      @keydown="onMenuKeydown"
     >
       <div class="truncate px-2.5 pb-1 font-mono text-[11px] text-dim" :data-tip="linkMenuRequest.text">{{ linkMenuRequest.text }}</div>
       <button type="button" role="menuitem" data-testid="link-open-pane" :class="ITEM_CLASS" @click="pick((link) => openLinkInPane(link, deps))">

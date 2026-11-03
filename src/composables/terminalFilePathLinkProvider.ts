@@ -215,25 +215,46 @@ export interface FileLinkOpeners extends LinkRouteDeps {
 export function createFilePathLinkProvider(term: Terminal, getCwd: () => string | null, openers: FileLinkOpeners): ILinkProvider {
   const { openUrl, openInFiles, openInPane, openOutside } = openers;
   const onHover = openers.onHover ?? (() => {});
+  // The link the pointer is over, so that only ITS leave or disposal clears the hover: xterm
+  // releases a cached link when the line it is on changes, which may be a link the pointer left
+  // long ago.
+  let current: HoveredLink | null = null;
+  const enter = (link: HoveredLink): void => {
+    current = link;
+    onHover(link);
+  };
+  const exit = (link: HoveredLink | null): void => {
+    if (link !== null && current !== link) return;
+    current = null;
+    onHover(null);
+  };
   return {
     provideLinks(bufferLineNumber: number, callback: (links: ILink[] | undefined) => void): void {
       const cwd = getCwd();
       const cells = cwd ? readCells(term, bufferLineNumber) : null;
-      if (!cwd || !cells) return callback(undefined);
+      if (!cwd || !cells) {
+        // No links while the cwd is unknown — and none hovered either, whatever was before.
+        exit(null);
+        return callback(undefined);
+      }
       // A Windows cell prints `\`-separated paths; anywhere else `\` can be part of a file name.
-      const links: ILink[] = computeFilePathLinks(cells, { windowsPaths: isWindowsRoot(cwd) }).map((link) => ({
-        text: link.text,
-        range: { start: { x: link.startX, y: bufferLineNumber }, end: { x: link.endX, y: bufferLineNumber } },
-        decorations: { pointerCursor: true, underline: true },
-        activate: (event: MouseEvent) => {
-          // xterm activates a link on any button's mouseup; a right-click is the menu's (#3238).
-          if (event.button !== MAIN_BUTTON) return;
-          if (openInPane(link.text, cwd, link.location, wantsNewTab(event))) return;
-          openLinkByRoute(link.text, cwd, link.location, { openUrl, openInFiles, openOutside });
-        },
-        hover: () => onHover({ text: link.text, cwd, location: link.location }),
-        leave: () => onHover(null),
-      }));
+      const links: ILink[] = computeFilePathLinks(cells, { windowsPaths: isWindowsRoot(cwd) }).map((link) => {
+        const hovered: HoveredLink = { text: link.text, cwd, location: link.location };
+        return {
+          text: link.text,
+          range: { start: { x: link.startX, y: bufferLineNumber }, end: { x: link.endX, y: bufferLineNumber } },
+          decorations: { pointerCursor: true, underline: true },
+          activate: (event: MouseEvent) => {
+            // xterm activates a link on any button's mouseup; a right-click is the menu's (#3238).
+            if (event.button !== MAIN_BUTTON) return;
+            if (openInPane(link.text, cwd, link.location, wantsNewTab(event))) return;
+            openLinkByRoute(link.text, cwd, link.location, { openUrl, openInFiles, openOutside });
+          },
+          hover: () => enter(hovered),
+          leave: () => exit(hovered),
+          dispose: () => exit(hovered),
+        };
+      });
       callback(links.length ? links : undefined);
     },
   };
