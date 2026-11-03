@@ -216,7 +216,7 @@ row above, since the pane is the same editor with a Preview for Markdown, HTML a
 image as a picture and a PDF in a frame, and plays a video or an audio file with the browser's own
 controls (seeking included, whatever the file's size). The file opens *beside* the terminal
 that printed it, and the pane opens itself if it was closed. It declines, leaving the routing
-above untouched, when nothing is enlarged and no pane is beside the tiles, or when the path is not
+above untouched, when `fileLinkOpensPane` is off on the tiled grid and no pane is beside the tiles, or when the path is not
 under the directory of the cell the pane belongs to (the pane cannot walk above its root). A file too large to edit as text still offers **Open in OS**.
 
 Highlighting in the Files view covers the JS/TS family, JSON and Markdown (the modes
