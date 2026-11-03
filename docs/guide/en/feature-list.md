@@ -4,7 +4,7 @@ nav_title: Feature list
 layout: default
 parent: English
 nav_order: 6.5
-as_of: 11.7.0
+as_of: 12.0.0
 description: "Every capability MulmoTerminal has today, one line each with the release it arrived in, grouped by area (as of 9.1.0)."
 ---
 
@@ -205,6 +205,9 @@ More: [Feature reference](features.html)
 - A right-click on a file path in terminal output opens a menu: open in the pane, open in a new tab, open in the Files view, or copy the absolute path; a right-click no longer opens the file the way a click does (v11.7.0)
 - A Markdown, JSON or table document opened in a tab of its own has a toolbar that switches between the rendering and the file's source and copies either (v11.7.0)
 - In a Windows cell, backslash-separated and drive-letter paths printed in terminal output are links too (v11.7.0)
+- A path clicked on the tiled grid opens the Files pane beside its cell, or moves it there, the way the cell's menu does; `fileLinkOpensPane: false` keeps such a click on its old route (v12.0.0)
+- A text file outside the cell, clicked in its output, opens in the Files pane on its own: read, previewed and saved against its own folder, an arrow mark before its name, the tree untouched; a page, a picture, a PDF or media outside the cell keeps its one-file tab (v12.0.0)
+- The Files pane's header opens a Markdown, JSON or table file's Preview in a tab of its own, with that tab's source switch and copy buttons (v12.0.0)
 - A full-screen file explorer with a CodeMirror editor and Markdown preview, linkable by ?path= since 1.11 (v0.6.2)
 
 ## Git, worktrees and PRs
