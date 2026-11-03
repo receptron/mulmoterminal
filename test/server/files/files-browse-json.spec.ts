@@ -62,7 +62,8 @@ describe("GET /api/files/browse/json — the tab", () => {
     expect(csp).toMatch(/^sandbox allow-scripts; script-src 'nonce-[A-Za-z0-9_-]+'$/);
     const nonce = /nonce-([A-Za-z0-9_-]+)/.exec(csp)?.[1] ?? "";
     expect(res.text).toContain(`<script nonce="${nonce}">`);
-    expect(res.text.split("<script")).toHaveLength(2);
+    expect(res.text.split('<script nonce="')).toHaveLength(2);
+    expect(res.text.split('<script type="application/json"')).toHaveLength(2);
     expect(res.text).toContain('<div id="tab-rendered"><pre><code>{\n  &quot;a&quot;: 1\n}</code></pre></div>');
     expect(res.text).toContain('<pre id="tab-source" hidden><code>{&quot;a&quot;:1}</code></pre>');
     expect(res.text).toContain('<button type="button" data-show="rendered" aria-pressed="true">Formatted</button>');

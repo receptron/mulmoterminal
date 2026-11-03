@@ -33,6 +33,9 @@
   （ファイルが包みを早く閉じても、残りも一緒に隠し、一緒にコピーする）。
 - 後退経路のコピー: ソースは正確な文字列を入れた一時的な `textarea` を選択してコピーする（要素の中身の
   選択は最後の文字で終わり、末尾の改行が落ちる）。描画は範囲選択のまま（書式が目的）。
+- ソースの文字列はツールバーの中の JSON データブロック（`<script type="application/json" data-tab-source>`。
+  実行されないので nonce 不要。`<` は `\u003c` に書く）から読む。表示用の `<pre>` は HTML の解析で
+  CRLF が LF に、U+0000 が置換文字に変わるので、「そのまま」のコピーには使えない。
 - `server/files/renderedDoc.ts`: JSON と表の本文と見た目を外殻から分け、ペイン用の外殻とタブ用の外殻の両方が
   同じ本文を使えるようにする。既存の `jsonHtmlDoc` / `tableHtmlDoc` はその薄い包み。
 - `server/files/files-browse.ts`: `mountRenderedRoute` が三つの形を返す。埋め込み文書のある経路の `embed=1`

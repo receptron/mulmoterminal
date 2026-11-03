@@ -72,7 +72,7 @@ describe("GET /api/files/browse/md with a mermaid fence", () => {
     await withMd(DIAGRAM, async (call, query) => {
       const res = await call(`/api/files/browse/md?${query}`);
       expect(res.headers["content-security-policy"]).toMatch(/^sandbox allow-scripts; script-src 'nonce-/);
-      expect(res.text.split("<script")).toHaveLength(2);
+      expect(res.text.split('<script nonce="')).toHaveLength(2);
       expect(res.text).not.toContain('type="module"');
       expect(res.text).not.toContain("mermaid.esm");
       expect(res.text).not.toContain("data-mermaid-pending");

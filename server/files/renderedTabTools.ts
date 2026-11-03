@@ -108,9 +108,18 @@ export function tabToolLabelsFor(language: unknown, kind: RenderedKind): TabTool
 // elements of its own beside it, repeating any id or class. What the file cannot do is put anything
 // BEFORE the wrapper, so the shell emits the toolbar, the source and the wrapper first and the
 // script reads them as the first three children of <body>, and finds itself as `currentScript`.
-const toolbarHtml = (labels: TabToolLabels): string =>
+/** The source as a JSON string in a data block, for the copies to read: the <pre> that SHOWS it
+ *  goes through the HTML parser, which turns CRLF into LF and U+0000 into U+FFFD before any script
+ *  can read it, so a file is copied "as it is" only from text the parser never touches. A data
+ *  block (`type="application/json"`) is never executed, so it needs no nonce and admits nothing;
+ *  `<` is written as `\u003c` so that no `</script` in the file can end the block early. */
+const sourceDataHtml = (source: string): string =>
+  `<script type="application/json" data-tab-source>${JSON.stringify(source).replace(/</g, "\\u003c")}</script>`;
+
+const toolbarHtml = (labels: TabToolLabels, source: string): string =>
   [
     `<div class="tab-tools" role="toolbar" aria-label="${escapeHtml(labels.toolbar)}">`,
+    sourceDataHtml(source),
     `<span class="tab-tools-view">`,
     `<button type="button" data-show="rendered" aria-pressed="true">${escapeHtml(labels.rendered)}</button>`,
     `<button type="button" data-show="source" aria-pressed="false">${escapeHtml(labels.source)}</button>`,
@@ -139,9 +148,11 @@ const COPIED_NOTICE_MS = 1500;
  *
  *  Its elements are the first three children of <body> — the toolbar, the source, the rendering's
  *  wrapper — checked for the shell's own marks, and the script itself is `currentScript`. Buttons
- *  are looked for inside the toolbar only. The rendering is every element from the wrapper up to
- *  the script: raw HTML in the file may have closed the wrapper early, and what follows it is
- *  still the rendering, shown and hidden and copied with it.
+ *  and the source's data block are looked for inside the toolbar only. The rendering is every
+ *  element from the wrapper up to the script: raw HTML in the file may have closed the wrapper
+ *  early, and what follows it is still the rendering, shown and hidden and copied with it. The
+ *  text both source copies hand over comes from the data block, never from the <pre> (see
+ *  sourceDataHtml).
  *
  *  Copying tries the Clipboard API first — `write` with both the text as shown and the HTML, so a
  *  rich editor keeps the headings and a plain field gets the words — and falls back to a selection
@@ -156,7 +167,10 @@ const TOOLS_SCRIPT = `(() => {
   if (!script || !toolbar || !source || !rendered) return;
   if (!toolbar.classList.contains("tab-tools") || source.id !== "tab-source" || rendered.id !== "tab-rendered") return;
   const status = toolbar.querySelector(".tab-tools-status");
-  if (!status) return;
+  const data = toolbar.querySelector("script[data-tab-source]");
+  if (!status || !data) return;
+  const sourceText = JSON.parse(data.textContent ?? '""');
+  if (typeof sourceText !== "string") return;
   const renderedNodes = () => {
     const nodes = [];
     for (let el = rendered; el && el !== script; el = el.nextElementSibling) nodes.push(el);
@@ -203,7 +217,7 @@ const TOOLS_SCRIPT = `(() => {
   const selectAndCopy = (name) => {
     if (name === "source") {
       const area = document.createElement("textarea");
-      area.value = source.textContent ?? "";
+      area.value = sourceText;
       area.setAttribute("aria-hidden", "true");
       area.style.position = "fixed";
       area.style.opacity = "0";
@@ -213,7 +227,7 @@ const TOOLS_SCRIPT = `(() => {
     return whileShown(renderedNodes(), () => copySelection((selection) => selection.addRange(renderedRange())));
   };
   const write = (name) => {
-    if (name === "source") return navigator.clipboard.writeText(source.textContent ?? "");
+    if (name === "source") return navigator.clipboard.writeText(sourceText);
     const text = renderedText();
     if (typeof ClipboardItem !== "function") return navigator.clipboard.writeText(text);
     const item = new ClipboardItem({ "text/plain": new Blob([text], { type: "text/plain" }), "text/html": new Blob([renderedHtml()], { type: "text/html" }) });
@@ -248,7 +262,7 @@ export interface RenderedTabDoc {
  *  the shell owns comes before the first byte of the file's rendering. */
 export function renderedTabDoc({ html, source, title, style, nonce, labels }: RenderedTabDoc): string {
   const body = [
-    toolbarHtml(labels),
+    toolbarHtml(labels, source),
     `<pre id="tab-source" hidden><code>${escapeHtml(source)}</code></pre>`,
     `<div id="tab-rendered">${html}</div>`,
     `<script nonce="${nonce}">${TOOLS_SCRIPT}</script>`,

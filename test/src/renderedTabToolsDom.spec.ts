@@ -36,6 +36,17 @@ describe("the tab document under hostile Markdown", () => {
     expect(after[after.length - 1]?.tagName).toBe("SCRIPT");
   });
 
+  it("carries the source through the parser untouched in its data block, while the <pre> is rewritten", () => {
+    const exact = "line\r\nnul\u0000end</script>\r\n";
+    const parsed = parse(
+      renderedTabDoc({ html: "<p>x</p>", source: exact, title: "crlf.md", style: "", nonce: "n", labels: tabToolLabelsFor("en", "markdown") }),
+    );
+    const [bar, pre] = parsed.body.children;
+    expect(JSON.parse(bar?.querySelector("script[data-tab-source]")?.textContent ?? '""')).toBe(exact);
+    expect(pre?.textContent).not.toBe(exact);
+    expect(pre?.textContent).toContain("line\nnul");
+  });
+
   it("gives the toolbar only its own buttons and status", () => {
     expect(toolbar?.querySelectorAll("[data-copy]")).toHaveLength(2);
     expect(toolbar?.querySelector(".tab-tools-status")?.getAttribute("data-copied")).toBe("Copied");

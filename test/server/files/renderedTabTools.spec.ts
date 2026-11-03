@@ -66,6 +66,17 @@ describe("renderedTabDoc", () => {
     expect(scriptOf(html)).not.toContain("done");
   });
 
+  // The <pre> goes through the HTML parser, which rewrites CRLF and U+0000; the copies read a JSON
+  // data block instead, which the parser leaves alone — and which the file cannot end early, since
+  // every `<` in it is written as an escape.
+  it("carries the source as JSON in the toolbar, with no < the file could use to end the block", () => {
+    const html = doc({ source: "a\r\nb\u0000c</script><!--x" });
+    const block = /<script type="application\/json" data-tab-source>([^]*?)<\/script>/.exec(html)?.[1] ?? "";
+    expect(block).toBe(String.raw`"a\r\nb\u0000c\u003c/script>\u003c!--x"`);
+    expect(html.indexOf(block)).toBeLessThan(html.indexOf('class="tab-tools-view"'));
+    expect(JSON.parse(block)).toBe("a\r\nb\u0000c</script><!--x");
+  });
+
   it("shows the source as text, so nothing in it is markup", () => {
     const html = doc({ source: '<script>document.title = "ran"</script>\n<img src=x onerror="x()">' });
     expect(html).toContain("&lt;script&gt;document.title = &quot;ran&quot;&lt;/script&gt;");
@@ -79,8 +90,8 @@ describe("renderedTabDoc", () => {
   it("writes one script, the same whatever the file, the labels or the nonce", () => {
     const a = doc();
     const b = doc({ source: "<script>x</script>", html: "<p>other</p>", nonce: "other", labels: tabToolLabelsFor("ja", "table") });
-    expect(a.split("<script")).toHaveLength(2);
-    expect(b.split("<script")).toHaveLength(2);
+    expect(a.split('<script nonce="')).toHaveLength(2);
+    expect(b.split('<script nonce="')).toHaveLength(2);
     expect(scriptOf(a)).toBe(scriptOf(b));
     expect(a).toContain('<script nonce="n0nce">');
     expect(b).toContain('<script nonce="other">');
@@ -109,7 +120,11 @@ describe("renderedTabDoc", () => {
       ["for (let el = rendered; el && el !== script; el = el.nextElementSibling)", "range.setStartBefore(rendered);", "range.setEndBefore(script);"],
     ],
     ["copies the rendering as text and as HTML, and falls back to a selection", ['"text/plain"', '"text/html"', 'execCommand("copy")']],
-    ["falls back to a textarea for the source", ['document.createElement("textarea")', "area.value = source.textContent", "area.select()"]],
+    ["falls back to a textarea for the source", ['document.createElement("textarea")', "area.value = sourceText", "area.select()"]],
+    [
+      "copies the source from the data block, never from the <pre>",
+      ['toolbar.querySelector("script[data-tab-source]")', "const sourceText = JSON.parse(data.textContent", "navigator.clipboard.writeText(sourceText)"],
+    ],
   ])("%s", (_what, parts) => {
     const script = scriptOf(doc());
     parts.forEach((part) => expect(script).toContain(part));

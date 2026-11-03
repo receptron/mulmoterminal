@@ -143,7 +143,7 @@ describe("the Preview's code-block numbers", () => {
       // The tab runs the toolbar's script and nothing for the blocks (#3238).
       const tab = (await routeCall(app)(query)).text;
       expect(tab).not.toContain("pre[data-code-block]");
-      expect(tab.split("<script")).toHaveLength(2);
+      expect(tab.split('<script nonce="')).toHaveLength(2);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

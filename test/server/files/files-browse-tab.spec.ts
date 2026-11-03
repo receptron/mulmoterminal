@@ -46,7 +46,7 @@ describe("GET /api/files/browse/md — the tab", () => {
       expect(csp).not.toContain("allow-same-origin");
       const nonce = nonceOf(csp);
       expect(res.text).toContain(`<script nonce="${nonce}">`);
-      expect(res.text.split("<script")).toHaveLength(3); // ours, and the file's in the rendering
+      expect(res.text.split('<script nonce="')).toHaveLength(2); // the one that runs; the file's below has none
       expect(res.text).toContain('<script>document.title = "ran"</script>');
       expect(res.text.split(nonce)).toHaveLength(2);
       expect(res.text).toContain('data-copy="source"');
