@@ -53,14 +53,16 @@ const isAlive = (pid: number): boolean => {
  *  opens closes), so a supervisor this spec stops cannot leave one behind (#2609, #2691). Not a run that
  *  is itself killed with the supervisor still up: nothing closes the channel then.
  *
- *  The supervisor forwards SIGTERM and exits at once, so the signal and the channel closing arrive
- *  together; the wait on `disconnect` lets a SIGTERM already on its way be the one recorded. */
+ *  The supervisor asks it to stop over the channel, as it asks the real backend (#3234); a SIGTERM is
+ *  recorded too, for a supervisor that falls back to one. The wait on `disconnect` lets a request
+ *  already on its way be the one recorded. */
 const stayingStub = (boots: string, ends: string): string =>
   [
     'import { appendFileSync } from "node:fs";',
     `appendFileSync(${JSON.stringify(boots)}, process.pid + "\\n");`,
     `const end = (how) => { appendFileSync(${JSON.stringify(ends)}, how + "\\n"); process.exit(0); };`,
     'process.on("SIGTERM", () => end("SIGTERM"));',
+    'process.on("message", (m) => { if (m && m.type === "shutdown") end("shutdown"); });',
     `process.on("disconnect", () => setTimeout(() => end("disconnect"), ${SIGNAL_RACE_MS}));`,
     "setInterval(() => {}, 1000);",
   ].join("\n");
@@ -112,8 +114,8 @@ describe("dev-server supervisor", () => {
     expect(bootCount).toBeGreaterThanOrEqual(2);
   }, 15000);
 
-  // What `yarn dev`'s Ctrl-C relies on. Not on Windows: a SIGTERM there terminates without running
-  // the handler that passes it on.
+  // What `yarn dev`'s Ctrl-C relies on. Not on Windows: this spec's SIGTERM to the supervisor there
+  // terminates it without running the handler that asks the backend to stop.
   it.skipIf(process.platform === "win32")(
     "stops the backend it started when it is stopped",
     async () => {
@@ -138,8 +140,8 @@ describe("dev-server supervisor", () => {
       await waitFor(() => !isAlive(backend), SUPERVISOR_EXIT_MS);
       rmSync(watchDir, { recursive: true, force: true });
       expect(isAlive(backend)).toBe(false);
-      // Stopped BY the supervisor, which passed the signal on — not merely left to end with it.
-      expect(linesOf(ends)[0]).toBe("SIGTERM");
+      // Stopped BY the supervisor, which asked it to — not merely left to end with it.
+      expect(linesOf(ends)[0]).toBe("shutdown");
     },
     30000,
   );
@@ -188,5 +190,39 @@ describe("dev-server supervisor", () => {
       expect(bootCount).toBeGreaterThanOrEqual(2);
     },
     20000,
+  );
+
+  // A backend that does not act on the request must not stop the reload for good: past the cap the
+  // supervisor ends it, and the next one comes up.
+  it.skipIf(process.platform === "win32")(
+    "still restarts a backend that ignores the request to stop",
+    async () => {
+      dir = makeTempDir("dev-server-test-");
+      const boots = path.join(dir, "boots.log");
+      const stub = path.join(dir, "stub.mjs");
+      writeFileSync(
+        stub,
+        [
+          `import { appendFileSync } from "node:fs";`,
+          `appendFileSync(${JSON.stringify(boots)}, process.pid + "\\n");`,
+          'process.on("disconnect", () => process.exit(0));',
+          "setInterval(() => {}, 1000);",
+        ].join("\n"),
+      );
+      const watchDir = makeTempDir("dev-server-watch-");
+      child = spawn(process.execPath, [SUPERVISOR], {
+        env: { ...process.env, DEV_SERVER_ENTRY: stub, DEV_SERVER_WATCH: watchDir },
+        stdio: "ignore",
+      });
+      await waitFor(() => bootedPids(boots).length > 0, BOOT_WAIT_MS);
+      const touched = path.join(watchDir, "touched.ts");
+      for (let i = 0; i < 50 && bootedPids(boots).length < 2; i++) {
+        writeFileSync(touched, `export const x = ${i};\n`);
+        await wait(200);
+      }
+      rmSync(watchDir, { recursive: true, force: true });
+      expect(bootedPids(boots).length).toBeGreaterThanOrEqual(2);
+    },
+    30000,
   );
 });

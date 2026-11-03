@@ -14,31 +14,37 @@
 // wait is capped, because a disk that has stopped answering must not turn Ctrl+C into a hang.
 //
 // `exit` cannot wait — the event loop is already over by then — so it stays synchronous and
-// drains nothing. That is why the signal path is the one that matters: it is the path Ctrl+C and
-// the browser's stop button both take.
+// drains nothing. That is why `requestShutdown` is the one that matters: Ctrl+C, the browser's stop
+// button and a parent's message all reach it — never a signal sent from one process to another,
+// which on Windows ends the target without running any of this (#3234).
 import { stopWhisperSidecar } from "../../backends/media/whisper.js";
 import { drainPersistQueues } from "../../session/reaping/persist-drain.js";
+import { isShutdownMessage } from "../../../bin/child-shutdown.js";
 
 const SIGNALS = ["SIGINT", "SIGTERM"] as const;
 
-export function installShutdownHandlers(): void {
-  // Installing handlers marks the start of a process lifecycle, so the once-only latch starts
+/** Where a parent's request to stop arrives: the IPC channel, which is `process` itself. */
+export interface ShutdownChannel {
+  on(event: "message", listener: (message: unknown) => void): unknown;
+}
+
+export function installShutdownHandlers(channel: ShutdownChannel = process): void {
+  // Installing handlers marks the start of a process lifecycle, so the once-only latches start
   // fresh with it. Production calls this once; a spec calls it per test, and without this the
   // first test to stop the sidecar would leave every later one looking at an already-stopped one.
   sidecarStopped = false;
+  stopping = false;
   process.once("exit", stopSidecarOnce);
+  // A parent asks over the channel because on Windows its signal would be TerminateProcess (#3234).
+  channel.on("message", (message) => {
+    if (isShutdownMessage(message)) requestShutdown();
+  });
   for (const signal of SIGNALS) {
     // `once`, not `on`, and that now carries a second guarantee worth stating: after the handler
     // fires the listener is gone, so Node's default action is restored and a SECOND Ctrl+C during
     // the drain terminates immediately (measured: exit 130). Switching this to `on` would make the
     // server unkillable for the length of the cap.
-    //
-    // Voided rather than returned: a promise handed to a void-returning callback is what
-    // `no-misused-promises` is about, and the rule is right — a rejection there would be
-    // unhandled. `stopAndExit` cannot reject, and a spec observes it by flushing instead.
-    process.once(signal, () => {
-      void stopAndExit();
-    });
+    process.once(signal, requestShutdown);
   }
 }
 
@@ -63,6 +69,18 @@ function stopSidecarOnce(): void {
   } catch (e) {
     console.warn(`[shutdown] the whisper sidecar did not stop cleanly: ${e instanceof Error ? e.message : String(e)}`);
   }
+}
+
+/** Run the shutdown, once — whoever asks: a signal, the browser's stop button, or a parent's message.
+ *
+ *  ONCE, because one Ctrl+C on POSIX arrives twice: the terminal signals the whole process group
+ *  and the launcher also sends its message. A later request while the drain runs changes nothing;
+ *  a second Ctrl+C still ends it at once, since the signal listener was `once`. */
+let stopping = false;
+export function requestShutdown(): void {
+  if (stopping) return;
+  stopping = true;
+  void stopAndExit();
 }
 
 async function stopAndExit(): Promise<void> {

@@ -2,6 +2,7 @@ import type { InstanceEntry } from "./instances.js";
 
 export interface StopEffects {
   kill?: (pid: number) => void;
+  request?: (instance: InstanceEntry) => Promise<boolean>;
   isAlive?: (pid: number) => boolean;
   sleep?: (ms: number) => Promise<void>;
   graceMs?: number;
@@ -26,6 +27,11 @@ export interface ConfirmDeps {
   owners?: (port: number) => Promise<number[] | null>;
 }
 export declare function confirmInstance(instance: InstanceEntry, deps?: ConfirmDeps): Promise<boolean>;
+export interface AskDeps {
+  fetchImpl?: (url: string, init: RequestInit) => Promise<{ ok: boolean }>;
+  timeoutMs?: number;
+}
+export declare function askServerToStop(instance: InstanceEntry, deps?: AskDeps): Promise<boolean>;
 export declare function stopInstances(instances: readonly InstanceEntry[], effects?: StopEffects): Promise<StopResult>;
 export declare function describeInstance(instance: InstanceEntry): string;
 export declare function manualStopCommand(pids: readonly number[], platform?: NodeJS.Platform): string;

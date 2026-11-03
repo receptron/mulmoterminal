@@ -1,7 +1,8 @@
 // @vitest-environment node
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 
 import {
+  askServerToStop,
   stopInstances,
   stopReport,
   stopExitCode,
@@ -15,6 +16,18 @@ import {
 
 const instance = (pid: number, port: number | null = 34567) => ({ pid, port, startedAt: 1 });
 
+// These instances sit on 34567, the port a LIVE server answers on, and the real request stops it —
+// a run of this file once did. So every call goes through `stop`, which never sends the real one,
+// and fetch itself refuses for anything that slips past.
+type StopEffects = NonNullable<Parameters<typeof stopInstances>[1]>;
+const stop = (instances: Parameters<typeof stopInstances>[0], effects: StopEffects) => stopInstances(instances, { request: async () => false, ...effects });
+beforeAll(() => {
+  vi.stubGlobal("fetch", async () => {
+    throw new Error("stop.spec must not reach a real server");
+  });
+});
+afterAll(() => vi.unstubAllGlobals());
+
 // The effects are injected, so a whole stop can be observed without a process to kill. `alive` is
 // the world: a pid in the set is running, and a kill that "works" takes it out.
 const world = (alive: number[], kill?: (pid: number) => void) => {
@@ -23,6 +36,8 @@ const world = (alive: number[], kill?: (pid: number) => void) => {
     running,
     effects: {
       kill: kill ?? ((pid: number) => running.delete(pid)),
+      // Never the real request: these instances sit on 34567, the port a live server uses.
+      request: async () => false,
       isAlive: (pid: number) => running.has(pid),
       sleep: async () => {},
       graceMs: 300,
@@ -41,7 +56,7 @@ const refuse = (code: string) => (pid: number) => {
 describe("stopInstances", () => {
   it("stops every running server, not just the first", async () => {
     const { effects } = world([11, 22]);
-    const result = await stopInstances([instance(11, 34567), instance(22, 34568)], effects);
+    const result = await stop([instance(11, 34567), instance(22, 34568)], effects);
     expect(result.stopped.map((i) => i.pid)).toEqual([11, 22]);
     expect(result.stubborn).toEqual([]);
   });
@@ -49,21 +64,21 @@ describe("stopInstances", () => {
   it("treats a server that ended on its own as nothing to report", async () => {
     // ESRCH is the registry being a moment stale — the user asked for it to be stopped and it is.
     const { effects } = world([], refuse("ESRCH"));
-    const result = await stopInstances([instance(11)], effects);
+    const result = await stop([instance(11)], effects);
     expect(result.stopped).toEqual([]);
     expect(result.stubborn).toEqual([]);
   });
 
   it("reports a server it is not allowed to stop, rather than claiming success", async () => {
     const { effects } = world([11], refuse("EPERM"));
-    const result = await stopInstances([instance(11)], effects);
+    const result = await stop([instance(11)], effects);
     expect(result.stopped).toEqual([]);
     expect(result.stubborn).toEqual([{ pid: 11, port: 34567, startedAt: 1, reason: "EPERM" }]);
   });
 
   it("gives up on a server that outlives the grace period, and says which", async () => {
     const { effects } = world([11]);
-    const result = await stopInstances([instance(11)], { ...effects, kill: () => {} });
+    const result = await stop([instance(11)], { ...effects, kill: () => {} });
     expect(result.stopped).toEqual([]);
     expect(result.stubborn.map((i) => i.reason)).toEqual(["still running"]);
   });
@@ -72,7 +87,7 @@ describe("stopInstances", () => {
     // The window exists because SIGTERM runs the same shutdown Ctrl+C runs, which is not instant.
     const { running, effects } = world([11]);
     let polls = 0;
-    const result = await stopInstances([instance(11)], {
+    const result = await stop([instance(11)], {
       ...effects,
       kill: () => {},
       isAlive: (pid: number) => {
@@ -86,7 +101,7 @@ describe("stopInstances", () => {
   it("asks them all before waiting on any, so one slow server does not delay the rest", async () => {
     const order: string[] = [];
     const { effects } = world([11, 22]);
-    await stopInstances([instance(11), instance(22)], {
+    await stop([instance(11), instance(22)], {
       ...effects,
       kill: (pid: number) => order.push(`kill:${pid}`),
       isAlive: () => {
@@ -100,9 +115,78 @@ describe("stopInstances", () => {
   it("sends SIGTERM by default — the signal the server has a handler for", async () => {
     const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
     // force, so this stays about the SIGNAL and does not depend on a server answering.
-    await stopInstances([instance(11)], { isAlive: () => false, sleep: async () => {}, graceMs: 0, force: true });
+    await stop([instance(11)], { isAlive: () => false, sleep: async () => {}, graceMs: 0, force: true, request: async () => true });
     expect(kill).toHaveBeenCalledWith(11, "SIGTERM");
     kill.mockRestore();
+  });
+});
+
+// #3234. On Windows the signal is TerminateProcess, so the server is asked over HTTP first and the
+// signal is only the fallback.
+describe("stopInstances asks over HTTP first", () => {
+  it("sends no signal to a server that took the request, and waits for it to go", async () => {
+    const { running, effects } = world([11]);
+    const kill = vi.fn();
+    let polls = 0;
+    const result = await stop([instance(11)], {
+      ...effects,
+      kill,
+      request: async () => true,
+      isAlive: (pid: number) => {
+        if (++polls > 1) running.delete(pid);
+        return running.has(pid);
+      },
+    });
+    expect(kill).not.toHaveBeenCalled();
+    expect(result.stopped.map((i) => i.pid)).toEqual([11]);
+  });
+
+  it("signals a server that did not take the request", async () => {
+    const { effects } = world([11]);
+    const kill = vi.fn();
+    await stop([instance(11)], { ...effects, kill, request: async () => false });
+    expect(kill).toHaveBeenCalledWith(11);
+  });
+
+  it("does not ask an unconfirmed server under --force, since the port may be someone else's", async () => {
+    const { effects } = world([11]);
+    const request = vi.fn(async () => true);
+    const kill = vi.fn();
+    await stop([instance(11)], { ...effects, kill, request, confirm: async () => false, force: true });
+    expect(request).not.toHaveBeenCalled();
+    expect(kill).toHaveBeenCalledWith(11);
+  });
+
+  it("never asks a server it could not confirm", async () => {
+    const { effects } = world([11]);
+    const request = vi.fn(async () => true);
+    await stop([instance(11)], { ...effects, request, confirm: async () => false });
+    expect(request).not.toHaveBeenCalled();
+  });
+});
+
+describe("askServerToStop", () => {
+  it("posts to the instance's own shutdown route with the Origin the browser sends", async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true }));
+    expect(await askServerToStop(instance(11, 34601), { fetchImpl })).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://127.0.0.1:34601/api/shutdown",
+      expect.objectContaining({ method: "POST", headers: { Origin: "http://localhost:34601" } }),
+    );
+  });
+
+  it("is false for a refusal, a failed connection, or no answer in time", async () => {
+    expect(await askServerToStop(instance(11), { fetchImpl: async () => ({ ok: false }) })).toBe(false);
+    expect(
+      await askServerToStop(instance(11), {
+        fetchImpl: async () => {
+          throw new Error("ECONNREFUSED");
+        },
+      }),
+    ).toBe(false);
+    const hang = (_url: string, init: RequestInit) =>
+      new Promise<{ ok: boolean }>((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(new Error("aborted"))));
+    expect(await askServerToStop(instance(11), { fetchImpl: hang, timeoutMs: 10 })).toBe(false);
   });
 });
 
@@ -150,7 +234,7 @@ describe("stopInstances identity check", () => {
 
   it("does not signal a pid it cannot corroborate", async () => {
     const kill = vi.fn();
-    const result = await stopInstances([instance(11)], { ...alive, kill, confirm: async () => false });
+    const result = await stop([instance(11)], { ...alive, kill, confirm: async () => false });
     expect(kill).not.toHaveBeenCalled();
     expect(result.unconfirmed.map((i) => i.pid)).toEqual([11]);
     expect(result.stopped).toEqual([]);
@@ -158,7 +242,7 @@ describe("stopInstances identity check", () => {
 
   it("signals one it can", async () => {
     const kill = vi.fn();
-    const result = await stopInstances([instance(11)], { ...alive, kill, confirm: async () => true });
+    const result = await stop([instance(11)], { ...alive, kill, confirm: async () => true });
     expect(kill).toHaveBeenCalledWith(11);
     expect(result.stopped.map((i) => i.pid)).toEqual([11]);
   });
@@ -166,14 +250,14 @@ describe("stopInstances identity check", () => {
   it("stops asking once --force is given, which is the way out for a server that has hung", async () => {
     const kill = vi.fn();
     const confirm = vi.fn(async () => false);
-    await stopInstances([instance(11)], { ...alive, kill, confirm, force: true });
+    await stop([instance(11)], { ...alive, kill, confirm, force: true });
     expect(confirm).not.toHaveBeenCalled();
     expect(kill).toHaveBeenCalledWith(11);
   });
 
   it("judges each instance on its own, so one unconfirmed entry cannot spare the others", async () => {
     const kill = vi.fn();
-    const result = await stopInstances([instance(11, 34567), instance(22, 34568)], {
+    const result = await stop([instance(11, 34567), instance(22, 34568)], {
       ...alive,
       kill,
       confirm: async (i) => i.pid === 22,
