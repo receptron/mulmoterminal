@@ -8,6 +8,22 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@12.0.0 — 2026-11-03
+
+> **Setup guide:** [12.0.0 — A clicked path opens the pane beside its cell, outside files included](https://receptron.github.io/mulmoterminal/guide/en/v12.0.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v12.0.0.html))
+
+### A path clicked on the tiled grid opens the Files pane beside its cell (#3263)
+
+Part 4 of #3238. The pane took a clicked path only beside an enlarged cell, or when a pane was already up beside the tiled grid (#3027); otherwise the click went to a new tab or the Files view. On the tiled grid the click now opens the pane beside the tile that printed the path, or moves it there, the way the tile's menu does (`openPaneFor`), and opens the file once the re-root has landed — the pane reads a relative path against the root it is on, and the move saves the pane it leaves first, so the file waits on a counter the re-root watcher bumps when a run ends. For that the click carries the terminal's session (`LinkOrigin` in the wiring, `session` on the opener and on the right-click menu's request), since two tiles can share a directory. A new setting, `fileLinkOpensPane` (on by default; a checkbox under Settings → Terminal keys; the `mulmoterminal-keys` skill owns it), set to `false` keeps a tiled-grid click on its old route unless a pane is already beside that tile. Beside an enlarged cell nothing changes. The decision is `paneToOpenBeside` in `paneClickTarget.ts`: null while a cell is enlarged, with the setting off, for a session the grid does not have, or when the cell's reported directory is not the one the path was read against.
+
+### A text file outside the cell opens in the Files pane on its own (#3264)
+
+Part 5 of #3238. A clicked path outside the cell's directory — absolute, `~/…`, `../` climbing out — now opens in the pane on its own when it is a text kind (Markdown, JSON, a table, source, or a type a tab would only download): its tab path is absolute, and `browseQuery`, which every `/api/files/browse/*` request goes through, hands an absolute path over as the file's own directory and name (`filesOutsidePath.ts`), so the read, the version poll, the conditional write with its 409, the backup, the Preview frame and the Preview-in-a-tab button all take that directory. The tree does not move and does not follow the tab; History and Changes, the folder's recent files and a link out of its Preview are not offered for it; an arrow mark before the name says it is outside, with the absolute path in its tooltip. A page, a picture, a PDF, an SVG or media outside the cell keeps the one-file grant in a tab, since the pane draws those from routes that serve only the workspace and live session directories. One server change came out of review: a read against an absolute `cwd` that is no longer a directory is refused (`readBase`), as a write already was, instead of falling back to the default workspace, where a same-named file would have been served under the vanished file's name. A root file printed absolute now reaches the Files view, the tab and the pane relative to the root (`underRootAsWritten`), so it never becomes an outside tab; a path printed relative goes as printed. `docs/file-surfaces.md` gains the surface.
+
+### The Files pane's header opens the Preview in a tab of its own (#3262)
+
+Part 3 of #3238. A Markdown, JSON or CSV/TSV file open in the pane gets a header button beside the Edit / Preview switch that opens the document a clicked path opens in a new tab — the rendering with the toolbar from #3252 that switches to the file's source and copies either. The URL (`previewTabUrl` beside `previewSrcFor`) names the pane's root and the file's path only, never the frame's `embed` flag, version, theme or token; an HTML page or an SVG, which is the file itself in a tab, gets no button, and neither does a pane with no root. A spec pins that none of the frame's parameters ride on the URL. The pane's own Preview frame is unchanged.
+
 ## mulmoterminal@11.7.0 — 2026-11-03
 
 > **Setup guide:** [11.7.0 — Right-click a path to choose how it opens, and a tab shows the source too](https://receptron.github.io/mulmoterminal/guide/en/v11.7.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v11.7.0.html))

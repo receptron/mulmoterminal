@@ -8,9 +8,9 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **11.7.0 is out.** Right-click a file path in terminal output to choose how it opens, a document
-> opened in a tab of its own can show its source and copy either, and a Claude cell shows the name
-> other sessions message it by. [Setup guide](v11.7.0.html)
+> **12.0.0 is out.** A file path clicked on the tiled grid opens the Files pane beside its cell, a
+> text file outside the cell opens there on its own, and the pane's header sends a Preview to a tab
+> of its own. [Setup guide](v12.0.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 
