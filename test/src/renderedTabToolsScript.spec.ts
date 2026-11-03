@@ -117,6 +117,22 @@ describe("the rendered tab's script", () => {
     expect(inlineDisplay(element("#tab-source"))).toBe("none important");
   });
 
+  // Hiding composes from the RECORDED original style, never from the current attribute, so pressing
+  // the already-selected view again rewrites the same value (Codex on #3259 read it as appending).
+  it("hides idempotently: pressing the selected view again leaves every style attribute as it was", () => {
+    mountTab('<h1>hi</h1></div><div id="beside" style="display:flex">x</div>');
+    const attributes = (): (string | null)[] => [element("#tab-source"), ...renderedNodes()].map((el) => el.getAttribute("style"));
+    element('[data-show="source"]').click();
+    const once = attributes();
+    expect(once).toEqual([null, "display:none !important", "display:flex;display:none !important"]);
+    element('[data-show="source"]').click();
+    element('[data-show="source"]').click();
+    expect(attributes()).toEqual(once);
+    element('[data-show="rendered"]').click();
+    element('[data-show="rendered"]').click();
+    expect(attributes()).toEqual(["display:none !important", null, "display:flex"]);
+  });
+
   // An element the FILE hid is the file's business: a copy from the Preview view must not touch it,
   // and a trip through the Source view must put its own `hidden` and style back byte for byte
   // (Codex on #3259).
