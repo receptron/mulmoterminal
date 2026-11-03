@@ -78,8 +78,8 @@ describe("GET /api/files/browse/md — the tab", () => {
     await withMd('# t\n\n</div><pre id="tab-source"><code>attacker</code></pre>\n', async (call, query) => {
       const text = (await call(`/api/files/browse/md?${query}`)).text;
       const at = (part: string) => text.indexOf(part);
-      expect(at('<div class="tab-tools"')).toBeLessThan(at('<pre id="tab-source" hidden>'));
-      expect(at('<pre id="tab-source" hidden>')).toBeLessThan(at('<script nonce="'));
+      expect(at('<div class="tab-tools"')).toBeLessThan(at('<pre id="tab-source" hidden style="display:none !important">'));
+      expect(at('<pre id="tab-source" hidden style="display:none !important">')).toBeLessThan(at('<script nonce="'));
       expect(at('<script nonce="')).toBeLessThan(at('<div id="tab-rendered">'));
       // the file's tag as marked passes it through — the escaped copy in the source comes earlier
       expect(at('<div id="tab-rendered">')).toBeLessThan(at('<pre id="tab-source"><code>attacker'));
@@ -89,7 +89,9 @@ describe("GET /api/files/browse/md — the tab", () => {
   it("shows the file as it is beside the rendering", async () => {
     await withMd(HOSTILE, async (call, query) => {
       const res = await call(`/api/files/browse/md?${query}`);
-      expect(res.text).toContain('<pre id="tab-source" hidden><code># title\n\n&lt;script&gt;document.title = &quot;ran&quot;&lt;/script&gt;');
+      expect(res.text).toContain(
+        '<pre id="tab-source" hidden style="display:none !important"><code># title\n\n&lt;script&gt;document.title = &quot;ran&quot;&lt;/script&gt;',
+      );
     });
   });
 
@@ -121,7 +123,7 @@ describe("GET /api/files/browse/table — the tab", () => {
     const res = await serve("");
     expect(res.headers["content-security-policy"]).toMatch(TAB_POLICY);
     expect(res.text).toContain('<button type="button" data-copy="rendered">Copy table</button>');
-    expect(res.text).toContain('<pre id="tab-source" hidden><code>a,b\n1,2\n</code></pre>');
+    expect(res.text).toContain('<pre id="tab-source" hidden style="display:none !important"><code>a,b\n1,2\n</code></pre>');
     expect(res.text).toContain("<th>a</th>");
   });
 });

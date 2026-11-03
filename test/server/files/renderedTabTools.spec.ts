@@ -42,7 +42,7 @@ describe("renderedTabDoc", () => {
     const html = doc();
     const order = [
       'class="tab-tools"',
-      '<pre id="tab-source" hidden><code># hi\n</code></pre>',
+      '<pre id="tab-source" hidden style="display:none !important"><code># hi\n</code></pre>',
       '<script nonce="n0nce">',
       '<div id="tab-rendered"><h1>hi</h1></div>',
     ].map((part) => html.indexOf(part));
@@ -141,6 +141,13 @@ describe("renderedTabDoc", () => {
       ['toolbar.querySelector("script[data-tab-source]")', "const sourceText = JSON.parse(data.textContent", "navigator.clipboard.writeText(sourceText)"],
     ],
     ["falls back to a textarea for the source", ['document.createElement("textarea")', "area.value = sourceText", "area.select()"]],
+    // An author `[hidden]{display:block}` in the file beats the browser's rule, so hiding also sets
+    // an inline display with priority — and the HTML copy clones the rendering while it is shown, or
+    // the payload carries `hidden` (CodeRabbit on #3252).
+    [
+      "hides by an inline display with priority as well as by hidden, and clones the rendering shown",
+      ['el.style.setProperty("display", "none", "important")', "const renderedHtml = () => whileShown(renderedNodes(), () => {"],
+    ],
   ])("%s", (_what, parts) => {
     const script = scriptOf(doc());
     parts.forEach((part) => expect(script).toContain(part));

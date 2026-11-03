@@ -163,7 +163,12 @@ const COPIED_NOTICE_MS = 1500;
  *  address) or a refused write still has. For the source that selection is a textarea holding the
  *  exact text: selecting the element's contents instead ends at its last character and loses the
  *  file's final newline. A view the reader is not looking at has no layout and so no line breaks
- *  in its text, so it is shown for the moment of the read. */
+ *  in its text, and a clone of it carries its `hidden`, so it is shown for the moment of the read.
+ *
+ *  What is hidden is hidden by an inline `display: none !important` as well as by `hidden`: raw HTML
+ *  in the file can carry a stylesheet, and an author `[hidden]{display:block}` beats the browser's
+ *  default rule, which would leave both views on screen. An element's own inline display comes back
+ *  when it is shown again. */
 const TOOLS_SCRIPT = `(() => {
   const script = document.currentScript;
   const ready = () => {
@@ -180,9 +185,22 @@ const TOOLS_SCRIPT = `(() => {
     for (let el = rendered; el; el = el.nextElementSibling) nodes.push(el);
     return nodes;
   };
+  const ownDisplay = new Map();
+  const setHidden = (el, hide) => {
+    el.hidden = hide;
+    if (hide) {
+      if (!ownDisplay.has(el)) ownDisplay.set(el, [el.style.getPropertyValue("display"), el.style.getPropertyPriority("display")]);
+      el.style.setProperty("display", "none", "important");
+      return;
+    }
+    const own = ownDisplay.get(el);
+    ownDisplay.delete(el);
+    if (own && own[0]) el.style.setProperty("display", own[0], own[1]);
+    else el.style.removeProperty("display");
+  };
   const show = (name) => {
-    source.hidden = name !== "source";
-    for (const el of renderedNodes()) el.hidden = name !== "rendered";
+    setHidden(source, name !== "source");
+    for (const el of renderedNodes()) setHidden(el, name !== "rendered");
     for (const b of toolbar.querySelectorAll("[data-show]")) b.setAttribute("aria-pressed", String(b.dataset.show === name));
   };
   let timer = 0;
@@ -192,9 +210,9 @@ const TOOLS_SCRIPT = `(() => {
     timer = setTimeout(() => { status.textContent = ""; }, ${COPIED_NOTICE_MS});
   };
   const whileShown = (els, read) => {
-    const hidden = els.map((el) => el.hidden);
-    els.forEach((el) => { el.hidden = false; });
-    try { return read(); } finally { els.forEach((el, i) => { el.hidden = hidden[i]; }); }
+    const wereHidden = els.filter((el) => el.hidden);
+    wereHidden.forEach((el) => setHidden(el, false));
+    try { return read(); } finally { wereHidden.forEach((el) => setHidden(el, true)); }
   };
   const renderedRange = () => {
     const range = document.createRange();
@@ -202,11 +220,11 @@ const TOOLS_SCRIPT = `(() => {
     range.setEnd(document.body, document.body.childNodes.length);
     return range;
   };
-  const renderedHtml = () => {
+  const renderedHtml = () => whileShown(renderedNodes(), () => {
     const box = document.createElement("div");
     box.append(renderedRange().cloneContents());
     return box.innerHTML;
-  };
+  });
   const renderedText = () => {
     const nodes = renderedNodes();
     return whileShown(nodes, () => nodes.map((el) => el.innerText).join("\\n"));
@@ -264,14 +282,15 @@ export interface RenderedTabDoc {
   labels: TabToolLabels;
 }
 
-/** The tab's document: the toolbar, the source (hidden until asked for), the one script and then
+/** The tab's document: the toolbar, the source (hidden until asked for — by the attribute and by an
+ *  inline display the file's own stylesheet cannot undo, see TOOLS_SCRIPT), the one script and then
  *  the rendering, in the shared shell. The order is the script's contract (see TOOLS_SCRIPT):
  *  everything the shell owns comes before the first byte of the file's rendering, the script
  *  included. */
 export function renderedTabDoc({ html, source, title, style, nonce, labels }: RenderedTabDoc): string {
   const body = [
     toolbarHtml(labels, source),
-    `<pre id="tab-source" hidden><code>${escapeHtml(source)}</code></pre>`,
+    `<pre id="tab-source" hidden style="display:none !important"><code>${escapeHtml(source)}</code></pre>`,
     `<script nonce="${nonce}">${TOOLS_SCRIPT}</script>`,
     `<div id="tab-rendered">${html}</div>`,
   ].join("");

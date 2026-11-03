@@ -65,7 +65,7 @@ describe("GET /api/files/browse/json — the tab", () => {
     expect(res.text.split('<script nonce="')).toHaveLength(2);
     expect(res.text.split('<script type="application/json"')).toHaveLength(2);
     expect(res.text).toContain('<div id="tab-rendered"><pre><code>{\n  &quot;a&quot;: 1\n}</code></pre></div>');
-    expect(res.text).toContain('<pre id="tab-source" hidden><code>{&quot;a&quot;:1}</code></pre>');
+    expect(res.text).toContain('<pre id="tab-source" hidden style="display:none !important"><code>{&quot;a&quot;:1}</code></pre>');
     expect(res.text).toContain('<button type="button" data-show="rendered" aria-pressed="true">Formatted</button>');
     expect(res.text).toContain('<button type="button" data-copy="rendered">Copy formatted</button>');
   });
