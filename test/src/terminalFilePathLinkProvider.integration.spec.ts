@@ -46,7 +46,7 @@ function provideLinks(
   openInPane: (filePath: string, cwd: string, location: FileLocation | undefined, newTab: boolean) => boolean = () => false,
   openOutside: (absPath: string) => void = () => {},
 ): ILink[] | undefined {
-  const provider = createFilePathLinkProvider(term, () => cwd, open, openInFiles, openInPane, openOutside);
+  const provider = createFilePathLinkProvider(term, () => cwd, { openUrl: open, openInFiles, openInPane, openOutside });
   let result: ILink[] | undefined;
   provider.provideLinks(1, (links) => {
     result = links;
@@ -162,6 +162,33 @@ describe("createFilePathLinkProvider against real xterm", () => {
     expect(openInFiles).toHaveBeenCalledWith("lib/b.ts", "/Users/me/proj", { line: 12, col: 5 });
 
     term.dispose();
+  });
+
+  // A right-click asks what the pointer is over (#3238): xterm tells each link when the pointer
+  // enters and leaves it, and the provider passes that on as the path, the cwd and the line.
+  it("reports the link under the pointer, and nothing once it leaves", async () => {
+    const term = new Terminal({ cols: 120, rows: 10, allowProposedApi: true });
+    term.open(document.createElement("div"));
+    await writeLine(term, "see src/a.ts:42 here");
+    const hovered: unknown[] = [];
+    const provider = createFilePathLinkProvider(term, () => "/proj", {
+      openUrl: () => {},
+      openInFiles: () => {},
+      openInPane: () => false,
+      openOutside: () => {},
+      onHover: (link) => hovered.push(link),
+    });
+    let links: ILink[] | undefined;
+    provider.provideLinks(1, (found) => {
+      links = found;
+    });
+    const link = links?.[0];
+    expect(link).toBeDefined();
+    link?.hover?.(new MouseEvent("mousemove"), link.text);
+    link?.leave?.(new MouseEvent("mousemove"), link.text);
+    expect(hovered).toHaveLength(2);
+    expect(hovered[0]).toEqual({ text: "src/a.ts", cwd: "/proj", location: { line: 42, col: null } });
+    expect(hovered[1]).toBeNull();
   });
 
   it("provides no links when the session cwd is unknown", async () => {

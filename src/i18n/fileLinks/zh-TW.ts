@@ -6,6 +6,13 @@ export const fileLinksZhTW = {
     dirSettings: "此目錄的設定",
     newTerminal: "在此處新增終端機",
   },
+  linkMenu: {
+    title: "開啟此路徑",
+    openInPane: "在面板中開啟",
+    openInTab: "在新分頁中開啟",
+    openInFiles: "在 Files 檢視中開啟",
+    copyPath: "複製路徑",
+  },
   outsideFile: {
     missing: "找不到 {path}。",
     refused: "無法在分頁中開啟 {path}。",

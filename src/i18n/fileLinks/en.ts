@@ -8,6 +8,13 @@ export const fileLinksEn = {
     dirSettings: "This directory's settings",
     newTerminal: "New terminal here",
   },
+  linkMenu: {
+    title: "Open this path",
+    openInPane: "Open in the pane",
+    openInTab: "Open in a new tab",
+    openInFiles: "Open in the Files view",
+    copyPath: "Copy the path",
+  },
   outsideFile: {
     missing: "{path} is not there anymore.",
     refused: "{path} could not be opened in a tab.",
