@@ -17,6 +17,7 @@ import {
   sanitizeFeedRefreshEnabled,
   sanitizeCalendarSyncEnabled,
   sanitizeCopyOnSelect,
+  sanitizeFileLinkOpensPane,
   sanitizeTerminalSubmit,
   loadAppConfig,
   loadAppConfigResult,
@@ -62,6 +63,19 @@ describe("sanitizePushEnabled", () => {
     expect(sanitizePushEnabled(1)).toBe(false);
     expect(sanitizePushEnabled(null)).toBe(false);
     expect(sanitizePushEnabled(undefined)).toBe(false);
+  });
+});
+
+// #3238. Opt-OUT: a config written before the key existed keeps the pane-first click, and only a
+// deliberate `false` turns it off — a quoted "false" is not one.
+describe("sanitizeFileLinkOpensPane", () => {
+  it("is off only for the boolean false", () => {
+    expect(sanitizeFileLinkOpensPane(false)).toBe(false);
+    expect(sanitizeFileLinkOpensPane(true)).toBe(true);
+    expect(sanitizeFileLinkOpensPane("false")).toBe(true);
+    expect(sanitizeFileLinkOpensPane(0)).toBe(true);
+    expect(sanitizeFileLinkOpensPane(null)).toBe(true);
+    expect(sanitizeFileLinkOpensPane(undefined)).toBe(true);
   });
 });
 
@@ -423,6 +437,7 @@ describe("loadAppConfig / saveAppConfig", () => {
     tmuxPrefix: "none",
     keymap: {},
     copyOnSelect: false,
+    fileLinkOpensPane: true,
     decisionDigest: false,
     questionPaneEnabled: false,
     issueWorkComments: false,
@@ -483,6 +498,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       tmuxPrefix: "C-]", // a non-default key must round-trip through the file (#2981)
       keymap: { "zoom-next": "PageDown" }, // a bound shortcut must survive the round-trip too
       copyOnSelect: true,
+      fileLinkOpensPane: false, // opt-out, so only `false` proves it persisted rather than defaulted
       decisionDigest: true, // opt-in, so only `true` proves it persisted rather than defaulted
       questionPaneEnabled: false,
       issueWorkComments: false, // opt-in, so only `true` proves it persisted rather than defaulted
@@ -573,6 +589,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       terminalSubmit: "cr",
       tmuxPrefix: "none",
       copyOnSelect: false,
+      fileLinkOpensPane: true,
       decisionDigest: false,
       questionPaneEnabled: false,
       issueWorkComments: false,
@@ -706,6 +723,7 @@ describe("#741 corrupt config is not silently wiped by a partial update", () => 
     tmuxPrefix: "none",
     keymap: {},
     copyOnSelect: false,
+    fileLinkOpensPane: true,
     decisionDigest: false,
     questionPaneEnabled: false,
     issueWorkComments: false,
@@ -806,6 +824,7 @@ describe("mergeConfigUpdate", () => {
     tmuxPrefix: "none",
     keymap: {},
     copyOnSelect: false,
+    fileLinkOpensPane: true,
     decisionDigest: false,
     questionPaneEnabled: false,
     issueWorkComments: false,
@@ -862,6 +881,8 @@ describe("mergeConfigUpdate", () => {
   it("applies terminalSubmit from the body (sanitized) and keeps it when omitted", () => {
     expect(mergeConfigUpdate(baseConfig(), { copyOnSelect: true }).copyOnSelect).toBe(true);
     expect(mergeConfigUpdate(baseConfig({ copyOnSelect: true }), { chips: ["git"] }).copyOnSelect).toBe(true);
+    expect(mergeConfigUpdate(baseConfig(), { fileLinkOpensPane: false }).fileLinkOpensPane).toBe(false);
+    expect(mergeConfigUpdate(baseConfig({ fileLinkOpensPane: false }), { chips: ["git"] }).fileLinkOpensPane).toBe(false);
     expect(mergeConfigUpdate(baseConfig(), { terminalSubmit: "esc-cr" }).terminalSubmit).toBe("esc-cr");
     expect(mergeConfigUpdate(baseConfig(), { terminalSubmit: "bogus" }).terminalSubmit).toBe("cr"); // invalid => default
     // a chips-only update must not reset the mapping

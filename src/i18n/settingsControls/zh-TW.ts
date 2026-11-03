@@ -12,6 +12,11 @@ export const settingsControlsZhTW = {
     field: "tmux 前綴鍵",
     options: { none: "關閉：所有按鍵都傳給代理程式（預設）", ctrlB: "Ctrl+B（tmux 內建預設，會在儲存格中吃掉 Ctrl+B）", ctrlBracket: "Ctrl+]" },
   },
+  fileLinkOpensPane: {
+    title: "點選的路徑在窗格中開啟",
+    hint: "在終端機輸出中點選的檔案路徑，即使沒有放大終端機，也會在該終端機旁邊的 Files 窗格中開啟。關閉後，除非該終端機旁邊已經開啟窗格，否則會在瀏覽器的新分頁（或 Files 檢視）中開啟。",
+    field: "在終端機旁邊的窗格中開啟點選的檔案路徑",
+  },
   defaultAgent: {
     title: "預設代理",
     hint: "新儲存格的啟動表單中，在你自行選擇之前預先選取的代理；MulmoTerminal 啟動時也會檢查它是否已安裝。",

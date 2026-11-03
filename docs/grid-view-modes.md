@@ -83,7 +83,8 @@ a teleport that exists only while its target does.
 The pane lives in the same row wrapper as `.zoom-main` in all three modes, so it is never remounted
 by a mode change. Zoomed, it sits beside the enlarged cell and answers for it. Tiled (#3027), the
 stage turns into a row, `.zoom-main` stays hidden, and the wrapper holds the pane alone after the
-tiles; it answers for `tiledPaneUid`, the cell whose menu opened it, and does not follow focus.
+tiles; it answers for `tiledPaneUid`, the cell whose menu opened it or whose printed path was clicked
+(#3238), and does not follow focus.
 It never takes the full width there, and it hides (still mounted) while its cell is on another page.
 
 What opens the pane by ITSELF — a drawing, a question, an agent's `showInPane` — still acts on the

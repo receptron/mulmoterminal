@@ -46,6 +46,7 @@ below belongs to one of them:
 |---|---|
 | nothing specific, or arrived via **Set up shortcuts…** | this section |
 | "selecting text doesn't copy" | [`copyOnSelect`](#copyonselect--copy-just-by-selecting) |
+| "clicking a path opens a pane / rearranges the grid", "I want clicked files in a new tab again" | [`fileLinkOpensPane`](#filelinkopenspane--a-clicked-path-opens-the-pane-beside-its-cell) |
 | anything about the question pane | [`questionPaneEnabled`](#questionpaneenabled--answer-a-question-from-a-side-pane) |
 | "Shift+Enter submits", "Enter makes a newline" | [`terminalSubmit`](#terminalsubmit--enter-vs-newline) |
 | "Ctrl+B does nothing / needs two presses", "the next key after Ctrl+B is eaten" | [`tmuxPrefix`](#tmuxprefix--the-tmux-prefix-key) |
@@ -432,6 +433,27 @@ clipboard **without pressing anything**. Off unless written.
   so an accidental drag doesn't destroy the clipboard. Say so if they report "it didn't copy".
 - **Settings → Terminal keys has a checkbox for it**, applied immediately. Point at that when the
   user only wants it turned on; write the key when they are setting up a machine without a browser.
+
+## `fileLinkOpensPane` — a clicked path opens the pane beside its cell
+
+A file path clicked in a terminal's output opens in the **Files pane beside that terminal**, on the
+tiled grid as well as beside an enlarged cell (#3238). The pane is opened, or moved to that cell, the
+way the cell menu's **Files** does. **On unless written `false`.**
+
+```json
+{ "fileLinkOpensPane": false }
+```
+
+- **Only write `false` if asked.** With it off, a click on the tiled grid keeps the older behaviour:
+  a new browser tab (Markdown, JSON, tables, images) or the in-app Files view (source), unless a pane
+  is already open beside that terminal — which still takes the click. Beside an enlarged cell nothing
+  changes either way.
+- The reason someone turns it off is that one click rearranges the grid. Say so if they describe the
+  pane "appearing" on a click; offer this rather than a keymap change.
+- A **right-click** on the path offers the other destinations one at a time (open in the pane, in a
+  new tab, in the Files view, copy the path), whatever this is set to.
+- **Settings → Terminal keys has a checkbox for it**, applied immediately. Point at that when the
+  user only wants it flipped; write the key when they are setting up a machine without a browser.
 
 ## `questionPaneEnabled` — answer a question from a side pane
 

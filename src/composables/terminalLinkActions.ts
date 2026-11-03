@@ -10,14 +10,14 @@ import { isWindowsRoot } from "./pathWithinCwd";
 import { joinedPath } from "./grantedTab";
 import { grantKind } from "../../common/fileGrant";
 import { locationQuery, type FileLocation } from "./filePathLocation";
-import type { HoveredLink } from "./terminalLinkMenu";
+import type { HoveredLink, LinkMenuRequest } from "./terminalLinkMenu";
 
 export interface LinkActionDeps extends LinkRouteDeps {
-  openInPane: (filePath: string, cwd: string, location: FileLocation | undefined, newTab: boolean) => boolean;
+  openInPane: (filePath: string, cwd: string, location: FileLocation | undefined, newTab: boolean, session: string | null) => boolean;
 }
 
-export function openLinkInPane(link: HoveredLink, deps: LinkActionDeps): void {
-  if (deps.openInPane(link.text, link.cwd, link.location, false)) return;
+export function openLinkInPane(link: LinkMenuRequest, deps: LinkActionDeps): void {
+  if (deps.openInPane(link.text, link.cwd, link.location, false, link.session)) return;
   openLinkByRoute(link.text, link.cwd, link.location, deps);
 }
 

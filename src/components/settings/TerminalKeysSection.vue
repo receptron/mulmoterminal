@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
 import { copyOnSelect, saveCopyOnSelect } from "../../composables/copyOnSelect";
+import { fileLinkOpensPane, saveFileLinkOpensPane } from "../../composables/fileLinkOpensPane";
 import { questionPaneEnabled, saveQuestionPaneEnabled } from "../../composables/questionPane";
 import { terminalSubmitMode, saveTerminalSubmitMode } from "../../composables/terminalSubmitMode";
 import { TERMINAL_SUBMIT_MODES, isTerminalSubmitMode } from "../../../common/terminalSubmit";
@@ -15,6 +16,10 @@ const { t } = useI18n();
 
 function onCopyOnSelectToggle(e: Event) {
   if (e.target instanceof HTMLInputElement) void saveCopyOnSelect(e.target.checked);
+}
+
+function onFileLinkOpensPaneToggle(e: Event) {
+  if (e.target instanceof HTMLInputElement) void saveFileLinkOpensPane(e.target.checked);
 }
 
 function onQuestionPaneToggle(e: Event) {
@@ -41,6 +46,20 @@ function onTmuxPrefixChange(e: Event) {
     />
     <span class="text-[12px]">
       <strong>{{ t("settings.terminalKeys.copyOnSelectTitle") }}</strong> — {{ t("settings.terminalKeys.copyOnSelectHint") }}
+    </span>
+  </label>
+
+  <!-- Beside copy-on-select: both decide what a mouse gesture in the terminal does (#3238). -->
+  <label class="mt-1.5 flex cursor-pointer items-start gap-2">
+    <input
+      type="checkbox"
+      class="mt-1 cursor-pointer"
+      :checked="fileLinkOpensPane"
+      :aria-label="t('settingsControls.fileLinkOpensPane.field')"
+      @change="onFileLinkOpensPaneToggle"
+    />
+    <span class="text-[12px]">
+      <strong>{{ t("settingsControls.fileLinkOpensPane.title") }}</strong> — {{ t("settingsControls.fileLinkOpensPane.hint") }}
     </span>
   </label>
 

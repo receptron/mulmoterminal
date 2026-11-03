@@ -21,7 +21,14 @@ export function forgetFilePathLinks(term: Terminal): void {
   forgetters.delete(term);
 }
 
-export function registerFilePathLinks(term: Terminal, getCwd: () => string | null): void {
+/** Where the terminal's links come from, read at click time: the session's cwd, and the session
+ *  itself — the cell a click came from (#3238). Both are learned after connect and can change. */
+export interface LinkOrigin {
+  cwd: () => string | null;
+  session: () => string | null;
+}
+
+export function registerFilePathLinks(term: Terminal, origin: LinkOrigin): void {
   let hovered: HoveredLink | null = null;
   let asked: LinkMenuRequest | null = null;
   forgetters.set(term, () => {
@@ -30,10 +37,10 @@ export function registerFilePathLinks(term: Terminal, getCwd: () => string | nul
     asked = null;
   });
   term.registerLinkProvider(
-    createFilePathLinkProvider(term, getCwd, {
+    createFilePathLinkProvider(term, origin.cwd, {
       openUrl: (url) => window.open(url, "_blank", "noopener,noreferrer"),
       openInFiles: (filePath, cwd, location) => filesGotoFile(cwd, filePath, location),
-      openInPane: (filePath, cwd, location, newTab) => tryOpenInPane(filePath, cwd, location, newTab),
+      openInPane: (filePath, cwd, location, newTab) => tryOpenInPane(filePath, cwd, location, newTab, origin.session()),
       openOutside: openOutsideFile,
       onHover: (link) => {
         hovered = link;
@@ -45,7 +52,7 @@ export function registerFilePathLinks(term: Terminal, getCwd: () => string | nul
   term.element?.addEventListener("contextmenu", (event) => {
     if (!hovered) return;
     event.preventDefault();
-    asked = { ...hovered, point: { top: event.clientY, left: event.clientX } };
+    asked = { ...hovered, session: origin.session(), point: { top: event.clientY, left: event.clientX } };
     requestLinkMenu(asked);
   });
 }

@@ -17,6 +17,9 @@ export interface HoveredLink {
 }
 
 export interface LinkMenuRequest extends HoveredLink {
+  /** The cell the terminal belongs to, which "open in the pane" opens beside on the tiled grid
+   *  (#3238); null for a terminal with no session yet. */
+  session: string | null;
   /** Where the pointer was: the menu opens there. */
   point: MenuPoint;
 }

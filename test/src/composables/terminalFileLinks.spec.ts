@@ -45,7 +45,7 @@ beforeAll(() => {
 const openTerminal = (): Terminal => {
   const term = new Terminal({ cols: 80, rows: 5, allowProposedApi: true });
   term.open(document.createElement("div"));
-  registerFilePathLinks(term, () => "/proj");
+  registerFilePathLinks(term, { cwd: () => "/proj", session: () => "s1" });
   return term;
 };
 const rightClick = (term: Terminal, clientX: number, clientY: number): MouseEvent => {
@@ -62,7 +62,7 @@ describe("registerFilePathLinks and the right-click menu", () => {
     onHoverOf({ text: "docs/a.md", cwd: "/proj", location: { line: 3, col: null } });
     const event = rightClick(term, 120, 80);
     expect(event.defaultPrevented).toBe(true);
-    expect(linkMenuRequest.value).toEqual({ text: "docs/a.md", cwd: "/proj", location: { line: 3, col: null }, point: { top: 80, left: 120 } });
+    expect(linkMenuRequest.value).toEqual({ text: "docs/a.md", cwd: "/proj", location: { line: 3, col: null }, session: "s1", point: { top: 80, left: 120 } });
   });
 
   // A terminal is disposed with the pointer still over a link, or with its menu open: the hover

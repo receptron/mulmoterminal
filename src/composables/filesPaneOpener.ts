@@ -15,8 +15,9 @@ import { openGrantedTab, requestFileGrant } from "./grantedTab";
 import { i18n } from "../i18n";
 
 /** Show `pathRel` (relative to `cwd`) in the pane, at `location` when one was named, in a new tab when
- *  `newTab`. False = not handled, use the old route. */
-export type FilesPaneOpener = (cwd: string, pathRel: string, location: FileLocation | undefined, newTab: boolean) => boolean;
+ *  `newTab`. `session` is the cell the click came from — on the tiled grid, the cell the pane opens
+ *  beside (#3238); null for a terminal with no session yet. False = not handled, use the old route. */
+export type FilesPaneOpener = (cwd: string, pathRel: string, location: FileLocation | undefined, newTab: boolean, session: string | null) => boolean;
 
 let opener: FilesPaneOpener | null = null;
 
@@ -26,18 +27,18 @@ export function setFilesPaneOpener(fn: FilesPaneOpener | null): void {
   opener = fn;
 }
 
-export function openInFilesPane(cwd: string, pathRel: string, location: FileLocation | undefined, newTab: boolean): boolean {
-  return opener?.(cwd, pathRel, location, newTab) ?? false;
+export function openInFilesPane(cwd: string, pathRel: string, location: FileLocation | undefined, newTab: boolean, session: string | null): boolean {
+  return opener?.(cwd, pathRel, location, newTab, session) ?? false;
 }
 
 /** First chance at a path clicked in terminal output: the grid's right pane, when it can show
  *  that kind of file and the file is under the directory of the cell the pane belongs to.
  *  False sends the click down the route it had before — a new tab, or the full-screen view. */
-export function tryOpenInPane(filePath: string, cwd: string, location: FileLocation | undefined, newTab: boolean): boolean {
+export function tryOpenInPane(filePath: string, cwd: string, location: FileLocation | undefined, newTab: boolean, session: string | null): boolean {
   if (!isPaneViewable(filePath)) return false;
   const pathRel = pathWithinCwd(filePath, cwd);
   if (pathRel === null) return false;
-  return openInFilesPane(cwd, pathRel, location, newTab);
+  return openInFilesPane(cwd, pathRel, location, newTab, session);
 }
 
 /** A clicked file outside the cell that a tab shows: opened in one, through a one-file URL. */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { paneCanShowClick, type PaneClickState } from "../../../src/components/paneClickTarget";
+import { paneCanShowClick, paneToOpenBeside, type PaneClickState, type TiledClickState } from "../../../src/components/paneClickTarget";
 
 // #910. The grid's half of "can this clicked path open in the pane" — the half that is about
 // the grid's own state rather than the path. A wrong `false` just leaves the click on its old
@@ -40,5 +40,39 @@ describe("paneCanShowClick", () => {
 
   it("declines when the pane's cell has not reported a directory yet", () => {
     expect(paneCanShowClick(state({ paneCellCwd: null }), CWD)).toBe(false);
+  });
+});
+
+// #3238. The tiled grid's half: a click may OPEN the pane beside its own cell, the way that cell's menu
+// would. A wrong null leaves the click on its old route; a wrong uid opens the pane on another cell
+// or roots it on a directory the path was not read against.
+describe("paneToOpenBeside", () => {
+  const CWD = "/Users/me/proj";
+  const from = { uid: 7, cwd: CWD };
+  const state = (over: Partial<TiledClickState> = {}): TiledClickState => ({ zoomed: false, fileLinkOpensPane: true, ...over });
+
+  it("names the clicked cell on the tiled grid", () => {
+    expect(paneToOpenBeside(state(), from, CWD)).toBe(7);
+  });
+
+  // Beside an enlarged cell the pane is the click's first stop already (paneCanShowClick), and a
+  // thumbnail's click must not move it.
+  it("is null while a cell is enlarged", () => {
+    expect(paneToOpenBeside(state({ zoomed: true }), from, CWD)).toBeNull();
+  });
+
+  it("is null when the setting keeps the click on its old route", () => {
+    expect(paneToOpenBeside(state({ fileLinkOpensPane: false }), from, CWD)).toBeNull();
+  });
+
+  it("is null for a click from a cell this grid does not have", () => {
+    expect(paneToOpenBeside(state(), undefined, CWD)).toBeNull();
+  });
+
+  // The session reports a new directory before the cell does: a path read against the new one would
+  // be opened against the old root.
+  it("is null while the cell's directory is not the one the path was read against", () => {
+    expect(paneToOpenBeside(state(), { uid: 7, cwd: "/Users/me/other" }, CWD)).toBeNull();
+    expect(paneToOpenBeside(state(), { uid: 7, cwd: null }, CWD)).toBeNull();
   });
 });

@@ -57,7 +57,7 @@ description: MulmoTerminal の設定方法。設定モーダル、プロジェ�
 > | **`/mulmoterminal-dirs`** | プロジェクトの色・グリッドとランチャでの位置・名前バッジ・ターミナルの文字サイズ。実際に開いているディレクトリを母集団にし、既にある設定を読んでその規則を、まだ無いディレクトリにも適用します。（Settings → **Configure appearance…** はこれを起動します） |
 > | **`/mulmoterminal-theme`** | 自分の[配色](#custom-themes)を作る。Settings のテーマ選択に並びます（Settings → **Create a theme…**） |
 > | **`/mulmoterminal-header`** | [ヘッダーのボタンとチップ](#header)。global でもプロジェクト単位でも |
-> | **`/mulmoterminal-keys`** | [`keymap`](#keymap)・[`copyOnSelect`](#copy-on-select)・[`terminalSubmit`](#terminal-submit)（「Shift+Enter で改行ではなく送信されてしまう」の対処）・[`questionPaneEnabled`](#question-pane)（Settings → **Set up shortcuts…**） |
+> | **`/mulmoterminal-keys`** | [`keymap`](#keymap)・[`copyOnSelect`](#copy-on-select)・[`fileLinkOpensPane`](#file-link-opens-pane)・[`terminalSubmit`](#terminal-submit)（「Shift+Enter で改行ではなく送信されてしまう」の対処）・[`questionPaneEnabled`](#question-pane)（Settings → **Set up shortcuts…**） |
 > | **`/mulmoterminal-model`** | [`providers`](#providers)、プロジェクトごとのモデル、[`customAgents`](#custom-agents)、[`accounts`](#accounts) |
 > | **`/mulmoterminal-notify`** | [どの瞬間に鳴らす・通知するか](#sounds)、それぞれ何を鳴らすか（Settings → **Configure notifications…**） |
 >
@@ -129,7 +129,7 @@ git チェックアウトならその横に `commit a1b2c3d` のチップが並�
 | **Directory settings** | 各ディレクトリの `.mulmoterminal.json` が**実際に何をしているか**。行を開くと、効いている値（色は見本付き）・**どのファイル由来か**・**検証で落ちたキー**・**このアプリが読まないキー**が出ます。下の **ここで変える** で名前・色・状態の色・テーマ・配色・フォント・優先順・モデル・終わりの要約・追加のディレクトリ・アイコン・背景・音・ヘッダーのボタン・チップ・コマンドを変えられます（→ [プロジェクトごとの設定](#per-dir)）。「Explain my settings…」で `mulmoterminal-config` スキルが同じものを読み、理由を説明して直します（→ [設定が効かないとき](#dir-settings-preview)） |
 | **Launch commands** | グリッドセルでエージェント以外に起動できるコマンド（`{ label, command }`）。素のシェルは登録不要 — ランチャの **Shell** トグルが無設定で `$SHELL` を開く |
 | **Header buttons and chips** | グローバル設定のヘッダーのボタンとチップを、ここで編集します — 追加・編集・削除、ボタンをフォルダにまとめる操作、状態ごとの色、ヘッダーの状態の色づけも。「Set up header buttons…」で `mulmoterminal-header` スキルを起動（→ [ヘッダーのカスタマイズ](#header)） |
-| **Terminal keys** | [選ぶだけでコピー](#copy-on-select)（`copyOnSelect`、既定 OFF）、[質問ペイン](#question-pane)（`questionPaneEnabled`）、あなたの Claude が**送信**として読むバイト（[Enter — 送信と改行](#terminal-submit)、`terminalSubmit`）、[tmux の prefix キー](#tmux-prefix)（`tmuxPrefix`、既定は無効） |
+| **Terminal keys** | [選ぶだけでコピー](#copy-on-select)（`copyOnSelect`、既定 OFF）、[クリックしたパスをペインに開く](#file-link-opens-pane)（`fileLinkOpensPane`、既定 ON）、[質問ペイン](#question-pane)（`questionPaneEnabled`）、あなたの Claude が**送信**として読むバイト（[Enter — 送信と改行](#terminal-submit)、`terminalSubmit`）、[tmux の prefix キー](#tmux-prefix)（`tmuxPrefix`、既定は無効） |
 | **Keyboard shortcuts** | 全アクションと `send` の行を、割り当ての有無にかかわらず並べる一覧（読み取り専用）。**既定は全部 Not set** — **おすすめのキー** を押すと、このプラットフォーム向けの入門セットが一度に入ります（まだ割り当てのない動作と、使われていないキーにだけ）。それ以外は「Set up shortcuts…」で `mulmoterminal-keys` スキルが `keymap` に書きます（→ [キーボードショートカット](#keymap)） |
 | **Voice input** | 音声入力で**話す言語**（ブラウザの言語 / 発話ごとの自動検出 / 固定）。文字起こしできるマシンでだけ表示されます |
 | **Models and backends** | セッションを動かせるバックエンドと、**今それぞれ到達できるか**（読み取り専用）。「Add a backend…」で `mulmoterminal-model` スキルを起動（→ [別のモデルで動かす](providers.html)） |
@@ -1143,6 +1143,25 @@ PuTTY や iTerm2 が昔からそうなっている挙動で、Windows Terminal �
 > フォーカスを持っている必要**があります。`http://<IP>:PORT` で開いていてドラッグしてもコピーされない
 > 場合は、まずここを疑ってください。`http://localhost:PORT` ならこの制限はかかりません。
 
+## クリックしたパスをそのセルの横のペインに開く（`fileLinkOpensPane`） {#file-link-opens-pane}
+
+エージェントが書き出したファイルパスはリンクになり、クリックすると**そのターミナルの横の Files ペイン**に
+開きます。セルを拡大しているときはもちろん、タイル表示でも、パスを書き出したタイルの横にペインが開きます
+（別のタイルの横にあれば移ります）。セルメニューの **Files** で開いたときと同じ動きです。
+
+**切らない限り ON** です。クリック一つでグリッドの配置が変わるのが望みでなければ切ってください。切ると、
+タイル表示でのクリックは以前の行き先に戻ります — Markdown・JSON・表・画像はブラウザの新しいタブ、ソースは
+アプリ内の Files ビュー — ただし、そのタイルの横に既にペインが開いていれば、これまでどおりそのペインが
+受け取ります。セルを拡大しているときの動きはどちらでも変わりません。パスの**右クリック**メニューからは、
+この設定によらず、どの開き方も選べます。
+
+```json
+{ "fileLinkOpensPane": false }
+```
+
+**Settings → Terminal keys** にチェックボックスがあり、こちらは即座に反映されます。ファイルを手で書いた
+場合は、[`copyOnSelect`](#copy-on-select) と同じく**サーバを再起動してから、タブを再読み込み**してください。
+
 ## サイドペインから答える（`questionPaneEnabled`） {#question-pane}
 
 Claude のセッションが何かを尋ねて止まったとき —— 普段は矢印キーで答える `AskUserQuestion` の
@@ -2135,6 +2154,7 @@ posted by MulmoTerminal
 | `themes` | 自分で定義した配色。Settings のテーマ選択に並ぶ（→ [自分の配色を作る](#custom-themes)） |
 | `keymap` | ユーザ定義のキーボードショートカット。**既定は空——何も割り当てられていない**（→ [キーボードショートカット](#keymap)） |
 | `copyOnSelect` | マウスで選択し終えた時点で、キーを押さずにクリップボードへ入れる。**既定 OFF**（→ [選択したらコピー](#copy-on-select)） |
+| `fileLinkOpensPane` | ターミナルに出たファイルパスをクリックしたとき、そのセルの横の Files ペインに開く（タイル表示でも）。**既定 ON**。`false` でタイル表示のクリックを以前の行き先に戻す（→ [クリックしたパスをペインに開く](#file-link-opens-pane)） |
 | `questionPaneEnabled` | Claude のセッションの質問を、拡大したターミナルの横のペインにボタンとして出す。**既定 OFF**（→ [サイドペインから答える](#question-pane)） |
 | `prWorkdirFooter` | 作成した PR の本文末尾に `work in <クローン名>` を書く（→ [この PR はどのクローンの作業か](#pr-workdir-footer)）。**既定 ON**、`false` で無効 |
 | `appendSystemPrompt` | 返信の最後に「何を頼まれたか / できたこと / できていないこと」のまとめを書かせる（→ [返信の最後のまとめを切る](#append-system-prompt)）。**既定 ON**、`false` で無効。`.mulmoterminal.json` の指定が優先 |
