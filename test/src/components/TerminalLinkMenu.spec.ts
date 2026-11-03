@@ -33,7 +33,7 @@ afterEach(() => {
 
 const open = async (text = "docs/a.md") => {
   const wrapper = mount(TerminalLinkMenu, { attachTo: document.body });
-  requestLinkMenu({ text, cwd: "/proj", location: undefined, point: { top: 40, left: 60 } });
+  requestLinkMenu({ text, cwd: "/proj", location: undefined, session: "s1", point: { top: 40, left: 60 } });
   await nextTick();
   await nextTick();
   return wrapper;
@@ -43,7 +43,7 @@ describe("TerminalLinkMenu", () => {
   it("is absent until a terminal asks, then opens at the pointer with the path and four items", async () => {
     const wrapper = mount(TerminalLinkMenu, { attachTo: document.body });
     expect(panel()).toBeNull();
-    requestLinkMenu({ text: "docs/a.md", cwd: "/proj", location: undefined, point: { top: 40, left: 60 } });
+    requestLinkMenu({ text: "docs/a.md", cwd: "/proj", location: undefined, session: "s1", point: { top: 40, left: 60 } });
     await nextTick();
     await nextTick();
     expect(panel()?.style.top).toBe("40px");
@@ -66,10 +66,10 @@ describe("TerminalLinkMenu", () => {
   it("asks the pane first for the pane item, and goes to the Files view for that item", async () => {
     const wrapper = await open("src/a.ts");
     item("link-open-pane")?.click();
-    expect(paneOpener).toHaveBeenCalledWith("src/a.ts", "/proj", undefined, false);
+    expect(paneOpener).toHaveBeenCalledWith("src/a.ts", "/proj", undefined, false, "s1");
     expect(gotoFile).toHaveBeenCalledWith("/proj", "src/a.ts", undefined);
     gotoFile.mockClear();
-    requestLinkMenu({ text: "src/a.ts", cwd: "/proj", location: { line: 7, col: null }, point: { top: 1, left: 1 } });
+    requestLinkMenu({ text: "src/a.ts", cwd: "/proj", location: { line: 7, col: null }, session: "s1", point: { top: 1, left: 1 } });
     await nextTick();
     await nextTick();
     item("link-open-files")?.click();
@@ -103,7 +103,7 @@ describe("TerminalLinkMenu", () => {
     item("link-copy-path")?.click();
     await nextTick();
     expect(document.activeElement).toBe(box);
-    requestLinkMenu({ text: "docs/a.md", cwd: "/proj", location: undefined, point: { top: 1, left: 1 } });
+    requestLinkMenu({ text: "docs/a.md", cwd: "/proj", location: undefined, session: "s1", point: { top: 1, left: 1 } });
     await nextTick();
     await nextTick();
     expect(document.activeElement).not.toBe(box);
@@ -171,7 +171,7 @@ describe("TerminalLinkMenu", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     await nextTick();
     expect(panel()).toBeNull();
-    requestLinkMenu({ text: "docs/a.md", cwd: "/proj", location: undefined, point: { top: 1, left: 1 } });
+    requestLinkMenu({ text: "docs/a.md", cwd: "/proj", location: undefined, session: "s1", point: { top: 1, left: 1 } });
     await nextTick();
     await nextTick();
     document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));

@@ -55,8 +55,9 @@ import {
   TERMINAL_STRIP,
 } from "./splitterWidth";
 import { setFilesPaneOpener } from "../composables/filesPaneOpener";
+import { isFileLinkOpensPaneEnabled } from "../composables/fileLinkOpensPane";
 import type { FileLocation } from "../composables/filePathLocation";
-import { paneCanShowClick } from "./paneClickTarget";
+import { paneCanShowClick, paneToOpenBeside } from "./paneClickTarget";
 import { onToolGroupsAnnounced } from "../composables/useToolGroupsAnnounce";
 import { usePubSub } from "../composables/usePubSub";
 import { isDrawnResult } from "../utils/drawnResult";
@@ -1189,46 +1190,53 @@ const paneCwd = ref<string | null>(null);
 // remembered tree.
 // Each run awaits the save, and a later run can finish first; only the latest may move the pane.
 let rerootRun = 0;
+// Bumped when a re-root run ends, moved or not: what a click on the tiled grid waits for before it
+// opens its file (untilPaneRootedOn).
+const rerootSettled = ref(0);
 // The cell a conversation was just asked for on, from another cell (see openPaneFor).
 let conversationAskedOnArrival: number | null = null;
 watch(
   [paneTargetUid, () => cwdOf(paneTargetUid.value), rightPane],
   async ([uid, targetCwd]) => {
-    const run = ++rerootRun;
-    const conversationAsked = conversationAskedOnArrival === uid;
-    conversationAskedOnArrival = null;
-    // A target that is not among the cells this grid was handed — a tiled pane's cell on another
-    // page — has no directory of its own, and `cwdOf` would answer the grid's default for it.
-    if (uid === null || cellOf(uid) === undefined) return;
-    const sameCell = paneUid.value === uid;
-    // Nothing moved: same cell, and it still reports the same directory.
-    if (sameCell && paneCwd.value === targetCwd) return;
-    // A pane with no root yet is about to mount against this cell: it reads the root and its
-    // `initial-state` on its own, and there is no buffer behind it to save.
-    const firstShowing = paneCwd.value === null;
-    // Leaving a files pane unmounts its editor whether the next cell shows another pane or none,
-    // so it is flushed on every path — the same rule as switching panes by hand. Nothing to fall
-    // back on means staying put: the pane keeps the cell and root it is on, which its header names.
-    const wasFiles = filesOpen.value && !firstShowing;
-    if (wasFiles && (await filesPane.value?.flush()) === false) return;
-    if (run !== rerootRun) return;
-    // On EVERY re-root, not only a move to another cell: a terminal that changed directory is
-    // leaving that tree behind too, and the snapshot is what the directory layer restores from
-    // when anything comes back to it (Codex review). A pane with no root yet has nothing to file.
-    if (!firstShowing) rememberPaneState(paneUid.value);
-    // A takeover was asked for on the cell it was on; the next cell's pane, a restored conversation
-    // included, starts beside its terminal unless the conversation was asked for there.
-    if (paneUid.value !== uid) paneExpanded.value = conversationAsked;
-    paneUid.value = uid;
-    tiledPaneUid.value = uid;
-    restoreSessionPane(uid);
-    paneCwd.value = targetCwd;
-    paneState.value = claimPaneState(uid, targetCwd);
-    // Only when the files pane STAYS the pane. Arriving at one mounts it fresh, which reads the
-    // new root and `initial-state` on its own; leaving one has nothing left to reload.
-    if (!wasFiles || !filesOpen.value) return;
-    await nextTick(); // the pane reads its `cwd` prop when reloading, so let the new one land
-    filesPane.value?.reload();
+    try {
+      const run = ++rerootRun;
+      const conversationAsked = conversationAskedOnArrival === uid;
+      conversationAskedOnArrival = null;
+      // A target that is not among the cells this grid was handed — a tiled pane's cell on another
+      // page — has no directory of its own, and `cwdOf` would answer the grid's default for it.
+      if (uid === null || cellOf(uid) === undefined) return;
+      const sameCell = paneUid.value === uid;
+      // Nothing moved: same cell, and it still reports the same directory.
+      if (sameCell && paneCwd.value === targetCwd) return;
+      // A pane with no root yet is about to mount against this cell: it reads the root and its
+      // `initial-state` on its own, and there is no buffer behind it to save.
+      const firstShowing = paneCwd.value === null;
+      // Leaving a files pane unmounts its editor whether the next cell shows another pane or none,
+      // so it is flushed on every path — the same rule as switching panes by hand. Nothing to fall
+      // back on means staying put: the pane keeps the cell and root it is on, which its header names.
+      const wasFiles = filesOpen.value && !firstShowing;
+      if (wasFiles && (await filesPane.value?.flush()) === false) return;
+      if (run !== rerootRun) return;
+      // On EVERY re-root, not only a move to another cell: a terminal that changed directory is
+      // leaving that tree behind too, and the snapshot is what the directory layer restores from
+      // when anything comes back to it (Codex review). A pane with no root yet has nothing to file.
+      if (!firstShowing) rememberPaneState(paneUid.value);
+      // A takeover was asked for on the cell it was on; the next cell's pane, a restored conversation
+      // included, starts beside its terminal unless the conversation was asked for there.
+      if (paneUid.value !== uid) paneExpanded.value = conversationAsked;
+      paneUid.value = uid;
+      tiledPaneUid.value = uid;
+      restoreSessionPane(uid);
+      paneCwd.value = targetCwd;
+      paneState.value = claimPaneState(uid, targetCwd);
+      // Only when the files pane STAYS the pane. Arriving at one mounts it fresh, which reads the
+      // new root and `initial-state` on its own; leaving one has nothing left to reload.
+      if (!wasFiles || !filesOpen.value) return;
+      await nextTick(); // the pane reads its `cwd` prop when reloading, so let the new one land
+      filesPane.value?.reload();
+    } finally {
+      rerootSettled.value++;
+    }
   },
   { immediate: true },
 );
@@ -1236,11 +1244,44 @@ watch(
 // The pane's SECOND entrance (#910): a file path clicked in terminal output, offered here
 // before it falls back to a new tab or the full-screen view. Whether this grid can show it is
 // `paneCanShowClick`; all that is left here is doing it.
-function openClickedPath(cwd: string, pathRel: string, location: FileLocation | undefined, newTab: boolean): boolean {
+function openClickedPath(cwd: string, pathRel: string, location: FileLocation | undefined, newTab: boolean, session: string | null): boolean {
+  // On the tiled grid the click opens the pane beside its own cell (#3238), as that cell's menu would.
+  const beside = paneToOpenBeside({ zoomed: zoomed.value, fileLinkOpensPane: isFileLinkOpensPaneEnabled() }, cellBySession(session), cwd);
+  if (beside !== null) {
+    void showClickedPathBeside(beside, pathRel, location, newTab);
+    return true;
+  }
   const state = { roomForPane: zoomed.value || tiledPane.value, paneCellCwd: paneCellCwd.value, paneCwd: paneCwd.value };
   if (!paneCanShowClick(state, cwd)) return false;
   void showClickedPath(pathRel, location, newTab);
   return true;
+}
+
+const cellBySession = (session: string | null): Cell | undefined => (session === null ? undefined : props.cells.find((cell) => cell.session === session));
+
+/** The tiled grid's `showClickedPath` (#3238): put the pane beside the clicked cell first — the cell
+ *  menu's move, which saves the pane it leaves — and open the file once the re-root has landed there,
+ *  since the pane reads the file against the root it is on. A move that did not land (the save
+ *  failed) opens nothing, exactly as the menu would have moved nothing. */
+async function showClickedPathBeside(uid: number, pathRel: string, location: FileLocation | undefined, newTab: boolean): Promise<void> {
+  await openPaneFor(uid, "files");
+  if (!(await untilPaneRootedOn(uid))) return;
+  await nextTick();
+  await filesPane.value?.openFile(pathRel, location, newTab);
+}
+
+/** True once the pane is rooted on `uid`'s directory; false when the move was not committed (nothing
+ *  will re-root) or when the re-root run in flight ended somewhere else. */
+function untilPaneRootedOn(uid: number): Promise<boolean> {
+  const rootedHere = (): boolean => paneUid.value === uid && paneCwd.value === cwdOf(uid);
+  if (rootedHere()) return Promise.resolve(true);
+  if (paneTargetUid.value !== uid) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const stop = watch(rerootSettled, () => {
+      stop();
+      resolve(rootedHere());
+    });
+  });
 }
 
 async function showClickedPath(pathRel: string, location: FileLocation | undefined, newTab: boolean): Promise<void> {

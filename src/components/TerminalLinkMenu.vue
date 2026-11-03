@@ -8,7 +8,7 @@ import { useI18n } from "vue-i18n";
 import { fitMenu, type MenuPoint } from "./rowMenu";
 import { clipboardAvailable } from "./codeBlockCopy";
 import { menuKeydown } from "./menuKeyboard";
-import { closeLinkMenu, linkMenuRequest, type HoveredLink } from "../composables/terminalLinkMenu";
+import { closeLinkMenu, linkMenuRequest, type HoveredLink, type LinkMenuRequest } from "../composables/terminalLinkMenu";
 import { absolutePathOf, openLinkInFiles, openLinkInPane, openLinkInTab, type LinkActionDeps } from "../composables/terminalLinkActions";
 import { openOutsideFile, tryOpenInPane } from "../composables/filesPaneOpener";
 import { filesGotoFile } from "../composables/useFilesView";
@@ -103,7 +103,7 @@ onBeforeUnmount(() => {
 });
 
 // Every item closes the menu, then acts on the link it was opened for.
-function pick(act: (link: HoveredLink, point: MenuPoint) => void): void {
+function pick(act: (link: LinkMenuRequest, point: MenuPoint) => void): void {
   const request = linkMenuRequest.value;
   closeLinkMenu();
   if (request) act(request, request.point);

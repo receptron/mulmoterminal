@@ -25,3 +25,19 @@ export function paneCanShowClick(state: PaneClickState, cwd: string): boolean {
   if (state.paneCellCwd !== cwd) return false;
   return state.paneCwd === null || state.paneCwd === cwd;
 }
+
+export interface TiledClickState {
+  /** Beside an enlarged cell the pane is the click's first stop already; this rule is the tiled grid's. */
+  zoomed: boolean;
+  /** The `fileLinkOpensPane` setting (#3238): off keeps a tiled-grid click on its old route. */
+  fileLinkOpensPane: boolean;
+}
+
+/** The cell to open the pane beside for a click on the tiled grid (#3238), or null to leave the click
+ *  to `paneCanShowClick` and the route. The click's cell has to be one of this grid's, and its
+ *  directory the one the path was read against: a session that just changed directory reports the
+ *  new one before the cell does, and the path would resolve against the wrong root. */
+export function paneToOpenBeside(state: TiledClickState, from: { uid: number; cwd: string | null } | undefined, cwd: string): number | null {
+  if (state.zoomed || !state.fileLinkOpensPane || from === undefined) return null;
+  return from.cwd === cwd ? from.uid : null;
+}

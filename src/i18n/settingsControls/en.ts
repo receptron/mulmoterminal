@@ -12,6 +12,11 @@ export const settingsControlsEn = {
     field: "Which key is the tmux prefix",
     options: { none: "Off: every key goes to the agent (default)", ctrlB: "Ctrl+B (tmux's own default; swallows Ctrl+B in the cell)", ctrlBracket: "Ctrl+]" },
   },
+  fileLinkOpensPane: {
+    title: "Clicked paths open the pane",
+    hint: "a file path clicked in a terminal's output opens beside that terminal, in the Files pane, even while nothing is enlarged. Off, the click goes to a new browser tab (or the Files view) unless a pane is already open beside that terminal.",
+    field: "Open a clicked file path in the pane beside its terminal",
+  },
   defaultAgent: {
     title: "Default agent",
     hint: "What a new cell's launch form starts on until you pick something there, and the agent MulmoTerminal checks is installed when it starts.",

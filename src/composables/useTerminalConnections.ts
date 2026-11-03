@@ -488,7 +488,7 @@ function buildTerminal(swallowedMouseModes: Set<number>, font: TerminalFont): Te
 
 // The wiring that needs the connection itself, so it is re-applied to every terminal a slot owns.
 function wireTerminalToConn(term: Terminal, c: Conn): void {
-  registerFilePathLinks(term, () => c.knownCwd);
+  registerFilePathLinks(term, { cwd: () => c.knownCwd, session: () => c.knownSessionId });
   wireTerminalInput(term, c);
   if (c.theme) term.options.theme = c.theme;
 }

@@ -73,6 +73,8 @@ const REACHABLE_BY: Record<string, Reachable> = {
   // No Settings control: the palette's own panel adds one at a time (#2546), through its own route.
   paletteFavorites: { skill: "mulmoterminal-keys" },
   copyOnSelect: { ui: true, skill: "mulmoterminal-keys" },
+  // Beside copy-on-select: both decide what a mouse gesture in the terminal does (#3238).
+  fileLinkOpensPane: { ui: true, skill: "mulmoterminal-keys" },
   tmuxPrefix: { ui: true, skill: "mulmoterminal-keys" },
   questionPaneEnabled: { ui: true, skill: "mulmoterminal-keys" },
   decisionDigest: { ui: true, skill: CONFIG_SKILL },

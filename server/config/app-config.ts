@@ -195,6 +195,10 @@ export interface AppConfig {
   // meant to highlight, and it is also the only place in the app that writes the clipboard on
   // its own — the `copy` keymap action merely stands back and lets the browser do it.
   copyOnSelect: boolean;
+  // A file path clicked in terminal output opens the Files pane beside its own cell on the tiled
+  // grid (#3238). On unless asked off: `false` keeps that click on its old route — a new tab, or the
+  // in-app Files view — except where a pane is already up beside that cell.
+  fileLinkOpensPane: boolean;
   // Leave a comment on the issue a cell is working on: once when the work starts, and again when
   // its PR merges (#979). OFF unless asked for — it writes to GitHub, on issues that are often
   // somebody else's, and the comment names the working directory it happened in.
@@ -523,6 +527,8 @@ export function sanitizeCopyOnSelect(input: unknown): boolean {
   return input === true;
 }
 
+export const sanitizeFileLinkOpensPane = (input: unknown): boolean => input !== false;
+
 export function sanitizeDecisionDigest(input: unknown): boolean {
   return input === true;
 }
@@ -588,6 +594,7 @@ export const emptyConfig = (): AppConfig => ({
   tmuxPrefix: TMUX_PREFIX_DEFAULT,
   keymap: {},
   copyOnSelect: false,
+  fileLinkOpensPane: true,
   decisionDigest: false,
   questionPaneEnabled: false,
   issueWorkComments: false,
@@ -702,6 +709,7 @@ function sanitizeAppConfig(raw: unknown): AppConfig {
     tmuxPrefix: sanitizeTmuxPrefix(o.tmuxPrefix),
     keymap: sanitizeKeymap(o.keymap),
     copyOnSelect: sanitizeCopyOnSelect(o.copyOnSelect),
+    fileLinkOpensPane: sanitizeFileLinkOpensPane(o.fileLinkOpensPane),
     decisionDigest: sanitizeDecisionDigest(o.decisionDigest),
     questionPaneEnabled: sanitizeQuestionPaneEnabled(o.questionPaneEnabled),
     issueWorkComments: sanitizeIssueWorkComments(o.issueWorkComments),
@@ -838,6 +846,7 @@ export function mergeConfigUpdate(base: AppConfig, body: Record<string, unknown>
     tmuxPrefix: updated("tmuxPrefix", sanitizeTmuxPrefix, base.tmuxPrefix),
     keymap: updated("keymap", sanitizeKeymap, base.keymap),
     copyOnSelect: updated("copyOnSelect", sanitizeCopyOnSelect, base.copyOnSelect),
+    fileLinkOpensPane: updated("fileLinkOpensPane", sanitizeFileLinkOpensPane, base.fileLinkOpensPane),
     decisionDigest: updated("decisionDigest", sanitizeDecisionDigest, base.decisionDigest),
     questionPaneEnabled: updated("questionPaneEnabled", sanitizeQuestionPaneEnabled, base.questionPaneEnabled),
     issueWorkComments: updated("issueWorkComments", sanitizeIssueWorkComments, base.issueWorkComments),
@@ -899,6 +908,7 @@ export function toPublicAppConfig(config: AppConfig): AppConfig {
     tmuxPrefix: config.tmuxPrefix,
     keymap: config.keymap,
     copyOnSelect: config.copyOnSelect,
+    fileLinkOpensPane: config.fileLinkOpensPane,
     decisionDigest: config.decisionDigest,
     questionPaneEnabled: config.questionPaneEnabled,
     issueWorkComments: config.issueWorkComments,

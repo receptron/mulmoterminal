@@ -12,6 +12,11 @@ export const settingsControlsZhCN = {
     field: "tmux 前缀键",
     options: { none: "关闭：所有按键都传给智能体（默认）", ctrlB: "Ctrl+B（tmux 自带默认值，会在单元格中吞掉 Ctrl+B）", ctrlBracket: "Ctrl+]" },
   },
+  fileLinkOpensPane: {
+    title: "点击的路径在面板中打开",
+    hint: "在终端输出中点击的文件路径，即使没有放大终端，也会在该终端旁边的 Files 面板中打开。关闭后，除非该终端旁边已经打开了面板，否则会在浏览器的新标签页（或 Files 视图）中打开。",
+    field: "在终端旁边的面板中打开点击的文件路径",
+  },
   defaultAgent: {
     title: "默认代理",
     hint: "新单元格的启动表单中，在你自己选择之前默认选中的代理；MulmoTerminal 启动时也会检查它是否已安装。",

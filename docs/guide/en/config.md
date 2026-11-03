@@ -57,7 +57,7 @@ Settings live in three places: the **settings modal (Settings)**, the **global c
 > | **`/mulmoterminal-dirs`** | A project's colours, its position in the grid and launcher, name badge, terminal font size. Starts from the directories you actually open, reads what you already have, and follows the same pattern for the ones that have none. (Settings → **Configure appearance…** starts this one.) |
 > | **`/mulmoterminal-theme`** | Your own [colour scheme](#custom-themes), appearing in Settings' picker. (Settings → **Create a theme…**) |
 > | **`/mulmoterminal-header`** | [Header buttons and chips](#header), global or per project |
-> | **`/mulmoterminal-keys`** | [`keymap`](#keymap), [`copyOnSelect`](#copy-on-select), [`terminalSubmit`](#terminal-submit) — the fix for "Shift+Enter submits instead of adding a line" — and [`questionPaneEnabled`](#question-pane). (Settings → **Set up shortcuts…**) |
+> | **`/mulmoterminal-keys`** | [`keymap`](#keymap), [`copyOnSelect`](#copy-on-select), [`fileLinkOpensPane`](#file-link-opens-pane), [`terminalSubmit`](#terminal-submit) — the fix for "Shift+Enter submits instead of adding a line" — and [`questionPaneEnabled`](#question-pane). (Settings → **Set up shortcuts…**) |
 > | **`/mulmoterminal-model`** | [`providers`](#providers), a per-project model, [`customAgents`](#custom-agents) and [`accounts`](#accounts) |
 > | **`/mulmoterminal-notify`** | [Which moments beep or push](#sounds), and what each plays. (Settings → **Configure notifications…**) |
 >
@@ -132,7 +132,7 @@ English, and the line under the picker says so.
 | **Directory settings** | What each directory's `.mulmoterminal.json` is **actually doing**. Expand a row for the values in force (colors with a swatch), **which file each came from**, **keys dropped in validation**, and **keys this app never reads**. **Change here** below it edits the name, colours, status colours, theme, palette, font, grid priority, model, closing summary, extra directories, icon, background, sounds and header buttons / chips / commands (→ [Per-project settings](#per-dir)). "Explain my settings…" starts the `mulmoterminal-config` skill to say why and fix it (→ [When a setting isn't working](#dir-settings-preview)) |
 | **Launch commands** | Commands you can launch besides the agents in a grid cell (`{ label, command }`). A plain shell needs no entry — the launcher's **Shell** toggle opens `$SHELL` unconfigured |
 | **Header buttons and chips** | Your global header buttons and chips, edited right here — add, edit, remove, and group buttons into folders — plus the colour per status and the status colour on the header. "Set up header buttons…" starts the `mulmoterminal-header` skill (→ [Customizing the header](#header)) |
-| **Terminal keys** | [Copy on select](#copy-on-select) (`copyOnSelect`, off), the [question pane](#question-pane) (`questionPaneEnabled`), and which bytes your Claude reads as **submit** ([Enter — submit vs. newline](#terminal-submit), `terminalSubmit`), and the [tmux prefix key](#tmux-prefix) (`tmuxPrefix`, off) |
+| **Terminal keys** | [Copy on select](#copy-on-select) (`copyOnSelect`, off), [Clicked paths open the pane](#file-link-opens-pane) (`fileLinkOpensPane`, on), the [question pane](#question-pane) (`questionPaneEnabled`), and which bytes your Claude reads as **submit** ([Enter — submit vs. newline](#terminal-submit), `terminalSubmit`), and the [tmux prefix key](#tmux-prefix) (`tmuxPrefix`, off) |
 | **Keyboard shortcuts** | Every action and the `send` row, bound or not, read-only. **Everything starts as Not set** — **Recommended keys** adds a starter set for this platform in one click (only to unbound actions and unused keys), and "Set up shortcuts…" starts the `mulmoterminal-keys` skill to bind anything else in `keymap` (→ [Keyboard shortcuts](#keymap)) |
 | **Voice input** | The language you **dictate in** (your browser's, per-clip detection, or a fixed one). Shown only on a machine that can transcribe |
 | **Models and backends** | The backends a session can run on and whether each can be **reached right now**, read-only. "Add a backend…" starts the `mulmoterminal-model` skill (→ [Using another model](providers.html)) |
@@ -1194,6 +1194,25 @@ Two things it deliberately does **not** copy, both to protect what you already h
 > way the keyboard shortcut does, which does work there, but it needs the terminal to still hold the
 > keyboard focus. If a drag does not seem to land while you are on `http://<some-ip>:PORT`, that is
 > where to look first. Reaching the app at `http://localhost:PORT` has no such limit.
+
+## A clicked path opens the pane beside its cell (`fileLinkOpensPane`) {#file-link-opens-pane}
+
+A file path an agent prints becomes a link, and a click on it opens the file in the **Files pane
+beside that terminal** — beside an enlarged cell, and on the tiled grid too, where the pane opens
+beside the tile that printed the path (or moves to it) the way the tile's menu would open it.
+
+**On unless you turn it off.** Turn it off if one click rearranging the grid is not what you want:
+a click on the tiled grid then goes where it went before — a new browser tab for Markdown, JSON,
+tables and pictures, the in-app Files view for source — unless a pane is already open beside that
+tile, which still takes it. Beside an enlarged cell nothing changes either way, and the
+**right-click** menu on a path offers every destination whatever this is set to.
+
+```json
+{ "fileLinkOpensPane": false }
+```
+
+There is a checkbox in **Settings → Terminal keys**, applied at once. A hand edit of the file
+instead needs a **server restart, then a tab reload**, as for [`copyOnSelect`](#copy-on-select).
 
 ## Answering from a side pane (`questionPaneEnabled`) {#question-pane}
 
@@ -2258,6 +2277,7 @@ What you write here appears in an empty cell's launcher under **OR RUN A SCRIPT*
 | `themes` | Colour schemes you defined; they appear in Settings' theme picker (→ [Make your own colour scheme](#custom-themes)) |
 | `keymap` | User-defined keyboard shortcuts. **Empty by default — nothing is bound** (→ [Keyboard shortcuts](#keymap)) |
 | `copyOnSelect` | Put a mouse selection on the clipboard the moment it settles, with no key pressed. **Off by default** (→ [Copy on select](#copy-on-select)) |
+| `fileLinkOpensPane` | Open a file path clicked in terminal output in the Files pane beside its cell, on the tiled grid too. **On by default**; `false` keeps a tiled-grid click on its old route (→ [A clicked path opens the pane](#file-link-opens-pane)) |
 | `questionPaneEnabled` | Offer a Claude session's question as buttons in a pane beside the enlarged terminal. **Off by default** (→ [Answering from a side pane](#question-pane)) |
 | `prWorkdirFooter` | End a created PR's body with `work in <clone>` (→ [Which clone made this PR](#pr-workdir-footer)). **On by default**; `false` opts out |
 | `appendSystemPrompt` | Have replies end with a summary of what was asked / achieved / not done (→ [Turning off the closing summary](#append-system-prompt)). **On by default**; `false` opts out, and a directory's `.mulmoterminal.json` wins |

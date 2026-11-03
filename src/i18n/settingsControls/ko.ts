@@ -12,6 +12,11 @@ export const settingsControlsKo = {
     field: "tmux prefix 키",
     options: { none: "끔: 모든 키를 에이전트에 전달 (기본)", ctrlB: "Ctrl+B (tmux 기본값, 셀에서 Ctrl+B가 소비됨)", ctrlBracket: "Ctrl+]" },
   },
+  fileLinkOpensPane: {
+    title: "클릭한 경로를 패널에서 열기",
+    hint: "터미널 출력에서 클릭한 파일 경로를, 확대하지 않은 상태에서도 그 터미널 옆의 Files 패널에 엽니다. 끄면 그 터미널 옆에 패널이 이미 열려 있는 경우를 제외하고 브라우저의 새 탭(또는 Files 뷰)에서 엽니다.",
+    field: "클릭한 파일 경로를 그 터미널 옆의 패널에서 열기",
+  },
   defaultAgent: {
     title: "기본 에이전트",
     hint: "새 셀의 실행 폼에서 직접 고르기 전까지 처음 선택되어 있는 에이전트이며, MulmoTerminal이 시작할 때 설치 여부를 확인하는 에이전트이기도 합니다.",

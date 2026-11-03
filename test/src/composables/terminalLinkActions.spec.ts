@@ -1,7 +1,7 @@
 // What the right-click menu on a printed path does (#3238), decided from the link and the deps.
 import { describe, it, expect, vi } from "vitest";
 import { absolutePathOf, openLinkInFiles, openLinkInPane, openLinkInTab, type LinkActionDeps } from "../../../src/composables/terminalLinkActions";
-import type { HoveredLink } from "../../../src/composables/terminalLinkMenu";
+import type { HoveredLink, LinkMenuRequest } from "../../../src/composables/terminalLinkMenu";
 
 const deps = (over: Partial<LinkActionDeps> = {}): LinkActionDeps => ({
   openUrl: vi.fn(),
@@ -11,21 +11,28 @@ const deps = (over: Partial<LinkActionDeps> = {}): LinkActionDeps => ({
   ...over,
 });
 const link = (text: string, cwd = "/proj", location: HoveredLink["location"] = undefined): HoveredLink => ({ text, cwd, location });
+// The pane action alone takes the menu's whole request: the cell the click came from decides where
+// the pane opens on the tiled grid (#3238).
+const request = (text: string, cwd = "/proj", location: HoveredLink["location"] = undefined): LinkMenuRequest => ({
+  ...link(text, cwd, location),
+  session: "s1",
+  point: { top: 1, left: 1 },
+});
 
 describe("openLinkInPane", () => {
   it("stops at the pane when it takes the link, with the line printed after it", () => {
     const d = deps({ openInPane: vi.fn(() => true) });
-    openLinkInPane(link("docs/a.md", "/proj", { line: 4, col: 2 }), d);
-    expect(d.openInPane).toHaveBeenCalledWith("docs/a.md", "/proj", { line: 4, col: 2 }, false);
+    openLinkInPane(request("docs/a.md", "/proj", { line: 4, col: 2 }), d);
+    expect(d.openInPane).toHaveBeenCalledWith("docs/a.md", "/proj", { line: 4, col: 2 }, false, "s1");
     expect(d.openUrl).not.toHaveBeenCalled();
     expect(d.openInFiles).not.toHaveBeenCalled();
   });
 
   it("does what a click does when the pane declines: the route for the extension", () => {
     const d = deps();
-    openLinkInPane(link("docs/a.md"), d);
+    openLinkInPane(request("docs/a.md"), d);
     expect(d.openUrl).toHaveBeenCalledWith("/api/files/browse/md?cwd=%2Fproj&path=docs%2Fa.md");
-    openLinkInPane(link("src/a.ts"), d);
+    openLinkInPane(request("src/a.ts"), d);
     expect(d.openInFiles).toHaveBeenCalledWith("src/a.ts", "/proj", undefined);
   });
 });

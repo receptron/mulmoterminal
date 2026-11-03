@@ -12,6 +12,11 @@ export const settingsControlsJa = {
     field: "tmux の prefix キー",
     options: { none: "無効：すべてのキーをエージェントへ渡す（既定）", ctrlB: "Ctrl+B（tmux 本来の既定。セルで Ctrl+B が吸われます）", ctrlBracket: "Ctrl+]" },
   },
+  fileLinkOpensPane: {
+    title: "クリックしたパスをペインに開く",
+    hint: "ターミナルの出力でクリックしたファイルパスを、拡大していないときもそのターミナルの横の Files ペインに開きます。オフにすると、そのターミナルの横にペインが既に開いているときを除き、ブラウザの新しいタブ（または Files ビュー）に開きます。",
+    field: "クリックしたファイルパスをそのターミナルの横のペインに開く",
+  },
   defaultAgent: {
     title: "既定のエージェント",
     hint: "新しいセルの起動フォームで、そこで選ぶまで最初に選ばれているエージェント。MulmoTerminal が起動するときにインストールされているかを確かめるのもこのエージェントです。",
