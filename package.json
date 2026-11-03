@@ -42,7 +42,7 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "dev": "concurrently -n server,vite -c blue,green \"node scripts/dev-server.mjs\" \"vite\"",
+    "dev": "node scripts/dev.mjs",
     "dev:server": "node scripts/dev-server.mjs",
     "dev:client": "vite",
     "build": "vue-tsc -b && vite build",
