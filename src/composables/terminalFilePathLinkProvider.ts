@@ -26,6 +26,7 @@ import { grantKind } from "../../common/fileGrant";
 import { fileMediaKind, filePreviewKind } from "../components/filePreviewKind";
 import { HTML_FILE_NAME, filesPageUrl } from "../../common/filesPage";
 import { wantsNewTab } from "./newTabModifier";
+import type { HoveredLink } from "./terminalLinkMenu";
 
 export interface TerminalCell {
   chars: string;
@@ -81,6 +82,7 @@ const ROUTE_BY_EXTENSION: Record<string, string> = {
 };
 
 const RAW_ROUTE = "/api/files/raw";
+const MAIN_BUTTON = 0;
 
 // Source: nothing a browser tab can do with it beyond showing the bytes, which is what the
 // app's own Files view does better — CodeMirror highlights it, the tree is right there, and
@@ -159,6 +161,35 @@ export function rawFileUrl(filePath: string, cwd: string): string {
   return `${fileViewerRoute(filePath)}?cwd=${encodeURIComponent(cwd)}&path=${encodeURIComponent(filePath)}`;
 }
 
+/** Where a printed path resolves for the routes: the base they may be handed and the path under
+ *  it. A path outside the cell is served relative to its own directory — the routes contain
+ *  `path` within `cwd`, so handing them the cell's cwd refused it as an escape (#2260). */
+export function resolveLinkPath(text: string, cwd: string): { base: string; rel: string; outside: boolean } {
+  const rebased = rebaseOutsideCwd(text, cwd);
+  return rebased ? { base: rebased.base, rel: rebased.rel, outside: true } : { base: cwd, rel: text, outside: false };
+}
+
+export interface LinkRouteDeps {
+  openUrl: (url: string) => void;
+  openInFiles: (filePath: string, cwd: string, location?: FileLocation) => void;
+  /** A file outside the cell that a tab shows gets a one-file URL from the server first (#3024):
+   *  the raw route refuses its directory. */
+  openOutside: (absPath: string) => void;
+}
+
+/** What a click does once the pane has declined it: a tab, through the route for the extension,
+ *  or the app's own Files view. Also what the right-click menu's "open in a new tab" starts from. */
+export function openLinkByRoute(text: string, cwd: string, location: FileLocation | undefined, deps: LinkRouteDeps): void {
+  const { base, rel, outside } = resolveLinkPath(text, cwd);
+  if (outside && grantKind(rel) !== null) {
+    deps.openOutside(joinedPath(base, rel));
+    return;
+  }
+  const target = fileLinkTarget(rel, base);
+  if (target.kind === "files") deps.openInFiles(rel, base, location);
+  else deps.openUrl(target.url);
+}
+
 function readCells(term: Terminal, bufferLineNumber: number): TerminalCell[] | null {
   const line = term.buffer.active.getLine(bufferLineNumber - 1);
   if (!line) return null;
@@ -170,46 +201,60 @@ function readCells(term: Terminal, bufferLineNumber: number): TerminalCell[] | n
   return cells;
 }
 
-export function createFilePathLinkProvider(
-  term: Terminal,
-  getCwd: () => string | null,
-  openUrl: (url: string) => void,
-  // `location` is the line an agent named after the path (`a.ts:42`). The pane and the Files view
-  // open the text at it; a route that renders the file in a new tab has no line to go to.
-  openInFiles: (filePath: string, cwd: string, location?: FileLocation) => void,
-  // First chance at the click, ahead of the extension table: the grid's Files pane, which can show most of these WITHOUT leaving the grid (#910). Returns whether it took
-  // it; false falls through to the routing below, unchanged. `newTab` is Cmd/Ctrl on the click (#3005).
-  openInPane: (filePath: string, cwd: string, location: FileLocation | undefined, newTab: boolean) => boolean,
-  // A file outside the cell that a tab shows — a video, an image, a PDF, a sound, an HTML page —
-  // gets a one-file URL from the server first (#3024): the raw route refuses its directory.
-  openOutside: (absPath: string) => void,
-): ILinkProvider {
+/** What a link does when used, supplied by the host that knows the pane, the router and the menu. */
+export interface FileLinkOpeners extends LinkRouteDeps {
+  // First chance at the click, ahead of the extension table: the grid's Files pane, which can show
+  // most of these WITHOUT leaving the grid (#910). Returns whether it took it; false falls through
+  // to the routing, unchanged. `newTab` is Cmd/Ctrl on the click (#3005).
+  openInPane: (filePath: string, cwd: string, location: FileLocation | undefined, newTab: boolean) => boolean;
+  // Told which link the pointer is over, and when it leaves one: a right-click on the terminal
+  // asks this to know what it was over (#3238).
+  onHover?: (link: HoveredLink | null) => void;
+}
+
+export function createFilePathLinkProvider(term: Terminal, getCwd: () => string | null, openers: FileLinkOpeners): ILinkProvider {
+  const { openUrl, openInFiles, openInPane, openOutside } = openers;
+  const onHover = openers.onHover ?? (() => {});
+  // The link the pointer is over, so that only ITS leave or disposal clears the hover: xterm
+  // releases a cached link when the line it is on changes, which may be a link the pointer left
+  // long ago.
+  let current: HoveredLink | null = null;
+  const enter = (link: HoveredLink): void => {
+    current = link;
+    onHover(link);
+  };
+  const exit = (link: HoveredLink | null): void => {
+    if (link !== null && current !== link) return;
+    current = null;
+    onHover(null);
+  };
   return {
     provideLinks(bufferLineNumber: number, callback: (links: ILink[] | undefined) => void): void {
       const cwd = getCwd();
       const cells = cwd ? readCells(term, bufferLineNumber) : null;
-      if (!cwd || !cells) return callback(undefined);
+      if (!cwd || !cells) {
+        // No links while the cwd is unknown — and none hovered either, whatever was before.
+        exit(null);
+        return callback(undefined);
+      }
       // A Windows cell prints `\`-separated paths; anywhere else `\` can be part of a file name.
-      const links: ILink[] = computeFilePathLinks(cells, { windowsPaths: isWindowsRoot(cwd) }).map((link) => ({
-        text: link.text,
-        range: { start: { x: link.startX, y: bufferLineNumber }, end: { x: link.endX, y: bufferLineNumber } },
-        decorations: { pointerCursor: true, underline: true },
-        activate: (event: MouseEvent) => {
-          if (openInPane(link.text, cwd, link.location, wantsNewTab(event))) return;
-          // A path outside the cell is served relative to its own directory: the routes contain
-          // `path` within `cwd`, so handing them the cell's cwd refused it as an escape (#2260).
-          const rebased = rebaseOutsideCwd(link.text, cwd);
-          if (rebased && grantKind(rebased.rel) !== null) {
-            openOutside(joinedPath(rebased.base, rebased.rel));
-            return;
-          }
-          const base = rebased?.base ?? cwd;
-          const filePath = rebased?.rel ?? link.text;
-          const target = fileLinkTarget(filePath, base);
-          if (target.kind === "files") openInFiles(filePath, base, link.location);
-          else openUrl(target.url);
-        },
-      }));
+      const links: ILink[] = computeFilePathLinks(cells, { windowsPaths: isWindowsRoot(cwd) }).map((link) => {
+        const hovered: HoveredLink = { text: link.text, cwd, location: link.location };
+        return {
+          text: link.text,
+          range: { start: { x: link.startX, y: bufferLineNumber }, end: { x: link.endX, y: bufferLineNumber } },
+          decorations: { pointerCursor: true, underline: true },
+          activate: (event: MouseEvent) => {
+            // xterm activates a link on any button's mouseup; a right-click is the menu's (#3238).
+            if (event.button !== MAIN_BUTTON) return;
+            if (openInPane(link.text, cwd, link.location, wantsNewTab(event))) return;
+            openLinkByRoute(link.text, cwd, link.location, { openUrl, openInFiles, openOutside });
+          },
+          hover: () => enter(hovered),
+          leave: () => exit(hovered),
+          dispose: () => exit(hovered),
+        };
+      });
       callback(links.length ? links : undefined);
     },
   };

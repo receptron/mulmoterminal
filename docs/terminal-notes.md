@@ -147,6 +147,14 @@ same question.
 | OSC 8 hyperlink (#783/#785) | `linkHandler` + xterm core `OscLinkService` | arbitrary text → URL (Claude statusline `PR #NNNN`) — **requires the tmux `hyperlinks` feature** |
 | Plain URL | `WebLinksAddon` | visible `http(s)://` URLs |
 
+A right-click on a file-path link opens the app's own menu (#3238): the provider's `ILink.hover` /
+`leave` callbacks track which link the pointer is over, and a `contextmenu` listener on
+`term.element` (`terminalFileLinks.ts`) hands that link to the one `TerminalLinkMenu` mounted in
+`App.vue`. Off a link the event is not prevented, so the browser's menu (paste) stays. xterm hands a link's
+`activate` the `mouseup` of ANY button, so the provider ignores an activation from any button but the
+main one — before #3256 a right-click opened the link as a click would. A terminal's hover and its
+menu request are forgotten when the terminal is disposed (`forgetFilePathLinks`).
+
 The per-extension routing table is **not** repeated here — it belongs to the file routes and
 the Files view, not to this stack, and nothing in it breaks when xterm or tmux is upgraded.
 It lives in [README → Clicking a file path](https://github.com/receptron/mulmoterminal#clicking-a-file-path);

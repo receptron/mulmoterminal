@@ -46,7 +46,7 @@ function provideLinks(
   openInPane: (filePath: string, cwd: string, location: FileLocation | undefined, newTab: boolean) => boolean = () => false,
   openOutside: (absPath: string) => void = () => {},
 ): ILink[] | undefined {
-  const provider = createFilePathLinkProvider(term, () => cwd, open, openInFiles, openInPane, openOutside);
+  const provider = createFilePathLinkProvider(term, () => cwd, { openUrl: open, openInFiles, openInPane, openOutside });
   let result: ILink[] | undefined;
   provider.provideLinks(1, (links) => {
     result = links;
@@ -162,6 +162,91 @@ describe("createFilePathLinkProvider against real xterm", () => {
     expect(openInFiles).toHaveBeenCalledWith("lib/b.ts", "/Users/me/proj", { line: 12, col: 5 });
 
     term.dispose();
+  });
+
+  // A right-click asks what the pointer is over (#3238): xterm tells each link when the pointer
+  // enters and leaves it, and the provider passes that on as the path, the cwd and the line.
+  it("reports the link under the pointer, and nothing once it leaves", async () => {
+    const term = new Terminal({ cols: 120, rows: 10, allowProposedApi: true });
+    term.open(document.createElement("div"));
+    await writeLine(term, "see src/a.ts:42 here");
+    const hovered: unknown[] = [];
+    const provider = createFilePathLinkProvider(term, () => "/proj", {
+      openUrl: () => {},
+      openInFiles: () => {},
+      openInPane: () => false,
+      openOutside: () => {},
+      onHover: (link) => hovered.push(link),
+    });
+    let links: ILink[] | undefined;
+    provider.provideLinks(1, (found) => {
+      links = found;
+    });
+    const link = links?.[0];
+    expect(link).toBeDefined();
+    link?.hover?.(new MouseEvent("mousemove"), link.text);
+    link?.leave?.(new MouseEvent("mousemove"), link.text);
+    expect(hovered).toHaveLength(2);
+    expect(hovered[0]).toEqual({ text: "src/a.ts", cwd: "/proj", location: { line: 42, col: null } });
+    expect(hovered[1]).toBeNull();
+  });
+
+  // The hover is cleared by the hovered link's own leave or release, and by the cwd going unknown
+  // (no links, so nothing is under the pointer) — never by another link's release: xterm releases a
+  // line's cached links when the line changes, which may be a link the pointer left long ago.
+  it("clears the hover only for the hovered link, and whenever the cwd becomes unknown", async () => {
+    const term = new Terminal({ cols: 120, rows: 10, allowProposedApi: true });
+    term.open(document.createElement("div"));
+    await writeLine(term, "see docs/a.md and src/a.ts");
+    const hovered: unknown[] = [];
+    let cwd: string | null = "/proj";
+    const provider = createFilePathLinkProvider(term, () => cwd, {
+      openUrl: () => {},
+      openInFiles: () => {},
+      openInPane: () => false,
+      openOutside: () => {},
+      onHover: (link) => hovered.push(link),
+    });
+    const provide = (): ILink[] | undefined => {
+      let links: ILink[] | undefined;
+      provider.provideLinks(1, (found) => {
+        links = found;
+      });
+      return links;
+    };
+    const [doc, source] = provide() ?? [];
+    if (!doc || !source) throw new Error("expected two links");
+    doc.hover?.(new MouseEvent("mousemove"), doc.text);
+    source.leave?.(new MouseEvent("mousemove"), source.text);
+    source.dispose?.();
+    expect(hovered).toEqual([{ text: "docs/a.md", cwd: "/proj", location: undefined }]);
+    doc.dispose?.();
+    expect(hovered).toEqual([{ text: "docs/a.md", cwd: "/proj", location: undefined }, null]);
+    doc.hover?.(new MouseEvent("mousemove"), doc.text);
+    cwd = null;
+    expect(provide()).toBeUndefined();
+    expect(hovered).toHaveLength(4);
+    expect(hovered[3]).toBeNull();
+    term.dispose();
+  });
+
+  // xterm hands activate() the mouseup of ANY button; a right-click is the menu's, and must not
+  // also open the file the way a left click would (found by the real-app check on #3256).
+  it("ignores an activation from a button other than the main one", async () => {
+    const term = new Terminal({ cols: 120, rows: 10, allowProposedApi: true });
+    term.open(document.createElement("div"));
+    await writeLine(term, "see docs/a.md and src/a.ts");
+    const opened: string[] = [];
+    const links = provideLinks(
+      term,
+      "/proj",
+      (url) => opened.push(url),
+      (filePath) => opened.push(`files:${filePath}`),
+    );
+    links?.forEach((link) => link.activate(new MouseEvent("mouseup", { button: 2 }), link.text));
+    expect(opened).toEqual([]);
+    links?.forEach((link) => link.activate(new MouseEvent("click", { button: 0 }), link.text));
+    expect(opened).toHaveLength(2);
   });
 
   it("provides no links when the session cwd is unknown", async () => {
