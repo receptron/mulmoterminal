@@ -104,7 +104,23 @@ const baseResolver =
 const browseRel = (req: Request): string => (typeof req.query.path === "string" ? req.query.path : "");
 
 // Resolve `path` under the request's project base; 403 (and returns null) if it escapes —
-// lexically OR through a symlink. One containment gate shared by every route (read + write).
+// lexically OR through a symlink. One containment gate shared by every route (read + write); the
+// two entrances below differ only in how the BASE is chosen.
+/** `path` resolved under `base`, or null after answering: 404 for a base that is gone (a named
+ *  directory that is not there any more), 403 for a path that escapes it. */
+function containedUnder(base: string | null, req: Request, res: Response): string | null {
+  if (base === null) {
+    res.status(404).json({ error: "that directory is not there any more" });
+    return null;
+  }
+  const abs = resolveContained(base, browseRel(req), os.homedir());
+  if (!abs) {
+    res.status(403).json({ error: "path escapes the project root" });
+    return null;
+  }
+  return abs;
+}
+
 /** The base a READ resolves against. An ABSOLUTE `cwd` that is no longer a directory is null, never
  *  the default workspace: a same-named file there would be served under the name of the one that
  *  vanished — the pane polls an outside file's version against its own directory, and would reload
@@ -115,36 +131,13 @@ function readBase(req: Request, defaultCwd: string): string | null {
   return absolute ? namedBase(named, defaultCwd, os.homedir()) : browseBase(req, defaultCwd);
 }
 
-function containedFor(req: Request, res: Response, defaultCwd: string): string | null {
-  const base = readBase(req, defaultCwd);
-  if (base === null) {
-    res.status(404).json({ error: "that directory is not there any more" });
-    return null;
-  }
-  const abs = resolveContained(base, browseRel(req), os.homedir());
-  if (!abs) {
-    res.status(403).json({ error: "path escapes the project root" });
-    return null;
-  }
-  return abs;
-}
+const containedFor = (req: Request, res: Response, defaultCwd: string): string | null => containedUnder(readBase(req, defaultCwd), req, res);
 
 /** `containedFor` for a request that CHANGES a file: a cwd that was named but is no longer a
  *  directory is refused rather than read as the default workspace, where the write would land on a
  *  same-named file in another folder (Codex on #2676). */
-function containedForChange(req: Request, res: Response, defaultCwd: string): string | null {
-  const base = namedBase(typeof req.query.cwd === "string" ? req.query.cwd : null, defaultCwd, os.homedir());
-  if (base === null) {
-    res.status(404).json({ error: "that directory is not there any more" });
-    return null;
-  }
-  const abs = resolveContained(base, browseRel(req), os.homedir());
-  if (!abs) {
-    res.status(403).json({ error: "path escapes the project root" });
-    return null;
-  }
-  return abs;
-}
+const containedForChange = (req: Request, res: Response, defaultCwd: string): string | null =>
+  containedUnder(namedBase(typeof req.query.cwd === "string" ? req.query.cwd : null, defaultCwd, os.homedir()), req, res);
 
 /** The rendering of a file and its style, for whichever shell the request gets. `theme` is the
  *  app's colours when the Files pane asked for them (#2263), else null: a rendering that has no
