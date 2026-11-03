@@ -128,6 +128,45 @@ describe("CockpitRowMenu", () => {
     w.unmount();
   });
 
+  // A role="menu" is driven from the keyboard (#3257): the first enabled item takes the focus on
+  // open, the arrows walk the enabled items and wrap, Home and End jump, Tab closes — and the focus
+  // goes back to the ⋮ on close, whichever way it closed.
+  it("focuses the first item on open, walks the enabled items with the keys, and gives the focus back on Tab", async () => {
+    const w = await openFromKebab({ canUp: false });
+    await w.vm.$nextTick();
+    await w.vm.$nextTick();
+    const focused = () => document.activeElement?.getAttribute("data-testid");
+    const press = (key: string) => document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+    expect(focused()).toBe("row-mark-unread");
+    press("ArrowDown");
+    expect(focused()).toBe("reorder-down");
+    press("End");
+    expect(focused()).toBe("row-close");
+    press("ArrowDown");
+    expect(focused()).toBe("row-mark-unread");
+    press("ArrowUp");
+    expect(focused()).toBe("row-close");
+    press("Home");
+    expect(focused()).toBe("row-mark-unread");
+    press("Tab");
+    await w.vm.$nextTick();
+    expect(menuOpen()).toBe(false);
+    expect(focused()).toBe("cockpit-row-menu");
+    w.unmount();
+  });
+
+  it("gives the focus back to the ⋮ on Escape as well", async () => {
+    const w = await openFromKebab();
+    await w.vm.$nextTick();
+    await w.vm.$nextTick();
+    expect(document.activeElement?.getAttribute("data-testid")).toBe("row-mark-unread");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await w.vm.$nextTick();
+    expect(menuOpen()).toBe(false);
+    expect(document.activeElement?.getAttribute("data-testid")).toBe("cockpit-row-menu");
+    w.unmount();
+  });
+
   it("closes on an outside pointerdown", async () => {
     const w = await openFromKebab();
     expect(menuOpen()).toBe(true);
