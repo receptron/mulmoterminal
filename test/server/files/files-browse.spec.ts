@@ -440,6 +440,36 @@ describe("GET /api/files/browse/index", () => {
   });
 });
 
+// #3238 (Codex on #3264). A file outside the cell is read and polled against its OWN directory. If
+// that directory goes, a read that fell back to the default workspace would serve a same-named file
+// there under the vanished file's name — and the pane, seeing a new version, would show it. So an
+// absolute cwd that is no longer a directory is refused for reads as it already was for writes; a
+// relative or absent cwd still falls back, as the index test above pins.
+describe("a read against an absolute cwd that is no longer a directory", () => {
+  it("is refused rather than read as the default workspace, even when the workspace has the name", async () => {
+    const dir = tmp();
+    writeFileSync(path.join(dir, "report.md"), "the workspace's own report");
+    const gone = path.join(tmp(), "vanished");
+    const call = routeCall(serveProject(dir));
+    const text = await call(`/api/files/browse/text?cwd=${encodeURIComponent(gone)}&path=report.md`);
+    expect(text.status).toBe(404);
+    expect(text.body.text).toBeUndefined();
+    const version = await call(`/api/files/browse/version?cwd=${encodeURIComponent(gone)}&path=report.md`);
+    expect(version.status).toBe(404);
+    const rendered = await call(`/api/files/browse/md?cwd=${encodeURIComponent(gone)}&path=report.md`);
+    expect(rendered.status).toBe(404);
+  });
+
+  it("still reads under a directory that is there", async () => {
+    const dir = tmp();
+    const other = tmp();
+    writeFileSync(path.join(other, "report.md"), "the other report");
+    const res = await routeCall(serveProject(dir))(`/api/files/browse/text?cwd=${encodeURIComponent(other)}&path=report.md`);
+    expect(res.status).toBe(200);
+    expect(res.body.text).toBe("the other report");
+  });
+});
+
 // #2264. Front matter is metadata; rendered as Markdown, its closing `---` makes the whole block a
 // heading under a rule. Both documents the route serves start at the body — the tab's beside the
 // source as it is, which does show it (#3238), so there the rendering is judged on its own.

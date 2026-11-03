@@ -3,6 +3,7 @@
 // somewhere other than where it was written — `../` from a nested document, an encoded space, a
 // fragment on another file — which a DOM test would not reach.
 import { OTHER_SCHEME_HREF } from "../../common/mdPreviewMessage";
+import { isOutsidePath } from "./filesOutsidePath";
 
 export type PreviewLinkTarget =
   /** A file under the pane's root, relative to it. */
@@ -36,11 +37,13 @@ const walk = (base: string[], segments: string[]): string[] | null =>
   }, base);
 
 /** `href` as written in the document at `docPath` (relative to the pane's root). A leading `/` is
- *  the root itself, as a repository's own README links read on the forge that hosts it. */
+ *  the root itself, as a repository's own README links read on the forge that hosts it. A document
+ *  OUTSIDE the root, open on its own (#3238), reaches no other file: every path in it is outside. */
 export function previewLinkTarget(docPath: string, href: string): PreviewLinkTarget {
   if (href === "" || href.startsWith("#") || OTHER_SCHEME_HREF.test(href)) return NONE;
   const written = pathPart(href);
   if (written === null || NAMES_A_FOLDER.test(written)) return NONE;
+  if (isOutsidePath(docPath)) return { kind: "outside" };
   const docDir = written.startsWith("/") ? [] : docPath.split("/").slice(0, -1);
   const segments = walk(docDir, written.split("/"));
   if (segments === null) return { kind: "outside" };

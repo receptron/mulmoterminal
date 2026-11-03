@@ -7,6 +7,7 @@
 // files whose only content is each other's call.
 import { nextTick, ref, watch, type Ref, type ShallowRef } from "vue";
 import { ancestorDirs } from "../components/filesTreeState";
+import { isOutsidePath } from "../components/filesOutsidePath";
 import type { FilesTree } from "./useFilesTree";
 
 export interface FilesRevealDeps {
@@ -151,7 +152,11 @@ export function useFilesReveal(deps: FilesRevealDeps): FilesReveal {
     await nextTick();
     if (current()) scrollToRow(rowPath);
   }
-  const showInTree = (pathRel: string): Promise<void> => showRow(ancestorDirs(pathRel), pathRel);
+  // A file outside the root (#3238) has no row and no ancestors in this tree: its path's segments
+  // would be read as folders under the root, and a folder that happens to share a name would open.
+  // An outside file (#3238) has no ancestors here and no row — its segments must not be walked as
+  // folders under the root — and still overtakes a reveal under way for the previous tab.
+  const showInTree = (pathRel: string): Promise<void> => showRow(isOutsidePath(pathRel) ? [] : ancestorDirs(pathRel), pathRel);
   const showFolderInTree = async (dirRel: string, stillShown: () => boolean): Promise<void> => {
     if (dirRel) return showRow([...ancestorDirs(dirRel), dirRel], dirRel, stillShown);
     stopShowing(); // the root has no row, but a move to it still overtakes one under way

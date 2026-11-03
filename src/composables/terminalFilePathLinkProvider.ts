@@ -20,7 +20,7 @@ import { SOURCE_CODE_EXTENSIONS } from "../../common/sourceExtensions";
 import { browserDisplays } from "../../common/rawContentType";
 import { findFilePathLinks, type FilePathLinkOptions } from "./terminalFilePathLinks";
 import type { FileLocation } from "./filePathLocation";
-import { isWindowsRoot, pathWithinCwd, rebaseOutsideCwd } from "./pathWithinCwd";
+import { isWindowsRoot, pathWithinCwd, rebaseOutsideCwd, underRootAsWritten } from "./pathWithinCwd";
 import { joinedPath } from "./grantedTab";
 import { grantKind } from "../../common/fileGrant";
 import { fileMediaKind, filePreviewKind } from "../components/filePreviewKind";
@@ -166,7 +166,8 @@ export function rawFileUrl(filePath: string, cwd: string): string {
  *  `path` within `cwd`, so handing them the cell's cwd refused it as an escape (#2260). */
 export function resolveLinkPath(text: string, cwd: string): { base: string; rel: string; outside: boolean } {
   const rebased = rebaseOutsideCwd(text, cwd);
-  return rebased ? { base: rebased.base, rel: rebased.rel, outside: true } : { base: cwd, rel: text, outside: false };
+  if (rebased) return { base: rebased.base, rel: rebased.rel, outside: true };
+  return { base: cwd, rel: underRootAsWritten(text, cwd), outside: false };
 }
 
 export interface LinkRouteDeps {

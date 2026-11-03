@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pathWithinCwd, rebaseOutsideCwd } from "../../../src/composables/pathWithinCwd";
+import { pathWithinCwd, rebaseOutsideCwd, underRootAsWritten } from "../../../src/composables/pathWithinCwd";
 
 // #910. This is the gate that decides whether a clicked path can open in the grid's right pane —
 // the pane is rooted at its cell's directory and cannot walk above it. A
@@ -110,5 +110,32 @@ describe("rebaseOutsideCwd", () => {
 
   it("climbs out of a Windows cwd with forward slashes", () => {
     expect(rebaseOutsideCwd("../x.md", "C:\\Users\\me\\proj")).toEqual({ base: "C:/Users/me", rel: "x.md" });
+  });
+});
+
+// #3238 (CodeRabbit on #3264). The pane reads an absolute tab path as a file OUTSIDE its root, so a
+// root file written absolute has to go relative — and a path written relative has to go as written,
+// since folding it would read a `\` in a POSIX name as a separator and open another file.
+describe("underRootAsWritten", () => {
+  const CWD = "/Users/me/proj";
+
+  it("puts a root file written absolute back relative to the root", () => {
+    expect(underRootAsWritten("/Users/me/proj/src/a.ts", CWD)).toBe("src/a.ts");
+    expect(underRootAsWritten("C:/work/app/src/a.ts", "C:\\work\\app")).toBe("src/a.ts");
+    expect(underRootAsWritten("C:\\work\\app\\src\\a.ts", "C:\\work\\app")).toBe("src/a.ts");
+  });
+
+  it("leaves a path written relative exactly as written, backslash included", () => {
+    expect(underRootAsWritten("src/lib\\a.ts", CWD)).toBe("src/lib\\a.ts");
+    expect(underRootAsWritten("docs/a.md", CWD)).toBe("docs/a.md");
+    expect(underRootAsWritten("./docs/a.md", CWD)).toBe("./docs/a.md");
+  });
+
+  // Not this function's question: an absolute path outside the root, or a home-relative one, is what
+  // the caller already decided was outside, and stays whole.
+  it("leaves an absolute path outside the root, and a home-relative one, as written", () => {
+    expect(underRootAsWritten("/elsewhere/report.md", CWD)).toBe("/elsewhere/report.md");
+    expect(underRootAsWritten("~/notes/a.md", CWD)).toBe("~/notes/a.md");
+    expect(underRootAsWritten("/Users/me/proj/src/a.ts", null)).toBe("/Users/me/proj/src/a.ts");
   });
 });

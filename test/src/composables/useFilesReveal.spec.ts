@@ -285,6 +285,22 @@ describe("following the tab in front", () => {
     expect(h.opened).toEqual([]);
   });
 
+  // #3238 (CodeRabbit on #3264). A file outside the root has no row here; coming to the front it
+  // still overtakes a reveal under way for the previous tab, which must not go on opening folders
+  // and scrolling after the outside file is what is shown.
+  it("overtakes a reveal under way when a file outside the root comes to the front", async () => {
+    let release = (): void => {};
+    const holdDir = new Promise<void>((resolve) => (release = resolve));
+    const h = harness({ holdDir });
+    h.reveal.followFrontTab(h.reveal.startEpoch());
+    await frontTo(h, "src/deep/buried.ts"); // held inside the first folder it opens
+    await frontTo(h, "/elsewhere/report.md");
+    release();
+    await flushPromises();
+    expect(h.opened).toEqual(["src"]);
+    expect(h.scrolled).not.toContain("src/deep/buried.ts");
+  });
+
   it("stops following when the pane re-roots", async () => {
     const h = harness();
     h.reveal.followFrontTab(h.reveal.startEpoch());

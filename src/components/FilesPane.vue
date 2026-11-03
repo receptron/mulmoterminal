@@ -55,6 +55,8 @@ import { useFileOutline } from "../composables/useFileOutline";
 import FilesOutlineMenu from "./FilesOutlineMenu.vue";
 import FilesViewModeButtons from "./FilesViewModeButtons.vue";
 import { previewTabUrl } from "./filesPreviewSrc";
+import { isOutsidePath } from "./filesOutsidePath";
+import { underRootAsWritten } from "../composables/pathWithinCwd";
 import FilesCanvasView from "./FilesCanvasView.vue";
 import FilesCanvasButton from "./FilesCanvasButton.vue";
 import FilesGallery from "./FilesGallery.vue";
@@ -108,6 +110,11 @@ const tree = useFilesTree(() => props.cwd);
 // every way it is written back. Destructured because the template names these directly.
 const file = useOpenFile(() => props.cwd);
 const { openPath, openName, dirty, editSeq, saving, fileError, unpreviewable, conflict, showPreview, previewKind, previewSrc, dirConfigReport } = file;
+// A file outside the root, open on its own (#3238): read and saved against its own directory by the
+// request builders, and offered nothing of the root's — no row in the tree, no History or Changes
+// (the root's git), no entry among this folder's recent files.
+const outsideFile = computed(() => openPath.value !== null && isOutsidePath(openPath.value));
+const pathUnderRoot = computed(() => (outsideFile.value ? null : openPath.value));
 // The open file's Preview as a tab of its own, with the toolbar the pane has no need of (#3238).
 const previewTab = computed(() => (openPath.value && previewKind.value ? previewTabUrl(previewKind.value, props.cwd, openPath.value) : null));
 const openPreviewTab = (): void => {
@@ -293,7 +300,7 @@ function focusAfterTabMove(): void {
 const treeEl = useTemplateRef<HTMLElement>("treeEl");
 
 // What git sees, the open file's changes against HEAD, and its earlier versions.
-const { gitStatus, git, head, showChanges, history } = useFilesPaneGit(() => props.cwd, file);
+const { gitStatus, git, head, showChanges, history } = useFilesPaneGit(() => props.cwd, { ...file, openPath: pathUnderRoot });
 
 async function reloadTree(): Promise<void> {
   void gitStatus.refresh();
@@ -425,8 +432,13 @@ async function start(): Promise<void> {
   if (!followFrontTab(startedAt)) return;
   // An explicitly requested path wins over whatever was remembered — it is the more recent
   // intent (a clicked path in terminal output).
-  if (props.requestedPath) void openRequested(props.requestedPath, props.requestedLocation ?? null);
+  if (props.requestedPath) void openRequested(requestedUnderRoot(props.requestedPath), props.requestedLocation ?? null);
 }
+
+// A URL may spell a root file absolute; the pane reads an absolute tab path as a file OUTSIDE the
+// root (#3238), so one under it is put back relative first — and one written relative is left as
+// written, since folding it would read a `\` in a POSIX name as a separator.
+const requestedUnderRoot = (requested: string): string => underRootAsWritten(requested, props.cwd);
 
 const restore = (state: FilesPaneState | null, reqIdAtStart: number): Promise<void> =>
   restorePaneState({ tree, file, canvasMode, tabs, treeEl: () => treeEl.value }, state, reqIdAtStart);
@@ -438,7 +450,7 @@ const restore = (state: FilesPaneState | null, reqIdAtStart: number): Promise<vo
 watch(
   () => JSON.stringify([props.requestedPath ?? null, props.requestedLocation ?? null]),
   () => {
-    if (props.requestedPath) void openRequested(props.requestedPath, props.requestedLocation ?? null);
+    if (props.requestedPath) void openRequested(requestedUnderRoot(props.requestedPath), props.requestedLocation ?? null);
   },
 );
 
@@ -497,6 +509,15 @@ defineExpose({
     <header class="flex flex-none flex-wrap items-center justify-end gap-x-2.5 gap-y-1.5 border-b border-border bg-panel px-4 py-2">
       <slot name="title" />
       <span class="flex-auto" />
+      <span
+        v-if="outsideFile && !showStrip"
+        class="material-symbols-outlined text-dim"
+        role="img"
+        :aria-label="t('tips.panes.outsideFile', { path: openPath })"
+        :data-tip="t('tips.panes.outsideFile', { path: openPath })"
+        data-testid="files-outside-mark"
+        >arrow_outward</span
+      >
       <span v-if="openPath && !showStrip" class="min-w-0 truncate font-mono text-[12px]" :class="dirty ? 'text-fg' : 'text-secondary'"
         >{{ openName }}<span v-if="dirty" class="ml-1 text-amber" :data-tip="t('tips.panes.unsaved')">●</span></span
       >
@@ -514,7 +535,7 @@ defineExpose({
         @click="openPreviewTab"
       />
       <FilesChangesButton
-        v-if="openPath && head.hasOriginal.value && layout.editor && !unpreviewable"
+        v-if="pathUnderRoot && head.hasOriginal.value && layout.editor && !unpreviewable"
         :pressed="showChanges"
         @toggle="showChanges = !showChanges"
       />
@@ -526,7 +547,7 @@ defineExpose({
         @pick="outline.pick"
       />
       <FilesHistoryMenu
-        v-if="openPath && layout.editor && !unpreviewable && !conflict"
+        v-if="pathUnderRoot && layout.editor && !unpreviewable && !conflict"
         v-bind="history.menu.value"
         @toggle="history.toggle()"
         @close="history.close()"
@@ -540,7 +561,7 @@ defineExpose({
       <!-- Each panel's only entrance that needs no configuration: neither `files-find` nor
            `files-search` has a default binding, so without these the features are invisible to
            anyone who has not written a keymap. -->
-      <FilesRecentMenu :cwd="cwd" :open-path="openPath" @open="(pathRel) => tabs.open(pathRel)" />
+      <FilesRecentMenu :cwd="cwd" :open-path="pathUnderRoot" @open="(pathRel) => tabs.open(pathRel)" />
       <FilesToolbarButton icon="search" :label="t('tips.panes.findByName')" test-id="files-find-btn" opens-a-panel @click="openFinder()" />
       <FilesToolbarButton icon="manage_search" :label="t('tips.panes.searchInFiles')" test-id="files-search-btn" opens-a-panel @click="openSearch()" />
       <FilesEditorActions

@@ -10,13 +10,20 @@ import { isRemoteServer, REMOTE_SERVER_DECLINE_EN } from "../composables/remoteS
 import { isRecord } from "../../common/isRecord";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import { readDirConfigSaveReport, type DirConfigSaveReport } from "../../common/dirConfigSaveReport";
+import { isOutsidePath, outsideFileTarget } from "./filesOutsidePath";
 
 /** The `?cwd=&path=` every `/api/files/browse/*` route takes. `cwd` is omitted when the pane has
- *  no root of its own, which is how the server is told to use its default workspace. */
+ *  no root of its own, which is how the server is told to use its default workspace.
+ *
+ *  An ABSOLUTE `pathRel` is a file outside the root, open on its own (#3238): it is handed over as its
+ *  own directory and name, whatever root the pane has — the one place that decides, so a read, a
+ *  write, a version, a backup and every Preview of such a file take the same base. The server refuses
+ *  that base once the directory is gone (reads and writes alike), rather than reading the workspace. */
 export function browseQuery(cwd: string | null, pathRel: string): string {
   const params = new URLSearchParams();
-  if (cwd) params.set("cwd", cwd);
-  params.set("path", pathRel);
+  const target = isOutsidePath(pathRel) ? outsideFileTarget(pathRel) : { cwd, pathRel };
+  if (target.cwd) params.set("cwd", target.cwd);
+  params.set("path", target.pathRel);
   return params.toString();
 }
 

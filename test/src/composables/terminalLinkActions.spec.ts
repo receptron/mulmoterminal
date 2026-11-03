@@ -101,3 +101,16 @@ describe("absolutePathOf", () => {
     expect(absolutePathOf(text, cwd)).toBe(abs);
   });
 });
+
+// #3238, part 5 (CodeRabbit on #3264). A tab path's shape says whether the file is outside the root,
+// so a ROOT file must reach the Files view and the tab relative to the root, however the terminal
+// printed it: absolute, it would open as an outside file and lose History and Changes.
+describe("a root file printed absolute", () => {
+  it("reaches the Files view and the tab relative to the root", () => {
+    const d = deps();
+    openLinkInFiles(request("/proj/src/a.ts", "/proj", { line: 3, col: null }), d);
+    expect(d.openInFiles).toHaveBeenCalledWith("src/a.ts", "/proj", { line: 3, col: null });
+    openLinkInTab(request("/proj/docs/a.md"), d);
+    expect(d.openUrl).toHaveBeenCalledWith("/api/files/browse/md?cwd=%2Fproj&path=docs%2Fa.md");
+  });
+});
