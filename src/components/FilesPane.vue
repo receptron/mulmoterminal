@@ -56,7 +56,7 @@ import FilesOutlineMenu from "./FilesOutlineMenu.vue";
 import FilesViewModeButtons from "./FilesViewModeButtons.vue";
 import { previewTabUrl } from "./filesPreviewSrc";
 import { isOutsidePath } from "./filesOutsidePath";
-import { pathWithinCwd } from "../composables/pathWithinCwd";
+import { underRootAsWritten } from "../composables/pathWithinCwd";
 import FilesCanvasView from "./FilesCanvasView.vue";
 import FilesCanvasButton from "./FilesCanvasButton.vue";
 import FilesGallery from "./FilesGallery.vue";
@@ -436,8 +436,9 @@ async function start(): Promise<void> {
 }
 
 // A URL may spell a root file absolute; the pane reads an absolute tab path as a file OUTSIDE the
-// root (#3238), so one under it is put back relative first.
-const requestedUnderRoot = (requested: string): string => pathWithinCwd(requested, props.cwd) ?? requested;
+// root (#3238), so one under it is put back relative first — and one written relative is left as
+// written, since folding it would read a `\` in a POSIX name as a separator.
+const requestedUnderRoot = (requested: string): string => underRootAsWritten(requested, props.cwd);
 
 const restore = (state: FilesPaneState | null, reqIdAtStart: number): Promise<void> =>
   restorePaneState({ tree, file, canvasMode, tabs, treeEl: () => treeEl.value }, state, reqIdAtStart);

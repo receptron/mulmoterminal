@@ -168,6 +168,15 @@ describe("a file outside the root, open on its own (#3238)", () => {
     expect(w.find('[data-testid="files-outside-mark"]').exists()).toBe(false);
   });
 
+  // The Files view's query form carries a name with a backslash as written (#3256); folding it here
+  // would open another file on a POSIX root.
+  it("leaves a requested relative path as written, backslash included", async () => {
+    const w = mount(FilesPane, { props: { cwd: "/proj", requestedPath: "src/lib\\a.ts" }, attachTo: document.body });
+    await flushPromises();
+    expect(requestsTo("/text")).toContain("/proj src/lib\\a.ts");
+    expect(w.find('[data-testid="files-outside-mark"]').exists()).toBe(false);
+  });
+
   // The root's own files are untouched by the rule: a relative path is still read under the root.
   it("still reads a file under the root relative to it", async () => {
     const w = await mountPane();
