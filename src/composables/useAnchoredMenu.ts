@@ -4,7 +4,7 @@
 // move it, Escape and Tab close and hand focus back to the trigger.
 import { nextTick, onBeforeUnmount, ref, watch, type Ref, type ShallowRef } from "vue";
 import { fitMenu, type MenuPoint } from "../components/rowMenu";
-import { menuFocusMove } from "../components/filesRowActions";
+import { menuKeydown } from "../components/menuKeyboard";
 import { useDropdownMenu } from "./useDropdownMenu";
 
 export interface AnchoredMenuOptions {
@@ -54,20 +54,7 @@ export function useAnchoredMenu(trigger: ElementRef, menu: ElementRef, options: 
   }
 
   function onMenuKeydown(event: KeyboardEvent): void {
-    if (event.key === "Escape" || event.key === "Tab") {
-      event.preventDefault();
-      leave();
-      return;
-    }
-    const list = items();
-    const next = menuFocusMove(
-      event.key,
-      list.findIndex((el) => el === document.activeElement),
-      list.length,
-    );
-    if (next === null) return;
-    event.preventDefault();
-    list[next]?.focus({ preventScroll: true });
+    menuKeydown(event, items(), leave);
   }
 
   // A menu long enough to scroll its own list must survive that scroll: only the page moving under

@@ -7,10 +7,13 @@
 // teleported to <body> and fixed-positioned: the roster row is overflow-hidden inside an
 // overflow-y-auto aside, so a menu left in place would be clipped. `@click.stop` on the trigger +
 // menu keeps a click from also swapping which terminal the row enlarges, and a roster scroll closes
-// it (the fixed panel would otherwise detach from its row).
+// it (the fixed panel would otherwise detach from its row). Open, it takes the focus for its first
+// item and the arrow keys walk the items as in the other menus (#3257); closed, the focus goes back
+// to the ⋮.
 import { ref, watch, nextTick, onBeforeUnmount, useTemplateRef } from "vue";
 import { useI18n } from "vue-i18n";
 import { fitMenu, type AttentionAction, type MenuPoint } from "./rowMenu";
+import { menuKeydown } from "./menuKeyboard";
 
 const props = defineProps<{
   canUp: boolean;
@@ -48,6 +51,9 @@ const trigger = useTemplateRef<HTMLElement>("trigger");
 const menu = useTemplateRef<HTMLElement>("menu");
 const open = ref(false);
 const pos = ref<MenuPoint>({ top: 0, left: 0 });
+// A disabled direction is skipped, not landed on.
+const ITEM_SELECTOR = "[role=menuitem]:not(:disabled)";
+const items = (): HTMLElement[] => [...(menu.value?.querySelectorAll<HTMLElement>(ITEM_SELECTOR) ?? [])];
 
 const belowTrigger = (): MenuPoint => {
   const rect = trigger.value?.getBoundingClientRect();
@@ -62,6 +68,7 @@ async function place(want: MenuPoint, alignRight: boolean): Promise<void> {
   if (!box) return;
   const left = alignRight ? want.left - box.width : want.left;
   pos.value = fitMenu({ top: want.top, left }, box, { width: window.innerWidth, height: window.innerHeight });
+  items()[0]?.focus({ preventScroll: true });
 }
 function onOutside(event: PointerEvent) {
   const target = event.target instanceof Node ? event.target : null;
@@ -69,6 +76,9 @@ function onOutside(event: PointerEvent) {
 }
 function onKeydown(event: KeyboardEvent) {
   if (event.key === "Escape") close();
+}
+function onMenuKeydown(event: KeyboardEvent) {
+  menuKeydown(event, items(), close);
 }
 function openMenu(want: MenuPoint, alignRight: boolean) {
   if (!open.value) {
@@ -81,6 +91,7 @@ function openMenu(want: MenuPoint, alignRight: boolean) {
 }
 function close() {
   if (!open.value) return;
+  if (menu.value?.contains(document.activeElement)) trigger.value?.focus({ preventScroll: true });
   open.value = false;
   window.removeEventListener("pointerdown", onOutside);
   window.removeEventListener("keydown", onKeydown);
@@ -131,6 +142,7 @@ onBeforeUnmount(close);
         :style="{ top: `${pos.top}px`, left: `${pos.left}px` }"
         @click.stop
         @contextmenu.prevent
+        @keydown="onMenuKeydown"
       >
         <template v-if="attention">
           <button

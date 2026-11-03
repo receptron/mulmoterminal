@@ -7,7 +7,7 @@ import { nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { fitMenu, type MenuPoint } from "./rowMenu";
 import { clipboardAvailable } from "./codeBlockCopy";
-import { menuFocusMove } from "./filesRowActions";
+import { menuKeydown } from "./menuKeyboard";
 import { closeLinkMenu, linkMenuRequest, type HoveredLink } from "../composables/terminalLinkMenu";
 import { absolutePathOf, openLinkInFiles, openLinkInPane, openLinkInTab, type LinkActionDeps } from "../composables/terminalLinkActions";
 import { openOutsideFile, tryOpenInPane } from "../composables/filesPaneOpener";
@@ -70,22 +70,9 @@ function onOutside(event: PointerEvent): void {
 function onKeydown(event: KeyboardEvent): void {
   if (event.key === "Escape") closeLinkMenu();
 }
-// Inside the panel: the arrow keys walk the items and Tab leaves, as the other menus' do.
+// Inside the panel: the keyboard every menu here shares.
 function onMenuKeydown(event: KeyboardEvent): void {
-  if (event.key === "Tab") {
-    event.preventDefault();
-    closeLinkMenu();
-    return;
-  }
-  const items = [...(menu.value?.querySelectorAll<HTMLElement>("[role=menuitem]") ?? [])];
-  const next = menuFocusMove(
-    event.key,
-    items.findIndex((el) => el === document.activeElement),
-    items.length,
-  );
-  if (next === null) return;
-  event.preventDefault();
-  items[next]?.focus({ preventScroll: true });
+  menuKeydown(event, [...(menu.value?.querySelectorAll<HTMLElement>("[role=menuitem]") ?? [])], closeLinkMenu);
 }
 function listen(): void {
   window.addEventListener("pointerdown", onOutside);
