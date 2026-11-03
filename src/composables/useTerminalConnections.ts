@@ -36,6 +36,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { guardMouseClicks, guardMouseTracking, type WheelScrollControl } from "./terminalMouseInput";
 import { getTerminalScrollSpeed } from "./useTerminalScrollSpeed";
 import { getTerminalUnicodeVersion, getTerminalWidthTable } from "./terminalUnicodeVersion";
+import { getTerminalWindowsPty } from "./terminalWindowsPty";
 import { applyCellWidths, reapplyCellWidths } from "./terminalCellWidths";
 import { scrollsToBottomOnSubmit } from "./useScrollToBottomOnSubmit";
 import { isTypedInput } from "./terminalUserInput";
@@ -439,6 +440,7 @@ interface TerminalRuntime {
 function buildTerminal(swallowedMouseModes: Set<number>, font: TerminalFont): TerminalRuntime {
   const term = new Terminal({
     cursorBlink: true,
+    windowsPty: getTerminalWindowsPty() ?? {},
     fontSize: font.size,
     fontFamily: font.family,
     // The scrollback half of the scroll-speed setting (the alternate buffer's half is the wheel
@@ -1047,6 +1049,9 @@ watch(getTerminalScrollSpeed, setScrollSpeed);
 
 // Watched at module scope for the scroll speed's reason: one value for every terminal. The config
 // usually arrives after the first terminals are built, and the measured table can arrive later still.
-watch([getTerminalUnicodeVersion, getTerminalWidthTable], () => {
-  conns.forEach((c) => reapplyCellWidths(c.term, c.ws));
+watch([getTerminalUnicodeVersion, getTerminalWidthTable, getTerminalWindowsPty], () => {
+  conns.forEach((c) => {
+    c.term.options.windowsPty = getTerminalWindowsPty() ?? {};
+    reapplyCellWidths(c.term, c.ws);
+  });
 });

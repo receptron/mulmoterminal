@@ -36,6 +36,7 @@ import { setAccountsProvider } from "../session/session-home.js";
 import { setTmuxPrefix } from "../infra/process/tmux.js";
 import { settledTmuxWidthTable, tmuxWidthTable } from "../infra/process/tmuxWidthProbe.js";
 import { DEFAULT_TERMINAL_UNICODE_VERSION } from "../../common/terminalUnicode.js";
+import { windowsPtyFor } from "../../common/terminalWindowsPty.js";
 import type { TokenRotation } from "../../common/tokenRotation.js";
 import { installBundledSkills } from "../infra/fs/install-bundled-skills.js";
 import type { SystemTaskSwitches } from "../backends/scheduler/system-tasks.js";
@@ -582,6 +583,7 @@ function serverFacts() {
     worktreesRoot: canonicalPath(worktreesRootDir()),
     storiesRoots: registeredStoriesRoots(),
     terminalUnicodeVersion: DEFAULT_TERMINAL_UNICODE_VERSION,
+    terminalWindowsPty: windowsPtyFor(process.platform, os.release()),
     terminalWidthTable: tmuxWidthTable(),
   };
 }
