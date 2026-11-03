@@ -56,6 +56,7 @@ import FilesOutlineMenu from "./FilesOutlineMenu.vue";
 import FilesViewModeButtons from "./FilesViewModeButtons.vue";
 import { previewTabUrl } from "./filesPreviewSrc";
 import { isOutsidePath } from "./filesOutsidePath";
+import { pathWithinCwd } from "../composables/pathWithinCwd";
 import FilesCanvasView from "./FilesCanvasView.vue";
 import FilesCanvasButton from "./FilesCanvasButton.vue";
 import FilesGallery from "./FilesGallery.vue";
@@ -431,8 +432,12 @@ async function start(): Promise<void> {
   if (!followFrontTab(startedAt)) return;
   // An explicitly requested path wins over whatever was remembered — it is the more recent
   // intent (a clicked path in terminal output).
-  if (props.requestedPath) void openRequested(props.requestedPath, props.requestedLocation ?? null);
+  if (props.requestedPath) void openRequested(requestedUnderRoot(props.requestedPath), props.requestedLocation ?? null);
 }
+
+// A URL may spell a root file absolute; the pane reads an absolute tab path as a file OUTSIDE the
+// root (#3238), so one under it is put back relative first.
+const requestedUnderRoot = (requested: string): string => pathWithinCwd(requested, props.cwd) ?? requested;
 
 const restore = (state: FilesPaneState | null, reqIdAtStart: number): Promise<void> =>
   restorePaneState({ tree, file, canvasMode, tabs, treeEl: () => treeEl.value }, state, reqIdAtStart);
@@ -444,7 +449,7 @@ const restore = (state: FilesPaneState | null, reqIdAtStart: number): Promise<vo
 watch(
   () => JSON.stringify([props.requestedPath ?? null, props.requestedLocation ?? null]),
   () => {
-    if (props.requestedPath) void openRequested(props.requestedPath, props.requestedLocation ?? null);
+    if (props.requestedPath) void openRequested(requestedUnderRoot(props.requestedPath), props.requestedLocation ?? null);
   },
 );
 

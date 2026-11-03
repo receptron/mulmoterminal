@@ -42,7 +42,10 @@ out. Clicked, a text file there (Markdown, JSON, a table, source, or a type a ta
 download) opens in the right pane **on its own** (#3238): its tab path is absolute, and every request
 the pane makes for it is built by `browseQuery` from the file's own directory and name
 (`src/components/filesOutsidePath.ts`), so it is read, previewed and saved against that directory
-with the same conditional write and 409 as a file under the root. The tree does not move, the file
+with the same conditional write and 409 as a file under the root. An absolute `cwd` that is no
+longer a directory is refused by the read routes as by the write routes (`readBase`,
+`server/files/files-browse.ts`), never read as the default workspace — a same-named file there
+would otherwise be served under the vanished file's name. The tree does not move, the file
 has no row in it, and the pane offers none of the root's extras for it — no History or Changes (the
 root's git), no entry among the folder's recent files, no link out of its Preview.
 

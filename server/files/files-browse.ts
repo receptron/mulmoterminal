@@ -105,8 +105,23 @@ const browseRel = (req: Request): string => (typeof req.query.path === "string" 
 
 // Resolve `path` under the request's project base; 403 (and returns null) if it escapes —
 // lexically OR through a symlink. One containment gate shared by every route (read + write).
+/** The base a READ resolves against. An ABSOLUTE `cwd` that is no longer a directory is null, never
+ *  the default workspace: a same-named file there would be served under the name of the one that
+ *  vanished — the pane polls an outside file's version against its own directory, and would reload
+ *  the workspace's file in its place (Codex on #3264). Absent or relative, the default as ever. */
+function readBase(req: Request, defaultCwd: string): string | null {
+  const named = typeof req.query.cwd === "string" ? req.query.cwd : null;
+  const absolute = named !== null && path.isAbsolute(expandTilde(named, os.homedir()));
+  return absolute ? namedBase(named, defaultCwd, os.homedir()) : browseBase(req, defaultCwd);
+}
+
 function containedFor(req: Request, res: Response, defaultCwd: string): string | null {
-  const abs = resolveContained(browseBase(req, defaultCwd), browseRel(req), os.homedir());
+  const base = readBase(req, defaultCwd);
+  if (base === null) {
+    res.status(404).json({ error: "that directory is not there any more" });
+    return null;
+  }
+  const abs = resolveContained(base, browseRel(req), os.homedir());
   if (!abs) {
     res.status(403).json({ error: "path escapes the project root" });
     return null;

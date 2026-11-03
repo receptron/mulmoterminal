@@ -164,9 +164,16 @@ export function rawFileUrl(filePath: string, cwd: string): string {
 /** Where a printed path resolves for the routes: the base they may be handed and the path under
  *  it. A path outside the cell is served relative to its own directory — the routes contain
  *  `path` within `cwd`, so handing them the cell's cwd refused it as an escape (#2260). */
+const PRINTED_ABSOLUTE = /^(?:\/|[A-Za-z]:[\\/])/;
+
 export function resolveLinkPath(text: string, cwd: string): { base: string; rel: string; outside: boolean } {
   const rebased = rebaseOutsideCwd(text, cwd);
-  return rebased ? { base: rebased.base, rel: rebased.rel, outside: true } : { base: cwd, rel: text, outside: false };
+  if (rebased) return { base: rebased.base, rel: rebased.rel, outside: true };
+  // A root file printed ABSOLUTE goes over relative to the root: a tab path's shape says whether the
+  // file is outside the root (#3238), so a root file must never arrive absolute. One printed relative
+  // goes as printed — folding it would read a `\` in a POSIX name as a separator.
+  const rel = PRINTED_ABSOLUTE.test(text) ? (pathWithinCwd(text, cwd) ?? text) : text;
+  return { base: cwd, rel, outside: false };
 }
 
 export interface LinkRouteDeps {

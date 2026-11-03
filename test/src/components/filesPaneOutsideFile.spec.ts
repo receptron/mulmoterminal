@@ -158,6 +158,16 @@ describe("a file outside the root, open on its own (#3238)", () => {
     expect(headerNames(again, "report.md")).toBe(true);
   });
 
+  // A URL can spell a root file absolute (the full-screen view's `?path=`); it must not become an
+  // outside tab, which would hide History and Changes for a file that has them.
+  it("opens a requested root file spelled absolute as a root file", async () => {
+    const w = mount(FilesPane, { props: { cwd: "/proj", requestedPath: "/proj/b.ts" }, attachTo: document.body });
+    await flushPromises();
+    expect(requestsTo("/text")).toContain("/proj b.ts");
+    expect(headerNames(w, "b.ts")).toBe(true);
+    expect(w.find('[data-testid="files-outside-mark"]').exists()).toBe(false);
+  });
+
   // The root's own files are untouched by the rule: a relative path is still read under the root.
   it("still reads a file under the root relative to it", async () => {
     const w = await mountPane();

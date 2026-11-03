@@ -17,7 +17,8 @@ import { isOutsidePath, outsideFileTarget } from "./filesOutsidePath";
  *
  *  An ABSOLUTE `pathRel` is a file outside the root, open on its own (#3238): it is handed over as its
  *  own directory and name, whatever root the pane has — the one place that decides, so a read, a
- *  write, a version, a backup and every Preview of such a file take the same base. */
+ *  write, a version, a backup and every Preview of such a file take the same base. The server refuses
+ *  that base once the directory is gone (reads and writes alike), rather than reading the workspace. */
 export function browseQuery(cwd: string | null, pathRel: string): string {
   const params = new URLSearchParams();
   const target = isOutsidePath(pathRel) ? outsideFileTarget(pathRel) : { cwd, pathRel };
