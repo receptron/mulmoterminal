@@ -32,6 +32,12 @@ describe("findFilePathLinks", () => {
     expect(texts("生成しました dir/f.png。")).toEqual(["dir/f.png"]);
   });
 
+  it("terminates a path at full-width separating punctuation, with or without a space after it", () => {
+    expect(texts("できたこと：src/a.md の該当行")).toEqual(["src/a.md"]);
+    expect(texts("できたこと： src/a.md の該当行")).toEqual(["src/a.md"]);
+    expect(texts("見て！src/a.md？それと，src/b.md；src/c.md、src/d.md")).toEqual(["src/a.md", "src/b.md", "src/c.md", "src/d.md"]);
+  });
+
   it("trims a clinging sentence period", () => {
     const [link] = findFilePathLinks("open dir/report.pdf.");
     expect(link.text).toBe("dir/report.pdf");
@@ -136,6 +142,14 @@ describe("Windows paths", () => {
     expect(windowsTexts("ab:/x/y.ts")).toEqual([]);
     expect(windowsTexts("a.ts:12")).toEqual([]);
     expect(windowsTexts("x1C:\\w\\a.ts")).toEqual([]);
+  });
+
+  it("keeps a drive that follows a full-width colon", () => {
+    const line = "できたこと：D:\\x\\a.md の該当行";
+    const [hit] = windows(line);
+    expect(hit?.text).toBe("D:/x/a.md");
+    expect(hit ? line.slice(hit.start, hit.end) : null).toBe("D:\\x\\a.md");
+    expect(windowsTexts("できたこと： D:\\x\\a.md")).toEqual(["D:/x/a.md"]);
   });
 
   it("still leaves URLs, UNC shares and bare names alone", () => {
