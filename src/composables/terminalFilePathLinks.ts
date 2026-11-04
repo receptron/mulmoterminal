@@ -2,7 +2,7 @@
 // no filesystem, no DOM. Returns half-open [start, end) UTF-16 string-index ranges.
 //
 // A token is a maximal run of path characters (everything except whitespace, quotes,
-// ASCII + full-width brackets, `:`, and separating punctuation incl. `、。`) that:
+// ASCII + full-width brackets, `:`, and separating punctuation incl. `、。：；，！？`) that:
 //   - is not part of a URL (no leading `//`, not preceded by `:`; URLs are the
 //     WebLinksAddon's job),
 //   - contains at least one `/`, and
@@ -32,7 +32,7 @@ export interface FilePathLinkOptions {
   windowsPaths?: boolean;
 }
 
-const PATH_CHARS = "[^\\s\"'`()[\\]{}<>（）「」【】:,;、。]+";
+const PATH_CHARS = "[^\\s\"'`()[\\]{}<>（）「」【】:,;、。：；，！？]+";
 const PATH_TOKEN = new RegExp(PATH_CHARS, "g");
 // A run never starts mid-word, so the drive is a lone letter: `ab:/x.ts` and `a.ts:12` still split at `:`.
 const WINDOWS_PATH_TOKEN = new RegExp(`(?:[A-Za-z]:(?=[\\\\/]))?${PATH_CHARS}`, "g");
