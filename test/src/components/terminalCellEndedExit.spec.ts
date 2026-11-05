@@ -56,9 +56,9 @@ const mountCell = (cwd = "/home/me/proj") =>
     },
   });
 
-async function exitWith(w: ReturnType<typeof mountCell>, session: { sessionEnded: boolean; lifetimeMs: number | null; reattached: boolean }) {
+async function exitWith(w: ReturnType<typeof mountCell>, session: { sessionEnded: boolean; lifetimeMs: number | null; reattached: boolean }, exitCode = 0) {
   await flushPromises();
-  w.findComponent({ name: "TerminalView" }).vm.$emit("exit", 0, session);
+  w.findComponent({ name: "TerminalView" }).vm.$emit("exit", exitCode, session);
   await flushPromises();
 }
 
@@ -86,6 +86,15 @@ describe("an agent cell whose session ended on its own", () => {
   ])("stays open when $name", async ({ session }) => {
     const w = mountCell();
     await exitWith(w, session);
+    expect(w.emitted("close")).toBeUndefined();
+    expect(terminateCalls).toEqual([]);
+    w.unmount();
+  });
+
+  // #3272: the code is the program's where tmux recorded it, and a crash keeps its banner on screen.
+  it.each([137, 139, 1])("stays open when the agent exited %i", async (exitCode) => {
+    const w = mountCell();
+    await exitWith(w, { sessionEnded: true, lifetimeMs: 60_000, reattached: false }, exitCode);
     expect(w.emitted("close")).toBeUndefined();
     expect(terminateCalls).toEqual([]);
     w.unmount();

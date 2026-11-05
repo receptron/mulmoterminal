@@ -6,6 +6,7 @@ import type { SessionAgent } from "../../../common/sessionAgent.js";
 import { ptySpawn, type PtySpawnEnv } from "./pty-spawn.js";
 import { ptyStartLine } from "./pty-exit-log.js";
 import { ptys } from "../registry.js";
+import { SESSION_AGENT_ENV } from "../../infra/process/tmux-pane-exit.js";
 import type { PtyEntry } from "../types.js";
 
 export interface AgentPtyStart {
@@ -31,11 +32,19 @@ export interface StartedAgentPty {
   reattached: boolean;
 }
 
+/** Every agent is started under the exit recorder (#3272), and its session names the agent, since
+ *  its pane's running command is now the recorder's shell. */
+const recordingSpawnEnv = (spawnEnv: PtySpawnEnv, agent: SessionAgent): PtySpawnEnv => ({
+  ...spawnEnv,
+  env: { ...spawnEnv.env, [SESSION_AGENT_ENV]: agent },
+  recordExit: true,
+});
+
 /** Start the pty and register it. A caller that wrote session files first calls this inside its
  *  `withSettingsCleanup`, so a spawn that throws takes those files with it. */
 export function startAgentPty(start: AgentPtyStart): StartedAgentPty {
   const { sessionId, ws, cwd, agent, file, args, spawnEnv, note } = start;
-  const { term, tmux, reattached } = ptySpawn(sessionId, file, args, cwd, true, spawnEnv);
+  const { term, tmux, reattached } = ptySpawn(sessionId, file, args, cwd, true, recordingSpawnEnv(spawnEnv, agent));
   const spawnedAtMs = Date.now();
   console.log(ptyStartLine({ agent, pid: term.pid, cwd, tmux, reattached, sessionId, note }));
   const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, reattached, active: false, agent };

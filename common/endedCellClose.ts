@@ -17,10 +17,14 @@ export interface EndedCellExit {
   reattached: boolean;
   /** A worktree cell's close asks whether to keep the worktree; that is not asked unprompted. */
   worktreeCell: boolean;
+  /** The program's own exit code where tmux recorded it (#3272), else the client's 0 — or null when
+   *  the frame named none. A crash keeps its cell, so its red banner is there to be read. */
+  exitCode: number | null;
 }
 
 export function shouldCloseEndedCell(exit: EndedCellExit): boolean {
   if (!exit.sessionEnded || exit.worktreeCell) return false;
+  if (exit.exitCode !== null && exit.exitCode !== 0) return false;
   if (exit.reattached) return true;
   return exit.lifetimeMs !== null && exit.lifetimeMs >= STARTUP_WINDOW_MS;
 }

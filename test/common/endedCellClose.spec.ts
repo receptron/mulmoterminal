@@ -7,6 +7,7 @@ const ended = (over: Partial<EndedCellExit> = {}): EndedCellExit => ({
   lifetimeMs: 60_000,
   reattached: false,
   worktreeCell: false,
+  exitCode: 0,
   ...over,
 });
 
@@ -40,6 +41,21 @@ describe("shouldCloseEndedCell", () => {
 
   it("keeps the cell when the frame named no lifetime", () => {
     expect(shouldCloseEndedCell(ended({ lifetimeMs: null }))).toBe(false);
+  });
+
+  // A crash stays on screen with its red banner rather than vanishing like `/exit` (#3272).
+  it("keeps a cell whose program exited non-zero, however it ended", () => {
+    [1, 2, 127, 134, 137, 139, -1].forEach((exitCode) => {
+      expect(shouldCloseEndedCell(ended({ exitCode }))).toBe(false);
+      expect(shouldCloseEndedCell(ended({ exitCode, reattached: true }))).toBe(false);
+    });
+  });
+
+  // No code is what an old server's frame, or a malformed one, looks like: decided as before.
+  it("decides a frame with no exit code by the other facts alone", () => {
+    expect(shouldCloseEndedCell(ended({ exitCode: null }))).toBe(true);
+    expect(shouldCloseEndedCell(ended({ exitCode: null, lifetimeMs: 0 }))).toBe(false);
+    expect(shouldCloseEndedCell(ended({ exitCode: null, sessionEnded: false }))).toBe(false);
   });
 
   // Its close asks whether to keep the worktree, which is not asked unprompted.
