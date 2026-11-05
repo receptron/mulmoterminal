@@ -91,7 +91,14 @@ describe("startAgentPty", () => {
       const { entry, spawnedAtMs, reattached } = startAgentPty(start);
 
       expect(spawnCalls).toEqual([
-        { sessionId: start.sessionId, file: start.file, args: start.args, cwd: start.cwd, persistent: true, options: { ...start.spawnEnv, recordExit: true } },
+        {
+          sessionId: start.sessionId,
+          file: start.file,
+          args: start.args,
+          cwd: start.cwd,
+          persistent: true,
+          options: { ...start.spawnEnv, env: { ...start.spawnEnv.env, MULMOTERMINAL_SESSION_AGENT: start.agent }, recordExit: true },
+        },
       ]);
       expect(entry).toEqual({
         term: { pid: index },

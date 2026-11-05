@@ -13,7 +13,6 @@
 import { markSessionPlaced, ptys } from "../registry.js";
 import { shouldCloseEndedCell } from "../../../common/endedCellClose.js";
 import { worktreeLabel } from "../../../common/worktreePath.js";
-import os from "node:os";
 import { tmuxHasSession, tmuxTakePaneExitRecord } from "../../infra/process/tmux.js";
 import { parsePaneExitRecord } from "../../infra/process/tmux-pane-exit.js";
 import { sendExitAndClose, type PtyExitReport } from "../ws-frames.js";
@@ -80,16 +79,14 @@ function applyPtyExit(sessionId: string, disposition: PtyExitDisposition, reap: 
   }
 }
 
-const SIGNAL_NUMBERS: ReadonlyMap<string, number> = new Map(Object.entries(os.constants.signals));
-
-/** The program's own exit code when tmux recorded one (#3272), else the client's. Asked only on a
+/** The program's own exit code when its recorder wrote one (#3272), else the client's. Asked only on a
  *  reap: a `keep` is a session still running, and a `gone` was ended by us, not by the program. */
 function programExitCode(sessionId: string, entry: PtyEntry, disposition: PtyExitDisposition, clientExitCode: number): number {
   if (disposition !== "reap" || !entry.tmux) return clientExitCode;
   const record = tmuxTakePaneExitRecord(sessionId);
-  const recorded = record === null ? null : parsePaneExitRecord(record, SIGNAL_NUMBERS);
+  const recorded = record === null ? null : parsePaneExitRecord(record);
   if (recorded === null) return clientExitCode;
-  if (recorded !== 0) console.log(`[pty] ${sessionId} program exited ${recorded} (recorded by tmux as ${record}) — keeping its cell`);
+  if (recorded !== 0) console.log(`[pty] ${sessionId} program exited ${recorded} — keeping its cell`);
   return recorded;
 }
 

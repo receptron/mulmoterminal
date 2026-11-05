@@ -20,7 +20,7 @@ import { isPsmuxVersion, psmuxConfLine, psmuxGlobalOptions, psmuxVersionOf, psmu
 import { writeFileAtomicSync } from "../../files/atomic-write.js";
 import { TMUX_PREFIX_DEFAULT, staleSendPrefixKeys, tmuxPrefixCommands } from "../../../common/tmuxPrefix.js";
 import { liveServerFrom, type LiveTmuxServer } from "./tmuxLiveServer.js";
-import { PANE_EXIT_DIR_SEGMENTS, paneExitRecordingArgs } from "./tmux-pane-exit.js";
+import { PANE_EXIT_DIR_SEGMENTS, SESSION_AGENT_ENV, paneExitWrapped } from "./tmux-pane-exit.js";
 
 // Per HOME, so a server started on another one never sweeps or reconfigures this one's sessions (#3039).
 const SERVER_SOCKET = `mulmoterminal${HOME_SCOPE_SUFFIX}`;
@@ -400,9 +400,8 @@ export const tmuxPaneTarget = (id: string): string => `${tmuxSessionTarget(id)}:
 // the session, but only where the environment named no locale at all — `-u` also covers a
 // machine that explicitly names a non-UTF-8 one.
 //
-// `recordExit` chains the pane-exit recording onto the same invocation (see tmux-pane-exit.ts), so
-// it is in place before the program can die. Not for psmux, which has not been measured to run
-// `pane-died`, and whose dead pane would then simply stay.
+// `recordExit` starts the program under the exit recorder (see tmux-pane-exit.ts). Not for psmux,
+// whose panes are started by Windows with no `/bin/sh` to run it.
 export function tmuxNewSessionArgs(
   id: string,
   file: string,
@@ -412,8 +411,8 @@ export function tmuxNewSessionArgs(
   options: { recordExit?: boolean } = {},
 ): string[] {
   const envArgs = Object.entries(env).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
-  const recording = options.recordExit && !cachedPsmux ? paneExitRecordingArgs(tmuxSessionName(id)) : [];
-  return ["-L", SERVER_SOCKET, "-f", CONF_FILE, "-u", "new-session", "-A", "-s", tmuxSessionName(id), "-c", cwd, ...envArgs, "--", file, ...args, ...recording];
+  const pane = options.recordExit && !cachedPsmux ? paneExitWrapped(tmuxSessionName(id), file, args) : { file, args };
+  return ["-L", SERVER_SOCKET, "-f", CONF_FILE, "-u", "new-session", "-A", "-s", tmuxSessionName(id), "-c", cwd, ...envArgs, "--", pane.file, ...pane.args];
 }
 
 const paneExitRecordFile = (id: string): string => path.join(os.homedir(), ...PANE_EXIT_DIR_SEGMENTS, tmuxSessionName(id));
@@ -442,6 +441,14 @@ export function tmuxTakePaneExitRecord(id: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** The agent a session was started for, as its own environment records it — null for a session
+ *  from before that was recorded, or for a shell. */
+export function tmuxSessionAgent(id: string): string | null {
+  const r = tmux(["show-environment", "-t", tmuxSessionTarget(id), SESSION_AGENT_ENV]);
+  if (r.status !== 0) return null;
+  return parseTmuxEnvironment(r.stdout).get(SESSION_AGENT_ENV) ?? null;
 }
 
 // Is a persistent session for this id currently alive in our tmux server?

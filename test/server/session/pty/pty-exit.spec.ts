@@ -265,7 +265,7 @@ describe("reportPtyExit — a session the close route ended", () => {
   });
 });
 
-// Under tmux our pty is the client and always exits 0; tmux recorded what the program did (#3272).
+// Under tmux our pty is the client and always exits 0; the recorder wrote what the program did (#3272).
 describe("reportPtyExit — the program's own exit code", () => {
   const registerRecording = () => {
     const frames: Array<{ exitCode?: unknown }> = [];
@@ -274,10 +274,10 @@ describe("reportPtyExit — the program's own exit code", () => {
   };
 
   it.each([
-    { record: ":kill", exitCode: 137 },
-    { record: ":segv", exitCode: 139 },
-    { record: "1:", exitCode: 1 },
-  ])("sends $exitCode for a $record and keeps the session adoptable", ({ record, exitCode }) => {
+    { record: "137", exitCode: 137 },
+    { record: "139", exitCode: 139 },
+    { record: "1", exitCode: 1 },
+  ])("sends $exitCode for a record of $record and keeps the session adoptable", ({ record, exitCode }) => {
     const { exiting, frames } = registerRecording();
     takeRecord.mockReturnValue(record);
 
@@ -290,7 +290,7 @@ describe("reportPtyExit — the program's own exit code", () => {
 
   it("closes as before for a recorded clean exit", () => {
     const { exiting, frames } = registerRecording();
-    takeRecord.mockReturnValue("0:");
+    takeRecord.mockReturnValue("0");
 
     reportPtyExit("s-1", exiting, EXIT, vi.fn());
 
@@ -310,7 +310,7 @@ describe("reportPtyExit — the program's own exit code", () => {
   });
 
   // No record (a shell cell, psmux, a session from before) or one it cannot read: the client's code.
-  it.each([null, "", "garbage", ":nosuchsignal"])("keeps the client's code when the record is %j", (record) => {
+  it.each([null, "", "garbage", "-1"])("keeps the client's code when the record is %j", (record) => {
     const { exiting, frames } = registerRecording();
     takeRecord.mockReturnValue(record);
 
@@ -328,7 +328,7 @@ describe("reportPtyExit — the program's own exit code", () => {
   ])("does not ask tmux when $name", ({ tmux, tmuxAlive, registered }) => {
     const exiting = registered ? register("s-1", tmux) : entryOf(tmux);
     hasSession.mockReturnValue(tmuxAlive);
-    takeRecord.mockReturnValue(":kill");
+    takeRecord.mockReturnValue("137");
 
     reportPtyExit("s-1", exiting, EXIT, vi.fn());
 

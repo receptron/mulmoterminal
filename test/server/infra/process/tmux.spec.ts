@@ -76,6 +76,7 @@ const TARGET_BUILDER_FOR: Record<string, string> = {
   "has-session": "tmuxSessionTarget",
   "kill-session": "tmuxSessionTarget",
   "list-clients": "tmuxSessionTarget",
+  "show-environment": "tmuxSessionTarget",
   "capture-pane": "tmuxPaneTarget",
   "display-message": "tmuxPaneTarget",
   "send-keys": "tmuxPaneTarget",
@@ -142,13 +143,12 @@ describe("tmuxNewSessionArgs", () => {
   });
 
   // #3272: agents only. A shell's status is its last command's, so it must not be recorded.
-  it("records how the program ended only when asked, chained after the program", () => {
-    expect(args).not.toContain("remain-on-exit");
+  it("starts the program under the exit recorder only when asked, its argv intact", () => {
+    expect(args).not.toContain("/bin/sh");
     const recording = tmuxNewSessionArgs("id1", "/bin/zsh", ["-lc", "exec codex"], "/proj", {}, { recordExit: true });
     const dashdash = recording.indexOf("--");
-    expect(recording.slice(dashdash + 1, dashdash + 4)).toEqual(["/bin/zsh", "-lc", "exec codex"]);
-    expect(recording[dashdash + 4]).toBe(";");
-    expect(recording.join(" ")).toContain('pane-exits"/mt-id1');
+    expect(recording[dashdash + 1]).toBe("/bin/sh");
+    expect(recording.slice(-4)).toEqual(["mt-id1", "/bin/zsh", "-lc", "exec codex"]);
   });
 
   it("passes no -e when there is no per-session environment", () => {
