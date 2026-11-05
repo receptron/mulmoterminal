@@ -100,7 +100,7 @@ describe.skipIf(!hasTmux)("the recording against a real tmux", () => {
     const facts = [
       `still alive: ${panes} record=${JSON.stringify(recorded(name))}`,
       `version: ${spawnCapture("tmux", ["-V"]).stdout.trim()}`,
-      `hooks: ${tmux(["show-hooks", "-t", `=${name}`]).stdout.trim()} | global: ${tmux(["show-hooks", "-g", "pane-died"]).stdout.trim()}`,
+      `hooks: ${tmux(["show-hooks", "-t", "=" + name]).stdout.trim()} | global: ${tmux(["show-hooks", "-g", "pane-died"]).stdout.trim()}`,
       `messages: ${tmux(["show-messages"]).stdout.trim()}`,
       `jobs: ${spawnCapture("ps", ["-eo", "pid,stat,args"])
         .stdout.split("\n")
