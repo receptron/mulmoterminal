@@ -65,7 +65,7 @@ describe("a slot's session-ended mark", () => {
     original.onmessage?.(exitFrame(true));
     const socketsBefore = FakeWebSocket.instances.length;
     conn.retarget(KEY, target);
-    expect(FakeWebSocket.instances.length).toBe(socketsBefore + 1);
+    expect(FakeWebSocket.instances).toHaveLength(socketsBefore + 1);
     const replacement = FakeWebSocket.instances.at(-1);
     if (!replacement || replacement === original) throw new Error("no replacement socket");
     replacement.onopen?.();
