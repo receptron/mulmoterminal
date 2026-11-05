@@ -8,7 +8,8 @@ import { codexAdapter } from "../../../agents/codex/codex.js";
 import type { ToolGroup } from "../../../../common/toolGroups.js";
 import { codexGuiMcpServers, guiMcpEnv } from "../setup/mcp-config.js";
 import { wantsCodexPermissionHook } from "../../../agents/codex/codex-hook.js";
-import { snapshotSessions, watchForCodexSession } from "../../../agents/codex/codex-session.js";
+import { readSessionMeta, snapshotSessions, watchForCodexSession } from "../../../agents/codex/codex-session.js";
+import { findOpenCodexRollout } from "./codex-open-rollout-recovery.js";
 import { accountSpawnEnv, codexSessionRoot, codexSessionSkillsDir } from "../../session-home.js";
 import { codexRolloutPath } from "../../../agents/codex/codex-sessions.js";
 import { trackCodexActivity } from "../../activity/codex-activity-track.js";
@@ -34,24 +35,54 @@ const activityDepsFor = (sessionId: string, entry: PtyEntry, deps: SpawnDeps) =>
   isAlive: () => ptys.get(sessionId) === entry,
 });
 
-export function createCodexSpawner(deps: SpawnDeps) {
-  // codex persists its rollout only after the first user turn, so watch a FRESH session's lifetime
-  // (stop once ITS pty is gone — the watch has no deadline, so a respawn under the same id must not
-  // keep it alive) and capture the minted id so a later cold reconnect can
-  // `codex resume <id>`. Attribution is unambiguous-only (see pickFreshSession).
-  function captureCodexRollout(sessionId: string, entry: PtyEntry, root: string, before: Set<string>, cwd: string): void {
-    watchForCodexSession(root, before, { cwd, claimed: claimedCodexRollouts, isCancelled: () => ptys.get(sessionId) !== entry })
-      .then((meta) => {
-        if (!meta) return;
-        claimedCodexRollouts.add(meta.file);
-        rememberCodexRollout(sessionId, meta.id, cwd);
-        // A rollout only discovered now is one this session just created, so it is read
-        // whole: its first turn is in there and hasn't been reported yet.
-        trackCodexActivity(sessionId, meta.file, { startAtEnd: false }, activityDepsFor(sessionId, entry, deps));
-      })
-      .catch(() => {});
-  }
+// codex persists its rollout only after the first user turn, so watch a FRESH session's lifetime
+// (stop once ITS pty is gone — the watch has no deadline, so a respawn under the same id must not
+// keep it alive) and capture the minted id so a later cold reconnect can
+// `codex resume <id>`. Attribution is unambiguous-only (see pickFreshSession).
+function captureCodexRollout(deps: SpawnDeps, sessionId: string, entry: PtyEntry, root: string, before: Set<string>, cwd: string): void {
+  watchForCodexSession(root, before, { cwd, claimed: claimedCodexRollouts, isCancelled: () => ptys.get(sessionId) !== entry })
+    .then((meta) => {
+      if (!meta) return;
+      claimedCodexRollouts.add(meta.file);
+      rememberCodexRollout(sessionId, meta.id, cwd);
+      // A rollout only discovered now is one this session just created, so it is read
+      // whole: its first turn is in there and hasn't been reported yet.
+      trackCodexActivity(sessionId, meta.file, { startAtEnd: false }, activityDepsFor(sessionId, entry, deps));
+    })
+    .catch(() => {});
+}
 
+// A survivor whose mapping is gone (#3283) is writing a rollout that predates the snapshot, so the
+// appear-watcher can never see it. The file its processes hold open for writing is the evidence.
+// Always tailed from the end with the open turn restored, like a mapped reattach: whether the file is
+// new cannot be told from the snapshot (it lists two day folders, and codex fixes a rollout's folder
+// when the session starts), and reading an old one whole would announce days of finished turns.
+// With no single open rollout — no first turn yet, or ambiguous — the appear-watcher runs as before.
+async function adoptOpenRollout(deps: SpawnDeps, sessionId: string, entry: PtyEntry, root: string, cwd: string): Promise<boolean> {
+  const file = await findOpenCodexRollout(sessionId, root, claimedCodexRollouts);
+  const meta = file === null ? null : await readSessionMeta(file);
+  // Re-checked after the awaits: the pty may have ended, or a watcher claimed the file meanwhile.
+  if (file === null || meta === null || ptys.get(sessionId) !== entry || claimedCodexRollouts.has(file)) return false;
+  if (mappedElsewhere(sessionId, meta.id)) return false;
+  claimedCodexRollouts.add(file);
+  rememberCodexRollout(sessionId, meta.id, cwd);
+  trackCodexActivity(sessionId, file, { startAtEnd: true, restoreOpenTurn: true }, activityDepsFor(sessionId, entry, deps));
+  return true;
+}
+
+// Paths are claimed only by this process; the log also knows conversations other cells resumed.
+const mappedElsewhere = (sessionId: string, conversationId: string): boolean =>
+  [...codexRollouts.values()].some((record) => record.conversationId === conversationId && record.sessionId !== sessionId);
+
+function recoverUnmappedRollout(deps: SpawnDeps, sessionId: string, entry: PtyEntry, root: string, before: Set<string>, cwd: string): void {
+  void adoptOpenRollout(deps, sessionId, entry, root, cwd)
+    .catch(() => false)
+    .then((adopted) => {
+      if (!adopted) captureCodexRollout(deps, sessionId, entry, root, before, cwd);
+    });
+}
+
+export function createCodexSpawner(deps: SpawnDeps) {
   function spawnCodexPty(
     sessionId: string,
     ws: WebSocket | null,
@@ -137,16 +168,16 @@ export function createCodexSpawner(deps: SpawnDeps) {
       const rolloutId = codexRollouts.get(sessionId)?.conversationId;
       const file = rolloutId ? codexRolloutPath(root, rolloutId) : null;
       if (file) trackCodexActivity(sessionId, file, { startAtEnd: true, restoreOpenTurn: true }, activityDepsFor(sessionId, entry, deps));
-      // No mapping — the restart came before the survivor's FIRST turn, so no rollout exists
-      // yet. Its first prompt may still be coming, so run the same appear-watcher a fresh
-      // session gets (attribution is unambiguous-only either way): without it that rollout is
-      // never recorded, activity stays dead, and a later cold reconnect starts a NEW
-      // conversation instead of resuming this one (Codex review on #1538).
-      else captureCodexRollout(sessionId, entry, root, before, cwd);
+      // No mapping. Either the restart came before the survivor's FIRST turn, so no rollout exists
+      // yet and its first prompt may still be coming (the appear-watcher; without it that rollout
+      // is never recorded and a cold reconnect starts a NEW conversation — Codex review on #1538),
+      // or the mapping was lost while the rollout already existed (#3283), which only the file
+      // the survivor holds open can tell.
+      else recoverUnmappedRollout(deps, sessionId, entry, root, before, cwd);
     } else {
       // Discover the id only for a FRESH session. On resume we already know it; running the watcher
       // could overwrite the known id with a mis-attributed concurrent rollout.
-      captureCodexRollout(sessionId, entry, root, before, cwd);
+      captureCodexRollout(deps, sessionId, entry, root, before, cwd);
     }
     // A seed prompt is typed into codex's input box after it settles (not a CLI arg — see
     // attachCodexAutoRun), so a long collection-action prompt can't overflow tmux's command limit.
