@@ -1372,10 +1372,14 @@ const rosterWidth = ref(Number(stored(ROSTER_WIDTH_KEY)) || ROSTER_WIDTH_DEFAULT
 const ROSTER_COLLAPSED_KEY = "roster_collapsed";
 const RAIL_WIDTH_PX = 40;
 const rosterCollapsed = ref(stored(ROSTER_COLLAPSED_KEY) === "1");
-function setRosterCollapsed(collapsed: boolean): void {
+// The menu that asked was in the branch this swaps out, so the focus would fall to <body>; it goes
+// to the same session on the other side instead — its rail dot, or its row.
+function setRosterCollapsed(collapsed: boolean, uid: number | null): void {
   rosterCollapsed.value = collapsed;
   remember(ROSTER_COLLAPSED_KEY, collapsed ? "1" : "0");
+  void nextTick(() => rosterRoot.value?.querySelector<HTMLElement>(`[data-uid="${uid}"]`)?.focus({ preventScroll: true }));
 }
+const shownRosterWidth = (): number => (rosterCollapsed.value ? RAIL_WIDTH_PX : rosterWidth.value);
 const stripHeight = ref(Number(stored(STRIP_HEIGHT_KEY)) || STRIP_HEIGHT_DEFAULT);
 // Each stage splitter divides what is left after its own separator (see SEPARATOR_PX).
 const stageWidth = () => Math.max(0, (stage.value?.clientWidth ?? 0) - SEPARATOR_PX);
@@ -1411,7 +1415,7 @@ function setRosterWidth(width: number): void {
   // for the reason setPaneWidth's parameter exists.
   // Skipped while the canvas is full-width: it is not sharing the row with a terminal, so its
   // remembered split width has nothing to be re-clamped against and must survive the drag intact.
-  if (rightPane.value && !paneFull.value) setPaneWidth(paneWidth.value, available - rosterWidth.value - PANE_CHROME_PX);
+  if (rightPane.value && !paneFull.value) setPaneWidth(paneWidth.value, available - shownRosterWidth() - PANE_CHROME_PX);
 }
 
 // Both floors change under a full-width transition, so both geometries are re-clamped after it.
@@ -1773,7 +1777,7 @@ function onRosterDragLeave(event: DragEvent) {
       ref="roster"
       data-testid="cockpit"
       class="relative flex min-w-0 shrink-0 grow-0 flex-col gap-[9px] overflow-y-auto bg-deep py-1.5 pr-0 pl-1.5"
-      :style="{ flexBasis: `${rosterCollapsed ? RAIL_WIDTH_PX : rosterWidth}px`, '--roster-move-ms': `${ROSTER_MOVE_MS}ms` }"
+      :style="{ flexBasis: `${shownRosterWidth()}px`, '--roster-move-ms': `${ROSTER_MOVE_MS}ms` }"
       @dragover="onRosterDragOver"
       @drop="onRosterDrop"
       @dragleave="onRosterDragLeave"
@@ -1798,7 +1802,7 @@ function onRosterDragLeave(event: DragEvent) {
             :parked="false"
             roster="collapsed"
             roster-only
-            @roster="setRosterCollapsed"
+            @roster="(collapsed) => setRosterCollapsed(collapsed, expandedUid)"
           />
         </div>
         <div
@@ -1828,7 +1832,7 @@ function onRosterDragLeave(event: DragEvent) {
             :parked="row.parked"
             :at="rowMenuAt?.uid === row.uid ? rowMenuAt.point : null"
             roster="collapsed"
-            @roster="setRosterCollapsed"
+            @roster="(collapsed) => setRosterCollapsed(collapsed, row.uid)"
             @attention="(waiting) => markAttention(row.uid, waiting)"
             @park="(on) => emit('park', row.uid, on)"
             @close="closeRow(row.uid)"
@@ -1885,7 +1889,7 @@ function onRosterDragLeave(event: DragEvent) {
               :parked="row.parked"
               :at="rowMenuAt?.uid === row.uid ? rowMenuAt.point : null"
               roster="open"
-              @roster="setRosterCollapsed"
+              @roster="(collapsed) => setRosterCollapsed(collapsed, row.uid)"
               @move="(dir) => emit('move', row.uid, dir)"
               @attention="(waiting) => markAttention(row.uid, waiting)"
               @park="(on) => emit('park', row.uid, on)"

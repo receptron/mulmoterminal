@@ -416,6 +416,40 @@ describe("TerminalGrid (page renderer)", () => {
       w.unmount();
     });
 
+    // The menu that asked lives in the branch the fold swaps out, so the focus goes to the same
+    // session on the other side rather than falling to <body>.
+    it("hands the focus to the same session's dot on folding, and to its row on unfolding", async () => {
+      const w = mount(TerminalGrid, {
+        attachTo: document.body,
+        props: {
+          cells,
+          expandedUid: 0,
+          listRows: rows(),
+          defaultCwd: "/work",
+          presets: [],
+          launchers: [],
+          home: "/work",
+          openSessionIds: [],
+          openCwds: [],
+          listMode: true,
+        },
+      });
+      await nextTick();
+      await w.findAll('[data-testid="cockpit-row-menu"]')[1].trigger("click");
+      await menuItem("row-roster-toggle").trigger("click");
+      await flushPromises();
+      expect(document.activeElement?.getAttribute("data-testid")).toBe("cockpit-rail-item");
+      expect(document.activeElement?.getAttribute("data-uid")).toBe("1");
+
+      await railItems(w)[1].trigger("contextmenu", { clientX: 5, clientY: 5 });
+      await flushPromises();
+      await menuItem("row-roster-toggle").trigger("click");
+      await flushPromises();
+      expect(document.activeElement?.getAttribute("data-testid")).toBe("cockpit-row");
+      expect(document.activeElement?.getAttribute("data-uid")).toBe("1");
+      w.unmount();
+    });
+
     it("unfolds from the one ⋮ at the top of the rail, which offers nothing else", async () => {
       localStorage.setItem("roster_collapsed", "1");
       const w = mountCockpit(cells, 0, rows());
@@ -1549,6 +1583,27 @@ describe("file pane width restored from storage", () => {
     await flushPromises();
     expect(w.findComponent({ name: "FilesPane" }).attributes("style")).toContain("400px");
   });
+  // #3271. Folded, the roster takes the rail's width, so the pane is clamped against the row the
+  // rail leaves — not against the full roster it would take unfolded.
+  it("clamps against the rail, not the stored roster width, while the roster is folded", async () => {
+    const RAIL = 40;
+    const FOLDED_ROW = STAGE - SEPARATOR - RAIL;
+    Object.defineProperty(window.HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.classList.contains("stage") ? STAGE : FOLDED_ROW;
+      },
+    });
+    localStorage.setItem("roster_collapsed", "1");
+    localStorage.setItem("pane_open_by_session", JSON.stringify({ s1: "files" }));
+    localStorage.setItem("files_pane_width", "2000");
+    const w = mountCockpit([cell(1, "s1", "/proj"), cell(2)], 1, []);
+    await flushPromises();
+    window.dispatchEvent(new Event("resize"));
+    await flushPromises();
+    expect(w.findComponent({ name: "FilesPane" }).attributes("style")).toContain(`${FOLDED_ROW - (SEPARATOR + 1) - 320}px`);
+  });
+
   // The width is shared by every pane, so the clamp is too — not the files pane's alone.
   it("clamps any pane, not only the files pane", async () => {
     localStorage.setItem("pane_open_by_session", JSON.stringify({ s1: "prompts" }));

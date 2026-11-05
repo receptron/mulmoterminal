@@ -27,6 +27,10 @@ Folded, the rows (and their ⋮) are gone, so the same menu has to be reachable 
   with a `STATUS_DOT_CLASS` dot. Hover shows `CockpitRow.title`; click / Enter / Space enlarges.
 - `STATUS_DOT_CLASS` moves out of `CockpitHeader.vue` into `statusDot.ts` so both draw one colour.
 - The filmstrip's menu has no roster prop and so no item.
+- While folded, the file pane is clamped against the rail's width, not the stored roster width.
+- Focus: the menu that folds or unfolds is in the branch that is swapped out, so the focus moves
+  to the same session on the other side (its dot, or its row). A menu with no ⋮ returns the focus
+  to whatever held it when it opened.
 
 ## Other
 

@@ -64,6 +64,9 @@ const DIVIDER_CLASS = "my-1.5 border-t border-border";
 const trigger = useTemplateRef<HTMLElement>("trigger");
 const menu = useTemplateRef<HTMLElement>("menu");
 const open = ref(false);
+// Where the focus goes back to on close. The ⋮ when there is one; without it (a rail dot's
+// right-click) whatever held the focus when the menu opened, or the focus would fall to <body>.
+let returnFocus: HTMLElement | null = null;
 const pos = ref<MenuPoint>({ top: 0, left: 0 });
 // A disabled direction is skipped, not landed on.
 const ITEM_SELECTOR = "[role=menuitem]:not(:disabled)";
@@ -96,6 +99,8 @@ function onMenuKeydown(event: KeyboardEvent) {
 }
 function openMenu(want: MenuPoint, alignRight: boolean) {
   if (!open.value) {
+    const focused = document.activeElement;
+    returnFocus = trigger.value ?? (focused instanceof HTMLElement ? focused : null);
     window.addEventListener("pointerdown", onOutside);
     window.addEventListener("keydown", onKeydown);
     window.addEventListener("scroll", close, true);
@@ -105,7 +110,7 @@ function openMenu(want: MenuPoint, alignRight: boolean) {
 }
 function close() {
   if (!open.value) return;
-  if (menu.value?.contains(document.activeElement)) trigger.value?.focus({ preventScroll: true });
+  if (menu.value?.contains(document.activeElement) && returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
   open.value = false;
   window.removeEventListener("pointerdown", onOutside);
   window.removeEventListener("keydown", onKeydown);

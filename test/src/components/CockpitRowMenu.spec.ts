@@ -231,4 +231,19 @@ describe("the horizontal axis", () => {
     expect(has("row-roster-toggle")).toBe(true);
     w.unmount();
   });
+
+  // A rail dot has no ⋮ to return to, so the focus goes back to what held it when the menu opened.
+  it("returns the focus to what held it when there is no ⋮", async () => {
+    const before = document.createElement("button");
+    document.body.appendChild(before);
+    before.focus();
+    const w = mountMenu({ hideTrigger: true });
+    await w.setProps({ at: { top: 10, left: 10 } });
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(document.activeElement?.getAttribute("role")).toBe("menuitem");
+    await item("row-park").trigger("click");
+    expect(document.activeElement).toBe(before);
+    w.unmount();
+    before.remove();
+  });
 });
