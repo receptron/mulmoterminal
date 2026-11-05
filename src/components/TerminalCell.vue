@@ -95,6 +95,8 @@ import { isUnknownArray } from "../../common/isUnknownArray";
 import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
 import { shouldCloseEndedCell } from "../../common/endedCellClose";
+import { canStartTalk } from "./cellTalkStart";
+import { connView } from "../composables/useTerminalConnections";
 import type { SessionExit } from "../composables/serverMessage";
 
 // How long a handoff failure stays on the cell before it clears itself.
@@ -704,7 +706,10 @@ const askMenuMaxH = ref<number | null>(null);
 function refreshAskTargets() {
   askTargets.value = handoffTargets(`cell-${props.uid}`, props.home);
 }
-const talkAvailable = computed(() => !!sessionId.value && askTargets.value.length > 0);
+// Read from the slot, not kept here: the slot outlives this component, which the trip into and out of
+// a collection pane remounts.
+const talkStartable = computed(() => canStartTalk({ sessionId: sessionId.value, sessionEnded: connView.get(`cell-${props.uid}`)?.sessionEnded ?? false }));
+const talkAvailable = computed(() => talkStartable.value && askTargets.value.length > 0);
 
 function openAskMenu() {
   refreshAskTargets();
@@ -755,7 +760,7 @@ function stopExchange() {
 
 async function exchangeWith(target: HandoffTarget) {
   askMenuOpen.value = false;
-  if (!sessionId.value || automating.value) return;
+  if (!sessionId.value || !talkStartable.value || automating.value) return;
   exchanging.value = true;
   exchangeStop = false;
   const self = { key: `cell-${props.uid}`, source: { sessionId: sessionId.value, cwd: cwd.value, agent: agent.value } };
@@ -784,7 +789,7 @@ function stopTable() {
 // The menu deliberately stays OPEN: it is where both of the things you want next live — stop, and
 // read the conversation as it fills up. It still closes on the next click outside.
 async function startTable(targets: HandoffTarget[], budget: number, room: string) {
-  if (!sessionId.value || automating.value) return;
+  if (!sessionId.value || !talkStartable.value || automating.value) return;
   tableRunning.value = true;
   tableRoom.value = room;
   tableStop = false;
