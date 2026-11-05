@@ -9,6 +9,7 @@
 // fetch), and the status is per cell. Handing them in as functions is what lets this stay pure
 // while the caller keeps its reactive maps.
 import { AGENT_TITLE_MAX, type AgentTitleKind } from "../../common/agentTitle";
+import { sessionDisplayName } from "../../common/sessionMemo";
 import type { Cell } from "./gridTabs";
 import type { CockpitRow } from "./TerminalGrid.vue";
 import type { AttentionStatus } from "./attentionStatus";
@@ -97,6 +98,9 @@ export function rosterRow(c: Cell, look: RosterLookups): CockpitRow {
     prompt: meta.lastPrompt,
     response: meta.lastResponse,
     fallback: fallbackLabel(c),
+    // The cell header's tiers (cellHeaderText), so a compact row and its cell go by one name — which
+    // is why the agent-store title the summary line admits is not among them.
+    title: sessionDisplayName(meta.memo, meta.customTitle, meta.aiTitle, meta.lastPrompt) || (fallbackLabel(c) ?? ""),
     phase: (c.cwd ? look.phase(c.cwd) : undefined) ?? NO_PR_PHASE,
     workPhase: meta.workPhase,
     collection: meta.collection,

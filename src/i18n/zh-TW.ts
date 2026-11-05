@@ -426,6 +426,7 @@ export const zhTW: Messages = {
       waiting: "正在等你",
       finished: "結束了",
       blink: "讓正在等我的列閃爍",
+      compact: "精簡顯示（只顯示標題列和工作階段名稱）",
       linesTitle: "每列的行數",
       linesHint: "每一列在截斷之前顯示多少。調高是拿螢幕上能放下多少個工作階段，去換在原地讀完一個長的。",
       fields: {

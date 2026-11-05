@@ -24,6 +24,7 @@ import { setCustomThemes } from "./customThemes";
 import { refreshTheme } from "./useTheme";
 import { setActiveKeymap } from "./activeKeymap";
 import { setCockpitLines } from "./cockpitLines";
+import { setCockpitCompact } from "./cockpitCompact";
 import { setHeaderStatusDefaults } from "./headerStatusColors";
 import { setCopyOnSelect } from "./copyOnSelect";
 import { setFileLinkOpensPane } from "./fileLinkOpensPane";
@@ -511,6 +512,7 @@ function applyGlobalSettings(c: Record<string, unknown>, pinsMark: number, jobsM
   setToolbarPins(c.toolbarPins, pinsMark);
   // How far the cockpit roster clamps each line. Absent `cockpitLines` keeps 2/2/3.
   setCockpitLines(c.cockpitLines);
+  setCockpitCompact(c.cockpitCompact);
   // What a header shows once a status replaces the directory's colour (#1617). The default for
   // every directory; a `.mulmoterminal.json` naming either key outranks it per cell.
   setHeaderStatusDefaults(c.headerStatusColors, c.headerStatusTint);

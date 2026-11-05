@@ -3,6 +3,7 @@ import { useI18n } from "vue-i18n";
 import { useRosterAlert } from "../../composables/useRosterAlert";
 import { cockpitLines, saveCockpitLines } from "../../composables/cockpitLines";
 import { COCKPIT_LINES_MIN, COCKPIT_LINES_MAX, type CockpitLines } from "../../../common/cockpitLines";
+import { cockpitCompact, saveCockpitCompact } from "../../composables/cockpitCompact";
 import SettingsStepper from "./SettingsStepper.vue";
 
 // Whether a roster row waiting on the user blinks (#1131) — per browser for the same reason the
@@ -27,6 +28,12 @@ const LINE_STEP = 1;
 function nudgeLines(key: keyof CockpitLines, delta: number) {
   void saveCockpitLines({ ...cockpitLines.value, [key]: cockpitLines.value[key] + delta });
 }
+// A refused save puts the box back, as the grid header's switches do.
+async function onCompactToggle(e: Event) {
+  const input = e.target;
+  if (!(input instanceof HTMLInputElement)) return;
+  if (!(await saveCockpitCompact(input.checked))) input.checked = cockpitCompact.value;
+}
 </script>
 
 <template>
@@ -46,6 +53,17 @@ function nudgeLines(key: keyof CockpitLines, delta: number) {
   <p class="mb-2 text-[12px] text-dim">
     <strong class="text-fg">{{ t("settings.waitingRows.linesTitle") }}</strong> — {{ t("settings.waitingRows.linesHint") }}
   </p>
+  <label class="mb-2 flex cursor-pointer items-center gap-2">
+    <input
+      type="checkbox"
+      data-testid="cockpit-compact"
+      class="cursor-pointer"
+      :checked="cockpitCompact"
+      :aria-label="t('settings.waitingRows.compact')"
+      @change="onCompactToggle"
+    />
+    <span class="text-[13px]">{{ t("settings.waitingRows.compact") }}</span>
+  </label>
   <div v-for="field in LINE_FIELDS" :key="field" class="mb-1.5 flex items-center gap-3">
     <span class="min-w-[92px] text-[12px] text-fg">{{ t(`settings.waitingRows.fields.${field}`) }}</span>
     <SettingsStepper
@@ -54,6 +72,7 @@ function nudgeLines(key: keyof CockpitLines, delta: number) {
       :min="COCKPIT_LINES_MIN"
       :max="COCKPIT_LINES_MAX"
       :step="LINE_STEP"
+      :disabled="cockpitCompact"
       :label="t(`settings.waitingRows.steppers.${field}`)"
       @nudge="nudgeLines(field, $event)"
     />

@@ -10,6 +10,7 @@ import CockpitHeader from "./CockpitHeader.vue";
 import * as conn from "../composables/useTerminalConnections";
 import { trackStyle, layoutForCount } from "./gridLayout";
 import { cockpitLines } from "../composables/cockpitLines";
+import { cockpitCompact } from "../composables/cockpitCompact";
 import { dragSplitter } from "../composables/dragSplitter";
 import { flipKeyframes, flipPairs, onScreen, FLIP_MS, FLIP_EASING } from "./cellFlip";
 import { canDropCellBefore, canMoveCell, reorderBefore, type Cell } from "./gridTabs";
@@ -108,6 +109,7 @@ export interface CockpitRow {
   prompt: string | null; // current user prompt
   response: string | null; // tail of the agent's latest reply
   fallback: string | null; // label when there's no prompt/summary yet (launcher/command name)
+  title: string; // the one line a compact row keeps (#3270): the session's name, in the cell header's tiers
   phase: PrPhase; // the branch's PR workflow phase (`none` until a PR exists)
   workPhase: WorkPhase | null; // planning vs editing while working; null when unknown / not working
   collection: SessionCollection | null; // the collection this chat was started from (#2020), or null
@@ -1827,41 +1829,44 @@ function onRosterDragLeave(event: DragEvent) {
               @dismissed="rowMenuAt = null"
             />
           </CockpitHeader>
-          <!-- The user's own note, above every line below it: those are what the AGENT said, and the
+          <span v-if="cockpitCompact" data-testid="cockpit-title" class="truncate text-[12px] leading-[1.35]" :data-tip="row.title">{{ row.title }}</span>
+          <template v-else>
+            <!-- The user's own note, above every line below it: those are what the AGENT said, and the
              memo is the user saying what the cell is FOR (#1084) — the same precedence the cell
              header, the sidebar row and the phone's roster already share via sessionDisplayName.
              Unclamped, alone among these lines, because it needs no guard: normalizeMemo caps a
              memo at one line of 200 code points, where the three below are agent text of no
              bounded length, which is what `cockpitLines` exists for. -->
-          <span v-if="row.memo" data-testid="cockpit-memo" class="text-[12px] leading-[1.35]"
-            ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">memo</b> {{ row.memo }}</span
-          >
-          <!-- The clamp is a runtime value, so the utility reads a CSS variable each line sets for
+            <span v-if="row.memo" data-testid="cockpit-memo" class="text-[12px] leading-[1.35]"
+              ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">memo</b> {{ row.memo }}</span
+            >
+            <!-- The clamp is a runtime value, so the utility reads a CSS variable each line sets for
              itself — `line-clamp-N` only exists for the literals Tailwind found in the source.
              `title` carries the rest, so a low clamp hides nothing you can't get at. -->
-          <span
-            v-if="row.summary"
-            data-testid="cockpit-line"
-            class="line-clamp-[var(--cockpit-lines)] overflow-hidden text-[12px] leading-[1.35]"
-            :style="{ '--cockpit-lines': cockpitLines.summary }"
-            :data-tip="row.summary"
-            ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">summary</b> {{ row.summary }}</span
-          >
-          <span
-            data-testid="cockpit-line"
-            class="line-clamp-[var(--cockpit-lines)] overflow-hidden text-[12px] leading-[1.35]"
-            :style="{ '--cockpit-lines': cockpitLines.prompt }"
-            :data-tip="row.prompt || row.fallback || undefined"
-            ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">prompt</b> {{ row.prompt || row.fallback || "—" }}</span
-          >
-          <span
-            v-if="row.response"
-            data-testid="cockpit-line"
-            class="line-clamp-[var(--cockpit-lines)] overflow-hidden text-[12px] leading-[1.35] text-dim"
-            :style="{ '--cockpit-lines': cockpitLines.response }"
-            :data-tip="row.response"
-            ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">reply</b> {{ row.response }}</span
-          >
+            <span
+              v-if="row.summary"
+              data-testid="cockpit-line"
+              class="line-clamp-[var(--cockpit-lines)] overflow-hidden text-[12px] leading-[1.35]"
+              :style="{ '--cockpit-lines': cockpitLines.summary }"
+              :data-tip="row.summary"
+              ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">summary</b> {{ row.summary }}</span
+            >
+            <span
+              data-testid="cockpit-line"
+              class="line-clamp-[var(--cockpit-lines)] overflow-hidden text-[12px] leading-[1.35]"
+              :style="{ '--cockpit-lines': cockpitLines.prompt }"
+              :data-tip="row.prompt || row.fallback || undefined"
+              ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">prompt</b> {{ row.prompt || row.fallback || "—" }}</span
+            >
+            <span
+              v-if="row.response"
+              data-testid="cockpit-line"
+              class="line-clamp-[var(--cockpit-lines)] overflow-hidden text-[12px] leading-[1.35] text-dim"
+              :style="{ '--cockpit-lines': cockpitLines.response }"
+              :data-tip="row.response"
+              ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">reply</b> {{ row.response }}</span
+            >
+          </template>
         </div>
       </TransitionGroup>
     </aside>

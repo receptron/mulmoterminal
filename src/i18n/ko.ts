@@ -432,6 +432,7 @@ export const ko: Messages = {
       waiting: "당신을 기다리는",
       finished: "끝나기만 한",
       blink: "나를 기다리는 행을 깜박이게 하기",
+      compact: "간단히 표시 (머리줄과 세션 이름만)",
       linesTitle: "행당 줄 수",
       linesHint: "각 행을 어디까지 보여 주고 자를지. 올릴수록 화면에 들어가는 세션 수를 내주고, 긴 것 하나를 그 자리에서 읽게 됩니다.",
       fields: {

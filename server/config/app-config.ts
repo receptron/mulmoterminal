@@ -45,6 +45,7 @@ import { parsePresetRef } from "../../common/notifySounds.js";
 import { MODEL_ID_ALLOWED } from "../../common/modelIds.js";
 import { sanitizeKeymap, unrecognisedKeymapEntries, type Keymap } from "../../common/keymap.js";
 import { sanitizeCockpitLines, DEFAULT_COCKPIT_LINES, type CockpitLines } from "../../common/cockpitLines.js";
+import { COCKPIT_COMPACT_DEFAULT, sanitizeCockpitCompact } from "../../common/cockpitCompact.js";
 import { sanitizeToolbarPins } from "../../common/toolbarPins.js";
 import {
   sanitizeHeaderStatusColors,
@@ -162,6 +163,8 @@ export interface AppConfig {
   // How many lines each cockpit-roster row shows before clamping (#877). Defaults keep the
   // previous 2/2/3; raising `summary` trades roster length for reading a long one in place.
   cockpitLines: CockpitLines;
+  // Each roster row cut to its header and the session's name (#3270). Off by default.
+  cockpitCompact: boolean;
   // Draw this machine's load average beside the 5h / 7d usage gauges in the grid header (#1786).
   // ON unless explicitly disabled: it answers "may I start another agent right now?", which is a
   // question the grid screen poses and could not answer. A host that keeps no load average
@@ -612,6 +615,7 @@ export const emptyConfig = (): AppConfig => ({
   botJobs: BOT_JOBS_DEFAULT,
   toolbarPins: [],
   cockpitLines: { ...DEFAULT_COCKPIT_LINES },
+  cockpitCompact: COCKPIT_COMPACT_DEFAULT,
   fontFamily: null,
   defaultAgent: null,
 });
@@ -727,6 +731,7 @@ function sanitizeAppConfig(raw: unknown): AppConfig {
     botJobs: sanitizeBotJobs(o.botJobs),
     toolbarPins: sanitizeToolbarPins(o.toolbarPins),
     cockpitLines: sanitizeCockpitLines(o.cockpitLines),
+    cockpitCompact: sanitizeCockpitCompact(o.cockpitCompact),
     fontFamily: normalizeFontFamily(o.fontFamily),
     defaultAgent: sanitizeDefaultAgent(o.defaultAgent),
   };
@@ -866,6 +871,7 @@ export function mergeConfigUpdate(base: AppConfig, body: Record<string, unknown>
     botJobs: updated("botJobs", sanitizeBotJobs, base.botJobs),
     toolbarPins: updated("toolbarPins", sanitizeToolbarPins, base.toolbarPins),
     cockpitLines: updated("cockpitLines", sanitizeCockpitLines, base.cockpitLines),
+    cockpitCompact: updated("cockpitCompact", sanitizeCockpitCompact, base.cockpitCompact),
   };
 }
 
@@ -926,6 +932,7 @@ export function toPublicAppConfig(config: AppConfig): AppConfig {
     botJobs: config.botJobs,
     toolbarPins: config.toolbarPins,
     cockpitLines: config.cockpitLines,
+    cockpitCompact: config.cockpitCompact,
     fontFamily: config.fontFamily,
     defaultAgent: config.defaultAgent,
   };
