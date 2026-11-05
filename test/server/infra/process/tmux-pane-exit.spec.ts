@@ -97,7 +97,17 @@ describe.skipIf(!hasTmux)("the recording against a real tmux", () => {
       await sleep(POLL_MS);
     }
     const panes = tmux(["list-panes", "-t", `=${name}:`, "-F", "dead=#{pane_dead} status=#{pane_dead_status} cmd=#{pane_current_command}"]).stdout.trim();
-    return `still alive: ${panes} record=${JSON.stringify(recorded(name))}`;
+    const facts = [
+      `still alive: ${panes} record=${JSON.stringify(recorded(name))}`,
+      `version: ${spawnCapture("tmux", ["-V"]).stdout.trim()}`,
+      `hooks: ${tmux(["show-hooks", "-t", `=${name}`]).stdout.trim()} | global: ${tmux(["show-hooks", "-g", "pane-died"]).stdout.trim()}`,
+      `messages: ${tmux(["show-messages"]).stdout.trim()}`,
+      `jobs: ${spawnCapture("ps", ["-eo", "pid,stat,args"])
+        .stdout.split("\n")
+        .filter((line) => line.includes("pane-exits"))
+        .join(" / ")}`,
+    ];
+    return facts.join("\n");
   };
 
   beforeAll(() => {
