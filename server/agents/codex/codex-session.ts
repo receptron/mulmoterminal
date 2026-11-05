@@ -4,12 +4,11 @@ import { isRecord } from "../../../common/isRecord.js";
 import { readFirstJsonlRecord } from "../../infra/fs/jsonl-file.js";
 import { canonicalPath } from "../../infra/fs/canonical-path.js";
 import { agentHome } from "../agent-homes.js";
+import { rolloutDayDirs } from "./codex-rollout-days.js";
 
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const ROLLOUT_RE = /^rollout-.*\.jsonl$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const WATCH_POLL_MS = 1000;
-const WATCH_MAX_WAIT_MS = 30 * 60 * 1000;
 
 export interface CodexSessionMeta {
   id: string;
@@ -55,18 +54,6 @@ export async function readSessionMeta(rolloutFile: string): Promise<CodexSession
   }
 }
 
-function dayDir(root: string, when: Date): string {
-  const month = String(when.getMonth() + 1).padStart(2, "0");
-  const day = String(when.getDate()).padStart(2, "0");
-  return path.join(root, String(when.getFullYear()), month, day);
-}
-
-// Only today + yesterday can hold a session spawned "now" (covers a spawn racing midnight),
-// so watching never walks the whole history.
-function recentDayDirs(root: string, now: Date): string[] {
-  return [dayDir(root, now), dayDir(root, new Date(now.getTime() - ONE_DAY_MS))];
-}
-
 function listRolloutsIn(dir: string): string[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
@@ -74,8 +61,8 @@ function listRolloutsIn(dir: string): string[] {
     .map((name) => path.join(dir, name));
 }
 
-export function listRecentRollouts(root: string, now: Date = new Date()): string[] {
-  return recentDayDirs(root, now).flatMap(listRolloutsIn);
+export function listRecentRollouts(root: string, now: Date = new Date(), startedAt: Date = now): string[] {
+  return rolloutDayDirs(root, now, startedAt).flatMap(listRolloutsIn);
 }
 
 // The rollout files that exist BEFORE spawning codex; a file that appears after is this
@@ -104,9 +91,40 @@ interface RolloutMeta extends CodexSessionMeta {
 const sameDir = (recorded: string | null | undefined, cwd: string | null): boolean =>
   cwd === null || (!!recorded && canonicalPath(recorded) === canonicalPath(cwd));
 
-export async function pickFreshSession(root: string, before: Set<string>, cwd: string | null, claimed?: Set<string>): Promise<RolloutMeta | null> {
-  const candidates = listRecentRollouts(root).filter((file) => !before.has(file) && !claimed?.has(file));
-  const read = await Promise.all(candidates.map(async (file) => ({ file, meta: await readSessionMeta(file) })));
+/** What one watcher carries between polls: the day it started, and every meta it has already read. */
+export interface FreshScan {
+  startedAt: Date;
+  metaCache: Map<string, CodexSessionMeta>;
+}
+
+// A rollout's first line never changes once written, so a watcher that runs for the cell's whole
+// life reads each foreign file once instead of once a poll. A file not carrying its meta yet is not
+// kept: its first line may still be on its way.
+async function cachedMeta(file: string, scan: FreshScan | undefined): Promise<CodexSessionMeta | null> {
+  const known = scan?.metaCache.get(file);
+  if (known) return known;
+  const meta = await readSessionMeta(file);
+  if (meta) scan?.metaCache.set(file, meta);
+  return meta;
+}
+
+// The day folders roll as the watch runs, so a file kept from a folder no longer listed is dropped
+// rather than held for the cell's life.
+function forgetUnlisted(scan: FreshScan, candidates: readonly string[]): void {
+  const listed = new Set(candidates);
+  [...scan.metaCache.keys()].filter((file) => !listed.has(file)).forEach((file) => scan.metaCache.delete(file));
+}
+
+export async function pickFreshSession(
+  root: string,
+  before: Set<string>,
+  cwd: string | null,
+  claimed?: Set<string>,
+  scan?: FreshScan,
+): Promise<RolloutMeta | null> {
+  const candidates = listRecentRollouts(root, new Date(), scan?.startedAt).filter((file) => !before.has(file) && !claimed?.has(file));
+  if (scan) forgetUnlisted(scan, candidates);
+  const read = await Promise.all(candidates.map(async (file) => ({ file, meta: await cachedMeta(file, scan) })));
   // Everything from here to the claim runs in ONE synchronous block, and the `claimed` filter is
   // re-applied rather than trusted from before the await. Reading the meta used to be synchronous,
   // so selecting and claiming could not be interleaved; with the read awaited, two watchers polling
@@ -133,20 +151,22 @@ const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 
 // codex persists a session's rollout only AFTER its first user turn (like claude's transcript),
 // so we watch for the whole session — not just at spawn — until the rollout appears, then read
-// its minted id. Stops early when the session is gone (isCancelled) so it can't outlive the pty.
+// its minted id. Stops when the session is gone (isCancelled) so it can't outlive the pty. No
+// deadline unless one is asked for: a first prompt can come hours after the cell opened.
 export async function watchForCodexSession(
   root: string,
   before: Set<string>,
   opts: { cwd?: string | null; pollMs?: number; maxWaitMs?: number; isCancelled?: () => boolean; claimed?: Set<string> } = {},
 ): Promise<RolloutMeta | null> {
   const pollMs = opts.pollMs ?? WATCH_POLL_MS;
-  const deadline = Date.now() + (opts.maxWaitMs ?? WATCH_MAX_WAIT_MS);
+  const deadline = opts.maxWaitMs === undefined ? Infinity : Date.now() + opts.maxWaitMs;
   const isCancelled = opts.isCancelled ?? (() => false);
   const cwd = opts.cwd ?? null;
-  let result = await pickFreshSession(root, before, cwd, opts.claimed);
+  const scan: FreshScan = { startedAt: new Date(), metaCache: new Map() };
+  let result = await pickFreshSession(root, before, cwd, opts.claimed, scan);
   while (!result && Date.now() < deadline && !isCancelled()) {
     await delay(pollMs);
-    result = await pickFreshSession(root, before, cwd, opts.claimed);
+    result = await pickFreshSession(root, before, cwd, opts.claimed, scan);
   }
   // The claim is made by `pickFreshSession`, synchronously with the selection (#1533, and see the
   // note there on why the await made that necessary). What is left here is releasing it: the read

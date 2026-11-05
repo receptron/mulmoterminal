@@ -36,10 +36,11 @@ const activityDepsFor = (sessionId: string, entry: PtyEntry, deps: SpawnDeps) =>
 
 export function createCodexSpawner(deps: SpawnDeps) {
   // codex persists its rollout only after the first user turn, so watch a FRESH session's lifetime
-  // (stop once its pty is gone) and capture the minted id so a later cold reconnect can
+  // (stop once ITS pty is gone — the watch has no deadline, so a respawn under the same id must not
+  // keep it alive) and capture the minted id so a later cold reconnect can
   // `codex resume <id>`. Attribution is unambiguous-only (see pickFreshSession).
   function captureCodexRollout(sessionId: string, entry: PtyEntry, root: string, before: Set<string>, cwd: string): void {
-    watchForCodexSession(root, before, { cwd, claimed: claimedCodexRollouts, isCancelled: () => !ptys.has(sessionId) })
+    watchForCodexSession(root, before, { cwd, claimed: claimedCodexRollouts, isCancelled: () => ptys.get(sessionId) !== entry })
       .then((meta) => {
         if (!meta) return;
         claimedCodexRollouts.add(meta.file);

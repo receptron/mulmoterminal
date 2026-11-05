@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -16,15 +16,12 @@ const UUID_A = "019f251d-001c-7542-b13e-9a627effce52";
 const UUID_B = "019db01d-aaa3-7ba2-b597-b29a7fca488f";
 
 const pad = (n: number): string => String(n).padStart(2, "0");
-const todayDir = (root: string): string => {
-  const d = new Date();
-  return path.join(root, String(d.getFullYear()), pad(d.getMonth() + 1), pad(d.getDate()));
-};
+const dayDirOf = (root: string, d: Date): string => path.join(root, String(d.getFullYear()), pad(d.getMonth() + 1), pad(d.getDate()));
+const todayDir = (root: string): string => dayDirOf(root, new Date());
 const metaLine = (id: string, cwd: string | null): string =>
   JSON.stringify({ timestamp: "t", type: "session_meta", payload: { id, cwd, originator: "codex-tui", source: "cli" } });
 
-function writeRollout(root: string, id: string, cwd: string | null, extraLines: string[] = []): string {
-  const dir = todayDir(root);
+function writeRollout(root: string, id: string, cwd: string | null, extraLines: string[] = [], dir = todayDir(root)): string {
   mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `rollout-x-${id}.jsonl`);
   writeFileSync(file, [metaLine(id, cwd), ...extraLines].join("\n") + "\n");
@@ -216,5 +213,102 @@ describe("watchForCodexSession", () => {
     const found = await watchForCodexSession(root, before, { pollMs: 10, maxWaitMs: 500, cwd: "/work", claimed });
     expect(found?.id).toBe(UUID_A);
     expect(claimed.has(file)).toBe(true);
+  });
+});
+
+describe("watchForCodexSession over a long wait", () => {
+  const ONE_SECOND_MS = 1000;
+  const ONE_MINUTE_MS = 60 * ONE_SECOND_MS;
+  const ONE_DAY_MS = 24 * 60 * ONE_MINUTE_MS;
+  let root: string;
+  beforeEach(() => {
+    root = mkdtempSync(path.join(tmpdir(), "mt-codex-"));
+    vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+    vi.setSystemTime(new Date(2026, 10, 5, 22, 40));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("still catches a first prompt that comes after thirty minutes", async () => {
+    const before = snapshotSessions(root);
+    let settled = false;
+    const watching = watchForCodexSession(root, before, { cwd: "/work" }).finally(() => (settled = true));
+    await vi.advanceTimersByTimeAsync(32 * ONE_MINUTE_MS);
+    expect(settled).toBe(false);
+    writeRollout(root, UUID_A, "/work");
+    await vi.advanceTimersByTimeAsync(ONE_SECOND_MS);
+    expect((await watching)?.id).toBe(UUID_A);
+  });
+
+  it("finds the rollout in the folder of the day the cell started, days later", async () => {
+    const startDir = todayDir(root);
+    const before = snapshotSessions(root);
+    const watching = watchForCodexSession(root, before, { cwd: "/work", pollMs: ONE_MINUTE_MS, maxWaitMs: 3 * ONE_DAY_MS });
+    await vi.advanceTimersByTimeAsync(2 * ONE_DAY_MS);
+    writeRollout(root, UUID_A, "/work", [], startDir);
+    await vi.advanceTimersByTimeAsync(ONE_DAY_MS);
+    expect((await watching)?.id).toBe(UUID_A);
+  });
+
+  it("stops when the session goes, however long it has waited", async () => {
+    const before = snapshotSessions(root);
+    let alive = true;
+    const watching = watchForCodexSession(root, before, { cwd: "/work", pollMs: ONE_MINUTE_MS, isCancelled: () => !alive });
+    await vi.advanceTimersByTimeAsync(2 * ONE_DAY_MS);
+    alive = false;
+    await vi.advanceTimersByTimeAsync(ONE_MINUTE_MS);
+    expect(await watching).toBeNull();
+  });
+});
+
+describe("pickFreshSession with a scan", () => {
+  let root: string;
+  beforeEach(() => {
+    root = mkdtempSync(path.join(tmpdir(), "mt-codex-"));
+  });
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("keeps the meta of a fresh rollout that is not this session's", async () => {
+    const before = snapshotSessions(root);
+    const foreign = writeRollout(root, UUID_A, "/other");
+    const scan = { startedAt: new Date(), metaCache: new Map() };
+    expect(await pickFreshSession(root, before, "/work", undefined, scan)).toBeNull();
+    expect(scan.metaCache.get(foreign)).toEqual({ id: UUID_A, cwd: "/other" });
+  });
+
+  it("decides from the kept meta on a later poll", async () => {
+    const before = snapshotSessions(root);
+    const file = writeRollout(root, UUID_A, "/other");
+    const scan = { startedAt: new Date(), metaCache: new Map() };
+    await pickFreshSession(root, before, "/work", undefined, scan);
+    writeFileSync(file, metaLine(UUID_A, "/work") + "\n");
+    expect(await pickFreshSession(root, before, "/work", undefined, scan)).toBeNull();
+  });
+
+  it("drops a kept meta once its file is no longer listed", async () => {
+    const before = snapshotSessions(root);
+    const foreign = writeRollout(root, UUID_A, "/other");
+    const scan = { startedAt: new Date(), metaCache: new Map() };
+    await pickFreshSession(root, before, "/work", undefined, scan);
+    rmSync(foreign);
+    await pickFreshSession(root, before, "/work", undefined, scan);
+    expect(scan.metaCache.has(foreign)).toBe(false);
+  });
+
+  it("does not keep a rollout whose first line is not written yet", async () => {
+    const before = snapshotSessions(root);
+    const dir = todayDir(root);
+    mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `rollout-x-${UUID_A}.jsonl`);
+    writeFileSync(file, "");
+    const scan = { startedAt: new Date(), metaCache: new Map() };
+    expect(await pickFreshSession(root, before, "/work", undefined, scan)).toBeNull();
+    expect(scan.metaCache.has(file)).toBe(false);
+    writeFileSync(file, metaLine(UUID_A, "/work") + "\n");
+    expect((await pickFreshSession(root, before, "/work", undefined, scan))?.id).toBe(UUID_A);
   });
 });
