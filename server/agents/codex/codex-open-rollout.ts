@@ -2,7 +2,8 @@
 // (#3283). codex keeps its own rollout open for as long as the process lives, idle between turns
 // included (measured on codex-cli 0.156.1), so this is the conversation the process is writing, not
 // a guess among the rollouts in the same directory (#1533). Exactly one, or nothing.
-import path from "node:path";
+// POSIX paths on purpose: the open files come from lsof, which exists only on macOS and Linux.
+import { posix as path } from "node:path";
 
 const ROLLOUT_NAME = /^rollout-.*\.jsonl$/;
 

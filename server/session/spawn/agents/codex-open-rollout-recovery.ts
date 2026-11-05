@@ -1,10 +1,11 @@
 // Finding the rollout a reattached codex is writing when the cell's mapping is gone (#3283): the
-// session's tmux panes, every process under them, and the one rollout those processes hold open.
+// session's tmux panes, every process under them, and the one rollout those processes hold open for
+// writing — a reader such as `tail` is not the conversation's writer.
 // The listings are injected so the walk is tested without tmux or lsof; the rule is pickOpenRollout.
 import { canonicalPath } from "../../../infra/fs/canonical-path.js";
 import { tmuxPanePidsBySessionAsync } from "../../../infra/process/tmux.js";
 import { listProcessRows, type ProcessRow } from "../../../infra/process/process-list.js";
-import { openFilesOf } from "../../../infra/process/open-files.js";
+import { writableFilesOf } from "../../../infra/process/open-files.js";
 import { childrenByParent, processTree } from "../../list/session-cpu.js";
 import { pickOpenRollout } from "../../../agents/codex/codex-open-rollout.js";
 
@@ -18,7 +19,7 @@ export interface OpenRolloutProbe {
 const LIVE_PROBE: OpenRolloutProbe = {
   listPanePids: tmuxPanePidsBySessionAsync,
   listProcesses: listProcessRows,
-  openFiles: openFilesOf,
+  openFiles: writableFilesOf,
   canonical: canonicalPath,
 };
 

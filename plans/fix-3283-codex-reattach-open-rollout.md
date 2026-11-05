@@ -11,21 +11,24 @@ found, so the cell's working state and finished-turn notice never came back.
 
 Picking among existing rollouts by cwd is the mis-attribution #1533 forbids. The running codex
 process is the evidence: measured on codex-cli 0.156.1, it holds its own rollout open for the life
-of the process, idle between turns included, and two codex processes on one `CODEX_HOME` and cwd
-each hold a different file.
+of the process, idle between turns included, read-write (`lsof` access `u`), and two codex
+processes on one `CODEX_HOME` and cwd each hold a different file.
 
 ## Change
 
 - `server/agents/codex/codex-open-rollout.ts`: `pickOpenRollout` (pure) — the one rollout of this
   session's root among open paths, re-spelled under the root as the server lists it (lsof prints
   the resolved path). Two distinct rollouts, or one claimed by another cell: nothing.
-- `server/infra/process/open-files.ts`: one `lsof -F n` call with a timeout; null when lsof cannot
-  answer.
+- `server/infra/process/open-files.ts`: one `lsof -F an` call with a timeout, keeping only files
+  held for writing (a reader such as `tail` is not the writer); any non-zero exit, a timeout or a
+  truncated listing included, is "cannot tell".
 - `server/session/spawn/agents/codex-open-rollout-recovery.ts`: the session's tmux panes, the
   process tree under them (`processTree`, `childrenByParent` from session-cpu), their open files.
   Listings injected.
-- `spawn-codex.ts`: the unmapped reattach branch first tries to adopt the open rollout — claimed,
-  recorded, tailed from the end with the open turn restored, as a mapped reattach. No adoption (no
+- `spawn-codex.ts`: the unmapped reattach branch first tries to adopt the open rollout — claimed
+  and recorded; a rollout that existed before the snapshot is tailed from the end with the open turn
+  restored, as a mapped reattach, and one created since is read whole, as the watcher would. A
+  conversation the log maps to another session is refused. No adoption (no
   first turn yet, ambiguous, claimed meanwhile, the pty replaced, or a probe failure) falls back to
   the appear-watcher with the original snapshot, so a first rollout still appearing is still found.
 

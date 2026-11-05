@@ -32,6 +32,8 @@ const mocks = vi.hoisted(() => ({
   rollouts: new Map<string, { sessionId: string; conversationId: string; cwd: string; startedAt: number }>(),
   // What the reattach probe finds open in the survivor's process tree (#3283), and how it answers.
   openRollout: null as string | null,
+  // The rollouts that existed when the spawn took its snapshot.
+  before: [] as string[],
   probe: null as (() => Promise<string | null>) | null,
 }));
 
@@ -58,7 +60,7 @@ vi.mock("../../../../../server/session/pty/pty-spawn.js", () => ({
 vi.mock("../../../../../server/agents/codex/codex-session.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../../../server/agents/codex/codex-session.js")>()),
   codexSessionsRoot: () => "/codex-root",
-  snapshotSessions: () => new Set<string>(),
+  snapshotSessions: () => new Set<string>(mocks.before),
   watchForCodexSession: vi.fn((_root: string, _before: Set<string>, opts: { isCancelled?: () => boolean }) => {
     mocks.watcherRuns += 1;
     mocks.watcherCancelled = opts.isCancelled ?? null;
@@ -117,6 +119,7 @@ describe("createCodexSpawner", () => {
     mocks.rollouts.clear();
     mocks.openRollout = null;
     mocks.probe = null;
+    mocks.before = [];
     claimedCodexRollouts.clear();
   });
 
@@ -188,12 +191,32 @@ describe("createCodexSpawner", () => {
 
     it("adopts the rollout the survivor holds open, records it, and runs no watcher", async () => {
       mocks.openRollout = OPEN_ROLLOUT;
+      mocks.before = [OPEN_ROLLOUT];
       spawn()(SID, null, null, "/w", false);
       await settle();
       expect(mocks.tracked).toEqual([{ sessionId: SID, file: OPEN_ROLLOUT, mode: { startAtEnd: true, restoreOpenTurn: true } }]);
       expect(mocks.remembered).toEqual([{ sessionId: SID, conversationId: OPEN_ID, cwd: "/w" }]);
       expect(claimedCodexRollouts.has(OPEN_ROLLOUT)).toBe(true);
       expect(mocks.watcherRuns).toBe(0);
+    });
+
+    // Created after the snapshot: its first turn just happened, and tailing from the end would miss it.
+    it("reads a rollout created since the snapshot from the start", async () => {
+      mocks.openRollout = OPEN_ROLLOUT;
+      spawn()(SID, null, null, "/w", false);
+      await settle();
+      expect(mocks.tracked).toEqual([{ sessionId: SID, file: OPEN_ROLLOUT, mode: { startAtEnd: false } }]);
+    });
+
+    it("refuses a conversation the log maps to another session, and watches instead", async () => {
+      mocks.openRollout = OPEN_ROLLOUT;
+      mocks.before = [OPEN_ROLLOUT];
+      mocks.rollouts.set("other", { sessionId: "other", conversationId: OPEN_ID, cwd: "/w", startedAt: 1 });
+      spawn()(SID, null, null, "/w", false);
+      await settle();
+      expect(mocks.tracked).toEqual([]);
+      expect(mocks.remembered).toEqual([]);
+      expect(mocks.watcherRuns).toBe(1);
     });
 
     it("leaves a rollout claimed while the probe ran, and watches instead", async () => {
