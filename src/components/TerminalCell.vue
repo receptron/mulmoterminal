@@ -96,6 +96,7 @@ import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
 import { shouldCloseEndedCell } from "../../common/endedCellClose";
 import { canStartTalk } from "./cellTalkStart";
+import { connView } from "../composables/useTerminalConnections";
 import type { SessionExit } from "../composables/serverMessage";
 
 // How long a handoff failure stays on the cell before it clears itself.
@@ -705,11 +706,9 @@ const askMenuMaxH = ref<number | null>(null);
 function refreshAskTargets() {
   askTargets.value = handoffTargets(`cell-${props.uid}`, props.home);
 }
-// Set by the session's own end and cleared by the next connection, which every launch, resume and
-// restart makes through `connectKey`.
-const sessionEnded = ref(false);
-watch(connectKey, () => (sessionEnded.value = false));
-const talkStartable = computed(() => canStartTalk({ sessionId: sessionId.value, sessionEnded: sessionEnded.value }));
+// Read from the slot, not kept here: the slot outlives this component, which the trip into and out of
+// a collection pane remounts.
+const talkStartable = computed(() => canStartTalk({ sessionId: sessionId.value, sessionEnded: connView.get(`cell-${props.uid}`)?.sessionEnded ?? false }));
 const talkAvailable = computed(() => talkStartable.value && askTargets.value.length > 0);
 
 function openAskMenu() {
@@ -1061,7 +1060,6 @@ defineExpose({ close });
 function onTerminalExit(exitCode: number | null, session: SessionExit) {
   // A kept cell has no agent either, so an exchange or table it started must stop typing into the others.
   if (session.sessionEnded) {
-    sessionEnded.value = true;
     exchangeStop = true;
     tableStop = true;
   }

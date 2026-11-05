@@ -18,16 +18,23 @@ transcript (still readable) and submits it into the live partner cell.
 ## Design
 
 - `canStartTalk({ sessionId, sessionEnded })` in `src/components/cellTalkStart.ts`, a pure rule.
-- `TerminalCell` keeps `sessionEnded`: set by an `exit` frame whose `sessionEnded` is true (not a
-  lost client), cleared on every `connectKey` change — launch, resume and restart all reconnect
-  through it.
+- **The mark lives on the slot**, in its `connView` state, not in `TerminalCell`: the slot outlives
+  the component, and the trip into and out of a collection pane remounts the cell without replaying
+  the exit. `applySessionExit` (`connViewFrames.ts`) sets it from an `exit` frame whose `ended` is
+  true; a lost client leaves it alone.
+- **Only the server's `session` frame clears it** (`applySessionStart`). A restart bumping
+  `connectKey` is not yet a session that started, so Talk stays off until the new process is up — and
+  stays off if it never comes up. The replay `attach` does on remount is not a frame and clears
+  nothing.
 - `talkAvailable`, `exchangeWith` and `startTable` all ask the rule, so a panel opened before the end
   cannot start anything either.
 
 ## Verification
 
-- Unit: `canStartTalk` both ways.
-- Component: no talk row after the end; the row stays on a lost client; neither an exchange nor a
-  table starts from a panel opened before the end; a restart brings the row back.
-- Each component case fails on the previous `TerminalCell.vue`; removing the `connectKey` reset
-  fails the restart case.
+- Unit: `canStartTalk` both ways; `applySessionExit` / `applySessionStart`.
+- Connection manager with a fake socket: an ended exit sets it, a lost client does not, a session
+  frame clears it, and it survives detach + attach. Removing either wiring line fails a case.
+- Component: no talk row after the end; the row stays on a lost client; a live exchange still starts;
+  neither an exchange nor a table starts from a panel opened before the end; a cell mounted on an
+  ended slot offers no row; a session on the slot brings it back. Four of these fail on the previous
+  `TerminalCell.vue`.

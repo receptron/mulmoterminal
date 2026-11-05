@@ -304,7 +304,7 @@ describe("TerminalGrid (page renderer)", () => {
     };
     // The attention item is offered only while the cell's socket is open, so each test states it.
     const setSlot = (uid: number, status: "connected" | "disconnected") =>
-      connView.set(`cell-${uid}`, { status, serverCwd: null, inCopyMode: false, heatLevel: 0, heatFinales: 0 });
+      connView.set(`cell-${uid}`, { status, serverCwd: null, inCopyMode: false, heatLevel: 0, heatFinales: 0, sessionEnded: false });
     beforeEach(() => {
       sendAttention.mockClear();
       setSlot(0, "connected");

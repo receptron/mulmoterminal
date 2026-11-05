@@ -30,7 +30,7 @@ const TerminalScrollSection = (await import("../../../src/components/settings/Te
 
 const SLOT = "copy-mode-banner-switch";
 const bannerCount = (inCopyMode: boolean) => {
-  connView.set(SLOT, { status: "connected", serverCwd: "/w", inCopyMode, heatLevel: 0, heatFinales: 0 });
+  connView.set(SLOT, { status: "connected", serverCwd: "/w", inCopyMode, heatLevel: 0, heatFinales: 0, sessionEnded: false });
   const wrapper = shallowMount(Terminal, {
     props: { sessionId: "s1", connectKey: 0, cwd: "/w", persistKey: SLOT },
     global: { stubs: { teleport: true } },

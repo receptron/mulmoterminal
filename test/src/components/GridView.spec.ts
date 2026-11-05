@@ -635,7 +635,9 @@ describe("GridView keyboard shortcuts (#829)", () => {
   it("mark-unread marks the enlarged cell, or the focused one un-zoomed", async () => {
     attentionSent.length = 0;
     const w = await mountShortcutGrid(4, {}, { ...DEFAULT_KEYMAP, "mark-unread": "F5" });
-    [1, 2].forEach((uid) => connView.set(`cell-${uid}`, { status: "connected", serverCwd: "/w", inCopyMode: false, heatLevel: 0, heatFinales: 0 }));
+    [1, 2].forEach((uid) =>
+      connView.set(`cell-${uid}`, { status: "connected", serverCwd: "/w", inCopyMode: false, heatLevel: 0, heatFinales: 0, sessionEnded: false }),
+    );
     gridOf(w).vm.$emit("focus-cell", 2);
     await flushPromises();
     await press("F5");
