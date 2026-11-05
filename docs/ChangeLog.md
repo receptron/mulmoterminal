@@ -8,6 +8,18 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@12.1.1 — 2026-11-06
+
+> **Setup guide:** [12.1.1 — A Codex cell keeps reporting when it is working](https://receptron.github.io/mulmoterminal/guide/en/v12.1.1.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v12.1.1.html))
+
+### Watch for a fresh codex rollout until the cell ends, not for thirty minutes (#3284)
+
+Fixes #3282. codex writes its rollout only on the first prompt, and `watchForCodexSession` gave up after thirty minutes, so a cell whose first prompt came later was never mapped and its working/waiting dots and turn-complete notice stayed dead. The watch now has no deadline unless a caller asks for one, and ends with ITS pty (`ptys.get(sessionId) !== entry`), so a cell respawned under the same id does not keep the old watcher. `rolloutDayDirs` (`codex-rollout-days.ts`) adds the day the watch started to today and yesterday, because codex fixes a rollout's folder at session start. Each watcher caches the session meta of rollouts it has read (`FreshScan.metaCache`) so an unrelated fresh rollout is not re-read every second for the cell's life.
+
+### A reattached codex with no mapping adopts the rollout it holds open (#3285)
+
+Fixes #3283. After a server restart, a codex cell with no entry in `codex-rollouts.jsonl` only ran the appear-watcher, which ignores rollouts that existed before its snapshot, so a rollout already written was never found again. The unmapped reattach branch now asks the running codex: the session's tmux panes, the process tree under them, and `lsof -F an` for the files they hold open for writing (codex holds its own rollout read-write for its whole life, measured on codex-cli 0.156.1). `pickOpenRollout` (`codex-open-rollout.ts`, pure) adopts only exactly one rollout under the session's sessions root that no other cell has claimed; a conversation the log maps to another session is refused, and any `lsof` failure, timeout or truncated listing adopts nothing. An adopted rollout is always tailed from the end with the open turn restored, as a mapped reattach, so no finished turn is announced again. Otherwise the appear-watcher runs as before. psmux is untouched.
+
 ## mulmoterminal@12.1.0 — 2026-11-05
 
 > **Setup guide:** [12.1.0 — A shorter roster, a roster you can fold, and a crashed cell that stays](https://receptron.github.io/mulmoterminal/guide/en/v12.1.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v12.1.0.html))

@@ -4,7 +4,7 @@ nav_title: 全機能リスト
 layout: default
 parent: 日本語
 nav_order: 6.5
-as_of: 12.1.0
+as_of: 12.1.1
 description: MulmoTerminal のいまある機能を、入った版つきで領域ごとに一行ずつ並べた一覧（9.1.0 時点）。
 ---
 
