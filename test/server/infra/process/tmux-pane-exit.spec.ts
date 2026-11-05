@@ -76,7 +76,7 @@ describe("paneExitRecordingArgs", () => {
 
 describe.skipIf(!hasTmux)("the recording against a real tmux", () => {
   const POLL_MS = 50;
-  // Generous: a loaded CI runner once took longer than 5s here, which tmux 3.4 never did locally.
+  // Generous: a loaded CI runner once outran a shorter wait, which tmux 3.4 never did locally.
   const POLL_LIMIT = 200;
   let dir = "";
   let socket = "";
