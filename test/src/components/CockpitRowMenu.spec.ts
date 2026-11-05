@@ -11,6 +11,9 @@ interface MenuProps {
   parkable: boolean;
   parked: boolean;
   at?: MenuPoint | null;
+  roster?: "open" | "collapsed";
+  rosterOnly?: boolean;
+  hideTrigger?: boolean;
 }
 const BASE: MenuProps = { canUp: true, canDown: true, reorderable: true, attention: "unread", parkable: true, parked: false };
 
@@ -191,6 +194,41 @@ describe("the horizontal axis", () => {
   it("keeps up and down for the roster", async () => {
     const w = await openFromKebab();
     expect(item("reorder-up").text()).toContain("Move up");
+    w.unmount();
+  });
+
+  // #3271. The roster-wide item leads, above the row's own actions, and the filmstrip has none.
+  it("leads with collapse in the roster, offers expand once collapsed, and nothing in the filmstrip", async () => {
+    let w = await openFromKebab({ roster: "open" });
+    expect(itemIds()).toEqual(["row-roster-toggle", "row-mark-unread", "reorder-up", "reorder-down", "row-park", "row-close"]);
+    await item("row-roster-toggle").trigger("click");
+    expect(w.emitted("roster")).toEqual([[true]]);
+    expect(menuOpen()).toBe(false);
+    w.unmount();
+
+    w = await openFromKebab({ roster: "collapsed" });
+    await item("row-roster-toggle").trigger("click");
+    expect(w.emitted("roster")).toEqual([[false]]);
+    w.unmount();
+
+    w = await openFromKebab({ axis: "horizontal" });
+    expect(has("row-roster-toggle")).toBe(false);
+    w.unmount();
+  });
+
+  it("offers only the roster item when it belongs to no row", async () => {
+    const w = await openFromKebab({ roster: "collapsed", rosterOnly: true });
+    expect(itemIds()).toEqual(["row-roster-toggle"]);
+    expect(document.querySelector(`${PANEL} [role="separator"]`)).toBeNull();
+    w.unmount();
+  });
+
+  it("has no ⋮ when told to hide it, and still opens at a right-click's point", async () => {
+    const w = mountMenu({ roster: "collapsed", hideTrigger: true });
+    expect(w.find('[data-testid="cockpit-row-menu"]').exists()).toBe(false);
+    await w.setProps({ at: { top: 10, left: 10 } });
+    expect(menuOpen()).toBe(true);
+    expect(has("row-roster-toggle")).toBe(true);
     w.unmount();
   });
 });

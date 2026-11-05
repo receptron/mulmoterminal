@@ -300,6 +300,12 @@ everyone else is doing and how far along it is — this is the main screen for r
 
 ![The cockpit roster — a summary list of every session on the left, one agent enlarged on the right](../images/cockpit-roster.png)
 
+**Folding the roster.** When the terminal needs the width, choose **Collapse the roster** at the top of any
+row's ⋮ menu. The roster becomes a narrow rail with one status dot per session, in the same order and with the
+same rings: amber for waiting on you, green for finished. Hover a dot for the session's name, click it to
+enlarge that session, and right-click it for that row's menu. **Expand the roster** is at the top of that menu,
+and of the one ⋮ at the top of the rail. The fold is remembered by this browser, like the roster's width.
+
 The **Show list roster / Show thumbnail strip** button in the top-right corner switches between the roster and the **filmstrip** (a thumbnail
 strip; click a thumbnail's header margin to switch cells). A thumbnail's header shows its directory, a **⋮** menu — the roster row's: mark
 unread / read, move left / right, set aside, close — and a close button. **Restore** returns to the grid.

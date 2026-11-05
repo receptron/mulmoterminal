@@ -4,6 +4,7 @@ import { blueprintsKo } from "./blueprints/ko";
 import { tipsKo } from "./tips/ko";
 import { commandPaletteKo } from "./commandPalette/ko";
 import { terminalCopyModeKo } from "./terminalCopyMode/ko";
+import { rowMenuKo } from "./rowMenu/ko";
 import { focusModeKo } from "./focusMode/ko";
 import { fileHistoryKo } from "./fileHistory/ko";
 import { filesRecentKo } from "./filesRecent/ko";
@@ -609,20 +610,7 @@ export const ko: Messages = {
     },
   },
   usageView: usageViewKo,
-  rowMenu: {
-    trigger: "이 터미널 작업",
-    title: "작업",
-    markUnread: "읽지 않음으로 표시",
-    markUnreadHint: "확인 대기 색을 다시 표시합니다",
-    markRead: "읽음으로 표시",
-    moveUp: "위로 이동",
-    moveDown: "아래로 이동",
-    moveLeft: "왼쪽으로 이동",
-    moveRight: "오른쪽으로 이동",
-    setAside: "옆으로 치우기",
-    wake: "깨우기",
-    close: "닫기",
-  },
+  rowMenu: rowMenuKo,
   fileOutline: {
     button: "개요",
     tip: "이 파일의 제목(선택하면 그곳으로 이동)",

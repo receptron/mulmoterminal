@@ -16,6 +16,7 @@ import { HOVER_TIP_ID, useHoverTipAnchor } from "../composables/useHoverTip";
 import { phaseDisplay, WORK_WORD, type PrPhase, type WorkPhase } from "./rosterPhase";
 import { textTip } from "./tipContent";
 import { ROSTER_STATUS_KEY, type AttentionStatus } from "./attentionStatus";
+import { STATUS_DOT_CLASS } from "./statusDot";
 import AgentMark from "./AgentMark.vue";
 import { isTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
 
@@ -42,10 +43,7 @@ const props = withDefaults(
 );
 
 const { t } = useI18n();
-// Hardcoded, token-less roster hues — come through as arbitrary utilities; fill + text paired.
-// `done` is the exception: it names --done, the one green every view paints a finished turn with
-// (#1307), so it cannot drift from the cell's ring or the row's edge.
-const DOT_CLASS: Record<AttentionStatus, string> = { working: "bg-[#4a9eff]", done: "bg-done", blocked: "bg-[#f59e0b]", idle: "bg-[#666]" };
+// The badge's hues pair fill and text; the dot's live in statusDot.ts, shared with the rail.
 const BADGE_CLASS: Record<AttentionStatus, string> = {
   working: "bg-[#4a9eff] text-[#04121f]",
   done: "bg-done text-[#04120a]",
@@ -97,7 +95,7 @@ const barStyle = computed(() => headerStyleFor(props.headerColor, props.headerTe
   >
     <!-- Leads the bar, ahead of the status dot — the browser-tab position (see TerminalCell). -->
     <DirIcon :src="iconUrl" />
-    <span data-testid="cockpit-dot" class="h-2 w-2 flex-none rounded-full" :class="DOT_CLASS[status]" aria-hidden="true" />
+    <span data-testid="cockpit-dot" class="h-2 w-2 flex-none rounded-full" :class="STATUS_DOT_CLASS[status]" aria-hidden="true" />
     <!-- Same place as the cell header's, so a row and its cell read as the same session. -->
     <CollectionMark :collection="collection" />
     <span data-testid="cockpit-badge" class="flex-none rounded-full px-1.5 py-px text-[10px] font-bold" :class="BADGE_CLASS[status]">{{ badgeWord }}</span>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-// The ⋮ action menu on a cockpit roster row (#707, #2299). Top: mark unread / read. Middle: move
+// The ⋮ action menu on a cockpit roster row (#707, #2299). Top: collapse / expand the roster (in
+// the roster only), then mark unread / read. Middle: move
 // up / down, in manual sort only. Bottom: set aside, close. Unread and close sit at opposite ends
 // on purpose — a slip onto the neighbouring item must not end a session.
 //
@@ -10,6 +11,11 @@
 // it (the fixed panel would otherwise detach from its row). Open, it takes the focus for its first
 // item and the arrow keys walk the items as in the other menus (#3257); closed, the focus goes back
 // to the ⋮.
+//
+// In the roster it also carries the one roster-wide item, collapse / expand (#3271), below the
+// row's own actions' divider. On the collapsed rail the same menu opens from a dot's right-click
+// (`hideTrigger`, since a ⋮ per dot would double the rail's width) and from one ⋮ at the rail's top
+// (`rosterOnly`, which has no row to act on).
 import { ref, watch, nextTick, onBeforeUnmount, useTemplateRef } from "vue";
 import { useI18n } from "vue-i18n";
 import { fitMenu, type AttentionAction, type MenuPoint } from "./rowMenu";
@@ -27,12 +33,20 @@ const props = defineProps<{
   /** Which way the list runs: the roster is a column, the filmstrip a row, and "up" in a row of
    *  thumbnails would name a direction the cells do not move in. */
   axis?: "vertical" | "horizontal";
+  /** The roster's own state, which picks the item that flips it; absent outside the roster. */
+  roster?: "open" | "collapsed";
+  /** Only the roster item: the rail's top ⋮ belongs to no row. */
+  rosterOnly?: boolean;
+  /** Open only through `at`: a rail dot has no room for a ⋮. */
+  hideTrigger?: boolean;
 }>();
 const emit = defineEmits<{
   move: [dir: -1 | 1];
   attention: [waiting: boolean];
   park: [on: boolean];
   close: [];
+  /** Collapse the roster to its rail (true) or open it back up (false). */
+  roster: [collapsed: boolean];
   /** The menu closed, so a pending `at` can be dropped. */
   dismissed: [];
 }>();
@@ -119,6 +133,7 @@ onBeforeUnmount(close);
 <template>
   <div class="relative flex-none" @click.stop>
     <button
+      v-if="!hideTrigger"
       ref="trigger"
       type="button"
       data-testid="cockpit-row-menu"
@@ -144,41 +159,50 @@ onBeforeUnmount(close);
         @contextmenu.prevent
         @keydown="onMenuKeydown"
       >
-        <template v-if="attention">
-          <button
-            v-if="attention === 'unread'"
-            type="button"
-            role="menuitem"
-            data-testid="row-mark-unread"
-            :class="ITEM_CLASS"
-            :data-tip="t('rowMenu.markUnreadHint')"
-            @click="pick(() => emit('attention', true))"
-          >
-            <span :class="ICON_CLASS" aria-hidden="true">mark_chat_unread</span> {{ t("rowMenu.markUnread") }}
+        <template v-if="roster">
+          <button type="button" role="menuitem" data-testid="row-roster-toggle" :class="ITEM_CLASS" @click="pick(() => emit('roster', roster === 'open'))">
+            <span :class="ICON_CLASS" aria-hidden="true">{{ roster === "open" ? "left_panel_close" : "left_panel_open" }}</span>
+            {{ roster === "open" ? t("rowMenu.collapseRoster") : t("rowMenu.expandRoster") }}
           </button>
-          <button v-else type="button" role="menuitem" data-testid="row-mark-read" :class="ITEM_CLASS" @click="pick(() => emit('attention', false))">
-            <span :class="ICON_CLASS" aria-hidden="true">mark_chat_read</span> {{ t("rowMenu.markRead") }}
-          </button>
-          <div :class="DIVIDER_CLASS" role="separator" />
+          <div v-if="!rosterOnly" :class="DIVIDER_CLASS" role="separator" />
         </template>
-        <template v-if="reorderable">
-          <button type="button" role="menuitem" data-testid="reorder-up" :class="ITEM_CLASS" :disabled="!canUp" @click="pick(() => emit('move', -1))">
-            <span :class="ICON_CLASS" aria-hidden="true">{{ axis === "horizontal" ? "arrow_back" : "arrow_upward" }}</span>
-            {{ axis === "horizontal" ? t("rowMenu.moveLeft") : t("rowMenu.moveUp") }}
+        <template v-if="!rosterOnly">
+          <template v-if="attention">
+            <button
+              v-if="attention === 'unread'"
+              type="button"
+              role="menuitem"
+              data-testid="row-mark-unread"
+              :class="ITEM_CLASS"
+              :data-tip="t('rowMenu.markUnreadHint')"
+              @click="pick(() => emit('attention', true))"
+            >
+              <span :class="ICON_CLASS" aria-hidden="true">mark_chat_unread</span> {{ t("rowMenu.markUnread") }}
+            </button>
+            <button v-else type="button" role="menuitem" data-testid="row-mark-read" :class="ITEM_CLASS" @click="pick(() => emit('attention', false))">
+              <span :class="ICON_CLASS" aria-hidden="true">mark_chat_read</span> {{ t("rowMenu.markRead") }}
+            </button>
+            <div :class="DIVIDER_CLASS" role="separator" />
+          </template>
+          <template v-if="reorderable">
+            <button type="button" role="menuitem" data-testid="reorder-up" :class="ITEM_CLASS" :disabled="!canUp" @click="pick(() => emit('move', -1))">
+              <span :class="ICON_CLASS" aria-hidden="true">{{ axis === "horizontal" ? "arrow_back" : "arrow_upward" }}</span>
+              {{ axis === "horizontal" ? t("rowMenu.moveLeft") : t("rowMenu.moveUp") }}
+            </button>
+            <button type="button" role="menuitem" data-testid="reorder-down" :class="ITEM_CLASS" :disabled="!canDown" @click="pick(() => emit('move', 1))">
+              <span :class="ICON_CLASS" aria-hidden="true">{{ axis === "horizontal" ? "arrow_forward" : "arrow_downward" }}</span>
+              {{ axis === "horizontal" ? t("rowMenu.moveRight") : t("rowMenu.moveDown") }}
+            </button>
+            <div :class="DIVIDER_CLASS" role="separator" />
+          </template>
+          <button v-if="parkable" type="button" role="menuitem" data-testid="row-park" :class="ITEM_CLASS" @click="pick(() => emit('park', !parked))">
+            <span :class="ICON_CLASS" aria-hidden="true">hotel</span>
+            {{ parked ? t("rowMenu.wake") : t("rowMenu.setAside") }}
           </button>
-          <button type="button" role="menuitem" data-testid="reorder-down" :class="ITEM_CLASS" :disabled="!canDown" @click="pick(() => emit('move', 1))">
-            <span :class="ICON_CLASS" aria-hidden="true">{{ axis === "horizontal" ? "arrow_forward" : "arrow_downward" }}</span>
-            {{ axis === "horizontal" ? t("rowMenu.moveRight") : t("rowMenu.moveDown") }}
+          <button type="button" role="menuitem" data-testid="row-close" :class="CLOSE_ITEM_CLASS" @click="pick(() => emit('close'))">
+            <span class="material-symbols-outlined w-3.5 text-center" aria-hidden="true">power_settings_new</span> {{ t("rowMenu.close") }}
           </button>
-          <div :class="DIVIDER_CLASS" role="separator" />
         </template>
-        <button v-if="parkable" type="button" role="menuitem" data-testid="row-park" :class="ITEM_CLASS" @click="pick(() => emit('park', !parked))">
-          <span :class="ICON_CLASS" aria-hidden="true">hotel</span>
-          {{ parked ? t("rowMenu.wake") : t("rowMenu.setAside") }}
-        </button>
-        <button type="button" role="menuitem" data-testid="row-close" :class="CLOSE_ITEM_CLASS" @click="pick(() => emit('close'))">
-          <span class="material-symbols-outlined w-3.5 text-center" aria-hidden="true">power_settings_new</span> {{ t("rowMenu.close") }}
-        </button>
       </div>
     </Teleport>
   </div>
