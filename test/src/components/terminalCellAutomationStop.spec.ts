@@ -14,7 +14,7 @@ vi.mock("../../../src/components/Terminal.vue", () => ({
   default: {
     name: "TerminalView",
     props: ["sessionId", "connectKey", "cwd", "hideHeader"],
-    emits: ["session", "cwd"],
+    emits: ["session", "cwd", "exit"],
     template: '<div class="stub-term"><slot v-if="!hideHeader" name="header-lead" /><slot v-if="!hideHeader" name="header-actions" /></div>',
     methods: {
       terminate() {},
@@ -63,18 +63,23 @@ const mountCell = () =>
     },
   });
 
+async function mountWithRunningTable() {
+  globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({}) })) as unknown as typeof fetch;
+  const w = mountCell();
+  await flushPromises();
+
+  await w.find('[data-testid="cell-tools-btn"]').trigger("click");
+  document.body.querySelector<HTMLButtonElement>('[data-testid="cell-pane-menu-talk"]')?.click();
+  await flushPromises();
+  await w.find('[data-testid="round-table-seat"]').setValue(true);
+  await w.find('[data-testid="round-table-start"]').trigger("click");
+  await flushPromises();
+  return w;
+}
+
 describe("closing a cell stops its automation", () => {
   it("flips the round table's abort signal on close, not only on unmount", async () => {
-    globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({}) })) as unknown as typeof fetch;
-    const w = mountCell();
-    await flushPromises();
-
-    await w.find('[data-testid="cell-tools-btn"]').trigger("click");
-    document.body.querySelector<HTMLButtonElement>('[data-testid="cell-pane-menu-talk"]')?.click();
-    await flushPromises();
-    await w.find('[data-testid="round-table-seat"]').setValue(true);
-    await w.find('[data-testid="round-table-start"]').trigger("click");
-    await flushPromises();
+    const w = await mountWithRunningTable();
 
     expect(abortSignal).not.toBeNull();
     expect(abortSignal?.()).toBe(false); // the table is running
@@ -85,5 +90,23 @@ describe("closing a cell stops its automation", () => {
     // The loop reads this before every submit, so a true here is what stops it typing into the
     // cells that are still open.
     expect(abortSignal?.()).toBe(true);
+  });
+});
+
+// A crashed agent keeps its cell (#3272), so no close runs — but its session is over all the same.
+describe("an ended session stops its automation even when the cell stays", () => {
+  it.each([
+    { name: "the agent crashed", exitCode: 137, sessionEnded: true, stops: true },
+    { name: "only the tmux client was lost", exitCode: 0, sessionEnded: false, stops: false },
+  ])("$name → stopped: $stops", async ({ exitCode, sessionEnded, stops }) => {
+    const w = await mountWithRunningTable();
+    expect(abortSignal?.()).toBe(false);
+
+    w.findComponent({ name: "TerminalView" }).vm.$emit("exit", exitCode, { sessionEnded, lifetimeMs: 60_000, reattached: false });
+    await flushPromises();
+
+    expect(w.emitted("close")).toBeUndefined();
+    expect(abortSignal?.()).toBe(stops);
+    w.unmount();
   });
 });

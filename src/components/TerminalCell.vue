@@ -1053,6 +1053,11 @@ defineExpose({ close });
 // An agent that ended on its own (`/exit`, Ctrl+C) takes its cell with it (#3049), through the same
 // teardown as the close button so the cell lands in the reopen list. A crash stays (#3272).
 function onTerminalExit(exitCode: number | null, session: SessionExit) {
+  // A kept cell has no agent either, so an exchange or table it started must stop typing into the others.
+  if (session.sessionEnded) {
+    exchangeStop = true;
+    tableStop = true;
+  }
   if (shouldCloseEndedCell({ ...session, exitCode, worktreeCell: isWorktreeCell.value })) teardown();
 }
 
