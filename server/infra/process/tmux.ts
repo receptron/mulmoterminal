@@ -6,7 +6,7 @@
 // Isolation: we use our OWN tmux server (SERVER_SOCKET: `-L mulmoterminal` on the account's own
 // home, `mulmoterminal-<hash>` on an overridden HOME) and config file, so none of this touches the
 // user's own tmux sessions, keybindings, or status bar.
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 // The bind port, to tell OUR leaked PORT from the user's own (see isOwnPort). config/ is
@@ -20,6 +20,7 @@ import { isPsmuxVersion, psmuxConfLine, psmuxGlobalOptions, psmuxVersionOf, psmu
 import { writeFileAtomicSync } from "../../files/atomic-write.js";
 import { TMUX_PREFIX_DEFAULT, staleSendPrefixKeys, tmuxPrefixCommands } from "../../../common/tmuxPrefix.js";
 import { liveServerFrom, type LiveTmuxServer } from "./tmuxLiveServer.js";
+import { PANE_EXIT_DIR_SEGMENTS, SESSION_AGENT_ENV, paneExitWrapped } from "./tmux-pane-exit.js";
 
 // Per HOME, so a server started on another one never sweeps or reconfigures this one's sessions (#3039).
 const SERVER_SOCKET = `mulmoterminal${HOME_SCOPE_SUFFIX}`;
@@ -398,9 +399,56 @@ export const tmuxPaneTarget = (id: string): string => `${tmuxSessionTarget(id)}:
 // our own xterm.js, which is always UTF-8. pty-env.ts supplies a LANG for everything else in
 // the session, but only where the environment named no locale at all — `-u` also covers a
 // machine that explicitly names a non-UTF-8 one.
-export function tmuxNewSessionArgs(id: string, file: string, args: string[], cwd: string, env: Readonly<Record<string, string>> = {}): string[] {
+//
+// `recordExit` starts the program under the exit recorder (see tmux-pane-exit.ts). Not for psmux,
+// whose panes are started by Windows with no `/bin/sh` to run it.
+export function tmuxNewSessionArgs(
+  id: string,
+  file: string,
+  args: string[],
+  cwd: string,
+  env: Readonly<Record<string, string>> = {},
+  options: { recordExit?: boolean } = {},
+): string[] {
   const envArgs = Object.entries(env).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
-  return ["-L", SERVER_SOCKET, "-f", CONF_FILE, "-u", "new-session", "-A", "-s", tmuxSessionName(id), "-c", cwd, ...envArgs, "--", file, ...args];
+  const pane = options.recordExit && !cachedPsmux ? paneExitWrapped(tmuxSessionName(id), file, args) : { file, args };
+  return ["-L", SERVER_SOCKET, "-f", CONF_FILE, "-u", "new-session", "-A", "-s", tmuxSessionName(id), "-c", cwd, ...envArgs, "--", pane.file, ...pane.args];
+}
+
+const paneExitRecordFile = (id: string): string => path.join(os.homedir(), ...PANE_EXIT_DIR_SEGMENTS, tmuxSessionName(id));
+
+/** Drop a record left by an earlier session under the same id — one that died while no server was
+ *  here to read it. Ids are reused (a restart, a reopen), and a new session that ends unrecorded
+ *  would otherwise be reported with the old one's code. */
+export function tmuxDiscardPaneExitRecord(id: string): void {
+  try {
+    rmSync(paneExitRecordFile(id), { force: true });
+  } catch {
+    // Unreadable is as good as absent: the take that follows fails the same way and falls back.
+  }
+}
+
+/** The `status:signal` a recording session left as its pane died, consumed so the file does not
+ *  outlive the session it describes. Null when nothing was recorded or it could not be read — the
+ *  caller then falls back to the client's code, which is what it had before. */
+export function tmuxTakePaneExitRecord(id: string): string | null {
+  if (cachedPsmux) return null;
+  const file = paneExitRecordFile(id);
+  try {
+    const record = readFileSync(file, "utf8");
+    rmSync(file, { force: true });
+    return record;
+  } catch {
+    return null;
+  }
+}
+
+/** The agent a session was started for, as its own environment records it — null for a session
+ *  from before that was recorded, or for a shell. */
+export function tmuxSessionAgent(id: string): string | null {
+  const r = tmux(["show-environment", "-t", tmuxSessionTarget(id), SESSION_AGENT_ENV]);
+  if (r.status !== 0) return null;
+  return parseTmuxEnvironment(r.stdout).get(SESSION_AGENT_ENV) ?? null;
 }
 
 // Is a persistent session for this id currently alive in our tmux server?

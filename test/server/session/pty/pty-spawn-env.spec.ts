@@ -9,6 +9,7 @@ import path from "node:path";
 const spawn = vi.fn(() => ({ pid: 1, onData: vi.fn(), onExit: vi.fn(), write: vi.fn(), kill: vi.fn() }));
 vi.mock("node-pty", () => ({ default: { spawn: (...args: unknown[]) => spawn(...(args as [])) } }));
 const scrub = vi.fn();
+const discardRecord = vi.fn();
 // `importOriginal` keeps the module's PURE parts real — the PORT rule the spawn asks for
 // (tmuxClientUnsetNames/ownPortFacts) is the thing under test below, and a hand-written stand-in
 // would pin the stand-in. Only what shells out to tmux is replaced.
@@ -25,6 +26,7 @@ vi.mock("../../../../server/infra/process/tmux.js", async (importOriginal) => ({
     return ["new-session", id, ...Object.entries(env).flatMap(([key, value]) => ["-e", `${key}=${value}`]), file, ...args];
   },
   tmuxScrubEnvNames: (names: readonly string[]) => scrub(names),
+  tmuxDiscardPaneExitRecord: (id: string) => discardRecord(id),
 }));
 
 // The Windows resolution of the PANE's program (#3201) is a pure rule with its own spec; what is
@@ -77,6 +79,7 @@ const cwdOf = (call: number = 0): string => (spawn.mock.calls[call] as unknown a
 beforeEach(() => {
   spawn.mockClear();
   scrub.mockClear();
+  discardRecord.mockClear();
   paneLaunchAsked.mockClear();
   paneLaunch = null;
   newSessionProgram = null;
@@ -519,5 +522,34 @@ describe("ptySpawn — the preflight a caller hands it", () => {
     ptySpawn(S1, "claude", [], EXISTING_CWD, true, { preflight });
     expect(preflight).not.toHaveBeenCalled();
     expect(spawn).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Ids are reused (a restart, a reopen), so a record an earlier session left while no server was here
+// to read it must not be read for the next one (#3272). Only a NEW recording session clears it: on
+// an attach the record, if any, is the running session's own.
+describe("ptySpawn — a stale pane-exit record", () => {
+  beforeEach(() => {
+    tmuxOn = true;
+    liveTmuxSessions.clear();
+  });
+
+  afterEach(() => {
+    tmuxOn = false;
+    liveTmuxSessions.clear();
+  });
+
+  it("is dropped before a new recording session starts", () => {
+    ptySpawn(S1, "claude", [], EXISTING_CWD, true, { recordExit: true });
+    expect(discardRecord).toHaveBeenCalledWith(S1);
+  });
+
+  it.each([
+    { name: "the session is attached, not started", live: true, recordExit: true },
+    { name: "the spawn does not record", live: false, recordExit: false },
+  ])("is left alone when $name", ({ live, recordExit }) => {
+    if (live) liveTmuxSessions.add(S1);
+    ptySpawn(S1, "claude", [], EXISTING_CWD, true, { recordExit });
+    expect(discardRecord).not.toHaveBeenCalled();
   });
 });

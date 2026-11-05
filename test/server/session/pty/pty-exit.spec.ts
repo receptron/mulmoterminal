@@ -10,7 +10,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { STARTUP_WINDOW_MS } from "../../../../common/endedCellClose";
 
 const hasSession = vi.fn<(id: string) => boolean>(() => false);
-vi.mock("../../../../server/infra/process/tmux.js", () => ({ tmuxHasSession: (id: string) => hasSession(id) }));
+const takeRecord = vi.fn<(id: string) => string | null>(() => null);
+vi.mock("../../../../server/infra/process/tmux.js", () => ({
+  tmuxHasSession: (id: string) => hasSession(id),
+  tmuxTakePaneExitRecord: (id: string) => takeRecord(id),
+}));
 
 // The real one appends to ~/.mulmoterminal, which a spec must not write.
 const placed = vi.hoisted(() => ({ ids: [] as string[] }));
@@ -38,6 +42,8 @@ beforeEach(() => {
   // a shared mock carries the previous test's calls into it.
   hasSession.mockClear();
   hasSession.mockReturnValue(false);
+  takeRecord.mockClear();
+  takeRecord.mockReturnValue(null);
 });
 
 describe("ptyExitDisposition", () => {
@@ -256,5 +262,76 @@ describe("reportPtyExit — a session the close route ended", () => {
     closed.closeRequested = true;
     reportPtyExit("s-1", closed, { exitCode: 0, signal: undefined, lifetimeMs: STARTUP_WINDOW_MS }, vi.fn());
     expect(placed.ids).toEqual(["s-1"]);
+  });
+});
+
+// Under tmux our pty is the client and always exits 0; the recorder wrote what the program did (#3272).
+describe("reportPtyExit — the program's own exit code", () => {
+  const registerRecording = () => {
+    const frames: Array<{ exitCode?: unknown }> = [];
+    const socket = { readyState: 1, OPEN: 1, send: (d: string) => frames.push(JSON.parse(d)), close: () => undefined };
+    return { exiting: register("s-1", true, socket), frames };
+  };
+
+  it.each([
+    { record: "137", exitCode: 137 },
+    { record: "139", exitCode: 139 },
+    { record: "1", exitCode: 1 },
+  ])("sends $exitCode for a record of $record and keeps the session adoptable", ({ record, exitCode }) => {
+    const { exiting, frames } = registerRecording();
+    takeRecord.mockReturnValue(record);
+
+    expect(reportPtyExit("s-1", exiting, EXIT, vi.fn())).toBe("reap");
+
+    expect(takeRecord).toHaveBeenCalledWith("s-1");
+    expect(frames[0]?.exitCode).toBe(exitCode);
+    expect(placed.ids).toEqual([]);
+  });
+
+  it("closes as before for a recorded clean exit", () => {
+    const { exiting, frames } = registerRecording();
+    takeRecord.mockReturnValue("0");
+
+    reportPtyExit("s-1", exiting, EXIT, vi.fn());
+
+    expect(frames[0]?.exitCode).toBe(0);
+    expect(placed.ids).toEqual(["s-1"]);
+  });
+
+  // On a host without tmux a launcher or bot job reports its shell's real code, which is its last
+  // command's — it must still be decided as before, not kept as a crash.
+  it("decides a shell pty's unplaced mark without its exit code", () => {
+    const exiting = register("s-1", false);
+    exiting.agent = "shell";
+
+    reportPtyExit("s-1", exiting, { ...EXIT, exitCode: 1 }, vi.fn());
+
+    expect(placed.ids).toEqual(["s-1"]);
+  });
+
+  // No record (a shell cell, psmux, a session from before) or one it cannot read: the client's code.
+  it.each([null, "", "garbage", "-1"])("keeps the client's code when the record is %j", (record) => {
+    const { exiting, frames } = registerRecording();
+    takeRecord.mockReturnValue(record);
+
+    reportPtyExit("s-1", exiting, { ...EXIT, exitCode: 5 }, vi.fn());
+
+    expect(frames[0]?.exitCode).toBe(5);
+  });
+
+  // A kept session is still running and a gone one was ended by us: neither has anything to read,
+  // and a non-tmux pty's code is already the program's.
+  it.each([
+    { name: "only the client died", tmux: true, tmuxAlive: true, registered: true },
+    { name: "the close route already reaped it", tmux: true, tmuxAlive: false, registered: false },
+    { name: "the pty was never tmux-backed", tmux: false, tmuxAlive: false, registered: true },
+  ])("does not ask tmux when $name", ({ tmux, tmuxAlive, registered }) => {
+    const exiting = registered ? register("s-1", tmux) : entryOf(tmux);
+    hasSession.mockReturnValue(tmuxAlive);
+    takeRecord.mockReturnValue("137");
+
+    reportPtyExit("s-1", exiting, EXIT, vi.fn());
+
+    expect(takeRecord).not.toHaveBeenCalled();
   });
 });

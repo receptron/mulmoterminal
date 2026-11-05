@@ -76,6 +76,7 @@ const TARGET_BUILDER_FOR: Record<string, string> = {
   "has-session": "tmuxSessionTarget",
   "kill-session": "tmuxSessionTarget",
   "list-clients": "tmuxSessionTarget",
+  "show-environment": "tmuxSessionTarget",
   "capture-pane": "tmuxPaneTarget",
   "display-message": "tmuxPaneTarget",
   "send-keys": "tmuxPaneTarget",
@@ -139,6 +140,15 @@ describe("tmuxNewSessionArgs", () => {
   it("forces UTF-8 output with -u, before `new-session`", () => {
     expect(args.indexOf("-u")).toBeGreaterThan(-1);
     expect(args.indexOf("-u")).toBeLessThan(args.indexOf("new-session"));
+  });
+
+  // #3272: agents only. A shell's status is its last command's, so it must not be recorded.
+  it("starts the program under the exit recorder only when asked, its argv intact", () => {
+    expect(args).not.toContain("/bin/sh");
+    const recording = tmuxNewSessionArgs("id1", "/bin/zsh", ["-lc", "exec codex"], "/proj", {}, { recordExit: true });
+    const dashdash = recording.indexOf("--");
+    expect(recording[dashdash + 1]).toBe("/bin/sh");
+    expect(recording.slice(-4)).toEqual(["mt-id1", "/bin/zsh", "-lc", "exec codex"]);
   });
 
   it("passes no -e when there is no per-session environment", () => {
