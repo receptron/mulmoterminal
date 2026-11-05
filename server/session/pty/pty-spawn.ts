@@ -102,6 +102,9 @@ export interface PtySpawnEnv {
    *  what the binary check resolves against too. Skipped on a reattach, where nothing is started —
    *  the same answer the binary check uses, so tmux is asked once. */
   preflight?: (childEnv: NodeJS.ProcessEnv) => void;
+  /** Have tmux record how the program ended (#3272). Agents only: a shell's exit status is its last
+   *  command's, so a shell cell closed by `exit` after a failed command would read as a crash. */
+  recordExit?: boolean;
 }
 
 // Would ptySpawn ATTACH to a program that is already running, rather than start a new one?
@@ -266,7 +269,7 @@ export function ptySpawn(
     return {
       term: spawnPty(
         "tmux",
-        tmuxNewSessionArgs(sessionId, pane.file, pane.args, cwd, { ...env, ...pane.env }),
+        tmuxNewSessionArgs(sessionId, pane.file, pane.args, cwd, { ...env, ...pane.env }, { recordExit: options.recordExit === true }),
         TMUX_CLIENT_CWD,
         [...unset, ...tmuxClientUnsetNames(process.env.PORT, ownBindPort())],
         tmuxPsmuxVtInput() ? PSMUX_VT_INPUT_ENV : {},

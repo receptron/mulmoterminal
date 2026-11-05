@@ -141,6 +141,16 @@ describe("tmuxNewSessionArgs", () => {
     expect(args.indexOf("-u")).toBeLessThan(args.indexOf("new-session"));
   });
 
+  // #3272: agents only. A shell's status is its last command's, so it must not be recorded.
+  it("records how the program ended only when asked, chained after the program", () => {
+    expect(args).not.toContain("remain-on-exit");
+    const recording = tmuxNewSessionArgs("id1", "/bin/zsh", ["-lc", "exec codex"], "/proj", {}, { recordExit: true });
+    const dashdash = recording.indexOf("--");
+    expect(recording.slice(dashdash + 1, dashdash + 4)).toEqual(["/bin/zsh", "-lc", "exec codex"]);
+    expect(recording[dashdash + 4]).toBe(";");
+    expect(recording.join(" ")).toContain("@mt-exit-mt-id1");
+  });
+
   it("passes no -e when there is no per-session environment", () => {
     expect(args).not.toContain("-e");
   });

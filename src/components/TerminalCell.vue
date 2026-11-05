@@ -1050,10 +1050,10 @@ async function close() {
 // the close was asked for.
 defineExpose({ close });
 
-// An agent that ended on its own (`/exit`, Ctrl+C, a crash) takes its cell with it (#3049), through
-// the same teardown as the close button so the cell lands in the reopen list.
-function onTerminalExit(_exitCode: number | null, session: SessionExit) {
-  if (shouldCloseEndedCell({ ...session, worktreeCell: isWorktreeCell.value })) teardown();
+// An agent that ended on its own (`/exit`, Ctrl+C) takes its cell with it (#3049), through the same
+// teardown as the close button so the cell lands in the reopen list. A crash stays (#3272).
+function onTerminalExit(exitCode: number | null, session: SessionExit) {
+  if (shouldCloseEndedCell({ ...session, exitCode, worktreeCell: isWorktreeCell.value })) teardown();
 }
 
 // Nothing dismisses the confirmation once the removal has started. The pty is terminated before the

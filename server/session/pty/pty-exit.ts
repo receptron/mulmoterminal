@@ -13,7 +13,9 @@
 import { markSessionPlaced, ptys } from "../registry.js";
 import { shouldCloseEndedCell } from "../../../common/endedCellClose.js";
 import { worktreeLabel } from "../../../common/worktreePath.js";
-import { tmuxHasSession } from "../../infra/process/tmux.js";
+import os from "node:os";
+import { tmuxHasSession, tmuxTakePaneExitRecord } from "../../infra/process/tmux.js";
+import { parsePaneExitRecord } from "../../infra/process/tmux-pane-exit.js";
 import { sendExitAndClose, type PtyExitReport } from "../ws-frames.js";
 import type { PtyEntry } from "../types.js";
 
@@ -78,6 +80,19 @@ function applyPtyExit(sessionId: string, disposition: PtyExitDisposition, reap: 
   }
 }
 
+const SIGNAL_NUMBERS: ReadonlyMap<string, number> = new Map(Object.entries(os.constants.signals));
+
+/** The program's own exit code when tmux recorded one (#3272), else the client's. Asked only on a
+ *  reap: a `keep` is a session still running, and a `gone` was ended by us, not by the program. */
+function programExitCode(sessionId: string, entry: PtyEntry, disposition: PtyExitDisposition, clientExitCode: number): number {
+  if (disposition !== "reap" || !entry.tmux) return clientExitCode;
+  const record = tmuxTakePaneExitRecord(sessionId);
+  const recorded = record === null ? null : parsePaneExitRecord(record, SIGNAL_NUMBERS);
+  if (recorded === null) return clientExitCode;
+  if (recorded !== 0) console.log(`[pty] ${sessionId} program exited ${recorded} (recorded by tmux as ${record}) — keeping its cell`);
+  return recorded;
+}
+
 /** A persistent pty's exit, end to end: decide, tell the browser whether the SESSION ended (only a
  *  reap means that — a `keep` is a lost client, and a cell closing on it would drop a live agent),
  *  then apply. `entry.ws` is read here, at exit time, because a reattach can swap it. */
@@ -88,14 +103,15 @@ export function reportPtyExit(
   reap: (id: string) => void,
 ): PtyExitDisposition {
   const disposition = decidePtyExit(sessionId, entry);
+  const exitCode = programExitCode(sessionId, entry, disposition, exit.exitCode);
   const reattached = !!entry.reattached;
   const sessionEnded = sessionEndedForCell(disposition, !!entry.closeRequested);
-  sendExitAndClose(entry.ws, { ...exit, reattached, ended: sessionEnded });
+  sendExitAndClose(entry.ws, { ...exit, exitCode, reattached, ended: sessionEnded });
   // The cell nobody opened yet (an agent's spawnBackgroundChat with no grid on screen) gets the
   // same answer an open one would: if that cell would have closed itself, no grid should adopt the
   // session later and resume it as a new cell (#3055).
   const worktreeCell = worktreeLabel(entry.cwd) !== null;
-  if (shouldCloseEndedCell({ sessionEnded, lifetimeMs: exit.lifetimeMs, reattached, worktreeCell })) markSessionPlaced(sessionId);
+  if (shouldCloseEndedCell({ sessionEnded, lifetimeMs: exit.lifetimeMs, reattached, worktreeCell, exitCode })) markSessionPlaced(sessionId);
   applyPtyExit(sessionId, disposition, reap);
   return disposition;
 }

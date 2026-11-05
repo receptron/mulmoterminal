@@ -20,6 +20,7 @@ import { isPsmuxVersion, psmuxConfLine, psmuxGlobalOptions, psmuxVersionOf, psmu
 import { writeFileAtomicSync } from "../../files/atomic-write.js";
 import { TMUX_PREFIX_DEFAULT, staleSendPrefixKeys, tmuxPrefixCommands } from "../../../common/tmuxPrefix.js";
 import { liveServerFrom, type LiveTmuxServer } from "./tmuxLiveServer.js";
+import { paneExitOptionName, paneExitRecordingArgs } from "./tmux-pane-exit.js";
 
 // Per HOME, so a server started on another one never sweeps or reconfigures this one's sessions (#3039).
 const SERVER_SOCKET = `mulmoterminal${HOME_SCOPE_SUFFIX}`;
@@ -398,9 +399,33 @@ export const tmuxPaneTarget = (id: string): string => `${tmuxSessionTarget(id)}:
 // our own xterm.js, which is always UTF-8. pty-env.ts supplies a LANG for everything else in
 // the session, but only where the environment named no locale at all — `-u` also covers a
 // machine that explicitly names a non-UTF-8 one.
-export function tmuxNewSessionArgs(id: string, file: string, args: string[], cwd: string, env: Readonly<Record<string, string>> = {}): string[] {
+//
+// `recordExit` chains the pane-exit recording onto the same invocation (see tmux-pane-exit.ts), so
+// it is in place before the program can die. Not for psmux, which has not been measured to run
+// `pane-died`, and whose dead pane would then simply stay.
+export function tmuxNewSessionArgs(
+  id: string,
+  file: string,
+  args: string[],
+  cwd: string,
+  env: Readonly<Record<string, string>> = {},
+  options: { recordExit?: boolean } = {},
+): string[] {
   const envArgs = Object.entries(env).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
-  return ["-L", SERVER_SOCKET, "-f", CONF_FILE, "-u", "new-session", "-A", "-s", tmuxSessionName(id), "-c", cwd, ...envArgs, "--", file, ...args];
+  const recording = options.recordExit && !cachedPsmux ? paneExitRecordingArgs(tmuxSessionName(id)) : [];
+  return ["-L", SERVER_SOCKET, "-f", CONF_FILE, "-u", "new-session", "-A", "-s", tmuxSessionName(id), "-c", cwd, ...envArgs, "--", file, ...args, ...recording];
+}
+
+/** The `status:signal` a recording session left as its pane died, consumed so the option does not
+ *  outlive the session it describes. Null when nothing was recorded. */
+export function tmuxTakePaneExitRecord(id: string): string | null {
+  if (cachedPsmux) return null;
+  const option = paneExitOptionName(tmuxSessionName(id));
+  const shown = tmux(["show-options", "-gqv", option]);
+  const record = shown.status === 0 ? shown.stdout.trim() : "";
+  if (record === "") return null;
+  tmux(["set-option", "-gu", option]);
+  return record;
 }
 
 // Is a persistent session for this id currently alive in our tmux server?

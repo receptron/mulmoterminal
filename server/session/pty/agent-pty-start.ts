@@ -35,7 +35,7 @@ export interface StartedAgentPty {
  *  `withSettingsCleanup`, so a spawn that throws takes those files with it. */
 export function startAgentPty(start: AgentPtyStart): StartedAgentPty {
   const { sessionId, ws, cwd, agent, file, args, spawnEnv, note } = start;
-  const { term, tmux, reattached } = ptySpawn(sessionId, file, args, cwd, true, spawnEnv);
+  const { term, tmux, reattached } = ptySpawn(sessionId, file, args, cwd, true, { ...spawnEnv, recordExit: true });
   const spawnedAtMs = Date.now();
   console.log(ptyStartLine({ agent, pid: term.pid, cwd, tmux, reattached, sessionId, note }));
   const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, reattached, active: false, agent };
