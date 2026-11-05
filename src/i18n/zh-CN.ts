@@ -4,6 +4,7 @@ import { blueprintsZhCN } from "./blueprints/zh-CN";
 import { tipsZhCN } from "./tips/zh-CN";
 import { commandPaletteZhCN } from "./commandPalette/zh-CN";
 import { terminalCopyModeZhCN } from "./terminalCopyMode/zh-CN";
+import { rowMenuZhCN } from "./rowMenu/zh-CN";
 import { focusModeZhCN } from "./focusMode/zh-CN";
 import { fileHistoryZhCN } from "./fileHistory/zh-CN";
 import { filesRecentZhCN } from "./filesRecent/zh-CN";
@@ -595,20 +596,7 @@ export const zhCN: Messages = {
     },
   },
   usageView: usageViewZhCN,
-  rowMenu: {
-    trigger: "此终端的操作",
-    title: "操作",
-    markUnread: "标为未读",
-    markUnreadHint: "重新显示待查看的颜色",
-    markRead: "标为已读",
-    moveUp: "上移",
-    moveDown: "下移",
-    moveLeft: "左移",
-    moveRight: "右移",
-    setAside: "暂放一边",
-    wake: "唤醒",
-    close: "关闭",
-  },
+  rowMenu: rowMenuZhCN,
   fileOutline: {
     button: "大纲",
     tip: "此文件的标题（选择即可跳转）",

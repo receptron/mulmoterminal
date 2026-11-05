@@ -4,6 +4,7 @@ import { blueprintsZhTW } from "./blueprints/zh-TW";
 import { tipsZhTW } from "./tips/zh-TW";
 import { commandPaletteZhTW } from "./commandPalette/zh-TW";
 import { terminalCopyModeZhTW } from "./terminalCopyMode/zh-TW";
+import { rowMenuZhTW } from "./rowMenu/zh-TW";
 import { focusModeZhTW } from "./focusMode/zh-TW";
 import { fileHistoryZhTW } from "./fileHistory/zh-TW";
 import { filesRecentZhTW } from "./filesRecent/zh-TW";
@@ -600,20 +601,7 @@ export const zhTW: Messages = {
     },
   },
   usageView: usageViewZhTW,
-  rowMenu: {
-    trigger: "此終端機的操作",
-    title: "操作",
-    markUnread: "標為未讀",
-    markUnreadHint: "重新顯示待查看的顏色",
-    markRead: "標為已讀",
-    moveUp: "上移",
-    moveDown: "下移",
-    moveLeft: "左移",
-    moveRight: "右移",
-    setAside: "暫放一旁",
-    wake: "喚醒",
-    close: "關閉",
-  },
+  rowMenu: rowMenuZhTW,
   fileOutline: {
     button: "大綱",
     tip: "此檔案的標題（選取即可跳轉）",

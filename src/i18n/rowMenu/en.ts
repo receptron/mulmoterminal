@@ -1,0 +1,17 @@
+export const rowMenuEn = {
+  collapseRoster: "Collapse the roster",
+  expandRoster: "Expand the roster",
+  railItem: "{title}, {status}",
+  trigger: "Actions for this terminal",
+  title: "Actions",
+  markUnread: "Mark unread",
+  markUnreadHint: "Show it as finished again, to come back to it later",
+  markRead: "Mark read",
+  moveUp: "Move up",
+  moveDown: "Move down",
+  moveLeft: "Move left",
+  moveRight: "Move right",
+  setAside: "Set aside",
+  wake: "Wake",
+  close: "Close",
+};

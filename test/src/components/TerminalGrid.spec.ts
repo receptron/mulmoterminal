@@ -365,6 +365,107 @@ describe("TerminalGrid (page renderer)", () => {
     });
   });
 
+  // #3271: the roster folds to a rail of status dots, from any row's menu, and back from the rail's.
+  describe("collapsed roster", () => {
+    const cells = [cell(0, "s0"), cell(1, "s1")];
+    const rows = () => [rosterRow(0, { title: "first" }), rosterRow(1, { status: "blocked", title: "second" })];
+    const railItems = (w: ReturnType<typeof mountCockpit>) => w.findAll('[data-testid="cockpit-rail-item"]');
+    beforeEach(() => localStorage.removeItem("roster_collapsed"));
+    afterEach(() => localStorage.removeItem("roster_collapsed"));
+
+    it("folds from a row's menu into one dot per row, drops the splitter, and remembers it", async () => {
+      const w = mountCockpit(cells, 0, rows());
+      await nextTick();
+      await w.findAll('[data-testid="cockpit-row-menu"]')[1].trigger("click");
+      await menuItem("row-roster-toggle").trigger("click");
+      expect(railItems(w)).toHaveLength(2);
+      expect(w.findAll('[data-testid="cockpit-row"]')).toHaveLength(0);
+      expect(w.find('[data-testid="roster-splitter"]').exists()).toBe(false);
+      expect(localStorage.getItem("roster_collapsed")).toBe("1");
+      w.unmount();
+    });
+
+    it("comes back folded, names each dot, and enlarges the one clicked", async () => {
+      localStorage.setItem("roster_collapsed", "1");
+      const w = mountCockpit(cells, 0, rows());
+      await nextTick();
+      const items = railItems(w);
+      expect(items.map((i) => i.attributes("data-tip"))).toEqual(["first", "second"]);
+      expect(items[1].attributes("aria-label")).toContain("second");
+      // The alert rings are the rows' own, so a waiting session still stands out folded.
+      expect(items[1].classes()).toContain("shadow-[0_0_0_2px_#f59e0b]");
+      await items[1].trigger("click");
+      expect(w.emitted("toggle-expand")?.[0]).toEqual([1]);
+      await items[0].trigger("click"); // already enlarged
+      expect(w.emitted("toggle-expand")).toHaveLength(1);
+      w.unmount();
+    });
+
+    it("unfolds from a dot's right-click menu, which still acts on that row", async () => {
+      localStorage.setItem("roster_collapsed", "1");
+      const w = mountCockpit(cells, 0, rows());
+      await nextTick();
+      await railItems(w)[1].trigger("contextmenu", { clientX: 5, clientY: 5 });
+      await flushPromises();
+      expect(document.querySelector('[data-testid="row-close"]')).not.toBeNull();
+      await menuItem("row-roster-toggle").trigger("click");
+      expect(railItems(w)).toHaveLength(0);
+      expect(w.findAll('[data-testid="cockpit-row"]')).toHaveLength(2);
+      expect(w.find('[data-testid="roster-splitter"]').exists()).toBe(true);
+      expect(localStorage.getItem("roster_collapsed")).toBe("0");
+      w.unmount();
+    });
+
+    // The menu that asked lives in the branch the fold swaps out, so the focus goes to the same
+    // session on the other side rather than falling to <body>.
+    it("hands the focus to the same session's dot on folding, and to its row on unfolding", async () => {
+      const w = mount(TerminalGrid, {
+        attachTo: document.body,
+        props: {
+          cells,
+          expandedUid: 0,
+          listRows: rows(),
+          defaultCwd: "/work",
+          presets: [],
+          launchers: [],
+          home: "/work",
+          openSessionIds: [],
+          openCwds: [],
+          listMode: true,
+        },
+      });
+      await nextTick();
+      await w.findAll('[data-testid="cockpit-row-menu"]')[1].trigger("click");
+      await menuItem("row-roster-toggle").trigger("click");
+      await flushPromises();
+      expect(document.activeElement?.getAttribute("data-testid")).toBe("cockpit-rail-item");
+      expect(document.activeElement?.getAttribute("data-uid")).toBe("1");
+
+      await railItems(w)[1].trigger("contextmenu", { clientX: 5, clientY: 5 });
+      await flushPromises();
+      await menuItem("row-roster-toggle").trigger("click");
+      await flushPromises();
+      expect(document.activeElement?.getAttribute("data-testid")).toBe("cockpit-row");
+      expect(document.activeElement?.getAttribute("data-uid")).toBe("1");
+      w.unmount();
+    });
+
+    it("unfolds from the one ⋮ at the top of the rail, which offers nothing else", async () => {
+      localStorage.setItem("roster_collapsed", "1");
+      const w = mountCockpit(cells, 0, rows());
+      await nextTick();
+      const kebabs = w.findAll('[data-testid="cockpit-row-menu"]');
+      expect(kebabs).toHaveLength(1);
+      await kebabs[0].trigger("click");
+      expect([...document.querySelectorAll('[data-testid="cockpit-row-menu-panel"] [role="menuitem"]')].map((el) => el.getAttribute("data-testid"))).toEqual([
+        "row-roster-toggle",
+      ]);
+      await menuItem("row-roster-toggle").trigger("click");
+      expect(w.findAll('[data-testid="cockpit-row"]')).toHaveLength(2);
+      w.unmount();
+    });
+  });
+
   // #2126: the ⋮ moves a row one step, which is a lot of presses on a long roster. The handle drags
   // it anywhere, and what the drag SHOWS is the list itself re-ordered live. jsdom has no DragEvent
   // and gives every element a zero-sized rect, so the events are built by hand and the rows' own
@@ -1482,6 +1583,27 @@ describe("file pane width restored from storage", () => {
     await flushPromises();
     expect(w.findComponent({ name: "FilesPane" }).attributes("style")).toContain("400px");
   });
+  // #3271. Folded, the roster takes the rail's width, so the pane is clamped against the row the
+  // rail leaves — not against the full roster it would take unfolded.
+  it("clamps against the rail, not the stored roster width, while the roster is folded", async () => {
+    const RAIL = 40;
+    const FOLDED_ROW = STAGE - SEPARATOR - RAIL;
+    Object.defineProperty(window.HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.classList.contains("stage") ? STAGE : FOLDED_ROW;
+      },
+    });
+    localStorage.setItem("roster_collapsed", "1");
+    localStorage.setItem("pane_open_by_session", JSON.stringify({ s1: "files" }));
+    localStorage.setItem("files_pane_width", "2000");
+    const w = mountCockpit([cell(1, "s1", "/proj"), cell(2)], 1, []);
+    await flushPromises();
+    window.dispatchEvent(new Event("resize"));
+    await flushPromises();
+    expect(w.findComponent({ name: "FilesPane" }).attributes("style")).toContain(`${FOLDED_ROW - (SEPARATOR + 1) - 320}px`);
+  });
+
   // The width is shared by every pane, so the clamp is too — not the files pane's alone.
   it("clamps any pane, not only the files pane", async () => {
     localStorage.setItem("pane_open_by_session", JSON.stringify({ s1: "prompts" }));

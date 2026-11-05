@@ -1,0 +1,17 @@
+export const rowMenuKo = {
+  collapseRoster: "목록 접기",
+  expandRoster: "목록 펼치기",
+  railItem: "{title} ({status})",
+  trigger: "이 터미널 작업",
+  title: "작업",
+  markUnread: "읽지 않음으로 표시",
+  markUnreadHint: "확인 대기 색을 다시 표시합니다",
+  markRead: "읽음으로 표시",
+  moveUp: "위로 이동",
+  moveDown: "아래로 이동",
+  moveLeft: "왼쪽으로 이동",
+  moveRight: "오른쪽으로 이동",
+  setAside: "옆으로 치우기",
+  wake: "깨우기",
+  close: "닫기",
+};

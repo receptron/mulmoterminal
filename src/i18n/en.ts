@@ -17,6 +17,7 @@ import { usageViewEn } from "./usageView/en";
 import { tipsEn } from "./tips/en";
 import { commandPaletteEn } from "./commandPalette/en";
 import { terminalCopyModeEn } from "./terminalCopyMode/en";
+import { rowMenuEn } from "./rowMenu/en";
 import { focusModeEn } from "./focusMode/en";
 import { fileHistoryEn } from "./fileHistory/en";
 import { filesRecentEn } from "./filesRecent/en";
@@ -632,20 +633,7 @@ export const en = {
     },
   },
   usageView: usageViewEn,
-  rowMenu: {
-    trigger: "Actions for this terminal",
-    title: "Actions",
-    markUnread: "Mark unread",
-    markUnreadHint: "Show it as finished again, to come back to it later",
-    markRead: "Mark read",
-    moveUp: "Move up",
-    moveDown: "Move down",
-    moveLeft: "Move left",
-    moveRight: "Move right",
-    setAside: "Set aside",
-    wake: "Wake",
-    close: "Close",
-  },
+  rowMenu: rowMenuEn,
   fileOutline: {
     button: "Outline",
     tip: "Headings in this file — pick one to go there",
