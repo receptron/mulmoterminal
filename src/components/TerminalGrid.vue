@@ -1812,7 +1812,7 @@ function onRosterDragLeave(event: DragEvent) {
           role="button"
           :tabindex="0"
           data-testid="cockpit-rail-item"
-          class="grid h-7 shrink-0 cursor-pointer place-items-center rounded-lg border"
+          class="flex h-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border"
           :class="rosterAlertClass(row.status, { expanded: row.uid === expandedUid, blink: rosterBlink, parked: row.parked })"
           :data-tip="row.title"
           :aria-label="t('rowMenu.railItem', { title: row.title, status: t(ROSTER_STATUS_KEY[row.status]) })"
