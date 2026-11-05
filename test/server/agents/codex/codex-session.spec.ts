@@ -289,6 +289,16 @@ describe("pickFreshSession with a scan", () => {
     expect(await pickFreshSession(root, before, "/work", undefined, scan)).toBeNull();
   });
 
+  it("drops a kept meta once its file is no longer listed", async () => {
+    const before = snapshotSessions(root);
+    const foreign = writeRollout(root, UUID_A, "/other");
+    const scan = { startedAt: new Date(), metaCache: new Map() };
+    await pickFreshSession(root, before, "/work", undefined, scan);
+    rmSync(foreign);
+    await pickFreshSession(root, before, "/work", undefined, scan);
+    expect(scan.metaCache.has(foreign)).toBe(false);
+  });
+
   it("does not keep a rollout whose first line is not written yet", async () => {
     const before = snapshotSessions(root);
     const dir = todayDir(root);

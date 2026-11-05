@@ -20,6 +20,9 @@ the deadline was a safety cap that became the bug.
 ## Design
 
 - `maxWaitMs` is optional and absent means "until cancelled". The spawn path passes none.
+- **Cancellation asks for THIS pty, not the id.** `!ptys.has(sessionId)` stays false when the cell is
+  respawned under the same id, which the deadline used to hide; with no deadline the old watcher
+  would run forever. It is `ptys.get(sessionId) !== entry`, as the activity tail already does.
 - **The day folder.** codex fixes the rollout path when the session starts: the reported file was
   named 22:40 and created at 23:12. So a first prompt on a later day writes into the START day's
   folder, which "today and yesterday" stops covering after a day. `rolloutDayDirs` (pure, its own
@@ -27,7 +30,10 @@ the deadline was a safety cap that became the bug.
 - **Polling forever re-reads foreign files.** A rollout that is fresh but not this cell's (another
   directory, ambiguous) used to be re-read each second for thirty minutes; now it would be read for
   the cell's life. The watcher keeps each file's meta once read; the first line never changes, and a
-  file whose meta is not there yet is not kept.
+  file whose meta is not there yet is not kept. An entry whose file is no longer listed (a day
+  folder rolled out of the window) is dropped, so the cache is never larger than the listing.
+- **Antigravity's watcher has the same thirty-minute default** and is left alone: whether agy, like
+  codex, creates its conversation only on the first turn is not established.
 
 ## Verification
 
@@ -35,3 +41,4 @@ the deadline was a safety cap that became the bug.
 - Watcher, with fake timers: still watching past thirty minutes and catching the rollout; catching a
   rollout in the start-day folder two days later; a foreign file read once; cancellation still stops
   it. The first two fail on main.
+- Spawner: the watch reports cancelled once its pty is replaced under the same id.

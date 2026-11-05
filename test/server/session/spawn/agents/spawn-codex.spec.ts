@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   tracked: [] as { sessionId: string; file: string; mode: unknown }[],
   remembered: [] as { sessionId: string; conversationId: string; cwd: string }[],
   watcherRuns: 0,
+  watcherCancelled: null as (() => boolean) | null,
   // The hydrated session -> rollout mapping, as the WS route's awaited hydration leaves it.
   rollouts: new Map<string, { sessionId: string; conversationId: string; cwd: string; startedAt: number }>(),
 }));
@@ -52,8 +53,9 @@ vi.mock("../../../../../server/agents/codex/codex-session.js", async (importOrig
   ...(await importOriginal<typeof import("../../../../../server/agents/codex/codex-session.js")>()),
   codexSessionsRoot: () => "/codex-root",
   snapshotSessions: () => new Set<string>(),
-  watchForCodexSession: vi.fn(() => {
+  watchForCodexSession: vi.fn((_root: string, _before: Set<string>, opts: { isCancelled?: () => boolean }) => {
     mocks.watcherRuns += 1;
+    mocks.watcherCancelled = opts.isCancelled ?? null;
     return new Promise(() => {}); // never resolves — the fresh branch is asserted by the call alone
   }),
 }));
@@ -100,7 +102,19 @@ describe("createCodexSpawner", () => {
     mocks.tracked.length = 0;
     mocks.remembered.length = 0;
     mocks.watcherRuns = 0;
+    mocks.watcherCancelled = null;
     mocks.rollouts.clear();
+  });
+
+  // The watch has no deadline, so it must end with ITS pty: a respawn under the same id is a
+  // different session, and a watcher that only asked whether the id exists would outlive it.
+  it("ends a fresh session's watch when its pty is replaced under the same id", () => {
+    const entry = spawn()(SID, null, null, "/w", false);
+    expect(mocks.watcherCancelled?.()).toBe(false);
+    ptys.set(SID, { ...entry });
+    expect(mocks.watcherCancelled?.()).toBe(true);
+    ptys.delete(SID);
+    expect(mocks.watcherCancelled?.()).toBe(true);
   });
 
   it("watches for a fresh session's rollout to appear, and tails nothing yet", () => {

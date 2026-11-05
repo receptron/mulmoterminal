@@ -108,6 +108,13 @@ async function cachedMeta(file: string, scan: FreshScan | undefined): Promise<Co
   return meta;
 }
 
+// The day folders roll as the watch runs, so a file kept from a folder no longer listed is dropped
+// rather than held for the cell's life.
+function forgetUnlisted(scan: FreshScan, candidates: readonly string[]): void {
+  const listed = new Set(candidates);
+  [...scan.metaCache.keys()].filter((file) => !listed.has(file)).forEach((file) => scan.metaCache.delete(file));
+}
+
 export async function pickFreshSession(
   root: string,
   before: Set<string>,
@@ -116,6 +123,7 @@ export async function pickFreshSession(
   scan?: FreshScan,
 ): Promise<RolloutMeta | null> {
   const candidates = listRecentRollouts(root, new Date(), scan?.startedAt).filter((file) => !before.has(file) && !claimed?.has(file));
+  if (scan) forgetUnlisted(scan, candidates);
   const read = await Promise.all(candidates.map(async (file) => ({ file, meta: await cachedMeta(file, scan) })));
   // Everything from here to the claim runs in ONE synchronous block, and the `claimed` filter is
   // re-applied rather than trusted from before the await. Reading the meta used to be synchronous,
