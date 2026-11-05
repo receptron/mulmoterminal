@@ -148,7 +148,7 @@ describe("tmuxNewSessionArgs", () => {
     const dashdash = recording.indexOf("--");
     expect(recording.slice(dashdash + 1, dashdash + 4)).toEqual(["/bin/zsh", "-lc", "exec codex"]);
     expect(recording[dashdash + 4]).toBe(";");
-    expect(recording.join(" ")).toContain("@mt-exit-mt-id1");
+    expect(recording.join(" ")).toContain('pane-exits"/mt-id1');
   });
 
   it("passes no -e when there is no per-session environment", () => {

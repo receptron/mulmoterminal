@@ -111,7 +111,9 @@ export function reportPtyExit(
   // same answer an open one would: if that cell would have closed itself, no grid should adopt the
   // session later and resume it as a new cell (#3055).
   const worktreeCell = worktreeLabel(entry.cwd) !== null;
-  if (shouldCloseEndedCell({ sessionEnded, lifetimeMs: exit.lifetimeMs, reattached, worktreeCell, exitCode })) markSessionPlaced(sessionId);
+  // A shell's code is its last command's, not a crash, so a launcher or bot job is decided as before.
+  const closeExitCode = entry.agent === "shell" ? null : exitCode;
+  if (shouldCloseEndedCell({ sessionEnded, lifetimeMs: exit.lifetimeMs, reattached, worktreeCell, exitCode: closeExitCode })) markSessionPlaced(sessionId);
   applyPtyExit(sessionId, disposition, reap);
   return disposition;
 }

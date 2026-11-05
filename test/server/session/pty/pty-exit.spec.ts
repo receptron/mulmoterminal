@@ -298,6 +298,17 @@ describe("reportPtyExit — the program's own exit code", () => {
     expect(placed.ids).toEqual(["s-1"]);
   });
 
+  // On a host without tmux a launcher or bot job reports its shell's real code, which is its last
+  // command's — it must still be decided as before, not kept as a crash.
+  it("decides a shell pty's unplaced mark without its exit code", () => {
+    const exiting = register("s-1", false);
+    exiting.agent = "shell";
+
+    reportPtyExit("s-1", exiting, { ...EXIT, exitCode: 1 }, vi.fn());
+
+    expect(placed.ids).toEqual(["s-1"]);
+  });
+
   // No record (a shell cell, psmux, a session from before) or one it cannot read: the client's code.
   it.each([null, "", "garbage", ":nosuchsignal"])("keeps the client's code when the record is %j", (record) => {
     const { exiting, frames } = registerRecording();

@@ -6,7 +6,7 @@
 // Isolation: we use our OWN tmux server (SERVER_SOCKET: `-L mulmoterminal` on the account's own
 // home, `mulmoterminal-<hash>` on an overridden HOME) and config file, so none of this touches the
 // user's own tmux sessions, keybindings, or status bar.
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 // The bind port, to tell OUR leaked PORT from the user's own (see isOwnPort). config/ is
@@ -20,7 +20,7 @@ import { isPsmuxVersion, psmuxConfLine, psmuxGlobalOptions, psmuxVersionOf, psmu
 import { writeFileAtomicSync } from "../../files/atomic-write.js";
 import { TMUX_PREFIX_DEFAULT, staleSendPrefixKeys, tmuxPrefixCommands } from "../../../common/tmuxPrefix.js";
 import { liveServerFrom, type LiveTmuxServer } from "./tmuxLiveServer.js";
-import { paneExitOptionName, paneExitRecordingArgs } from "./tmux-pane-exit.js";
+import { PANE_EXIT_DIR_SEGMENTS, paneExitRecordingArgs } from "./tmux-pane-exit.js";
 
 // Per HOME, so a server started on another one never sweeps or reconfigures this one's sessions (#3039).
 const SERVER_SOCKET = `mulmoterminal${HOME_SCOPE_SUFFIX}`;
@@ -416,16 +416,19 @@ export function tmuxNewSessionArgs(
   return ["-L", SERVER_SOCKET, "-f", CONF_FILE, "-u", "new-session", "-A", "-s", tmuxSessionName(id), "-c", cwd, ...envArgs, "--", file, ...args, ...recording];
 }
 
-/** The `status:signal` a recording session left as its pane died, consumed so the option does not
- *  outlive the session it describes. Null when nothing was recorded. */
+/** The `status:signal` a recording session left as its pane died, consumed so the file does not
+ *  outlive the session it describes. Null when nothing was recorded or it could not be read — the
+ *  caller then falls back to the client's code, which is what it had before. */
 export function tmuxTakePaneExitRecord(id: string): string | null {
   if (cachedPsmux) return null;
-  const option = paneExitOptionName(tmuxSessionName(id));
-  const shown = tmux(["show-options", "-gqv", option]);
-  const record = shown.status === 0 ? shown.stdout.trim() : "";
-  if (record === "") return null;
-  tmux(["set-option", "-gu", option]);
-  return record;
+  const file = path.join(os.homedir(), ...PANE_EXIT_DIR_SEGMENTS, tmuxSessionName(id));
+  try {
+    const record = readFileSync(file, "utf8");
+    rmSync(file, { force: true });
+    return record;
+  } catch {
+    return null;
+  }
 }
 
 // Is a persistent session for this id currently alive in our tmux server?

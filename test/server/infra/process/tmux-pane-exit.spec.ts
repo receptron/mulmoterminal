@@ -5,10 +5,10 @@
 // removed, so the live `-L mulmoterminal` server is never reached. That half is skipped where there
 // is no tmux: what it pins is tmux's own behaviour, which no fake could stand in for.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { paneExitOptionName, paneExitRecordingArgs, parsePaneExitRecord } from "../../../../server/infra/process/tmux-pane-exit";
+import { PANE_EXIT_DIR_SEGMENTS, paneExitRecordingArgs, parsePaneExitRecord } from "../../../../server/infra/process/tmux-pane-exit";
 import { spawnCapture } from "../../../../server/infra/process/spawnCapture";
 
 const SIGNALS: ReadonlyMap<string, number> = new Map(Object.entries(os.constants.signals));
@@ -57,21 +57,18 @@ describe("paneExitRecordingArgs", () => {
   const args = paneExitRecordingArgs("mt-abc");
 
   // Each `;` must be its OWN argument: that is what tmux splits a command list on in argv.
-  it("chains two commands onto whatever precedes it", () => {
+  it("chains two commands onto whatever precedes it, the hook first", () => {
     expect(args[0]).toBe(";");
     expect(args.filter((arg) => arg === ";")).toHaveLength(2);
-    expect(args.slice(1, 5)).toEqual(["set-option", "-w", "remain-on-exit", "on"]);
+    expect(args.slice(1, 3)).toEqual(["set-hook", "pane-died"]);
+    expect(args.slice(-4)).toEqual(["set-option", "-w", "remain-on-exit", "on"]);
   });
 
-  it("records under the session's own option and then kills the pane", () => {
-    const hook = args[args.length - 1];
-    expect(hook).toContain(paneExitOptionName("mt-abc"));
-    expect(hook).toContain("-gqF");
-    expect(hook?.endsWith("; kill-pane")).toBe(true);
-  });
-
-  it("names a user option, which no pane's environment ever receives", () => {
-    expect(paneExitOptionName("mt-abc")).toBe("@mt-exit-mt-abc");
+  it("writes the record under the server's own HOME and then kills the pane", () => {
+    const hook = args[3] ?? "";
+    expect(hook).toContain(`"$HOME/${PANE_EXIT_DIR_SEGMENTS.join("/")}"/mt-abc`);
+    expect(hook).toContain("exit 0");
+    expect(hook.endsWith("; kill-pane")).toBe(true);
   });
 });
 
@@ -80,12 +77,14 @@ describe.skipIf(!hasTmux)("the recording against a real tmux", () => {
   const POLL_LIMIT = 100;
   let dir = "";
   let socket = "";
-  const env = { ...process.env, TMUX: undefined };
-  const tmux = (args: string[]) => spawnCapture("tmux", ["-S", socket, "-f", "/dev/null", ...args], { env });
+  // HOME is the throwaway directory, so the hook's `"$HOME/…"` lands there and nowhere real.
+  const env = () => ({ ...process.env, TMUX: undefined, HOME: dir });
+  const tmux = (args: string[]) => spawnCapture("tmux", ["-S", socket, "-f", "/dev/null", ...args], { env: env() });
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   const start = (name: string, script: string) => tmux(["new-session", "-d", "-s", name, "--", "sh", "-c", script, ...paneExitRecordingArgs(name)]);
   const sessionAlive = (name: string) => tmux(["has-session", "-t", `=${name}`]).status === 0;
-  const recorded = (name: string) => tmux(["show-options", "-gqv", paneExitOptionName(name)]).stdout.trim();
+  const recordFile = (name: string) => path.join(dir, ...PANE_EXIT_DIR_SEGMENTS, name);
+  const recorded = (name: string) => (existsSync(recordFile(name)) ? readFileSync(recordFile(name), "utf8") : "");
 
   const untilEnded = async (name: string): Promise<boolean> => {
     for (let i = 0; i < POLL_LIMIT; i += 1) {
@@ -100,7 +99,6 @@ describe.skipIf(!hasTmux)("the recording against a real tmux", () => {
     // is already long on macOS.
     dir = mkdtempSync(path.join(os.tmpdir(), "mt-x-"));
     socket = path.join(dir, "s");
-    tmux(["new-session", "-d", "-s", "bystander", "sleep 60"]);
   });
 
   afterAll(() => {
@@ -108,23 +106,46 @@ describe.skipIf(!hasTmux)("the recording against a real tmux", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it.each([
-    ["exits-0", "sleep 0.3; exit 0", 0],
-    ["exits-3", "sleep 0.3; exit 3", 3],
-    ["killed", "sleep 0.3; kill -9 $$", 128 + 9],
-    ["segv", "sleep 0.3; kill -SEGV $$", 128 + 11],
-  ])("records %s and still ends the session", async (name, script, code) => {
-    expect(start(name, script).status).toBe(0);
-    expect(await untilEnded(name)).toBe(true);
-    expect(parsePaneExitRecord(recorded(name), SIGNALS)).toBe(code);
+  // First and alone on purpose: when the crashed session is the server's LAST, the server exits with
+  // it, so a record held in tmux itself would be gone before anyone read it.
+  it("survives the server exiting with its last session", async () => {
+    expect(start("alone", "sleep 0.3; kill -9 $$").status).toBe(0);
+    expect(await untilEnded("alone")).toBe(true);
+    expect(tmux(["ls"]).status).not.toBe(0);
+    expect(parsePaneExitRecord(recorded("alone"), SIGNALS)).toBe(128 + 9);
   });
 
-  // Per session: a session started without it must keep tmux's defaults, so a shell cell neither
-  // leaves a dead pane behind nor records anything.
-  it("leaves every other session as it was", () => {
-    expect(tmux(["show-options", "-w", "-v", "-t", "=bystander:", "remain-on-exit"]).stdout.trim()).toBe("");
-    expect(tmux(["show-options", "-g", "-w", "-v", "remain-on-exit"]).stdout.trim()).toBe("off");
-    expect(tmux(["show-hooks", "-g"]).stdout).not.toContain("@mt-exit");
-    expect(recorded("bystander")).toBe("");
+  describe("beside another session", () => {
+    beforeAll(() => {
+      tmux(["new-session", "-d", "-s", "bystander", "sleep 60"]);
+    });
+
+    it.each([
+      ["exits-0", "sleep 0.3; exit 0", 0],
+      ["exits-3", "sleep 0.3; exit 3", 3],
+      ["killed", "sleep 0.3; kill -9 $$", 128 + 9],
+      ["segv", "sleep 0.3; kill -SEGV $$", 128 + 11],
+    ])("records %s and still ends the session", async (name, script, code) => {
+      expect(start(name, script).status).toBe(0);
+      expect(await untilEnded(name)).toBe(true);
+      expect(parsePaneExitRecord(recorded(name), SIGNALS)).toBe(code);
+    });
+
+    // A program can die before the chained commands run. Whatever got recorded, the pane must not
+    // be left dead on screen with the session still alive.
+    it("never leaves a session behind for a program that dies at once", async () => {
+      expect(start("instant", "exit 7").status).toBe(0);
+      expect(await untilEnded("instant")).toBe(true);
+      expect([null, 7]).toContain(parsePaneExitRecord(recorded("instant"), SIGNALS));
+    });
+
+    // Per session: a session started without it must keep tmux's defaults, so a shell cell neither
+    // leaves a dead pane behind nor records anything.
+    it("leaves every other session as it was", () => {
+      expect(tmux(["show-options", "-w", "-v", "-t", "=bystander:", "remain-on-exit"]).stdout.trim()).toBe("");
+      expect(tmux(["show-options", "-g", "-w", "-v", "remain-on-exit"]).stdout.trim()).toBe("off");
+      expect(tmux(["show-hooks", "-g"]).stdout).not.toContain("run-shell");
+      expect(recorded("bystander")).toBe("");
+    });
   });
 });
