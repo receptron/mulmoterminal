@@ -4,7 +4,7 @@ nav_title: Feature list
 layout: default
 parent: English
 nav_order: 6.5
-as_of: 12.0.1
+as_of: 12.1.0
 description: "Every capability MulmoTerminal has today, one line each with the release it arrived in, grouped by area (as of 9.1.0)."
 ---
 
@@ -17,6 +17,8 @@ Every capability MulmoTerminal has as of 9.1.0, one line each, grouped by area. 
 {:toc}
 
 ## Grid and cells
+- The roster folds into a narrow rail of status dots from any row's ⋮ menu: hover a dot for the session's name, click to enlarge it, right-click for its menu; the fold is remembered per browser (v12.1.0)
+- Compact roster rows show only the header and the session's name (`cockpitCompact`, Settings → Waiting rows) (v12.1.0)
 - The panes opened beside a terminal stack: closing the one on screen shows the one it covered, a pane opened again moves to the top, and the stack survives a reload (v11.6.0)
 - A conversation named with Claude Code's /rename shows that name on the cell header, the roster row, the resume list, the command palette and its recently-closed entries; your own note still comes first (v11.6.0)
 - The launch form's resume list has a filter box once it is long: every word you type must be in a title, in any order (v11.6.0)
@@ -24,7 +26,7 @@ Every capability MulmoTerminal has as of 9.1.0, one line each, grouped by area. 
 More: [Basics](basics.html)
 
 - The launch form's Working directory suggests subdirectories once typing pauses, and refuses a directory that does not exist (v10.10.0)
-- A cell whose agent ends on its own (`/exit`, Ctrl+C, a crash) closes itself and is listed under Reopen; a launch failure, a lost connection and a worktree cell keep it (v10.5.0)
+- A cell whose agent ends on its own (`/exit`, Ctrl+C) closes itself and is listed under Reopen; a launch failure, a lost connection and a worktree cell keep it, and since 12.1.0 so does a crash, with its exit code (v10.5.0)
 - A tile's History and Tools menus open their pane to the right of the tiled grid, without enlarging the cell (v10.4.0)
 - The launch directory may start with `~` (v8.5.0)
 - Reopen a recently closed cell beside the current terminal from "Reopen: …" in the command palette; an agent resumes its conversation. The `terminal-reopen` action reopens the newest (v8.2.0)

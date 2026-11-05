@@ -1676,6 +1676,11 @@ Or use the three steppers in **Settings → Waiting rows**.
 - Omit `cockpitLines` entirely and the roster looks exactly as it always has.
 - **Hovering a line shows the full text**, whatever the clamp — raising it saves a hover, it isn't
   the only way to read a long summary.
+- Takes effect after a **tab reload**.
+
+{: .note }
+> This is a **global** setting, not a per-directory one. The roster mixes sessions from every
+> directory, so a per-directory value would leave neighbouring rows disagreeing about their height.
 
 ### Compact rows: the header and the session name only {#cockpit-compact}
 
@@ -1690,11 +1695,6 @@ Each row then keeps its header (status, directory, agent) and **one line naming 
 your memo, else the session's title, else your last prompt — the same name the cell's own header
 shows. The line counts above have nothing to clamp and their steppers are greyed out; they come back
 when you turn it off. Anything that is not a boolean is the default, off.
-- Takes effect after a **tab reload**.
-
-{: .note }
-> This is a **global** setting, not a per-directory one. The roster mixes sessions from every
-> directory, so a per-directory value would leave neighbouring rows disagreeing about their height.
 
 ## A favourite you open all day (`toolbarPins`) {#toolbar-pins}
 

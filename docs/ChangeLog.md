@@ -8,6 +8,26 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@12.1.0 — 2026-11-05
+
+> **Setup guide:** [12.1.0 — A shorter roster, a roster you can fold, and a crashed cell that stays](https://receptron.github.io/mulmoterminal/guide/en/v12.1.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v12.1.0.html))
+
+### Compact roster rows: the header and the session's name only (#3273)
+
+Fixes #3270. `cockpitLines` can lower each roster line to 1 but not remove it, so a row stayed four lines tall. A new top-level boolean `cockpitCompact` (default `false`; a checkbox under Settings → Waiting rows; the `mulmoterminal-config` skill documents it) keeps each row's header and replaces memo, summary, prompt and reply with ONE line, `CockpitRow.title`, built in `rosterRow()` from the cell header's tiers (memo, `/rename` name, AI title, last prompt), then the fallback label. A top-level key rather than a field of `cockpitLines`, because an older version keeps an unknown top-level key when it rewrites config.json but drops an unknown nested field, and because the switch and the steppers then never post over each other. A refused save puts the checkbox back; the steppers are disabled while it is on.
+
+### The cockpit roster folds into a rail of status dots (#3275, #3279)
+
+Fixes #3271. Every roster row's ⋮ menu (and its right-click menu) gains **Collapse the roster** as its first item. Folded, the roster is a narrow rail with one dot per session in roster order, carrying the same alert rings (`rosterAlertClass`); hover names the session, a click or Enter/Space enlarges it, a right-click opens that row's menu, whose first item is **Expand the roster**, as is the one ⋮ at the top of the rail. The fold is per browser (`roster_collapsed` in localStorage), the splitter hides while folded, the file pane's width clamp uses the rail's width, and focus is handed to the matching row or dot across the switch; `CockpitRowMenu` now returns focus to whatever opened it. The status-dot colours moved to `statusDot.ts`, and the row-menu strings to `src/i18n/rowMenu/`. #3279 (fixes #3278, found before release) moved the dots back on screen: each carried the Tailwind utility `grid`, which TerminalGrid's scoped `.stage.zoomed.listmode .grid` parks at `left: -99999px` with the cell grid; a source-level spec now allows that class on the cell grid only.
+
+### A crashed agent's cell stays and shows how it ended (#3274)
+
+Fixes #3272. Under tmux our pty is the tmux client, which exits 0 whatever the agent did, so since #3049 a crash closed its cell exactly like `/exit`. Agent sessions now run under a small `/bin/sh` recorder that writes the agent's exit status to `$HOME/.mulmoterminal/pane-exits/<session>`; the `exit` frame carries that code, and a non-zero exit keeps the cell with the red `[session ended — exit N]` banner (`shouldCloseEndedCell` gains `exitCode`). Clean exits still close. A tmux `remain-on-exit` + `pane-died` approach was tried first and dropped: under load it could leave a dead pane on screen for good. Because the agent now has a parent shell, the session carries `MULMOTERMINAL_SESSION_AGENT` for `agentOfSession`, and process-tree walks include descendants. psmux is untouched.
+
+### A cell whose session ended cannot start a talk (#3277, #3281)
+
+Fixes #3276. A kept cell (a crash, a worktree cell, a launch failure) still offered Talk, and an exchange read the dead session's last turn and submitted it into the live partner. `canStartTalk({ sessionId, sessionEnded })` in `cellTalkStart.ts` is the rule; the mark lives on the terminal's slot (`connView.sessionEnded`), so a remount through the collection pane keeps it. #3281 (fixes #3280) settled when it is set and cleared: an `exit` whose `ended` is true or any `error` sets it (a start that fails after admission sends `error`), and only `output`, which only a running pty sends, clears it. The server's `session` frame no longer does, because the server sends it during admission, before it spawns, which re-enabled Talk on a restart before the new process ran.
+
 ## mulmoterminal@12.0.1 — 2026-11-05
 
 > **Setup guide:** [12.0.1 — A path right after a full-width colon is a link](https://receptron.github.io/mulmoterminal/guide/en/v12.0.1.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v12.0.1.html))
