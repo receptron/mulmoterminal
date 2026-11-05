@@ -26,9 +26,12 @@ processes on one `CODEX_HOME` and cwd each hold a different file.
   process tree under them (`processTree`, `childrenByParent` from session-cpu), their open files.
   Listings injected.
 - `spawn-codex.ts`: the unmapped reattach branch first tries to adopt the open rollout — claimed
-  and recorded; a rollout that existed before the snapshot is tailed from the end with the open turn
-  restored, as a mapped reattach, and one created since is read whole, as the watcher would. A
-  conversation the log maps to another session is refused. No adoption (no
+  and recorded, then tailed from the end with the open turn restored, as a mapped reattach. Never
+  read whole: the snapshot lists only today's and yesterday's folders and codex fixes a rollout's
+  folder at session start, so "not in the snapshot" cannot tell a new rollout from a days-old one,
+  and reading an old one whole announces every finished turn again. The cost is a first turn that
+  starts and ends inside the probe's moment. A conversation the log maps to another session is
+  refused. No adoption (no
   first turn yet, ambiguous, claimed meanwhile, the pty replaced, or a probe failure) falls back to
   the appear-watcher with the original snapshot, so a first rollout still appearing is still found.
 

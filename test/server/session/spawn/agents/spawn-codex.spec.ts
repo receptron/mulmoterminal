@@ -200,12 +200,13 @@ describe("createCodexSpawner", () => {
       expect(mocks.watcherRuns).toBe(0);
     });
 
-    // Created after the snapshot: its first turn just happened, and tailing from the end would miss it.
-    it("reads a rollout created since the snapshot from the start", async () => {
+    // A survivor running for days writes into a day folder the snapshot never listed, so "not in the
+    // snapshot" does not mean new — reading it whole would announce every finished turn again.
+    it("tails a rollout the snapshot did not list from the end too", async () => {
       mocks.openRollout = OPEN_ROLLOUT;
       spawn()(SID, null, null, "/w", false);
       await settle();
-      expect(mocks.tracked).toEqual([{ sessionId: SID, file: OPEN_ROLLOUT, mode: { startAtEnd: false } }]);
+      expect(mocks.tracked).toEqual([{ sessionId: SID, file: OPEN_ROLLOUT, mode: { startAtEnd: true, restoreOpenTurn: true } }]);
     });
 
     it("refuses a conversation the log maps to another session, and watches instead", async () => {

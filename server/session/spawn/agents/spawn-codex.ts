@@ -54,10 +54,11 @@ function captureCodexRollout(deps: SpawnDeps, sessionId: string, entry: PtyEntry
 
 // A survivor whose mapping is gone (#3283) is writing a rollout that predates the snapshot, so the
 // appear-watcher can never see it. The file its processes hold open for writing is the evidence.
-// One that existed before the snapshot is tailed from the end like a mapped reattach, so no finished
-// turn is announced again; one created since is its first turn, read whole as the watcher would.
+// Always tailed from the end with the open turn restored, like a mapped reattach: whether the file is
+// new cannot be told from the snapshot (it lists two day folders, and codex fixes a rollout's folder
+// when the session starts), and reading an old one whole would announce days of finished turns.
 // With no single open rollout — no first turn yet, or ambiguous — the appear-watcher runs as before.
-async function adoptOpenRollout(deps: SpawnDeps, sessionId: string, entry: PtyEntry, root: string, before: Set<string>, cwd: string): Promise<boolean> {
+async function adoptOpenRollout(deps: SpawnDeps, sessionId: string, entry: PtyEntry, root: string, cwd: string): Promise<boolean> {
   const file = await findOpenCodexRollout(sessionId, root, claimedCodexRollouts);
   const meta = file === null ? null : await readSessionMeta(file);
   // Re-checked after the awaits: the pty may have ended, or a watcher claimed the file meanwhile.
@@ -65,8 +66,7 @@ async function adoptOpenRollout(deps: SpawnDeps, sessionId: string, entry: PtyEn
   if (mappedElsewhere(sessionId, meta.id)) return false;
   claimedCodexRollouts.add(file);
   rememberCodexRollout(sessionId, meta.id, cwd);
-  const mode = before.has(file) ? { startAtEnd: true, restoreOpenTurn: true } : { startAtEnd: false };
-  trackCodexActivity(sessionId, file, mode, activityDepsFor(sessionId, entry, deps));
+  trackCodexActivity(sessionId, file, { startAtEnd: true, restoreOpenTurn: true }, activityDepsFor(sessionId, entry, deps));
   return true;
 }
 
@@ -75,7 +75,7 @@ const mappedElsewhere = (sessionId: string, conversationId: string): boolean =>
   [...codexRollouts.values()].some((record) => record.conversationId === conversationId && record.sessionId !== sessionId);
 
 function recoverUnmappedRollout(deps: SpawnDeps, sessionId: string, entry: PtyEntry, root: string, before: Set<string>, cwd: string): void {
-  void adoptOpenRollout(deps, sessionId, entry, root, before, cwd)
+  void adoptOpenRollout(deps, sessionId, entry, root, cwd)
     .catch(() => false)
     .then((adopted) => {
       if (!adopted) captureCodexRollout(deps, sessionId, entry, root, before, cwd);
