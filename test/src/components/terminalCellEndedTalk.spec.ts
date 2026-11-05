@@ -3,7 +3,7 @@ import { mount, flushPromises } from "@vue/test-utils";
 
 // A kept cell whose session ended (a crash #3272, a worktree, a startup failure) must not start a
 // cross-talk or round table: its last turn would be typed into a live cell (#3276). The mark lives on
-// the terminal's slot, which outlives the component, and only the server's next `session` frame
+// the terminal's slot, which outlives the component, and only output from a running process
 // clears it. Terminal.vue is stubbed, so these tests write the slot's view state as the connection
 // manager would.
 
@@ -47,7 +47,7 @@ vi.mock("../../../src/composables/useRoundTable", async (importOriginal) => ({
 
 const TerminalCell = (await import("../../../src/components/TerminalCell.vue")).default;
 const { connView } = await import("../../../src/composables/useTerminalConnections");
-const { applySessionExit, applySessionStart } = await import("../../../src/composables/connViewFrames");
+const { applySessionExit, applySessionOutput } = await import("../../../src/composables/connViewFrames");
 
 const SLOT = "cell-1";
 const markSlot = () => connView.set(SLOT, { status: "connected", serverCwd: null, inCopyMode: false, heatLevel: 0, heatFinales: 0, sessionEnded: false });
@@ -79,7 +79,7 @@ async function openTools(w: Cell) {
   await flushPromises();
 }
 async function endSession(w: Cell, sessionEnded: boolean) {
-  applySessionExit(connView.get(SLOT), sessionEnded);
+  applySessionExit(connView.get(SLOT), { type: "exit", ended: sessionEnded });
   w.findComponent({ name: "TerminalView" }).vm.$emit("exit", 137, { sessionEnded, lifetimeMs: 60_000, reattached: false });
   await flushPromises();
 }
@@ -152,7 +152,7 @@ describe("talk from a cell whose session ended", () => {
 
   // The trip into and out of a collection pane remounts the cell; the slot, and its mark, stay.
   it("offers no talk row from a cell remounted on a slot whose session ended", async () => {
-    applySessionExit(connView.get(SLOT), true);
+    applySessionExit(connView.get(SLOT), { type: "exit", ended: true });
     const w = mountCell();
     await flushPromises();
     await openTools(w);
@@ -160,11 +160,11 @@ describe("talk from a cell whose session ended", () => {
     w.unmount();
   });
 
-  it("offers the talk row again once the server reports a session on the slot", async () => {
+  it("offers the talk row again once the slot shows the agent running", async () => {
     const w = mountCell();
     await flushPromises();
     await endSession(w, true);
-    applySessionStart(connView.get(SLOT));
+    applySessionOutput(connView.get(SLOT));
     await openTools(w);
     expect(toolButton("talk")).not.toBeNull();
     w.unmount();

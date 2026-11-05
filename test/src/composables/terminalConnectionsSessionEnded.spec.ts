@@ -1,6 +1,7 @@
-// The slot's session-ended mark (#3276): set by an exit frame that ended the session, left alone by
-// one that only lost the client, cleared by the server's next `session` frame — and kept while the
-// view is detached, which is what a cell remounted on the slot reads.
+// The slot's session-ended mark (#3276, #3280): set by an exit frame that ended the session or by a
+// failed start, left alone by one that only lost the client, cleared by output from a running
+// process — not by the `session` frame, which the server sends before it spawns — and kept while
+// the view is detached, which is what a cell remounted on the slot reads.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const { termState: mockTermState, keyState: mockKeyState } = await vi.hoisted(async () => (await import("../../helpers/xtermDouble")).createXtermState());
@@ -19,6 +20,8 @@ const SESSION = "11111111-2222-4333-8444-555555555555";
 const target: conn.ConnTarget = { sessionId: SESSION, cwd: "/w", devTerminal: false, command: null, launcher: null };
 const exitFrame = (ended: boolean) => ({ data: JSON.stringify({ type: "exit", exitCode: 137, ended, lifetimeMs: 60_000, reattached: false }) });
 const sessionFrame = { data: JSON.stringify({ type: "session", id: SESSION, cwd: "/w" }) };
+const errorFrame = { data: JSON.stringify({ type: "error", message: "failed to start" }) };
+const outputFrame = { data: JSON.stringify({ type: "output", data: "hello" }) };
 const ended = () => conn.connView.get(KEY)?.sessionEnded;
 
 let host: HTMLElement;
@@ -56,10 +59,42 @@ describe("a slot's session-ended mark", () => {
     expect(ended()).toBe(false);
   });
 
-  it("is cleared by the server's session frame", () => {
+  // A restart's new socket: announced, then the spawn — which may fail.
+  it("stays set through the session frame of a restart", () => {
+    const original = openCell();
+    original.onmessage?.(exitFrame(true));
+    const socketsBefore = FakeWebSocket.instances.length;
+    conn.retarget(KEY, target);
+    expect(FakeWebSocket.instances).toHaveLength(socketsBefore + 1);
+    const replacement = FakeWebSocket.instances.at(-1);
+    if (!replacement || replacement === original) throw new Error("no replacement socket");
+    replacement.onopen?.();
+    replacement.onmessage?.(sessionFrame);
+    expect(ended()).toBe(true);
+  });
+
+  it("is set by a start that failed after the session was announced", () => {
+    const ws = openCell();
+    ws.onmessage?.(sessionFrame);
+    ws.onmessage?.(errorFrame);
+    expect(ended()).toBe(true);
+  });
+
+  // A switched subscription prints its notice before the spawn, which can still throw.
+  it("is set again when a notice printed before the spawn is followed by a failed start", () => {
     const ws = openCell();
     ws.onmessage?.(exitFrame(true));
     ws.onmessage?.(sessionFrame);
+    ws.onmessage?.(outputFrame);
+    ws.onmessage?.(errorFrame);
+    expect(ended()).toBe(true);
+  });
+
+  it("is cleared by output once the agent runs", () => {
+    const ws = openCell();
+    ws.onmessage?.(exitFrame(true));
+    ws.onmessage?.(sessionFrame);
+    ws.onmessage?.(outputFrame);
     expect(ended()).toBe(false);
   });
 
