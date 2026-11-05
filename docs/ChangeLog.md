@@ -8,6 +8,18 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@12.0.1 — 2026-11-05
+
+> **Setup guide:** [12.0.1 — A path right after a full-width colon is a link](https://receptron.github.io/mulmoterminal/guide/en/v12.0.1.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v12.0.1.html))
+
+### A full-width colon and similar punctuation end a file path link (#3269)
+
+Fixes #3268. `PATH_CHARS` in `terminalFilePathLinks.ts`, the character class that cuts a path token out of a terminal line, excluded ASCII `:,;` and `、。` but not their full-width forms. So `できたこと：src/a.md` was linked as one token with the Japanese before it, and with `windowsPaths` `できたこと：D:\x\a.md` was not linked at all, because the drive letter was swallowed into the preceding word and never stood alone. `：；，！？` are now separators too. A file name containing one of them is cut there, the same trade already made for `、。` and the full-width brackets. Specs cover a path after `：` with and without a space, several paths split by `！？，；、`, and a drive path after `：`.
+
+### One containment gate body for reads and changes in the browse routes (#3267)
+
+`containedFor` and `containedForChange` in `server/files/files-browse.ts` had become identical apart from the base they check against (flagged by the duplication scan after #3264). The shared body is now `containedUnder(base, req, res)` — 404 for a base that is gone, 403 for a path that escapes it, the resolved path otherwise — and the two entrances differ only in the base they pass. No behaviour change; `test/server/files` pins both answers on both sides.
+
 ## mulmoterminal@12.0.0 — 2026-11-03
 
 > **Setup guide:** [12.0.0 — A clicked path opens the pane beside its cell, outside files included](https://receptron.github.io/mulmoterminal/guide/en/v12.0.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v12.0.0.html))
