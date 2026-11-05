@@ -416,12 +416,25 @@ export function tmuxNewSessionArgs(
   return ["-L", SERVER_SOCKET, "-f", CONF_FILE, "-u", "new-session", "-A", "-s", tmuxSessionName(id), "-c", cwd, ...envArgs, "--", file, ...args, ...recording];
 }
 
+const paneExitRecordFile = (id: string): string => path.join(os.homedir(), ...PANE_EXIT_DIR_SEGMENTS, tmuxSessionName(id));
+
+/** Drop a record left by an earlier session under the same id — one that died while no server was
+ *  here to read it. Ids are reused (a restart, a reopen), and a new session that ends unrecorded
+ *  would otherwise be reported with the old one's code. */
+export function tmuxDiscardPaneExitRecord(id: string): void {
+  try {
+    rmSync(paneExitRecordFile(id), { force: true });
+  } catch {
+    // Unreadable is as good as absent: the take that follows fails the same way and falls back.
+  }
+}
+
 /** The `status:signal` a recording session left as its pane died, consumed so the file does not
  *  outlive the session it describes. Null when nothing was recorded or it could not be read — the
  *  caller then falls back to the client's code, which is what it had before. */
 export function tmuxTakePaneExitRecord(id: string): string | null {
   if (cachedPsmux) return null;
-  const file = path.join(os.homedir(), ...PANE_EXIT_DIR_SEGMENTS, tmuxSessionName(id));
+  const file = paneExitRecordFile(id);
   try {
     const record = readFileSync(file, "utf8");
     rmSync(file, { force: true });

@@ -18,6 +18,7 @@ import {
   ownBindPort,
   tmuxAvailable,
   tmuxClientUnsetNames,
+  tmuxDiscardPaneExitRecord,
   tmuxHasSession,
   tmuxNewSessionArgs,
   tmuxPsmuxVtInput,
@@ -245,6 +246,7 @@ export function ptySpawn(
     // enough — the server may already carry the name from an earlier session. For the same
     // reason `env` goes to `new-session -e` rather than onto the tmux CLIENT we spawn here.
     if (unset.length > 0) tmuxScrubEnvNames(unset);
+    if (options.recordExit && !reattached) tmuxDiscardPaneExitRecord(sessionId);
     // The tmux CLIENT runs from a directory that cannot be deleted — deliberately NOT the cell's.
     //
     // tmux 3.7 moves the SERVER's cwd to the client's on every `new-session` and never restores

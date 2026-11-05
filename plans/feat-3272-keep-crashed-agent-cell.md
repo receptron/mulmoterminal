@@ -59,4 +59,4 @@ parsed.
 - psmux, and agents other than Claude whose normal quit might be non-zero (their cell would then
   stay open with a red banner, which is the pre-#3049 behaviour).
 - Resuming from the kept cell is unchanged and was not exercised.
-- A record whose session died while this server was down is never read; the file stays (a few bytes).
+- A record whose session died while this server was down is never read; it stays (a few bytes) until a new session under the same id starts, which drops it first (ids are reused by restart and reopen).
