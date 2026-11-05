@@ -7,7 +7,7 @@
 // CPU time between two listings is the same on both platforms.
 import type { ProcessRow } from "../../infra/process/process-list.js";
 
-const childrenByParent = (rows: readonly ProcessRow[]): Map<number, number[]> => {
+export const childrenByParent = (rows: readonly ProcessRow[]): Map<number, number[]> => {
   const children = new Map<number, number[]>();
   rows.forEach((row) => children.set(row.ppid, [...(children.get(row.ppid) ?? []), row.pid]));
   return children;

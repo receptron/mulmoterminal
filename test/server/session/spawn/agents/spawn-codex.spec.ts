@@ -6,12 +6,15 @@
 // restart. Claude survives the same restart via its HTTP hooks; codex has only this tail.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createCodexSpawner } from "../../../../../server/session/spawn/agents/spawn-codex.js";
-import { ptys } from "../../../../../server/session/registry.js";
+import { claimedCodexRollouts, ptys } from "../../../../../server/session/registry.js";
 import type { SpawnDeps } from "../../../../../server/session/spawn/spawn-deps.js";
 import { codexPermissionHookOverride } from "../../../../../server/agents/codex/codex-hook.js";
 
 const SID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee01";
 const ROLLOUT_ID = "11111111-2222-4333-8444-555555555555";
+const OPEN_ID = "66666666-7777-4888-8999-000000000000";
+const OPEN_ROLLOUT = `/codex-root/2026/11/05/rollout-2026-11-05T22-40-08-${OPEN_ID}.jsonl`;
+const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 const mocks = vi.hoisted(() => ({
   // What ptySpawn reports back — the reattached flag IS the case under test.
@@ -27,6 +30,9 @@ const mocks = vi.hoisted(() => ({
   watcherCancelled: null as (() => boolean) | null,
   // The hydrated session -> rollout mapping, as the WS route's awaited hydration leaves it.
   rollouts: new Map<string, { sessionId: string; conversationId: string; cwd: string; startedAt: number }>(),
+  // What the reattach probe finds open in the survivor's process tree (#3283), and how it answers.
+  openRollout: null as string | null,
+  probe: null as (() => Promise<string | null>) | null,
 }));
 
 vi.mock("../../../../../server/session/pty/pty-spawn.js", () => ({
@@ -58,6 +64,11 @@ vi.mock("../../../../../server/agents/codex/codex-session.js", async (importOrig
     mocks.watcherCancelled = opts.isCancelled ?? null;
     return new Promise(() => {}); // never resolves — the fresh branch is asserted by the call alone
   }),
+  readSessionMeta: vi.fn(async (file: string) => ({ id: file === OPEN_ROLLOUT ? OPEN_ID : ROLLOUT_ID, cwd: "/w" })),
+}));
+
+vi.mock("../../../../../server/session/spawn/agents/codex-open-rollout-recovery.js", () => ({
+  findOpenCodexRollout: vi.fn(() => (mocks.probe ? mocks.probe() : Promise.resolve(mocks.openRollout))),
 }));
 
 vi.mock("../../../../../server/agents/codex/codex-sessions.js", async (importOriginal) => ({
@@ -104,6 +115,9 @@ describe("createCodexSpawner", () => {
     mocks.watcherRuns = 0;
     mocks.watcherCancelled = null;
     mocks.rollouts.clear();
+    mocks.openRollout = null;
+    mocks.probe = null;
+    claimedCodexRollouts.clear();
   });
 
   // The watch has no deadline, so it must end with ITS pty: a respawn under the same id is a
@@ -155,11 +169,64 @@ describe("createCodexSpawner", () => {
   // but its first prompt may still be coming. The appear-watcher must run exactly as it does for
   // a fresh session, or that rollout is never recorded and a later cold reconnect starts a new
   // conversation instead of resuming this one (Codex review on #1538).
-  it("falls back to the appear-watcher on a tmux reattach with no known rollout", () => {
+  it("falls back to the appear-watcher on a tmux reattach with no known rollout", async () => {
     mocks.reattached = true;
     spawn()(SID, null, null, "/w", false);
+    await settle();
     expect(mocks.tracked).toEqual([]);
     expect(mocks.watcherRuns).toBe(1);
+  });
+
+  // #3283: the mapping was lost while the rollout already existed, so it predates the snapshot and
+  // the appear-watcher can never see it. The file the survivor holds open is adopted instead —
+  // tailed from the END with the open turn restored, exactly as a mapped reattach, so no turn that
+  // finished before the restart is announced again.
+  describe("a tmux reattach with no mapping and a rollout already written (#3283)", () => {
+    beforeEach(() => {
+      mocks.reattached = true;
+    });
+
+    it("adopts the rollout the survivor holds open, records it, and runs no watcher", async () => {
+      mocks.openRollout = OPEN_ROLLOUT;
+      spawn()(SID, null, null, "/w", false);
+      await settle();
+      expect(mocks.tracked).toEqual([{ sessionId: SID, file: OPEN_ROLLOUT, mode: { startAtEnd: true, restoreOpenTurn: true } }]);
+      expect(mocks.remembered).toEqual([{ sessionId: SID, conversationId: OPEN_ID, cwd: "/w" }]);
+      expect(claimedCodexRollouts.has(OPEN_ROLLOUT)).toBe(true);
+      expect(mocks.watcherRuns).toBe(0);
+    });
+
+    it("leaves a rollout claimed while the probe ran, and watches instead", async () => {
+      let answer: (file: string | null) => void = () => {};
+      mocks.probe = () => new Promise((resolve) => (answer = resolve));
+      spawn()(SID, null, null, "/w", false);
+      claimedCodexRollouts.add(OPEN_ROLLOUT);
+      answer(OPEN_ROLLOUT);
+      await settle();
+      expect(mocks.tracked).toEqual([]);
+      expect(mocks.remembered).toEqual([]);
+      expect(mocks.watcherRuns).toBe(1);
+    });
+
+    it("adopts nothing for a pty replaced while the probe ran", async () => {
+      let answer: (file: string | null) => void = () => {};
+      mocks.probe = () => new Promise((resolve) => (answer = resolve));
+      const entry = spawn()(SID, null, null, "/w", false);
+      ptys.set(SID, { ...entry });
+      answer(OPEN_ROLLOUT);
+      await settle();
+      expect(mocks.tracked).toEqual([]);
+      expect(mocks.remembered).toEqual([]);
+      expect(claimedCodexRollouts.size).toBe(0);
+    });
+
+    it("watches as before when the probe fails", async () => {
+      mocks.probe = () => Promise.reject(new Error("lsof: not found"));
+      spawn()(SID, null, null, "/w", false);
+      await settle();
+      expect(mocks.tracked).toEqual([]);
+      expect(mocks.watcherRuns).toBe(1);
+    });
   });
 
   // The hook's command is a constant, so what makes it this session's is the environment it runs
