@@ -455,6 +455,7 @@ describe("loadAppConfig / saveAppConfig", () => {
     botJobs: BOT_JOBS_DEFAULT,
     toolbarPins: [],
     cockpitLines: { ...DEFAULT_COCKPIT_LINES },
+    cockpitCompact: false,
     headerStatusColors: {},
     headerStatusTint: DEFAULT_HEADER_STATUS_TINT,
     fontFamily: null,
@@ -515,7 +516,8 @@ describe("loadAppConfig / saveAppConfig", () => {
       confetti: { styles: ["sakura" as const], events: ["pr-merged" as const] }, // a narrowed list and an opted-in event
       botJobs: { enabled: true, python: "~/venvs/gpu/bin/python" }, // switched on, with a venv
       toolbarPins: ["collection:works"], // opt-in (#1984): only a promoted pin proves it persisted
-      cockpitLines: { summary: 6, prompt: 2, response: 3, compact: true }, // a raised clamp and the opt-in must survive it too
+      cockpitLines: { summary: 6, prompt: 2, response: 3 }, // a raised clamp must survive it too
+      cockpitCompact: true, // opt-in (#3270): only `true` proves it persisted
       headerStatusColors: { working: { background: "#6d28d9", text: null } }, // a per-status header colour must round-trip too
       headerStatusTint: "none" as const, // non-default, so only "none" proves it persisted
       fontFamily: "Cica, monospace", // already normalized, so it must come back byte-identical
@@ -572,6 +574,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       themes: [],
       keymap: { "zoom-next": "PageDown" },
       cockpitLines: { ...DEFAULT_COCKPIT_LINES },
+      cockpitCompact: false,
       headerStatusColors: {},
       headerStatusTint: DEFAULT_HEADER_STATUS_TINT,
       buttons: null,
@@ -741,6 +744,7 @@ describe("#741 corrupt config is not silently wiped by a partial update", () => 
     botJobs: BOT_JOBS_DEFAULT,
     toolbarPins: [],
     cockpitLines: { ...DEFAULT_COCKPIT_LINES },
+    cockpitCompact: false,
     headerStatusColors: {},
     headerStatusTint: DEFAULT_HEADER_STATUS_TINT,
     fontFamily: null,
@@ -842,6 +846,7 @@ describe("mergeConfigUpdate", () => {
     botJobs: BOT_JOBS_DEFAULT,
     toolbarPins: [],
     cockpitLines: { ...DEFAULT_COCKPIT_LINES },
+    cockpitCompact: false,
     headerStatusColors: {},
     headerStatusTint: DEFAULT_HEADER_STATUS_TINT,
     fontFamily: null,

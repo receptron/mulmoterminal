@@ -5,6 +5,7 @@ import TerminalGrid, { type CockpitRow } from "../../../src/components/TerminalG
 import type { Cell } from "../../../src/components/gridTabs.js";
 import type { RunCommand } from "../../../src/components/runCommand.js";
 import { setCockpitLines } from "../../../src/composables/cockpitLines";
+import { setCockpitCompact } from "../../../src/composables/cockpitCompact";
 import { connView } from "../../../src/composables/useTerminalConnections";
 import { oneFile } from "./filesPaneFixture";
 import type { FilesPaneState } from "../../../src/components/filesPaneState";
@@ -125,6 +126,7 @@ const rosterRow = (uid: number, over: Partial<CockpitRow> = {}): CockpitRow => (
   prompt: null,
   response: null,
   fallback: null,
+  title: "",
   phase: "none",
   workPhase: null,
   collection: null,
@@ -857,8 +859,8 @@ describe("grid cockpit (list view)", () => {
 
   // #3270: compact keeps the header (status, directory) and ONE line naming the session.
   it("shows only the header and the session name when compact, and the full row again when not", async () => {
-    setCockpitLines({ compact: true });
-    const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { memo: "mine", summary: "s", prompt: "p", response: "r" })]);
+    setCockpitCompact(true);
+    const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { memo: "mine", summary: "s", prompt: "p", response: "r", title: "mine" })]);
     await nextTick();
     expect(w.find('[data-testid="cockpit-header"]').exists()).toBe(true);
     expect(w.get('[data-testid="cockpit-title"]').text()).toBe("mine");
@@ -866,7 +868,7 @@ describe("grid cockpit (list view)", () => {
     expect(w.findAll('[data-testid="cockpit-line"]')).toHaveLength(0);
     expect(w.find('[data-testid="cockpit-memo"]').exists()).toBe(false);
 
-    setCockpitLines(undefined);
+    setCockpitCompact(false);
     await nextTick();
     expect(w.find('[data-testid="cockpit-title"]').exists()).toBe(false);
     expect(w.findAll('[data-testid="cockpit-line"]')).toHaveLength(3);

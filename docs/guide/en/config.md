@@ -1680,16 +1680,16 @@ Or use the three steppers in **Settings → Waiting rows**.
 ### Compact rows: the header and the session name only {#cockpit-compact}
 
 If you read the roster only to tell sessions apart and see which one is waiting, the lines are in
-the way. Turn on **Compact rows** in **Settings → Waiting rows**, or set `compact`:
+the way. Turn on **Compact rows** in **Settings → Waiting rows**, or set `cockpitCompact`:
 
 ```json
-{ "cockpitLines": { "compact": true } }
+{ "cockpitCompact": true }
 ```
 
 Each row then keeps its header (status, directory, agent) and **one line naming the session**:
 your memo, else the session's title, else your last prompt — the same name the cell's own header
 shows. The line counts above have nothing to clamp and their steppers are greyed out; they come back
-when you turn it off. Only `true` turns it on; anything else is the default, off.
+when you turn it off. Anything that is not a boolean is the default, off.
 - Takes effect after a **tab reload**.
 
 {: .note }
@@ -2301,7 +2301,8 @@ What you write here appears in an empty cell's launcher under **OR RUN A SCRIPT*
 | `showLoadAverage` | The machine's load average in the bar above the grid. **On unless `false`** (→ Settings → Grid header read-outs) |
 | `paletteSearchBox` | A search box in the middle of the top bar, on every screen, that opens the command palette. **Off unless `true`** (→ Settings → Grid header read-outs) |
 | `remoteServer` | **Experimental.** Say the server runs on another machine than your browser (an SSH tunnel — see [Run the server on another machine](remote.html)). Then the actions that act on the server's screen are withheld: the path menu's *Insert a file path* and *Reveal in the file manager* and the launch form's folder button are hidden; a header button, a key or the Files pane asking for the file dialog, the file manager or the OS app says why instead; and a dropped file is always uploaded, never inserted as your machine's path. The launcher opens no browser on the server, and Google sign-in points to `npx mulmoterminal google login` on the server. **Off unless set to `true`**; the box is under Settings → **Sessions and background tasks**. |
-| `cockpitLines` | How many lines each cockpit-roster row shows before clamping (default `2 / 2 / 3`), or `compact: true` for the header and the session name only (→ [Cockpit roster line counts](#cockpit-lines)) |
+| `cockpitLines` | How many lines each cockpit-roster row shows before clamping (default `2 / 2 / 3` → [Cockpit roster line counts](#cockpit-lines)) |
+| `cockpitCompact` | `true` cuts each cockpit-roster row to its header and the session name (default `false` → [Compact rows](#cockpit-compact)) |
 | `fontFamily` | The font every terminal renders in — a CSS font-family stack (→ [Terminal font](#font-family)) |
 
 ### Keys this version doesn't know are kept {#unknown-keys}

@@ -98,6 +98,9 @@ export function rosterRow(c: Cell, look: RosterLookups): CockpitRow {
     prompt: meta.lastPrompt,
     response: meta.lastResponse,
     fallback: fallbackLabel(c),
+    // The cell header's tiers (cellHeaderText), so a compact row and its cell go by one name — which
+    // is why the agent-store title the summary line admits is not among them.
+    title: sessionDisplayName(meta.memo, meta.customTitle, meta.aiTitle, meta.lastPrompt) || (fallbackLabel(c) ?? ""),
     phase: (c.cwd ? look.phase(c.cwd) : undefined) ?? NO_PR_PHASE,
     workPhase: meta.workPhase,
     collection: meta.collection,
@@ -109,10 +112,6 @@ export function rosterRow(c: Cell, look: RosterLookups): CockpitRow {
     markable: isTerminalCell(c) && !!c.session,
   };
 }
-
-/** The one line a compact row keeps (#3270): the session's name, in the cell header's order. */
-export const rosterTitle = (row: { memo: string | null; summary: string | null; prompt: string | null; fallback: string | null }): string =>
-  sessionDisplayName(row.memo, row.summary, row.prompt, row.fallback) || "—";
 
 // A TerminalCell rather than a command or launcher one — the same split TerminalGrid renders by.
 const isTerminalCell = (c: Cell): boolean => !c.command && !c.launcher;

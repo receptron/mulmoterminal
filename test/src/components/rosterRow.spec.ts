@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { AGENT_TITLE_MAX } from "../../../common/agentTitle";
-import { rosterRow, rosterTitle, fallbackLabel, type RosterLookups, type RowChrome } from "../../../src/components/rosterRow";
+import { rosterRow, fallbackLabel, type RosterLookups, type RowChrome } from "../../../src/components/rosterRow";
 import type { Cell } from "../../../src/components/gridTabs";
 import type { SessionMetaView } from "../../../src/components/rosterPhase";
 
@@ -164,6 +164,7 @@ describe("rosterRow", () => {
       prompt: "fix the parser",
       response: "done",
       fallback: "starting…",
+      title: "before the demo",
       phase: "ready",
       workPhase: "implementing",
       collection: { slug: "invoices", icon: "receipt_long", title: "Invoices" },
@@ -254,17 +255,26 @@ describe("rosterRow — row menu capabilities", () => {
   });
 });
 
-describe("rosterTitle — the one line a compact row keeps (#3270)", () => {
-  const none = { memo: null, summary: null, prompt: null, fallback: null };
-  it("takes the memo first, then the summary, the prompt and the fallback label", () => {
-    expect(rosterTitle({ memo: "mine", summary: "S", prompt: "P", fallback: "bash" })).toBe("mine");
-    expect(rosterTitle({ ...none, summary: "S", prompt: "P", fallback: "bash" })).toBe("S");
-    expect(rosterTitle({ ...none, prompt: "P", fallback: "bash" })).toBe("P");
-    expect(rosterTitle({ ...none, fallback: "bash" })).toBe("bash");
+describe("rosterRow — the title a compact row keeps (#3270)", () => {
+  const titleOf = (meta: Partial<SessionMetaView>, over: Partial<Cell> = {}) => rosterRow(cell(over), lookups({ meta: () => ({ ...META, ...meta }) })).title;
+
+  it("goes memo, then /rename, then the AI title, then the last prompt", () => {
+    expect(titleOf({ memo: "mine", customTitle: "renamed" })).toBe("mine");
+    expect(titleOf({ memo: null, customTitle: "renamed" })).toBe("renamed");
+    expect(titleOf({ memo: null })).toBe("Parser fix");
+    expect(titleOf({ memo: null, aiTitle: null })).toBe("fix the parser");
   });
 
-  it("skips an empty tier, and shows a dash when nothing names the session", () => {
-    expect(rosterTitle({ memo: "", summary: "", prompt: "P", fallback: null })).toBe("P");
-    expect(rosterTitle(none)).toBe("—");
+  // The cell header (cellHeaderText) never shows the agent-store title, so neither does this: a
+  // codex row would otherwise go by its store title while its enlarged cell shows the prompt.
+  it("skips the agent-store title the summary line shows", () => {
+    const meta = { memo: null, aiTitle: null, agentTitle: "Store title", agentTitleKind: null, lastPrompt: "the prompt" };
+    expect(rosterRow(cell(), lookups({ meta: () => ({ ...META, ...meta }) })).summary).toBe("Store title");
+    expect(titleOf(meta)).toBe("the prompt");
+  });
+
+  it("falls back to what the cell runs, skipping empty tiers", () => {
+    expect(titleOf({ memo: "", aiTitle: "", lastPrompt: null })).toBe("starting…");
+    expect(rosterRow(cell({ session: null }), lookups()).title).toBe("empty");
   });
 });

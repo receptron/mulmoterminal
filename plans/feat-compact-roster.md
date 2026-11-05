@@ -15,24 +15,27 @@ leaves a cell without a memo nameless.
 
 ## Change
 
-- `common/cockpitLines.ts`: `CockpitLines` gains `compact: boolean`, default `false`. Sanitized
-  per field like the rest: only literal `true` turns it on, anything else is the default.
-- Roster row (`TerminalGrid.vue`): when `cockpitLines.compact`, the header stays and the four lines
-  give way to ONE line — the session's name, from `sessionDisplayName` (memo, then summary, then
-  prompt, then the fallback label). That is the same precedence the cell header uses, so a row and
-  its cell go by the same name. One line, truncated, with the whole text on hover.
-- The pure rule (`rosterTitle`) lives in `src/components/rosterRow.ts`.
-- Settings → Waiting rows: a checkbox. While it is on, the three steppers are disabled — they
-  have nothing to clamp.
-- Docs: `docs/guide/{en,ja}/config.md`, the `mulmoterminal-config` skill section, i18n (all locales).
+- `common/cockpitCompact.ts`: a top-level boolean key `cockpitCompact`, default `false`, wired
+  like `paletteSearchBox` (`createGlobalFlag`). Not a field of `cockpitLines`: an older version
+  keeps an unknown top-level key when it writes config.json but drops an unknown nested field, and
+  a separate key also means the switch and the steppers never post over each other.
+- Roster row (`TerminalGrid.vue`): when `cockpitCompact`, the header stays and the four lines
+  give way to ONE line, `CockpitRow.title`. It is built in `rosterRow()` from the cell header's tiers
+  (memo, `/rename` name, AI title, last prompt), so a row and its cell go by the same name; the
+  agent-store title the summary line admits is not one of them. Then the fallback label. One line,
+  truncated, with the whole text on hover.
+- Settings → Waiting rows: a checkbox; a refused save puts it back. While it is on, the three
+  steppers are disabled — they have nothing to clamp.
+- Docs: README, `docs/guide/{en,ja}/config.md`, the `mulmoterminal-config` skill, i18n (all locales).
 
 ## Decision
 
 Global (in config.json, next to the line counts) rather than per browser like the blink: it is the
-same trade the line counts make, and it rides on their existing load / save / sanitize path.
+same trade the line counts make.
 
 ## Tests
 
-- `sanitizeCockpitLines`: `compact` default false, `true` kept, non-boolean ignored, counts untouched.
-- `rosterTitle`: memo wins, then summary, prompt, fallback; empty strings skipped.
+- `rosterRow().title`: the header's tiers in order, the agent-store title skipped, empty tiers skipped.
+- `WaitingRowsSection`: saves `cockpitCompact` alone, a refused save puts the box back, steppers disabled while on.
+- `app-config` round-trip and `settings-coverage` carry the new key.
 - `TerminalGrid` spec: compact shows the header and one title line and no `cockpit-line` / memo.

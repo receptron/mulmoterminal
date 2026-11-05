@@ -10,7 +10,7 @@ import CockpitHeader from "./CockpitHeader.vue";
 import * as conn from "../composables/useTerminalConnections";
 import { trackStyle, layoutForCount } from "./gridLayout";
 import { cockpitLines } from "../composables/cockpitLines";
-import { rosterTitle } from "./rosterRow";
+import { cockpitCompact } from "../composables/cockpitCompact";
 import { dragSplitter } from "../composables/dragSplitter";
 import { flipKeyframes, flipPairs, onScreen, FLIP_MS, FLIP_EASING } from "./cellFlip";
 import { canDropCellBefore, canMoveCell, reorderBefore, type Cell } from "./gridTabs";
@@ -109,6 +109,7 @@ export interface CockpitRow {
   prompt: string | null; // current user prompt
   response: string | null; // tail of the agent's latest reply
   fallback: string | null; // label when there's no prompt/summary yet (launcher/command name)
+  title: string; // the one line a compact row keeps (#3270): the session's name, in the cell header's tiers
   phase: PrPhase; // the branch's PR workflow phase (`none` until a PR exists)
   workPhase: WorkPhase | null; // planning vs editing while working; null when unknown / not working
   collection: SessionCollection | null; // the collection this chat was started from (#2020), or null
@@ -1828,9 +1829,7 @@ function onRosterDragLeave(event: DragEvent) {
               @dismissed="rowMenuAt = null"
             />
           </CockpitHeader>
-          <span v-if="cockpitLines.compact" data-testid="cockpit-title" class="truncate text-[12px] leading-[1.35]" :data-tip="rosterTitle(row)">{{
-            rosterTitle(row)
-          }}</span>
+          <span v-if="cockpitCompact" data-testid="cockpit-title" class="truncate text-[12px] leading-[1.35]" :data-tip="row.title">{{ row.title }}</span>
           <template v-else>
             <!-- The user's own note, above every line below it: those are what the AGENT said, and the
              memo is the user saying what the cell is FOR (#1084) — the same precedence the cell
