@@ -25,12 +25,14 @@ describe("parsePaneExitRecord", () => {
     expect(parsePaneExitRecord(record, SIGNALS)).toBe(code);
   });
 
-  // tmux 3.6a on macOS writes the name; the number form is what the issue measured elsewhere.
+  // tmux 3.6a on macOS writes the name, 3.4 on Ubuntu the number. A name maps through the HOST's
+  // table, whose numbers differ (SIGABRT is 22 on Windows), so the expectation is read from it too.
+  const signalCode = (name: string) => 128 + (SIGNALS.get(name) ?? Number.NaN);
   it.each([
-    [":kill", 128 + 9],
-    [":segv", 128 + 11],
-    [":abrt", 128 + 6],
-    [":KILL", 128 + 9],
+    [":kill", signalCode("SIGKILL")],
+    [":segv", signalCode("SIGSEGV")],
+    [":abrt", signalCode("SIGABRT")],
+    [":KILL", signalCode("SIGKILL")],
     [":9", 128 + 9],
     [":11", 128 + 11],
   ])("reads a signal %j as 128 + its number", (record, code) => {
@@ -74,7 +76,8 @@ describe("paneExitRecordingArgs", () => {
 
 describe.skipIf(!hasTmux)("the recording against a real tmux", () => {
   const POLL_MS = 50;
-  const POLL_LIMIT = 100;
+  // Generous: a loaded CI runner once took longer than 5s here, which tmux 3.4 never did locally.
+  const POLL_LIMIT = 200;
   let dir = "";
   let socket = "";
   // HOME is the throwaway directory, so the hook's `"$HOME/…"` lands there and nowhere real.
@@ -86,12 +89,15 @@ describe.skipIf(!hasTmux)("the recording against a real tmux", () => {
   const recordFile = (name: string) => path.join(dir, ...PANE_EXIT_DIR_SEGMENTS, name);
   const recorded = (name: string) => (existsSync(recordFile(name)) ? readFileSync(recordFile(name), "utf8") : "");
 
-  const untilEnded = async (name: string): Promise<boolean> => {
+  // "" once the session is gone; otherwise what tmux says about it, so a session left behind (a dead
+  // pane nobody killed is the failure that matters) reads as such in the assertion.
+  const untilEnded = async (name: string): Promise<string> => {
     for (let i = 0; i < POLL_LIMIT; i += 1) {
-      if (!sessionAlive(name)) return true;
+      if (!sessionAlive(name)) return "";
       await sleep(POLL_MS);
     }
-    return false;
+    const panes = tmux(["list-panes", "-t", `=${name}:`, "-F", "dead=#{pane_dead} status=#{pane_dead_status} cmd=#{pane_current_command}"]).stdout.trim();
+    return `still alive: ${panes} record=${JSON.stringify(recorded(name))}`;
   };
 
   beforeAll(() => {
@@ -110,7 +116,7 @@ describe.skipIf(!hasTmux)("the recording against a real tmux", () => {
   // it, so a record held in tmux itself would be gone before anyone read it.
   it("survives the server exiting with its last session", async () => {
     expect(start("alone", "sleep 0.3; kill -9 $$").status).toBe(0);
-    expect(await untilEnded("alone")).toBe(true);
+    expect(await untilEnded("alone")).toBe("");
     expect(tmux(["ls"]).status).not.toBe(0);
     expect(parsePaneExitRecord(recorded("alone"), SIGNALS)).toBe(128 + 9);
   });
@@ -127,7 +133,7 @@ describe.skipIf(!hasTmux)("the recording against a real tmux", () => {
       ["segv", "sleep 0.3; kill -SEGV $$", 128 + 11],
     ])("records %s and still ends the session", async (name, script, code) => {
       expect(start(name, script).status).toBe(0);
-      expect(await untilEnded(name)).toBe(true);
+      expect(await untilEnded(name)).toBe("");
       expect(parsePaneExitRecord(recorded(name), SIGNALS)).toBe(code);
     });
 
@@ -135,7 +141,7 @@ describe.skipIf(!hasTmux)("the recording against a real tmux", () => {
     // be left dead on screen with the session still alive.
     it("never leaves a session behind for a program that dies at once", async () => {
       expect(start("instant", "exit 7").status).toBe(0);
-      expect(await untilEnded("instant")).toBe(true);
+      expect(await untilEnded("instant")).toBe("");
       expect([null, 7]).toContain(parsePaneExitRecord(recorded("instant"), SIGNALS));
     });
 
