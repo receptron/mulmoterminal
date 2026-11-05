@@ -1,5 +1,5 @@
 import type { ConnStatus } from "./useTerminalConnections";
-import { copyModeOf } from "./serverMessage";
+import { copyModeOf, sessionExitOf } from "./serverMessage";
 import { heatFrameOf, type HeatLevel } from "../../common/playfulEffects";
 
 /** What a terminal view shows of its connection. */
@@ -14,14 +14,14 @@ export interface ConnViewState {
   sessionEnded: boolean;
 }
 
-/** An exit frame marks the session ended only when the server says the session, not the client, ended. */
-export function applySessionExit(view: ConnViewState | undefined, sessionEnded: boolean): void {
-  if (view && sessionEnded) view.sessionEnded = true;
+/** A session the server ended, or one that failed to start (`error`), marks the slot; a lost client does not. */
+export function applySessionExit(view: ConnViewState | undefined, msg: Record<string, unknown>): void {
+  if (view && (msg.type === "error" || sessionExitOf(msg).sessionEnded)) view.sessionEnded = true;
 }
 
-/** Only the server's own `session` frame clears it: a restart reconnecting is not yet a session that started. */
-export function applySessionStart(view: ConnViewState | undefined): void {
-  if (view) view.sessionEnded = false;
+/** Output is what clears it: the server sends `session` before it spawns, so that frame proves nothing runs. */
+export function applySessionOutput(view: ConnViewState | undefined): void {
+  if (view?.sessionEnded) view.sessionEnded = false;
 }
 
 /** Apply a frame that only changes what the view shows: the copy-mode banner (#2207) and the heat. */
