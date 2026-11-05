@@ -61,9 +61,15 @@ describe("a slot's session-ended mark", () => {
 
   // A restart's new socket: announced, then the spawn — which may fail.
   it("stays set through the session frame of a restart", () => {
-    const ws = openCell();
-    ws.onmessage?.(exitFrame(true));
-    ws.onmessage?.(sessionFrame);
+    const original = openCell();
+    original.onmessage?.(exitFrame(true));
+    const socketsBefore = FakeWebSocket.instances.length;
+    conn.retarget(KEY, target);
+    expect(FakeWebSocket.instances.length).toBe(socketsBefore + 1);
+    const replacement = FakeWebSocket.instances.at(-1);
+    if (!replacement || replacement === original) throw new Error("no replacement socket");
+    replacement.onopen?.();
+    replacement.onmessage?.(sessionFrame);
     expect(ended()).toBe(true);
   });
 
