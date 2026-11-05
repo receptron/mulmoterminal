@@ -435,6 +435,7 @@ export const ja: Messages = {
       waiting: "あなたを待っている",
       finished: "終わっただけの",
       blink: "待っている行を点滅させる",
+      compact: "コンパクト表示（見出しとセッション名だけ）",
       linesTitle: "1 行あたりの行数",
       linesHint: "各行をどこまで表示してから打ち切るか。増やすほど 1 つを読みやすくなり、画面に収まるセッション数は減ります。",
       fields: {

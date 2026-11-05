@@ -9,6 +9,7 @@
 // fetch), and the status is per cell. Handing them in as functions is what lets this stay pure
 // while the caller keeps its reactive maps.
 import { AGENT_TITLE_MAX, type AgentTitleKind } from "../../common/agentTitle";
+import { sessionDisplayName } from "../../common/sessionMemo";
 import type { Cell } from "./gridTabs";
 import type { CockpitRow } from "./TerminalGrid.vue";
 import type { AttentionStatus } from "./attentionStatus";
@@ -108,6 +109,10 @@ export function rosterRow(c: Cell, look: RosterLookups): CockpitRow {
     markable: isTerminalCell(c) && !!c.session,
   };
 }
+
+/** The one line a compact row keeps (#3270): the session's name, in the cell header's order. */
+export const rosterTitle = (row: { memo: string | null; summary: string | null; prompt: string | null; fallback: string | null }): string =>
+  sessionDisplayName(row.memo, row.summary, row.prompt, row.fallback) || "—";
 
 // A TerminalCell rather than a command or launcher one — the same split TerminalGrid renders by.
 const isTerminalCell = (c: Cell): boolean => !c.command && !c.launcher;

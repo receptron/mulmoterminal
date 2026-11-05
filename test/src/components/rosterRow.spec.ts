@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { AGENT_TITLE_MAX } from "../../../common/agentTitle";
-import { rosterRow, fallbackLabel, type RosterLookups, type RowChrome } from "../../../src/components/rosterRow";
+import { rosterRow, rosterTitle, fallbackLabel, type RosterLookups, type RowChrome } from "../../../src/components/rosterRow";
 import type { Cell } from "../../../src/components/gridTabs";
 import type { SessionMetaView } from "../../../src/components/rosterPhase";
 
@@ -251,5 +251,20 @@ describe("rosterRow — row menu capabilities", () => {
     const row = rosterRow(c, lookups());
     expect(row.parkable).toBe(parkable);
     expect(row.markable).toBe(markable);
+  });
+});
+
+describe("rosterTitle — the one line a compact row keeps (#3270)", () => {
+  const none = { memo: null, summary: null, prompt: null, fallback: null };
+  it("takes the memo first, then the summary, the prompt and the fallback label", () => {
+    expect(rosterTitle({ memo: "mine", summary: "S", prompt: "P", fallback: "bash" })).toBe("mine");
+    expect(rosterTitle({ ...none, summary: "S", prompt: "P", fallback: "bash" })).toBe("S");
+    expect(rosterTitle({ ...none, prompt: "P", fallback: "bash" })).toBe("P");
+    expect(rosterTitle({ ...none, fallback: "bash" })).toBe("bash");
+  });
+
+  it("skips an empty tier, and shows a dash when nothing names the session", () => {
+    expect(rosterTitle({ memo: "", summary: "", prompt: "P", fallback: null })).toBe("P");
+    expect(rosterTitle(none)).toBe("—");
   });
 });

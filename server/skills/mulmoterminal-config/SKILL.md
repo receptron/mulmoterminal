@@ -406,6 +406,9 @@ clamps. Defaults to 2 / 2 / 3.
 - Each is clamped to 1–20, **per field**, so one bad value cannot discard the two set correctly.
 - Raising these trades how many sessions fit on screen for reading a long one in place. It is a
   trade the user makes — do not "fix" a clamped row by raising it unasked.
+- `"compact": true` shrinks each row to its header and ONE line naming the session (memo, else
+  title, else last prompt) — for someone who reads the roster only to tell sessions apart. The
+  counts are then unused but kept. Only literal `true` turns it on. Also **Settings → Waiting rows**.
 
 ### `usageGauge` and `usageProbeIntervalMinutes` — the usage gauge, and how often it measures
 

@@ -125,7 +125,7 @@ English, and the line under the picker says so.
 | **Terminal font** | The font-family stack every terminal renders in (`fontFamily`) — **global**, unlike the size, because which fonts exist is a property of the machine. Empty means the built-in stack (→ [Terminal font](#font-family)) |
 | **Terminal font size** | The xterm font size in px (8–32). Applies to every terminal **in this browser** — a phone and a desktop each keep their own. A directory can override it with `fontSize` ([below](#per-dir)) |
 | **Terminal scroll speed** | How far one wheel notch or trackpad swipe moves the terminal (1× is xterm's own). Per browser, like the font size, because it is a property of the pointing device |
-| **Waiting rows** | In the roster beside an enlarged cell, a row whose agent is **waiting on you** carries an amber ring and blinks; one that has merely **finished** is green and still. The checkbox turns off the movement, not the colour — and no row blinks when your system asks for reduced motion. The three steppers below it set how many lines each row shows before clamping (`cockpitLines` → [Roster rows](#cockpit-lines)) |
+| **Waiting rows** | In the roster beside an enlarged cell, a row whose agent is **waiting on you** carries an amber ring and blinks; one that has merely **finished** is green and still. The checkbox turns off the movement, not the colour — and no row blinks when your system asks for reduced motion. **Compact rows** shrinks each row to its header and the session name, and the three steppers below it set how many lines each row shows before clamping (`cockpitLines` → [Roster rows](#cockpit-lines)) |
 | **Grid header read-outs** | The **usage gauge** itself (on by default, `usageGauge`) and how many minutes Claude's reading may age before it is measured again (default 10, `usageProbeIntervalMinutes`); beside it, the machine's **load average** (on by default, `showLoadAverage`), and a **search box** in the middle of the top bar, on every screen, that opens the command palette (off by default, `paletteSearchBox`) |
 | **Toolbar pins** | Which of your pinned collections and feeds get a button in the toolbar itself, up to five. A tick per pinned entry; none ticked leaves the toolbar as it was (`toolbarPins` → [Favourites on the toolbar](#toolbar-pins)) |
 | **Directory appearance** | "Configure appearance…" — set a directory's name badge, colors, terminal palette, and grid position interactively, through the `mulmoterminal-dirs` skill |
@@ -1676,6 +1676,20 @@ Or use the three steppers in **Settings → Waiting rows**.
 - Omit `cockpitLines` entirely and the roster looks exactly as it always has.
 - **Hovering a line shows the full text**, whatever the clamp — raising it saves a hover, it isn't
   the only way to read a long summary.
+
+### Compact rows: the header and the session name only {#cockpit-compact}
+
+If you read the roster only to tell sessions apart and see which one is waiting, the lines are in
+the way. Turn on **Compact rows** in **Settings → Waiting rows**, or set `compact`:
+
+```json
+{ "cockpitLines": { "compact": true } }
+```
+
+Each row then keeps its header (status, directory, agent) and **one line naming the session**:
+your memo, else the session's title, else your last prompt — the same name the cell's own header
+shows. The line counts above have nothing to clamp and their steppers are greyed out; they come back
+when you turn it off. Only `true` turns it on; anything else is the default, off.
 - Takes effect after a **tab reload**.
 
 {: .note }
@@ -2287,7 +2301,7 @@ What you write here appears in an empty cell's launcher under **OR RUN A SCRIPT*
 | `showLoadAverage` | The machine's load average in the bar above the grid. **On unless `false`** (→ Settings → Grid header read-outs) |
 | `paletteSearchBox` | A search box in the middle of the top bar, on every screen, that opens the command palette. **Off unless `true`** (→ Settings → Grid header read-outs) |
 | `remoteServer` | **Experimental.** Say the server runs on another machine than your browser (an SSH tunnel — see [Run the server on another machine](remote.html)). Then the actions that act on the server's screen are withheld: the path menu's *Insert a file path* and *Reveal in the file manager* and the launch form's folder button are hidden; a header button, a key or the Files pane asking for the file dialog, the file manager or the OS app says why instead; and a dropped file is always uploaded, never inserted as your machine's path. The launcher opens no browser on the server, and Google sign-in points to `npx mulmoterminal google login` on the server. **Off unless set to `true`**; the box is under Settings → **Sessions and background tasks**. |
-| `cockpitLines` | How many lines each cockpit-roster row shows before clamping (default `2 / 2 / 3` → [Cockpit roster line counts](#cockpit-lines)) |
+| `cockpitLines` | How many lines each cockpit-roster row shows before clamping (default `2 / 2 / 3`), or `compact: true` for the header and the session name only (→ [Cockpit roster line counts](#cockpit-lines)) |
 | `fontFamily` | The font every terminal renders in — a CSS font-family stack (→ [Terminal font](#font-family)) |
 
 ### Keys this version doesn't know are kept {#unknown-keys}

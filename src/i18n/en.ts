@@ -443,6 +443,7 @@ export const en = {
       waiting: "waiting on you",
       finished: "finished",
       blink: "Blink a row that is waiting on me",
+      compact: "Compact rows: the header and the session name only",
       linesTitle: "Lines per row",
       linesHint: "how much of each row is shown before it clamps. Raising these trades how many sessions fit on screen for reading a long one in place.",
       fields: {

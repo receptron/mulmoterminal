@@ -855,6 +855,23 @@ describe("grid cockpit (list view)", () => {
     setCockpitLines(undefined); // leave the singleton as the next test expects to find it
   });
 
+  // #3270: compact keeps the header (status, directory) and ONE line naming the session.
+  it("shows only the header and the session name when compact, and the full row again when not", async () => {
+    setCockpitLines({ compact: true });
+    const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { memo: "mine", summary: "s", prompt: "p", response: "r" })]);
+    await nextTick();
+    expect(w.find('[data-testid="cockpit-header"]').exists()).toBe(true);
+    expect(w.get('[data-testid="cockpit-title"]').text()).toBe("mine");
+    expect(w.get('[data-testid="cockpit-title"]').attributes("data-tip")).toBe("mine");
+    expect(w.findAll('[data-testid="cockpit-line"]')).toHaveLength(0);
+    expect(w.find('[data-testid="cockpit-memo"]').exists()).toBe(false);
+
+    setCockpitLines(undefined);
+    await nextTick();
+    expect(w.find('[data-testid="cockpit-title"]').exists()).toBe(false);
+    expect(w.findAll('[data-testid="cockpit-line"]')).toHaveLength(3);
+  });
+
   // Truncation must never be the only way the text exists — the full line is one hover away.
   it("carries the untruncated text in a title", async () => {
     const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { summary: "a long summary", prompt: "the prompt", response: "the reply" })]);

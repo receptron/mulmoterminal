@@ -423,6 +423,7 @@ export const zhCN: Messages = {
       waiting: "在等你",
       finished: "结束了",
       blink: "让在等我的行闪烁",
+      compact: "紧凑显示（只显示标题栏和会话名称）",
       linesTitle: "每行的行数",
       linesHint: "每一行在截断之前显示多少。调高是拿屏幕上能放下多少个会话，去换在原地读完一个长的。",
       fields: {

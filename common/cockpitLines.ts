@@ -17,9 +17,13 @@ export interface CockpitLines {
   summary: number;
   prompt: number;
   response: number;
+  // Header plus ONE line, the session's name (#3270). The counts above then have nothing to clamp.
+  compact: boolean;
 }
 
-export const DEFAULT_COCKPIT_LINES: CockpitLines = { summary: 2, prompt: 2, response: 3 };
+export type CockpitLineField = "summary" | "prompt" | "response";
+
+export const DEFAULT_COCKPIT_LINES: CockpitLines = { summary: 2, prompt: 2, response: 3, compact: false };
 
 // 1 is "one line, still clamped". Past ~20 a single row fills the column and the roster stops
 // being a roster.
@@ -42,5 +46,6 @@ export function sanitizeCockpitLines(input: unknown): CockpitLines {
     summary: oneField(input.summary, DEFAULT_COCKPIT_LINES.summary),
     prompt: oneField(input.prompt, DEFAULT_COCKPIT_LINES.prompt),
     response: oneField(input.response, DEFAULT_COCKPIT_LINES.response),
+    compact: input.compact === true,
   };
 }

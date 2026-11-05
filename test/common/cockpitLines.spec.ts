@@ -4,7 +4,7 @@ import { sanitizeCockpitLines, DEFAULT_COCKPIT_LINES, COCKPIT_LINES_MIN, COCKPIT
 
 describe("sanitizeCockpitLines", () => {
   it("keeps whole numbers inside the range", () => {
-    expect(sanitizeCockpitLines({ summary: 8, prompt: 1, response: 20 })).toEqual({ summary: 8, prompt: 1, response: 20 });
+    expect(sanitizeCockpitLines({ summary: 8, prompt: 1, response: 20 })).toEqual({ summary: 8, prompt: 1, response: 20, compact: false });
   });
 
   // The feature is opt-in: an install that never touched config.json must render exactly as before.
@@ -23,6 +23,7 @@ describe("sanitizeCockpitLines", () => {
       summary: 6,
       prompt: DEFAULT_COCKPIT_LINES.prompt,
       response: 4,
+      compact: false,
     });
   });
 
@@ -39,6 +40,7 @@ describe("sanitizeCockpitLines", () => {
       summary: COCKPIT_LINES_MAX,
       prompt: COCKPIT_LINES_MIN,
       response: COCKPIT_LINES_MIN,
+      compact: false,
     });
   });
 
@@ -54,6 +56,13 @@ describe("sanitizeCockpitLines", () => {
     expect(sanitizeCockpitLines({ summary: 4.9 }).summary).toBe(5);
     expect(sanitizeCockpitLines({ summary: 1.9 }).summary).toBe(2);
     expect(sanitizeCockpitLines({ summary: 4.2 }).summary).toBe(4);
+  });
+
+  // Only a literal true opts in: a stray "true" or 1 in a hand-edited file must not collapse the roster.
+  it("turns compact on only for true, and leaves the counts alone", () => {
+    expect(sanitizeCockpitLines({ summary: 5, compact: true })).toEqual({ ...DEFAULT_COCKPIT_LINES, summary: 5, compact: true });
+    for (const bad of ["true", 1, null, {}]) expect(sanitizeCockpitLines({ compact: bad }).compact).toBe(false);
+    expect(DEFAULT_COCKPIT_LINES.compact).toBe(false);
   });
 
   // The defaults are handed out by reference nowhere: a caller that mutates its result must not

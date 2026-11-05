@@ -2,7 +2,7 @@
 import { useI18n } from "vue-i18n";
 import { useRosterAlert } from "../../composables/useRosterAlert";
 import { cockpitLines, saveCockpitLines } from "../../composables/cockpitLines";
-import { COCKPIT_LINES_MIN, COCKPIT_LINES_MAX, type CockpitLines } from "../../../common/cockpitLines";
+import { COCKPIT_LINES_MIN, COCKPIT_LINES_MAX, type CockpitLineField } from "../../../common/cockpitLines";
 import SettingsStepper from "./SettingsStepper.vue";
 
 // Whether a roster row waiting on the user blinks (#1131) — per browser for the same reason the
@@ -20,12 +20,15 @@ function onRosterBlinkToggle(e: Event) {
 //
 // One stepper per field because the three are worth different amounts: a summary says what a
 // session is doing now, while a prompt is usually done in two lines.
-const LINE_FIELDS: (keyof CockpitLines)[] = ["summary", "prompt", "response"];
+const LINE_FIELDS: CockpitLineField[] = ["summary", "prompt", "response"];
 const LINE_STEP = 1;
 
 // The whole object goes each time — the saver's contract, since the server merges by field.
-function nudgeLines(key: keyof CockpitLines, delta: number) {
+function nudgeLines(key: CockpitLineField, delta: number) {
   void saveCockpitLines({ ...cockpitLines.value, [key]: cockpitLines.value[key] + delta });
+}
+function onCompactToggle(e: Event) {
+  if (e.target instanceof HTMLInputElement) void saveCockpitLines({ ...cockpitLines.value, compact: e.target.checked });
 }
 </script>
 
@@ -46,6 +49,17 @@ function nudgeLines(key: keyof CockpitLines, delta: number) {
   <p class="mb-2 text-[12px] text-dim">
     <strong class="text-fg">{{ t("settings.waitingRows.linesTitle") }}</strong> — {{ t("settings.waitingRows.linesHint") }}
   </p>
+  <label class="mb-2 flex cursor-pointer items-center gap-2">
+    <input
+      type="checkbox"
+      data-testid="cockpit-compact"
+      class="cursor-pointer"
+      :checked="cockpitLines.compact"
+      :aria-label="t('settings.waitingRows.compact')"
+      @change="onCompactToggle"
+    />
+    <span class="text-[13px]">{{ t("settings.waitingRows.compact") }}</span>
+  </label>
   <div v-for="field in LINE_FIELDS" :key="field" class="mb-1.5 flex items-center gap-3">
     <span class="min-w-[92px] text-[12px] text-fg">{{ t(`settings.waitingRows.fields.${field}`) }}</span>
     <SettingsStepper
@@ -54,6 +68,7 @@ function nudgeLines(key: keyof CockpitLines, delta: number) {
       :min="COCKPIT_LINES_MIN"
       :max="COCKPIT_LINES_MAX"
       :step="LINE_STEP"
+      :disabled="cockpitLines.compact"
       :label="t(`settings.waitingRows.steppers.${field}`)"
       @nudge="nudgeLines(field, $event)"
     />
