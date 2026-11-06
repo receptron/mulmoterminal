@@ -25,11 +25,14 @@ const DEFAULT_IMAGE_CONFIG = {
 // server-side billing, but nothing here is waiting on that).
 const IMAGE_TIMEOUT_MS = 120_000;
 
+// genai 3 defaults to v1; the preview image model and imageConfig are only known to work on v1beta.
+const GEMINI_API_VERSION = "v1beta";
+
 let client: GoogleGenAI | null = null;
 function getClient() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
-  if (!client) client = new GoogleGenAI({ apiKey });
+  if (!client) client = new GoogleGenAI({ apiKey, apiVersion: GEMINI_API_VERSION });
   return client;
 }
 
