@@ -109,6 +109,9 @@ function satisfiesCaret(version: string, range: string): boolean {
   return gPatch >= wPatch;
 }
 
+/** A `||` union of carets: satisfied when any alternative is. Each alternative must still be a caret. */
+const satisfiesCaretUnion = (version: string, range: string): boolean => range.split("||").some((alternative) => satisfiesCaret(version, alternative.trim()));
+
 describe("the core each bundled consumer runs against", () => {
   it("has plugins to check, and reads them from what we actually bundle", () => {
     // Guards the reading itself: a manifest key that changed shape, or a filter that stopped
@@ -130,7 +133,7 @@ describe("the core each bundled consumer runs against", () => {
       if (declared === undefined) continue; // covered by the test above
       const resolved = resolvedCoreFor(pkg);
       expect(resolved, `${pkg} declares core ${declared} and resolves none`).not.toBeNull();
-      expect(satisfiesCaret(resolved?.version ?? "", declared), `${pkg} declares core ${declared} but runs ${resolved?.version}`).toBe(true);
+      expect(satisfiesCaretUnion(resolved?.version ?? "", declared), `${pkg} declares core ${declared} but runs ${resolved?.version}`).toBe(true);
     }
   });
 
@@ -159,7 +162,7 @@ describe("the core each bundled consumer runs against", () => {
   const DRIFTED: Record<string, string> = {};
 
   it("names every consumer running outside its declared range", () => {
-    const drifted = CORE_CONSUMERS.filter((pkg) => !satisfiesCaret(resolvedCoreFor(pkg)?.version ?? "", declaredCoreOf(pkg) ?? ""));
+    const drifted = CORE_CONSUMERS.filter((pkg) => !satisfiesCaretUnion(resolvedCoreFor(pkg)?.version ?? "", declaredCoreOf(pkg) ?? ""));
     expect([...drifted].sort()).toEqual(Object.keys(DRIFTED).sort());
   });
 
@@ -179,5 +182,15 @@ describe("the core each bundled consumer runs against", () => {
     expect(satisfiesCaret("4.2.0", "^3.0.0")).toBe(false);
     expect(satisfiesCaret("3.9.9", "^4.0.0")).toBe(false);
     expect(satisfiesCaret("4.2.0", ">=4.0.0")).toBe(false);
+  });
+
+  it("reads a || union of carets as any one of them", () => {
+    expect(satisfiesCaretUnion("6.0.0", "^5.4.0 || ^6.0.0")).toBe(true);
+    expect(satisfiesCaretUnion("5.4.1", "^5.4.0 || ^6.0.0")).toBe(true);
+    expect(satisfiesCaretUnion("5.3.9", "^5.4.0 || ^6.0.0")).toBe(false);
+    expect(satisfiesCaretUnion("7.0.0", "^5.4.0 || ^6.0.0")).toBe(false);
+    expect(satisfiesCaretUnion("6.0.0", "^6.0.0")).toBe(true);
+    expect(satisfiesCaretUnion("6.0.0", "^5.4.0 || >=6.0.0")).toBe(false);
+    expect(satisfiesCaretUnion("6.0.0", "")).toBe(false);
   });
 });
