@@ -4,7 +4,7 @@ nav_title: Alternatives
 layout: default
 parent: English
 nav_order: 18
-description: An honest map of the tools that run several Claude Code / Codex sessions at once — Vibe Kanban, Nimbalyst, Parallel Code, Conductor, Claude Squad, and Claude Code's own `claude agents` — and which one fits which bottleneck. Written by the maintainer of one of them.
+description: An honest map of the tools that run several Claude Code / Codex sessions at once — T3 Code, Vibe Kanban, Nimbalyst, Parallel Code, Conductor, Claude Squad, Codealong, and Claude Code's own `claude agents` — and which one fits which bottleneck. Written by the maintainer of one of them.
 ---
 
 # Open-source alternatives for running parallel AI coding agents
@@ -54,6 +54,7 @@ Every tool here solves parallel agents. They differ in *which part of it hurts y
 | **Reviewing** — five branches landed and you have to judge them | Diff-first, worktree-per-task |
 | **Coordinating** — you lose track of what each task even was | A board or task graph |
 | **Isolating** — you don't want a permission-skipped agent on your real machine | Containers, not just worktrees |
+| **Reaching** — the work is on a machine you are not sitting at | A relay and a phone client, not just a port |
 
 Pick by that, not by feature count.
 
@@ -61,15 +62,42 @@ Pick by that, not by feature count.
 
 ## The tools
 
-Figures checked 2026-08-03. This space changes fast — Crystal became Nimbalyst, Terragon shut
-down, and Vibe Kanban's company (Bloop) wound down in April 2026 while the project continues as
-community-maintained OSS.
+Figures checked 2026-08-03, except T3 Code and Vibe Kanban, re-checked 2026-11-08. This space
+changes fast — Crystal became Nimbalyst, Terragon shut down, and Vibe Kanban's company (Bloop)
+wound down in April 2026 while the project continues as community-maintained OSS.
+
+### T3 Code
+
+**~50,000 stars · MIT · desktop, native mobile and a hosted web client · macOS / Windows / Linux**
+
+The largest project on this page by a wide margin, and the youngest of the large ones — the
+repository was created in February 2026 and nightly builds go out every few hours. An Electron
+desktop app, **native iOS and Android apps**, and a hosted web client at `app.t3.codes` that
+reaches your machine through a relay the project runs, so getting to your agents from a phone
+needs no networking of your own. Claude Code, Codex, Cursor, Grok Build, OpenCode, Antigravity
+and fx.
+
+The shape is a **sidebar of threads with one open at a time**, and the terminal is a panel beside
+it rather than the main view. A guest link (beta) lets someone follow one thread in a browser and
+ask questions without an account. Three machines on the free plan; more needs a paid T3 Chat plan.
+
+**Where it differs from this one is underneath, and their own FAQ puts it better than I could:**
+"Claude Code is kind of a harness. It is an interface (the TUI, the Code tab in the desktop app)
+plus a harness underneath (the Anthropic Agent SDK) … T3 Code uses those harnesses. It is not a
+harness, and it does not work without one." MulmoTerminal keeps the interface instead: it runs
+the `claude` CLI itself inside a real pty. One consequence of the other route is written up in
+that same FAQ — "all Agent SDK usage will drain your 5h limits faster than using Claude Code
+directly" — which they report as an upstream bug rather than as a design choice. Weekly limits
+are unaffected.
+
+**If you want native mobile apps, a relay you don't have to run yourself, or OpenCode, this is
+the better pick.**
 
 ### Vibe Kanban
 
-**~27,500 stars · Apache-2.0 · board-first**
+**~28,600 stars · Apache-2.0 · board-first**
 
-The largest by a wide margin. Models the work as **tasks on a kanban board** rather than as
+The largest of the board-first ones. Models the work as **tasks on a kanban board** rather than as
 sessions, which is the right abstraction if what you lose track of is *what you asked for*.
 Usable from a mobile browser.
 
@@ -149,6 +177,7 @@ Machine-readable facts: [`facts.json`](https://receptron.github.io/mulmoterminal
 
 | | Interface | Licence | Agents | Mobile | Isolation |
 |---|---|---|---|---|---|
+| **T3 Code** | Desktop + web | MIT | Claude, Codex, Cursor, Grok Build, OpenCode, Antigravity, fx | **Native iOS + Android**, hosted relay | Worktrees |
 | **Vibe Kanban** | Web | Apache-2.0 | Many | Browser | Worktrees |
 | **Nimbalyst** | Desktop | MIT | Claude, Codex, OpenCode | **Native iOS + Android** | Worktrees |
 | **Parallel Code** | Desktop | MIT | Claude, Codex, **Gemini** | — | Worktrees |
@@ -171,7 +200,9 @@ a devcontainer or a VM underneath whichever one you pick.
 ## How I'd choose
 
 - **You want to leave the terminal as little as possible** → Claude Squad, or `claude agents`.
-- **You want a real phone app** → Nimbalyst.
+- **You want a real phone app** → T3 Code or Nimbalyst.
+- **You are rarely at the machine the work runs on** → T3 Code, whose relay saves you from
+  exposing or tunnelling anything.
 - **You mostly need to judge diffs afterwards** → Parallel Code, or Conductor on a Mac.
 - **You lose track of the tasks themselves** → Vibe Kanban.
 - **Your sessions are scattered across tools, accounts or machines and you want to find them**

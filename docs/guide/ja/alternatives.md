@@ -4,7 +4,7 @@ nav_title: 他の選択肢との比較
 layout: default
 parent: 日本語
 nav_order: 18
-description: Claude Code / Codex を複数同時に走らせるツール — Vibe Kanban、Nimbalyst、Parallel Code、Conductor、Claude Squad、そして Claude Code 本体の claude agents。どれがどの困りごとに向くかを、作っている側から正直に書きます。
+description: Claude Code / Codex を複数同時に走らせるツール — T3 Code、Vibe Kanban、Nimbalyst、Parallel Code、Conductor、Claude Squad、Codealong、そして Claude Code 本体の claude agents。どれがどの困りごとに向くかを、作っている側から正直に書きます。
 ---
 
 # Claude Code を並列で動かすツールの比較
@@ -42,7 +42,7 @@ claude agents
 
 ---
 
-## 困りごとは4つのどれか
+## 困りごとは5つのどれか
 
 どのツールも「並列で動かす」はできます。違うのは**どこが痛いか**です。
 
@@ -52,6 +52,7 @@ claude agents
 | **レビューできない** — ブランチが5本上がってきて判断がつかない | **diff 中心・worktree ごと** |
 | **見失う** — そもそも何を頼んだか分からなくなる | **ボードやタスクグラフ** |
 | **隔離できない** — 権限を切ったエージェントを本番マシンで走らせたくない | **コンテナ**（worktree では足りない） |
+| **届かない** — 走っているのは、いま自分が座っていないマシン | **中継とスマホの専用アプリ**（ポートを開けるだけでは足りない） |
 
 **機能の数ではなく、ここで選んでください。**
 
@@ -59,13 +60,43 @@ claude agents
 
 ## それぞれのツール
 
-数字は 2026-08-03 時点。**この分野は1年で入れ替わります** — Crystal は Nimbalyst に改称し、
+数字は 2026-08-03 時点（T3 Code と Vibe Kanban だけ 2026-11-08 に取り直し）。
+**この分野は1年で入れ替わります** — Crystal は Nimbalyst に改称し、
 Terragon は終了、Vibe Kanban の運営会社（Bloop）も 2026年4月に事業を畳みました
 （プロジェクトはコミュニティ運営として継続）。
 
-### Vibe Kanban（★27,500・Apache-2.0）
+### T3 Code（★約50,000・MIT・デスクトップ + スマホ専用アプリ + ホスト版）
 
-**圧倒的に最大手。** セッションではなく**タスクをカンバンでモデル化**します。
+**このページで圧倒的に最大手**で、大きいものの中ではいちばん若いです。リポジトリができたのは
+2026年2月で、いまは数時間おきに新しい版が出ています。デスクトップアプリ（Electron）、
+**iOS と Android のネイティブアプリ**、それに `app.t3.codes` のホスト版があります。
+ホスト版は**向こうが運用している中継**を通って手元のマシンに届くので、
+スマホからエージェントに触るのに**こちら側のネットワークの用意が要りません**。
+Claude Code / Codex / Cursor / Grok Build / OpenCode / Antigravity / fx 対応。
+
+形は**スレッドの一覧で、開くのは1つずつ**。端末は主役ではなく、横に出る1枚の面です。
+来客用リンク（試験中）を渡すと、口座を持たない人がブラウザで1つのスレッドを追って質問できます。
+無料の枠は3台までで、それ以上は T3 Chat の有料プランが要ります。
+
+**こちらとの違いは中身の作りのほうで、向こうの FAQ がこちらより上手く書いています。**
+
+> Claude Code is kind of a harness. It is an interface (the TUI, the Code tab in the desktop app)
+> plus a harness underneath (the Anthropic Agent SDK) … T3 Code uses those harnesses. It is not a
+> harness, and it does not work without one.
+
+つまり**エージェントを動かす土台を直に呼び、画面は自分のものに差し替える**という作りです。
+MulmoTerminal は画面のほうを残します —— `claude` の CLI そのものを本物の擬似端末の中で動かします。
+もう一方の経路の副作用は、同じ FAQ に書かれています ——
+"all Agent SDK usage will drain your 5h limits faster than using Claude Code directly"
+（5時間の上限が、Claude Code を直接使うより早く減る）。
+向こうはこれを設計上の選択ではなく**上流の不具合として報告中**としています。週の上限には影響しません。
+
+**ネイティブのスマホアプリが欲しい・中継を自分で運用したくない・OpenCode を使う**なら、
+こちらよりそちらです。
+
+### Vibe Kanban（★約28,600・Apache-2.0）
+
+**カンバン型では最大手。** セッションではなく**タスクをカンバンでモデル化**します。
 「何を頼んだか分からなくなる」が主な困りごとなら、この抽象が正しい。モバイルブラウザでも使えます。
 
 運営会社が畳んだあとコミュニティ運営です。**半年後に issue に誰が答えるか**を気にするなら、
@@ -131,6 +162,7 @@ worktree を作るのはエージェント側、git は基本的に読むだけ�
 
 | | UI | ライセンス | エージェント | モバイル |
 |---|---|---|---|---|
+| **T3 Code** | デスクトップ + Web | MIT | Claude / Codex / Cursor / Grok Build / OpenCode / Antigravity / fx | **iOS + Android ネイティブ**・中継つき |
 | **Vibe Kanban** | Web | Apache-2.0 | 多数 | ブラウザ |
 | **Nimbalyst** | デスクトップ | MIT | Claude / Codex / OpenCode | **iOS + Android ネイティブ** |
 | **Parallel Code** | デスクトップ | MIT | Claude / Codex / **Gemini** | — |
@@ -152,7 +184,9 @@ devcontainer か VM を下に敷いてください。
 ## 選び方
 
 - **ターミナルから出たくない** → Claude Squad、または `claude agents`
-- **本物のスマホアプリが欲しい** → Nimbalyst
+- **本物のスマホアプリが欲しい** → T3 Code、または Nimbalyst
+- **走らせているマシンの前にほとんど座っていない** → T3 Code（中継があるので、
+  こちらでポートを開けたり経路を掘ったりしなくて済みます）
 - **主に diff を判断したい** → Parallel Code、Mac なら Conductor
 - **タスク自体を見失う** → Vibe Kanban
 - **セッションが道具やアカウントやマシンに散らばって、まず在処を知りたい** → Codealong（どれかの隣に置く）
