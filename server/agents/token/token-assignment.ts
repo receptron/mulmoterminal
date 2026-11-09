@@ -28,6 +28,11 @@ export interface TokenAssignmentDeps {
   spentUntil_sec?: (tokenId: string) => number | null;
   /** Sessions running on each credential now, by token id (DEFAULT_LOGIN_ID included). */
   liveSessions?: (tokenId: string) => number;
+  /** Whether the credential's latest probe got no answer, by token id (#3291). */
+  probeFailed?: (tokenId: string) => boolean;
+  /** Whether the credential cannot run Claude Code at all now — its subscription access is
+   *  disabled — by token id. Such a one is no candidate, not even as a last resort (#3291). */
+  unusable?: (tokenId: string) => boolean;
   readSecret: (token: RotationToken) => string | null;
   now_sec: number;
   /** Refuse a candidate that is held out, rather than falling back to the one free soonest — for
@@ -38,18 +43,24 @@ export interface TokenAssignmentDeps {
 const candidatesOf = (deps: TokenAssignmentDeps): TokenCandidate[] => {
   const spent = (id: string) => deps.spentUntil_sec?.(id) ?? null;
   const live = (id: string) => deps.liveSessions?.(id) ?? 0;
+  const failed = (id: string) => deps.probeFailed?.(id) ?? false;
   const tokens = deps.rotation.tokens.map((token) => ({
     id: token.id,
     limits: deps.tokenLimits(token),
     spentUntil_sec: spent(token.id),
     liveSessions: live(token.id),
     reserveWeeklyPercent: token.reserveWeeklyPercent,
+    probeFailed: failed(token.id),
   }));
-  if (!deps.rotation.includeDefaultLogin) return tokens;
-  return [
-    { id: DEFAULT_LOGIN_ID, limits: deps.defaultLoginLimits(), spentUntil_sec: spent(DEFAULT_LOGIN_ID), liveSessions: live(DEFAULT_LOGIN_ID) },
-    ...tokens,
-  ];
+  const defaultLogin = (): TokenCandidate => ({
+    id: DEFAULT_LOGIN_ID,
+    limits: deps.defaultLoginLimits(),
+    spentUntil_sec: spent(DEFAULT_LOGIN_ID),
+    liveSessions: live(DEFAULT_LOGIN_ID),
+    probeFailed: failed(DEFAULT_LOGIN_ID),
+  });
+  const all = deps.rotation.includeDefaultLogin ? [defaultLogin(), ...tokens] : tokens;
+  return all.filter((candidate) => !deps.unusable?.(candidate.id));
 };
 
 const assignmentOf = (tokenId: string, secret: string | null): TokenAssignment | null => {

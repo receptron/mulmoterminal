@@ -119,6 +119,36 @@ describe("assignToken with onlyFree (#2919)", () => {
   });
 });
 
+describe("tokens whose probe failed (#3291)", () => {
+  it("never chooses a token that cannot run Claude Code, even when it would win", () => {
+    expect(assignToken(deps({ includeDefaultLogin: false }, { unusable: (id) => id === "b" }))?.tokenId).toBe("a");
+  });
+
+  it("does not fall back to an unusable token when every other one is held out", () => {
+    const rest = deps({ includeDefaultLogin: false }, { unusable: (id) => id === "b", spentUntil_sec: (id) => (id === "a" ? NOW + DAY : null) });
+    expect(assignToken(rest)?.tokenId).toBe("a");
+    expect(assignToken(deps({ includeDefaultLogin: false, tokens: [B] }, { unusable: () => true }))).toBeNull();
+  });
+
+  it("never reads the secret of an unusable token", () => {
+    const read: string[] = [];
+    assignToken(deps({ includeDefaultLogin: false }, { unusable: (id) => id === "b", readSecret: (token) => (read.push(token.id), `s-${token.id}`) }));
+    expect(read).toEqual(["a"]);
+  });
+
+  it("passes a failed probe through, so its stale reading stops winning", () => {
+    // b would win on its reading (used(10) beats used(50)).
+    const failedB = deps({ includeDefaultLogin: false }, { probeFailed: (id) => id === "b" });
+    expect(assignToken(failedB)?.tokenId).toBe("a");
+  });
+
+  it("applies both to the /login credential too", () => {
+    const onlyDefault = deps({ tokens: [] }, { defaultLoginLimits: () => used(10) });
+    expect(assignToken(onlyDefault)?.tokenId).toBe(DEFAULT_LOGIN_ID);
+    expect(assignToken({ ...onlyDefault, unusable: (id) => id === DEFAULT_LOGIN_ID })).toBeNull();
+  });
+});
+
 describe("live sessions (#2926)", () => {
   it("counts the running sessions recorded on a token", () => {
     const tokenOf = (id: string) => ({ s1: "a", s2: "a", s3: "b" })[id];

@@ -18,6 +18,8 @@ export interface TokenCandidate {
   liveSessions?: number;
   /** Percent of the 7-day window never to spend on it (#3064). */
   reserveWeeklyPercent?: number | undefined;
+  /** The latest probe got no answer, so `limits` is a reading nothing has confirmed since (#3291). */
+  probeFailed?: boolean;
 }
 
 /** At or above this, a 5-hour window is too close to blocking a turn to start a session on it. */
@@ -81,7 +83,8 @@ const RANK_UNMEASURED = 1;
  * The candidate a new session should run on, or null when there are none.
  *
  * Eligible and measured first, by burn pace shared among the sessions already running there; then
- * eligible but never measured (the next probe measures it); and only when every one is held out, the
+ * eligible but never measured (the next probe measures it), or measured only before a probe that
+ * failed — a stale reading of an unused week would otherwise win every time (#3291); and only when every one is held out, the
  * one free soonest — never one down to its reserve, which would spend the very room it keeps. Ties go to fewer running sessions, then config order.
  *
  * The sharing is what spreads parallel sessions (#2926): by pace alone every one of them landed on
@@ -98,8 +101,9 @@ export function chooseToken(candidates: readonly TokenCandidate[], now_sec: numb
   }
   const ranked = free.map((candidate, order) => {
     const load = candidate.liveSessions ?? 0;
-    const pace = candidate.limits ? burnPace(candidate.limits, now_sec, candidate.reserveWeeklyPercent) : 0;
-    return { id: candidate.id, order, load, rank: candidate.limits ? RANK_MEASURED : RANK_UNMEASURED, share: pace / (1 + load) };
+    const confirmed = candidate.probeFailed ? null : candidate.limits;
+    const pace = confirmed ? burnPace(confirmed, now_sec, candidate.reserveWeeklyPercent) : 0;
+    return { id: candidate.id, order, load, rank: confirmed ? RANK_MEASURED : RANK_UNMEASURED, share: pace / (1 + load) };
   });
   ranked.sort((a, b) => a.rank - b.rank || b.share - a.share || a.load - b.load || a.order - b.order);
   return ranked[0]?.id ?? null;

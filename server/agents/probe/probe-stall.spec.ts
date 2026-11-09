@@ -45,6 +45,26 @@ describe("classifyProbeStall on a usage limit (#2919)", () => {
   });
 });
 
+// Recorded from a real `claude` (2.1.292) on a login whose organization has disabled subscription
+// access for Claude Code (#3291), escapes included — the reply and the line after it.
+const SUBSCRIPTION_DISABLED_SCREEN =
+  `${ESC}[H\r${ESC}[15B${ESC}[38;5;137m⏺${ESC}[3GYour organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, ` +
+  `\r${ESC}[2C${ESC}[1Bor ask your admin to enable access\r${ESC}[2B${ESC}[38;5;241m✻${ESC}[3GCooked for 1s · done 8:31 AM`;
+
+describe("classifyProbeStall on disabled subscription access (#3291)", () => {
+  it("names it when Claude Code says the organization has disabled it", () => {
+    expect(classifyProbeStall(SUBSCRIPTION_DISABLED_SCREEN)).toBe("subscription-disabled");
+  });
+
+  it("does not read a mention of an organization or a subscription alone as one", () => {
+    expect(classifyProbeStall(`${ESC}[2J❯ explain how my organization's Claude subscription works`)).toBe("unknown");
+  });
+
+  it("still names the trust dialog first", () => {
+    expect(classifyProbeStall(`${SUBSCRIPTION_DISABLED_SCREEN}${TRUST_SCREEN}`)).toBe("trust-prompt");
+  });
+});
+
 describe("classifyProbeStall", () => {
   it("names the trust dialog when it is what the terminal is showing", () => {
     expect(classifyProbeStall(TRUST_SCREEN)).toBe("trust-prompt");
