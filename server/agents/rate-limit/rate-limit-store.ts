@@ -9,7 +9,7 @@
 // Codex is not in that bargain — its windows are read from a rollout file — so it is refreshed
 // whenever asked and never gates on staleness.
 import type { ClaudeStatus, RateLimits } from "../statusline.js";
-import type { ProbeStall } from "../probe/probe-stall.js";
+import type { ProbeStall } from "../../../common/probeStall.js";
 
 export type RateLimitAgent = "claude" | "codex";
 

@@ -12,7 +12,7 @@ import { CLAUDE_READING_MAX_AGE_MS, RATE_LIMIT_STALE_MS, createRateLimitStore } 
 import { mountRateLimitRoutes } from "../../../../server/agents/rate-limit/rate-limit-routes.js";
 import { rateLimitCacheFile } from "../../../../server/agents/rate-limit/rate-limit-persist.js";
 import { statusLineCommand } from "../../../../server/agents/statusline.js";
-import type { ProbeStall } from "../../../../server/agents/probe/probe-stall.js";
+import type { ProbeStall } from "../../../../common/probeStall.js";
 
 const WORK: AgentAccount = { id: "work", label: "Work", agent: "claude", home: "/h/claude-work" };
 const CW: AgentAccount = { id: "cw", label: "Codex work", agent: "codex", home: "/h/codex-work" };

@@ -17,7 +17,7 @@ import { newestRolloutFile, readRolloutTail } from "../codex/codex-rollout.js";
 import { codexSessionsRoot } from "../codex/codex-session.js";
 import { createAccountRateLimits, type AccountRateLimitReading } from "./account-rate-limits.js";
 import { createTokenRotation, type TokenRotationRuntime } from "../token/token-rotation-service.js";
-import type { ProbeStall } from "../probe/probe-stall.js";
+import type { ProbeStall } from "../../../common/probeStall.js";
 import { accountHome, codexSessionsUnder, distinctAccounts, homeEnv } from "../../session/session-home.js";
 import { latestRateLimitsInRollout } from "../codex/codex-rate-limits.js";
 import { rateLimitCacheFile, readRateLimitCache, createRateLimitCacheWriter } from "./rate-limit-persist.js";

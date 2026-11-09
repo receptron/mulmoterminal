@@ -10,7 +10,8 @@
 import { ref } from "vue";
 import { parseRateLimits, type RateLimits } from "../../common/rateLimits";
 import { isRecord } from "../../common/isRecord";
-import type { AccountReading, ClaudeProbeStall, ClaudeProbeState, RateLimitSnapshot } from "./rateLimitGauge";
+import type { AccountReading, ClaudeProbeState, RateLimitSnapshot } from "./rateLimitGauge";
+import { isProbeStall } from "../../common/probeStall";
 import { isAccountId } from "../../common/agentAccounts";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 
@@ -30,9 +31,6 @@ let watchers = 0;
 
 const PROBE_STATES: readonly ClaudeProbeState[] = ["ok", "no-claude", "no-windows", "no-report"];
 const isProbeState = (v: unknown): v is ClaudeProbeState => typeof v === "string" && PROBE_STATES.some((state) => state === v);
-
-const PROBE_STALLS: readonly ClaudeProbeStall[] = ["trust-prompt", "usage-limit", "unknown"];
-const isProbeStall = (v: unknown): v is ClaudeProbeStall => typeof v === "string" && PROBE_STALLS.some((stall) => stall === v);
 
 // A failure leaves the last known windows in place. Blanking them would read as "0% used", which
 // is the opposite of the truth we just failed to fetch.

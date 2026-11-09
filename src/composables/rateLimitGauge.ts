@@ -8,6 +8,7 @@
 
 import type { RateLimits, RateLimitWindow } from "../../common/rateLimits";
 import { DEFAULT_LOGIN_SHORT_LABEL } from "../../common/tokenRotation";
+import type { ProbeStall } from "../../common/probeStall";
 import type { Translate } from "../i18n/translate";
 
 export interface RateLimitSnapshot {
@@ -17,7 +18,7 @@ export interface RateLimitSnapshot {
    *  cannot describe the same situation differently. */
   claudeProbe?: ClaudeProbeState | undefined;
   /** Which silence, when the state is `no-report` (#1293). */
-  claudeStall?: ClaudeProbeStall | undefined;
+  claudeStall?: ProbeStall | undefined;
   /** The folder every Claude probe runs in (#3200), named in a trust-prompt note: accepting the prompt
    *  anywhere else does nothing. Absent only from a server that predates it. */
   claudeProbeCwd?: string | undefined;
@@ -33,7 +34,7 @@ export interface AccountReading {
   limits: RateLimits | null;
   /** Why a claude account's figures are missing, as for the default login. */
   probe?: ClaudeProbeState | undefined;
-  probeStall?: ClaudeProbeStall | undefined;
+  probeStall?: ProbeStall | undefined;
   /** The windows as last read when `limits` is gone stale; what says when a held-out login resets. */
   lastLimits?: RateLimits | null | undefined;
   /** Whose subscription a rotation token is (#2919), shown beside its label where there is room. */
@@ -44,13 +45,8 @@ export interface AccountReading {
 
 export type ClaudeProbeState = "ok" | "no-claude" | "no-windows" | "no-report";
 
-/** The one silence the probe's screen can name. Everything else is `unknown`, which reads as the
- *  general no-report line — a wrong reason costs more than a vague one. */
-export type ClaudeProbeStall = "trust-prompt" | "usage-limit" | "unknown";
-
 /** The one silence that is a reading in itself: the subscription is OUT, not unmeasured (#2995). */
-export const atUsageLimit = (probe: ClaudeProbeState | undefined, stall: ClaudeProbeStall | undefined): boolean =>
-  probe === "no-report" && stall === "usage-limit";
+export const atUsageLimit = (probe: ClaudeProbeState | undefined, stall: ProbeStall | undefined): boolean => probe === "no-report" && stall === "usage-limit";
 
 // What to put where the Claude figures would be. Silence is right for "we simply have not
 // measured yet", and wrong for the two states that will not resolve on their own: #1011 was a
@@ -86,7 +82,7 @@ const noteParams = (folder: string | undefined): Record<string, unknown> => (fol
 function probeNoteKey(
   limits: RateLimits | null,
   probe: ClaudeProbeState | undefined,
-  stall: ClaudeProbeStall | undefined,
+  stall: ProbeStall | undefined,
   now_ms: number,
   trustNote: string,
   folder: string | undefined,

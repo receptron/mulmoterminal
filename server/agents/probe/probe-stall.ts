@@ -12,9 +12,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { ESC, squashForMarker, stripPtyEscapes, trustDialogIsUp } from "../../session/pty/pty-scan.js";
-
-/** Why a probe went silent, as far as its own screen can prove. */
-export type ProbeStall = "trust-prompt" | "usage-limit" | "subscription-disabled" | "unknown";
+import type { ProbeStall } from "../../../common/probeStall.js";
 
 // How much of the probe's output to keep. The pty is 120x30, so this holds a few full repaints —
 // enough that a dialog painted at startup is still there when the probe gives up 90 seconds later,

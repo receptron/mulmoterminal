@@ -10,7 +10,7 @@ import { agentHome } from "../agent-homes.js";
 import { getTokenRotation } from "../../config/config-routes.js";
 import { DEFAULT_LOGIN_ID, type RotationToken } from "../../../common/tokenRotation.js";
 import type { RateLimits } from "../../../common/rateLimits.js";
-import type { ProbeStall } from "../probe/probe-stall.js";
+import type { ProbeStall } from "../../../common/probeStall.js";
 import type { LoginRateLimits } from "../rate-limit/rate-limit-routes.js";
 
 const MS_PER_SEC = 1000;
