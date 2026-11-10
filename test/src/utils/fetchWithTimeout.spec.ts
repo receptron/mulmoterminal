@@ -7,12 +7,27 @@ import { isRequestTimeout } from "../../../src/utils/requestTimeout";
 
 const TIMEOUT_TEXT = /did not answer within/;
 
+const LATE_REJECT_MS = DEFAULT_REQUEST_TIMEOUT_MS * 2;
+
+/** A fetch whose rejection reaches the caller only `delay_ms` after its signal aborts. */
+function lateRejectingFetch(delay_ms: number): void {
+  vi.stubGlobal("fetch", (_input: RequestInfo | URL, init?: RequestInit) => {
+    const signal = init?.signal;
+    return new Promise<Response>((_resolve, reject) => {
+      const rejectLater = () => setTimeout(() => reject(signal?.reason), delay_ms);
+      signal?.addEventListener("abort", rejectLater);
+    });
+  });
+}
+
 /** A fetch that never answers, recording the signal it was handed. */
 function hangingFetch(): { signals: AbortSignal[] } {
   const signals: AbortSignal[] = [];
   vi.stubGlobal("fetch", (_input: RequestInfo | URL, init?: RequestInit) => {
     if (init?.signal) signals.push(init.signal);
     return new Promise<Response>((_resolve, reject) => {
+      // Like the real fetch, an already-aborted signal rejects at once rather than never.
+      if (init?.signal?.aborted) reject(new DOMException("Aborted", "AbortError"));
       init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
     });
   });
@@ -20,6 +35,10 @@ function hangingFetch(): { signals: AbortSignal[] } {
 }
 
 const ok = () => ({ ok: true, status: 200 }) as Response;
+
+// By name rather than `instanceof`: under jsdom the abort reason a Node AbortController makes is
+// not the DOMException the spec file sees.
+const errorName = (err: unknown): string => (typeof err === "object" && err !== null && "name" in err ? String(err.name) : "");
 
 describe("fetchWithTimeout", () => {
   afterEach(() => {
@@ -101,6 +120,29 @@ describe("fetchWithTimeout", () => {
     expect(err).toBeInstanceOf(DOMException);
     expect(err instanceof DOMException ? err.name : "").toBe("AbortError");
     expect(isRequestTimeout(err)).toBe(false);
+  });
+
+  // The rejection can reach the catch AFTER the deadline fired even though the caller cancelled
+  // first (Codex, #3294). The composed signal remembers which came first; the deadline controller
+  // alone does not.
+  it("keeps a cancellation a cancellation when its rejection lands after the deadline", async () => {
+    vi.useFakeTimers();
+    lateRejectingFetch(LATE_REJECT_MS);
+    const caller = new AbortController();
+    const outcome = fetchWithTimeout("/api/thing", { signal: caller.signal }).catch((err: unknown) => err);
+    caller.abort();
+    await vi.advanceTimersByTimeAsync(LATE_REJECT_MS);
+    const err = await outcome;
+    expect(isRequestTimeout(err)).toBe(false);
+    expect(errorName(err)).toBe("AbortError");
+  });
+
+  it("treats a signal that was already aborted as a cancellation", async () => {
+    vi.useFakeTimers();
+    hangingFetch();
+    const outcome = fetchWithTimeout("/api/thing", { signal: AbortSignal.abort() }).catch((err: unknown) => err);
+    await vi.advanceTimersByTimeAsync(DEFAULT_REQUEST_TIMEOUT_MS);
+    expect(isRequestTimeout(await outcome)).toBe(false);
   });
 
   it("keeps the caller's signal AND the deadline, whichever comes first", async () => {

@@ -64,7 +64,9 @@ export async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestI
     // `Response`'s accessors need their real receiver. Not worth it for a handle.
     clearTimeout(timer);
     // Our deadline's reason, not whatever `fetch` chose to reject with: a runtime that drops the
-    // abort reason would otherwise bring back the message this reason exists to replace.
-    throw abort.signal.aborted ? abort.signal.reason : err;
+    // abort reason would otherwise bring back the message this reason exists to replace. Asked of
+    // the composed signal, which keeps the FIRST reason: a caller that cancelled before the deadline
+    // fired stays a cancellation even when the rejection reaches here after it.
+    throw signal.aborted && signal.reason === abort.signal.reason ? abort.signal.reason : err;
   }
 }
