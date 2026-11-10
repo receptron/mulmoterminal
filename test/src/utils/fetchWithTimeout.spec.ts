@@ -3,6 +3,23 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 
 import { fetchWithTimeout, DEFAULT_REQUEST_TIMEOUT_MS } from "../../../src/utils/fetchWithTimeout";
+import { isRequestTimeout } from "../../../src/utils/requestTimeout";
+
+const TIMEOUT_TEXT = /did not answer within/;
+
+const LATE_REJECT_MS = DEFAULT_REQUEST_TIMEOUT_MS * 2;
+
+/** A fetch whose rejection reaches the caller only `delay_ms` after its signal aborts. */
+function lateRejectingFetch(delay_ms: number): void {
+  vi.stubGlobal("fetch", (_input: RequestInfo | URL, init?: RequestInit) => {
+    const signal = init?.signal;
+    return new Promise<Response>((_resolve, reject) => {
+      const rejectLater = () => setTimeout(() => reject(signal?.reason), delay_ms);
+      if (signal?.aborted) rejectLater();
+      else signal?.addEventListener("abort", rejectLater);
+    });
+  });
+}
 
 /** A fetch that never answers, recording the signal it was handed. */
 function hangingFetch(): { signals: AbortSignal[] } {
@@ -10,6 +27,8 @@ function hangingFetch(): { signals: AbortSignal[] } {
   vi.stubGlobal("fetch", (_input: RequestInfo | URL, init?: RequestInit) => {
     if (init?.signal) signals.push(init.signal);
     return new Promise<Response>((_resolve, reject) => {
+      // Like the real fetch, an already-aborted signal rejects at once rather than never.
+      if (init?.signal?.aborted) reject(new DOMException("Aborted", "AbortError"));
       init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
     });
   });
@@ -17,6 +36,10 @@ function hangingFetch(): { signals: AbortSignal[] } {
 }
 
 const ok = () => ({ ok: true, status: 200 }) as Response;
+
+// By name rather than `instanceof`: under jsdom the abort reason a Node AbortController makes is
+// not the DOMException the spec file sees.
+const errorName = (err: unknown): string => (typeof err === "object" && err !== null && "name" in err ? String(err.name) : "");
 
 describe("fetchWithTimeout", () => {
   afterEach(() => {
@@ -38,9 +61,30 @@ describe("fetchWithTimeout", () => {
     // Asserted BEFORE the clock moves: attaching the handler afterwards leaves a moment where the
     // promise rejects with nothing listening, which Node reports as an unhandled rejection. It
     // survived locally and failed on CI, where the ordering is not the same.
-    const settled = expect(fetchWithTimeout("/api/thing")).rejects.toThrow(/abort/i);
+    const settled = expect(fetchWithTimeout("/api/thing")).rejects.toThrow(TIMEOUT_TEXT);
     await vi.advanceTimersByTimeAsync(DEFAULT_REQUEST_TIMEOUT_MS);
     await settled;
+  });
+
+  // The mock rejects with its own bare AbortError, as a runtime that drops the abort reason does.
+  // What reaches the caller must still be the timeout, not "signal is aborted without reason".
+  it("reports the deadline as a timeout whatever fetch rejected with", async () => {
+    vi.useFakeTimers();
+    hangingFetch();
+    const outcome = fetchWithTimeout("/api/thing").catch((err: unknown) => err);
+    await vi.advanceTimersByTimeAsync(DEFAULT_REQUEST_TIMEOUT_MS);
+    const err = await outcome;
+    expect(isRequestTimeout(err)).toBe(true);
+    expect(String(err)).toContain("within 8 seconds");
+  });
+
+  it("hands the deadline to fetch as the abort reason", async () => {
+    vi.useFakeTimers();
+    const { signals } = hangingFetch();
+    const settled = fetchWithTimeout("/api/thing").catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(DEFAULT_REQUEST_TIMEOUT_MS);
+    await settled;
+    expect(isRequestTimeout(signals[0]?.reason)).toBe(true);
   });
 
   // The reason this takes a parameter at all: the same codebase runs 90s for an LLM summary and
@@ -70,16 +114,45 @@ describe("fetchWithTimeout", () => {
     vi.useFakeTimers();
     hangingFetch();
     const caller = new AbortController();
-    const settled = expect(fetchWithTimeout("/api/thing", { signal: caller.signal })).rejects.toThrow(/abort/i);
+    const outcome = fetchWithTimeout("/api/thing", { signal: caller.signal }).catch((err: unknown) => err);
     caller.abort();
-    await settled;
+    const err = await outcome;
+    // A cancellation, not a timeout: an unmounting component must not be told the server was slow.
+    expect(err).toBeInstanceOf(DOMException);
+    expect(err instanceof DOMException ? err.name : "").toBe("AbortError");
+    expect(isRequestTimeout(err)).toBe(false);
+  });
+
+  // The rejection can reach the catch AFTER the deadline fired even though the caller cancelled
+  // first (Codex, #3294). The composed signal remembers which came first; the deadline controller
+  // alone does not.
+  it("keeps a cancellation a cancellation when its rejection lands after the deadline", async () => {
+    vi.useFakeTimers();
+    lateRejectingFetch(LATE_REJECT_MS);
+    const caller = new AbortController();
+    const outcome = fetchWithTimeout("/api/thing", { signal: caller.signal }).catch((err: unknown) => err);
+    caller.abort();
+    await vi.advanceTimersByTimeAsync(LATE_REJECT_MS);
+    const err = await outcome;
+    expect(isRequestTimeout(err)).toBe(false);
+    expect(errorName(err)).toBe("AbortError");
+  });
+
+  it("treats a signal that was already aborted as a cancellation, even when its rejection is late", async () => {
+    vi.useFakeTimers();
+    lateRejectingFetch(LATE_REJECT_MS);
+    const outcome = fetchWithTimeout("/api/thing", { signal: AbortSignal.abort() }).catch((err: unknown) => err);
+    await vi.advanceTimersByTimeAsync(LATE_REJECT_MS);
+    const err = await outcome;
+    expect(isRequestTimeout(err)).toBe(false);
+    expect(errorName(err)).toBe("AbortError");
   });
 
   it("keeps the caller's signal AND the deadline, whichever comes first", async () => {
     vi.useFakeTimers();
     hangingFetch();
     const caller = new AbortController(); // never fired
-    const settled = expect(fetchWithTimeout("/api/thing", { signal: caller.signal })).rejects.toThrow(/abort/i);
+    const settled = expect(fetchWithTimeout("/api/thing", { signal: caller.signal })).rejects.toThrow(TIMEOUT_TEXT);
     await vi.advanceTimersByTimeAsync(DEFAULT_REQUEST_TIMEOUT_MS);
     await settled;
   });
@@ -159,13 +232,15 @@ describe("fetchWithTimeout", () => {
     vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
       // headers now, body never
       const body = new Promise<string>((_resolve, reject) => {
-        init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+        // A body errors with the signal's reason, per the Fetch spec; this is the one path that
+        // reaches the caller without passing through fetchWithTimeout's own catch.
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
       });
       return { ok: true, status: 200, text: () => body, json: () => body, blob: () => body } as unknown as Response;
     });
     const res = await fetchWithTimeout("/api/media");
     expect(res.ok).toBe(true); // the headers were fine
-    const settled = expect(res.text()).rejects.toThrow(/abort/i);
+    const settled = expect(res.text()).rejects.toThrow(TIMEOUT_TEXT);
     await vi.advanceTimersByTimeAsync(DEFAULT_REQUEST_TIMEOUT_MS);
     await settled;
   });

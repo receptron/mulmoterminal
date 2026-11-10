@@ -6,6 +6,7 @@ import { commandPaletteKo } from "./commandPalette/ko";
 import { terminalCopyModeKo } from "./terminalCopyMode/ko";
 import { rowMenuKo } from "./rowMenu/ko";
 import { focusModeKo } from "./focusMode/ko";
+import { requestTimeoutKo } from "./requestTimeout/ko";
 import { fileHistoryKo } from "./fileHistory/ko";
 import { filesRecentKo } from "./filesRecent/ko";
 import { dirConfigSaveKo } from "./dirConfigSave/ko";
@@ -634,6 +635,7 @@ export const ko: Messages = {
   headerChips: headerChipsKo,
   headerButtons: headerButtonsKo,
   focusMode: focusModeKo,
+  requestTimeout: requestTimeoutKo,
   settingsControls: settingsControlsKo,
   ...filesTreeKo,
   ...previewCodeCopyKo,

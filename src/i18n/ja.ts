@@ -6,6 +6,7 @@ import { commandPaletteJa } from "./commandPalette/ja";
 import { terminalCopyModeJa } from "./terminalCopyMode/ja";
 import { rowMenuJa } from "./rowMenu/ja";
 import { focusModeJa } from "./focusMode/ja";
+import { requestTimeoutJa } from "./requestTimeout/ja";
 import { fileHistoryJa } from "./fileHistory/ja";
 import { filesRecentJa } from "./filesRecent/ja";
 import { dirConfigSaveJa } from "./dirConfigSave/ja";
@@ -637,6 +638,7 @@ export const ja: Messages = {
   headerChips: headerChipsJa,
   headerButtons: headerButtonsJa,
   focusMode: focusModeJa,
+  requestTimeout: requestTimeoutJa,
   settingsControls: settingsControlsJa,
   ...filesTreeJa,
   ...previewCodeCopyJa,
