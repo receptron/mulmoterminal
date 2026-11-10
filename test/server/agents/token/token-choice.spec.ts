@@ -79,6 +79,27 @@ describe("chooseToken (#2919)", () => {
     expect(chooseToken([candidate("a", limits(100, DAY)), candidate("b", null)], NOW)).toBe("b");
   });
 
+  it("ranks a candidate whose latest probe failed with the unmeasured, behind every measured free one (#3291)", () => {
+    // a's stale reading — 1% of a week resetting tomorrow — would win on pace by far.
+    const a: TokenCandidate = { ...candidate("a", limits(1, DAY)), probeFailed: true };
+    expect(chooseToken([a, candidate("b", limits(95, 6 * DAY))], NOW)).toBe("b");
+  });
+
+  it("does not let a failed probe's stale reading put it ahead of a never-measured one (#3291)", () => {
+    const a: TokenCandidate = { ...candidate("a", limits(1, DAY)), probeFailed: true };
+    expect(chooseToken([candidate("b", null), a], NOW)).toBe("b");
+  });
+
+  it("still holds out a candidate whose failed probe's last reading was at its ceiling (#3291)", () => {
+    const a: TokenCandidate = { ...candidate("a", limits(100, DAY)), probeFailed: true };
+    expect(chooseToken([a, candidate("b", null)], NOW)).toBe("b");
+  });
+
+  it("still takes a candidate whose probe failed when it is the only free one (#3291)", () => {
+    const a: TokenCandidate = { ...candidate("a", limits(1, DAY)), probeFailed: true };
+    expect(chooseToken([a, candidate("b", limits(100, DAY))], NOW)).toBe("a");
+  });
+
   it("with every candidate held out, picks the one free soonest", () => {
     const a = candidate("a", limits(100, 3 * DAY));
     const b = candidate("b", limits(100, DAY));

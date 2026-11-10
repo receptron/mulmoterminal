@@ -147,6 +147,18 @@ describe("useRateLimits polling lifecycle", () => {
     stop();
   });
 
+  it("carries a token whose subscription access is disabled as that stall (#3291)", async () => {
+    const accounts = [
+      { id: "ss", label: "SS", agent: "claude", limits: null, probing: false, probe: "no-report", probeStall: "subscription-disabled", rotation: true },
+    ];
+    fetchMock.mockImplementation(() => respond({ claude: null, codex: null, probing: false, accounts }));
+    const { start, stop, snapshot } = useRateLimits();
+    start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(snapshot.value?.accounts?.map((a) => a.probeStall)).toEqual(["subscription-disabled"]);
+    stop();
+  });
+
   it("carries an account's probe state and drops one it does not recognise", async () => {
     const accounts = [
       { id: "work", label: "Work", agent: "claude", limits: null, probing: false, probe: "no-report", probeStall: "trust-prompt" },

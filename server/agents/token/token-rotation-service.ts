@@ -10,7 +10,7 @@ import { agentHome } from "../agent-homes.js";
 import { getTokenRotation } from "../../config/config-routes.js";
 import { DEFAULT_LOGIN_ID, type RotationToken } from "../../../common/tokenRotation.js";
 import type { RateLimits } from "../../../common/rateLimits.js";
-import type { ProbeStall } from "../probe/probe-stall.js";
+import type { ProbeStall } from "../../../common/probeStall.js";
 import type { LoginRateLimits } from "../rate-limit/rate-limit-routes.js";
 
 const MS_PER_SEC = 1000;
@@ -77,8 +77,8 @@ export function createTokenRotation(deps: TokenRotationDeps): TokenRotationRunti
 
   // A token whose last probe found it at its usage limit reports no windows at all (the block comes
   // before any response), so the probe's verdict is what holds it out until a later probe answers.
-  const atLimitByProbe = (id: string): boolean =>
-    meters.readings(Date.now()).some((reading) => reading.id === id && reading.probe === "no-report" && reading.probeStall === "usage-limit");
+  const failedProbe = (id: string) => meters.readings(Date.now()).find((reading) => reading.id === id && reading.probe === "no-report");
+  const atLimitByProbe = (id: string): boolean => failedProbe(id)?.probeStall === "usage-limit";
   const heldUntil = (id: string): number | null => spentUntil.get(id) ?? (atLimitByProbe(id) ? nowSec() + SPENT_HOLD_SEC : null);
   const limitsOf = (tokenId: string): RateLimits | null => {
     if (tokenId === DEFAULT_LOGIN_ID) return deps.defaultLoginLimits();
@@ -93,6 +93,8 @@ export function createTokenRotation(deps: TokenRotationDeps): TokenRotationRunti
       tokenLimits: (token) => meters.lastClaudeLimits(meteredToken(token)),
       spentUntil_sec: heldUntil,
       liveSessions: deps.liveSessions,
+      probeFailed: (id) => failedProbe(id) !== undefined,
+      unusable: (id) => failedProbe(id)?.probeStall === "subscription-disabled",
       readSecret: readRotationToken,
       now_sec: nowSec(),
       onlyFree,

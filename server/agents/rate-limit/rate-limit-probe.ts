@@ -14,7 +14,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { killPty } from "../../session/pty/pty-kill.js";
 import { statusLineCommand } from "../statusline.js";
-import { appendProbeScreen, classifyProbeStall, type ProbeStall } from "../probe/probe-stall.js";
+import { appendProbeScreen, classifyProbeStall } from "../probe/probe-stall.js";
+import type { ProbeStall } from "../../../common/probeStall.js";
 
 // Long enough for a cold `claude` to boot, answer, and re-render its status line; short enough
 // that a probe which will never report (no binary, an unaccepted trust prompt, an expired login)

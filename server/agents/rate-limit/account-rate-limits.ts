@@ -15,7 +15,7 @@ import type { RateLimits } from "../../../common/rateLimits.js";
 import { createRateLimitStore, currentClaudeLimits, type ProbeState, type RateLimitStore } from "./rate-limit-store.js";
 import { createRateLimitCacheWriter, rateLimitCacheFile, readRateLimitCache } from "./rate-limit-persist.js";
 import type { ClaudeStatus } from "../statusline.js";
-import type { ProbeStall } from "../probe/probe-stall.js";
+import type { ProbeStall } from "../../../common/probeStall.js";
 
 /** What one account's gauge needs, as the route sends it. */
 export interface AccountRateLimitReading {

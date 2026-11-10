@@ -5,17 +5,14 @@
 // cost a reporter a whole debugging session. The probe already HAS the evidence on its screen —
 // this reads it.
 //
-// Only ONE cause is named, and that is deliberate. The trust dialog is recognised by the marker
-// pty-scan.ts already matches against a live claude TUI; every other guess at a message ("log in
-// again", "you are rate limited") would be a string nobody here has watched upstream emit, and a
+// Only causes whose words were recorded from a real claude are named, and that is deliberate: a
+// guess at a message ("log in again") would be a string nobody here has watched upstream emit, and a
 // confidently wrong reason is worse than none. Everything else stays `unknown` and keeps its screen
 // instead — see writeProbeScreen.
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { ESC, squashForMarker, stripPtyEscapes, trustDialogIsUp } from "../../session/pty/pty-scan.js";
-
-/** Why a probe went silent, as far as its own screen can prove. */
-export type ProbeStall = "trust-prompt" | "usage-limit" | "unknown";
+import type { ProbeStall } from "../../../common/probeStall.js";
 
 // How much of the probe's output to keep. The pty is 120x30, so this holds a few full repaints —
 // enough that a dialog painted at startup is still there when the probe gives up 90 seconds later,
@@ -32,12 +29,16 @@ export const appendProbeScreen = (held: string, chunk: string): string => (held 
 // and on screen: "You've hit your weekly limit", "… your session limit", "… your limit" (#2919). The
 // probe then never gets a status line, because the block comes before any response.
 const USAGE_LIMIT_MARKER = /you['’]vehityour(?:weekly|session)?limit/u;
+// Claude Code's reply on a login whose organization does not let its subscription run Claude Code
+// (2.1.292, recorded in the TUI and in `-p`). Unlike a usage limit it has no reset to wait for.
+const SUBSCRIPTION_DISABLED_MARKER = /yourorganizationhasdisabledclaudesubscriptionaccess/u;
 
 /** Why a probe's terminal never reported, read off what it showed. */
 export function classifyProbeStall(screen: string): ProbeStall {
   const squashed = squashForMarker(screen);
   if (trustDialogIsUp(squashed)) return "trust-prompt";
-  return USAGE_LIMIT_MARKER.test(squashed) ? "usage-limit" : "unknown";
+  if (USAGE_LIMIT_MARKER.test(squashed)) return "usage-limit";
+  return SUBSCRIPTION_DISABLED_MARKER.test(squashed) ? "subscription-disabled" : "unknown";
 }
 
 // A TUI does not write rows and spaces — it MOVES THE CURSOR — so a stream with its escapes merely
