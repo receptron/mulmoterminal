@@ -38,6 +38,7 @@ import { useBusyAction } from "../composables/useBusyAction";
 import { useSessionStop } from "../composables/useSessionStop";
 import { worktreeRequestFailure } from "./cellChromeRules";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
+import { isRequestTimeout } from "../utils/requestTimeout";
 import { useDirSuggest } from "../composables/useDirSuggest";
 import { dirSuggestKeyAction, type DirSuggestKey } from "./dirSuggestKeys";
 
@@ -602,7 +603,7 @@ const reportWorktreeFailure = (repoDir: string | null, message: string): void =>
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 const requestFailureText = (e: unknown): string =>
-  e instanceof DOMException && e.name === "AbortError"
+  isRequestTimeout(e) || (e instanceof DOMException && e.name === "AbortError")
     ? "Timed out waiting for git — it may still finish. Re-select this directory to see."
     : `Could not reach the server: ${errorText(e)}`;
 

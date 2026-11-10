@@ -6,6 +6,7 @@ import { zhCN } from "./zh-CN";
 import { zhTW } from "./zh-TW";
 import { ko } from "./ko";
 import { resolveUiLocale, uiLanguage } from "../composables/uiLanguage";
+import { setRequestTimeoutText } from "../utils/requestTimeout";
 
 // `legacy: false` — the app is Composition API throughout, and the legacy mode installs a global
 // mixin that would put `$t` on every component in the tree, including the plugin roots.
@@ -21,6 +22,8 @@ export const i18n = createI18n({
   fallbackLocale: "en",
   messages: { en, ja, "zh-CN": zhCN, "zh-TW": zhTW, ko },
 });
+
+setRequestTimeoutText((seconds) => i18n.global.t("requestTimeout.message", { seconds }));
 
 // The setting is the source of truth; this keeps the runtime following it. Watched here rather than
 // written from the picker so any other writer of `uiLanguage` reaches the same place.

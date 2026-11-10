@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import { PLUGIN_DISPATCH_TIMEOUT_MS, pluginDispatchError } from "../../../src/composables/pluginDispatchDeadline";
 import { SLOW_COMMAND_TIMEOUT_MS } from "../../../src/utils/fetchWithTimeout";
+import { requestTimeoutError } from "../../../src/utils/requestTimeout";
 
 const HOUR_MS = 60 * 60_000;
 
@@ -44,8 +45,17 @@ describe("pluginDispatchError", () => {
     expect(pluginDispatchError("t", err, HOUR_MS)).toBe(err);
   });
 
-  it("passes a DOMException that is not an abort through unchanged", () => {
-    const err = new DOMException("nope", "TimeoutError");
+  // What fetchWithTimeout now rejects with at its deadline; the generic wording is replaced by the
+  // plugin's own, which knows the work may still be running.
+  it("turns fetchWithTimeout's own timeout into the plugin's wording", () => {
+    const timeout = requestTimeoutError(HOUR_MS);
+    const out = pluginDispatchError("presentMulmoScript", timeout, HOUR_MS);
+    expect(String(out)).toContain("plugin/presentMulmoScript gave no answer within 60 minutes");
+    expect(out instanceof Error ? out.cause : undefined).toBe(timeout);
+  });
+
+  it("passes a DOMException that is neither an abort nor a timeout through unchanged", () => {
+    const err = new DOMException("nope", "NetworkError");
     expect(pluginDispatchError("t", err, HOUR_MS)).toBe(err);
   });
 

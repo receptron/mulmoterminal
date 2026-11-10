@@ -9,6 +9,8 @@
 // for an upload, and a blanket value would break exactly those. Pass `timeout_ms` when the call is
 // not an ordinary one, and say in a comment why the number is what it is.
 
+import { requestTimeoutError } from "./requestTimeout";
+
 /** The deadline for an ordinary `/api` call — read a config, list a directory, save a setting. */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 8_000;
 
@@ -30,7 +32,7 @@ export const SLOW_COMMAND_TIMEOUT_MS = 60_000;
  */
 export async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit, timeout_ms: number = DEFAULT_REQUEST_TIMEOUT_MS): Promise<Response> {
   const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), timeout_ms);
+  const timer = setTimeout(() => abort.abort(requestTimeoutError(timeout_ms)), timeout_ms);
   // A `Request` carries its own signal, so a caller that built the request up front rather than
   // passing an init here would otherwise lose its cancellation (CodeRabbit, #1398).
   //
@@ -61,6 +63,8 @@ export async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestI
     // it — buys back a few timers at the price of wrapping every response this app makes, and
     // `Response`'s accessors need their real receiver. Not worth it for a handle.
     clearTimeout(timer);
-    throw err;
+    // Our deadline's reason, not whatever `fetch` chose to reject with: a runtime that drops the
+    // abort reason would otherwise bring back the message this reason exists to replace.
+    throw abort.signal.aborted ? abort.signal.reason : err;
   }
 }
