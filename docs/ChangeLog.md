@@ -8,6 +8,26 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@12.1.2 — 2026-11-10
+
+> **Setup guide:** [12.1.2 — Token rotation stops choosing a subscription that cannot run Claude Code](https://receptron.github.io/mulmoterminal/guide/en/v12.1.2.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v12.1.2.html))
+
+### Token rotation skips a token whose subscription access is disabled (#3292)
+
+Fixes #3291. A rotation token whose organization has disabled Claude subscription access for Claude Code was chosen for every new session: its probe never answers, so `lastClaudeLimits` kept a days-old reading, and `chooseToken` ranked that nearly unused week first on burn pace (and as fully unused once its reset passed). `classifyProbeStall` now names Claude Code's refusal (recorded from 2.1.292, TUI and `-p`) as `subscription-disabled`, and the rotation runtime drops such a token from the candidates altogether, not even as the "free soonest" fallback, until a probe answers again. Separately, a candidate whose latest probe failed for any reason is ranked with the unmeasured ones and its stale reading no longer sets its pace; the reading still decides hold-outs, so a token can only move down. The stall union and its guard moved to `common/probeStall.ts`, which the server and the browser both import (the browser had its own copy and would have dropped the new value). Known window: after a restart the probe state starts `ok`, so such a token can still be chosen until its first probe fails.
+
+### Pin the image-generation client to Gemini API v1beta (#3288)
+
+`@google/genai` 3 (#3286) changed the Gemini Developer API default from `v1beta` to `v1`. Image generation uses a preview model with `responseModalities` / `imageConfig`, which nothing has checked against `v1`, so the one `GoogleGenAI` client passes `apiVersion: "v1beta"` and requests go where genai 2 sent them. #3287 tracks verifying `v1` with a real key and dropping the pin.
+
+### Alternatives page lists T3 Code (#3289)
+
+Docs only: a new entry on the English and Japanese Alternatives pages, a fifth row in the bottlenecks table (being away from the machine the work runs on), and the side-by-side table and "How I'd choose" updated. The architectural difference is quoted from that project's own FAQ.
+
+### Dependency updates (#3286, #3290)
+
+Includes `@google/genai` 3, the `@mulmoclaude/*` plugins to their new majors (core 6, collection/html/markdown/mulmoscript 6, accounting/chart/google 5), `jinglescript` 1, `undici` 8, `jsdom` 31, and patch/minor updates to vite, vitest, vue, eslint and others. `test/scripts/mulmoclaudePeerRanges.spec.ts` now understands version ranges with several alternatives.
+
 ## mulmoterminal@12.1.1 — 2026-11-06
 
 > **Setup guide:** [12.1.1 — A Codex cell keeps reporting when it is working](https://receptron.github.io/mulmoterminal/guide/en/v12.1.1.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v12.1.1.html))

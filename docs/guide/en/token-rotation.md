@@ -97,6 +97,10 @@ all landing on the most urgent one.
 
 A subscription is skipped when its 5-hour window is at 90% or more, or its week is at 98% or more.
 
+A subscription whose organization has disabled Claude Code access is left out altogether, until a
+later usage check answers again. A subscription whose last usage check failed for any other reason is
+tried only after every one with a fresh reading, since its last figure is no longer confirmed.
+
 ## Keeping part of a week back {#keep-week-back}
 
 To keep some of a subscription for use outside MulmoTerminal, give its entry `reserveWeeklyPercent`:
