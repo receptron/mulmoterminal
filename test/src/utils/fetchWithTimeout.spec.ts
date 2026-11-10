@@ -15,7 +15,8 @@ function lateRejectingFetch(delay_ms: number): void {
     const signal = init?.signal;
     return new Promise<Response>((_resolve, reject) => {
       const rejectLater = () => setTimeout(() => reject(signal?.reason), delay_ms);
-      signal?.addEventListener("abort", rejectLater);
+      if (signal?.aborted) rejectLater();
+      else signal?.addEventListener("abort", rejectLater);
     });
   });
 }
@@ -137,12 +138,14 @@ describe("fetchWithTimeout", () => {
     expect(errorName(err)).toBe("AbortError");
   });
 
-  it("treats a signal that was already aborted as a cancellation", async () => {
+  it("treats a signal that was already aborted as a cancellation, even when its rejection is late", async () => {
     vi.useFakeTimers();
-    hangingFetch();
+    lateRejectingFetch(LATE_REJECT_MS);
     const outcome = fetchWithTimeout("/api/thing", { signal: AbortSignal.abort() }).catch((err: unknown) => err);
-    await vi.advanceTimersByTimeAsync(DEFAULT_REQUEST_TIMEOUT_MS);
-    expect(isRequestTimeout(await outcome)).toBe(false);
+    await vi.advanceTimersByTimeAsync(LATE_REJECT_MS);
+    const err = await outcome;
+    expect(isRequestTimeout(err)).toBe(false);
+    expect(errorName(err)).toBe("AbortError");
   });
 
   it("keeps the caller's signal AND the deadline, whichever comes first", async () => {
