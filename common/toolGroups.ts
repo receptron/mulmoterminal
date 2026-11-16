@@ -100,6 +100,12 @@ const GROUP_BY_TOOL = new Map<string, ToolGroup>([
   ["exportShapeScriptUsdz", "render"],
   // And the printable STL beside it: the same model handed out as a file a slicer takes.
   ["exportShapeScriptStl", "render"],
+  // presentBrep draws a solid model and saves it under artifacts/brep/, as presentShapeScript
+  // does a mesh. It is NOT a render tool by the definition at the top of this file, and is here
+  // by the owner's decision (2026-11-16): its script is JavaScript, run by the package through
+  // node:vm in THIS server's process, unsandboxed. A call can therefore do whatever the server
+  // can, which is more than "touches only its own output". See AUTO_ALLOWED_TOOLS below.
+  ["presentBrep", "render"],
   // The cell's own right pane (#3022): show a file, or a checklist for the human. Render because
   // they only put something in front of the user — what they send back is typed by the user's Send.
   ["showInPane", "render"],
@@ -242,6 +248,19 @@ export const LEGACY_GUI_SERVER_IDS: readonly string[] = ["mulmoterminal-gui"];
 // is fetched, and the result is one file under the workspace artifacts. It can burn CPU
 // for a minute on a lattice of tens of thousands of parts, which is cost of the
 // render-tool kind, not of the kind this list keeps off.
+//
+// `presentBrep` is on this list by the owner's decision (2026-11-16), and it does NOT clear the
+// bar the paragraphs above describe: say so here rather than let the list imply it does. The
+// tool builds a solid from a replicad script, and that script is JavaScript the agent wrote,
+// run by @gui-chat-plugin/brep through node:vm in this server's process with no sandbox. So an
+// auto-approved call is code running on this machine without a prompt, outside whatever
+// sandbox or permission mode the agent itself is under, and with what this process can reach.
+// The package's own README says to enable it only where the model can already run code on the
+// machine. The reasoning for accepting that here is the render-look-fix loop again: a part is
+// built, read against its report and rebuilt several times, and a prompt in the middle of each
+// round costs more attention than it buys from an agent that already has a shell. If that
+// trade is ever revisited, moving the name to NEVER_AUTO_APPROVED_TOOLS is the whole change for
+// claude; for codex a group is approved as a whole, so it would also have to leave `render`.
 export const AUTO_ALLOWED_TOOLS: readonly string[] = [
   "presentForm",
   "presentChart",
@@ -251,6 +270,7 @@ export const AUTO_ALLOWED_TOOLS: readonly string[] = [
   "renderShapeScript",
   "exportShapeScriptUsdz",
   "exportShapeScriptStl",
+  "presentBrep",
   "showInPane",
   "requestCheck",
 ];

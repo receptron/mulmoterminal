@@ -29,6 +29,9 @@ describe("tool groups", () => {
     expect(groupOfTool("renderShapeScript")).toBe("render");
     expect(groupOfTool("exportShapeScriptUsdz")).toBe("render");
     expect(groupOfTool("exportShapeScriptStl")).toBe("render");
+    // In render by the owner's decision, not by the group's definition: its script is code
+    // run in this server's process. common/toolGroups.ts says so where it is listed.
+    expect(groupOfTool("presentBrep")).toBe("render");
   });
 
   // The blast-radius split is the whole point of the grouping: only `render` is auto-allowed,
@@ -114,6 +117,7 @@ describe("tool groups", () => {
       "renderShapeScript",
       "exportShapeScriptUsdz",
       "exportShapeScriptStl",
+      "presentBrep",
       "showInPane",
       "requestCheck",
     ]);

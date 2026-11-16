@@ -14,6 +14,7 @@ import { plugin as htmlPlugin } from "@mulmoclaude/html-plugin/vue";
 import GenerateImagePlugin from "@mulmochat-plugin/generate-image/vue";
 import { plugin as mulmoScriptPlugin, MULMOSCRIPT_HOST_ADAPTER_KEY, type MulmoScriptHostAdapter } from "@mulmoclaude/mulmoscript-plugin/vue";
 import { plugin as shapeScriptPlugin } from "@gui-chat-plugin/shapescript/vue";
+import { plugin as brepPlugin } from "@gui-chat-plugin/brep/vue";
 import { plugin as jingleScriptPlugin } from "@gui-chat-plugin/jinglescript/vue";
 import { plugin as spreadsheetPlugin } from "@gui-chat-plugin/spreadsheet/vue";
 import { AccountingView } from "@mulmoclaude/accounting-plugin/vue";
@@ -32,6 +33,7 @@ import chartCss from "@mulmoclaude/chart-plugin/style.css?inline";
 import htmlCss from "@mulmoclaude/html-plugin/style.css?inline";
 import mulmoScriptCss from "@mulmoclaude/mulmoscript-plugin/style.css?inline";
 import shapeScriptCss from "@gui-chat-plugin/shapescript/style.css?inline";
+import brepCss from "@gui-chat-plugin/brep/style.css?inline";
 import jingleScriptCss from "@gui-chat-plugin/jinglescript/style.css?inline";
 import spreadsheetCss from "@gui-chat-plugin/spreadsheet/style.css?inline";
 import { collectionShadowCss } from "./collectionShadowCss";
@@ -216,6 +218,19 @@ const PACKAGES: Record<string, Registration> = {
     // null here and keeps standing alone, which is correct: nothing identifies
     // it. See canvasIdentity.ts.
     identityOf: filePathIdentity,
+  },
+  "@gui-chat-plugin/brep": {
+    toolName: brepPlugin.toolDefinition.name,
+    // presentBrep: a solid model built on the server by the OpenCascade kernel. Everything the
+    // View shows travels in the result (the mesh it draws, the report, and the STEP / STL /
+    // drawing files behind its download buttons), so it needs no runtime, no dispatch and no
+    // file route. The `/vue` entry carries the View alone: it imports nothing that reaches the
+    // kernel, and its own `execute` refuses, since the tool runs through /api/plugin/presentBrep.
+    viewComponent: viewOf("@gui-chat-plugin/brep", brepPlugin.viewComponent),
+    css: brepCss,
+    // The View is the model at a height the user drags, over a part that scrolls, inside a
+    // `height: 100%` column: without a definite frame it has nothing to divide.
+    height: CANVAS_CARD_HEIGHT,
   },
   "@mulmoclaude/mulmoscript-plugin": {
     toolName: mulmoScriptPlugin.toolDefinition.name,
