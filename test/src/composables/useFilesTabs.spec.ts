@@ -31,6 +31,7 @@ function fakeFile(): FakeFile {
     fileError: ref<string | null>(null),
     unpreviewable: ref<string | null>(null),
     baseVersion: ref<string | null>(null),
+    grantedMediaSrc: ref<string | null>(null),
     conflict: ref(null),
     showPreview: ref(false),
     previewScrollTop: ref(0),

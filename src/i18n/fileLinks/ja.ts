@@ -18,5 +18,6 @@ export const fileLinksJa = {
   outsideFile: {
     missing: "{path} は見つかりません。",
     refused: "{path} をタブで開けませんでした。",
+    symlinkNotShown: "{path} はこのフォルダの外を指すシンボリックリンクの先にあるため、ここでは表示できません。",
   },
 };
