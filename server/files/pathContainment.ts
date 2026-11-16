@@ -78,6 +78,14 @@ export function resolveContained(base: string, rel: string, homeDir: string, pla
   return lexical ? realContainedWithin(base, lexical) : null;
 }
 
+/** Whether `resolveContained` refuses `rel` ONLY because a symlink on the way leads out of `base`:
+ *  inside by its spelling, outside by where it really is. */
+export function escapesThroughSymlink(base: string, rel: string, homeDir: string, platform: NodeJS.Platform = process.platform): boolean {
+  if (namesAWindowsDevice(rel, platform)) return false;
+  const lexical = containedPath(base, expandTilde(rel, homeDir));
+  return lexical !== null && realContainedWithin(base, lexical) === null;
+}
+
 /** Contain a path a BROWSER named, against the directories this server already serves files
  *  from: the workspace, and the directory of any live session.
  *

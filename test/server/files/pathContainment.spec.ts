@@ -13,6 +13,7 @@ import {
   resolveContained,
   containForWatching,
   namesAWindowsDevice,
+  escapesThroughSymlink,
 } from "../../../server/files/pathContainment";
 
 const tmp = () => makeTempDir("mt-files-");
@@ -143,6 +144,47 @@ describe("realContainedWithin (symlink-safe containment)", () => {
     expect(realContainedWithin(root, path.join(root, "link", "new.txt"))).toBeNull(); // write escape blocked
     rmSync(root, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });
+  });
+});
+
+// #3301. The one refusal the pane treats differently, so it must be told apart from every other.
+describe("escapesThroughSymlink", () => {
+  const HOME = "/home/user";
+  const layout = () => {
+    const root = realpathSync(tmp());
+    const outside = realpathSync(tmp());
+    writeFileSync(path.join(outside, "clip.mp4"), "v");
+    mkdirSync(path.join(root, "data"));
+    writeFileSync(path.join(root, "data", "inside.mp4"), "v");
+    symlinkSync(outside, path.join(root, "data", "media"));
+    symlinkSync(path.join(root, "data"), path.join(root, "inner"));
+    return { root, cleanup: () => [root, outside].forEach((dir) => rmSync(dir, { recursive: true, force: true })) };
+  };
+
+  it("is true for a file behind a link that leads out, whether or not the file exists", () => {
+    const { root, cleanup } = layout();
+    expect(escapesThroughSymlink(root, "data/media/clip.mp4", HOME)).toBe(true);
+    expect(escapesThroughSymlink(root, "data/media/missing.mp4", HOME)).toBe(true);
+    expect(escapesThroughSymlink(root, "data/media", HOME)).toBe(true);
+    cleanup();
+  });
+
+  it("is false for what resolveContained accepts, including a link that stays inside", () => {
+    const { root, cleanup } = layout();
+    ["data/inside.mp4", "inner/inside.mp4", "data/new.mp4", ""].forEach((rel) => {
+      expect(resolveContained(root, rel, HOME)).not.toBeNull();
+      expect(escapesThroughSymlink(root, rel, HOME)).toBe(false);
+    });
+    cleanup();
+  });
+
+  it("is false for an escape by spelling: a climb, an absolute path, a tilde out, a device name", () => {
+    const { root, cleanup } = layout();
+    ["../secret", "data/../../secret", "/etc/passwd", "~/elsewhere.mp4"].forEach((rel) => {
+      expect(escapesThroughSymlink(root, rel, HOME)).toBe(false);
+    });
+    expect(escapesThroughSymlink(root, "NUL", HOME, "win32")).toBe(false);
+    cleanup();
   });
 });
 

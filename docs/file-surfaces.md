@@ -187,6 +187,13 @@ that comes back (`server/backends/files/fileGrants.ts`).
 
 So do not widen `authorizedServingBase` to reach such a file: that would let any site embed it.
 
+The pane uses the same grant for one case of its own (#3301): a picture, PDF, video or sound whose
+path is inside its directory by spelling but behind a symlink that leads out. The browse routes
+still refuse it, and their 403 says why with `escape: "symlink"` (`common/symlinkEscape.ts`), set
+only when the path is contained by spelling and not by real location. The pane decides from that
+field, never from the error sentence, and shows the file through a grant (`src/composables/symlinkedMedia.ts`).
+Any other refusal, or a text file, stays refused and says so.
+
 ## What to check before changing any of this
 
 - **Which surface are you in?** `canvas-target` distinguishes the two `FilesPane` mounts and is the

@@ -22,6 +22,10 @@ import { watchExternalFileChanges } from "./externalFileChanges";
 import { MARKDOWN_FILE_SCOPE, fileChannelPath, pluginFileChannel } from "../../common/fileChannel";
 import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
+import { requestFileGrant } from "./grantedTab";
+import { showsThroughGrant } from "./symlinkedMedia";
+import { isSymlinkEscape } from "../../common/symlinkEscape";
+import { i18n } from "../i18n";
 
 /** What a save that came back 409 learned: the version now on disk, which "Overwrite" re-sends. */
 export interface FileConflict {
@@ -55,6 +59,9 @@ export interface OpenFileBuffer {
   /** The version the open buffer was loaded from; sent back on save so the server can refuse a
    *  write that would clobber someone else's (null = the file didn't exist). */
   baseVersion: Ref<string | null>;
+  /** The one-file URL a picture, PDF, video or sound behind a symlink out of the project is shown
+   *  through (#3301); null for every other file, which the raw route serves. */
+  grantedMediaSrc: Ref<string | null>;
   conflict: Ref<FileConflict | null>;
   showPreview: Ref<boolean>;
   /** Where the reader is in the PREVIEW, as its own document last reported (#2157). Lives beside
@@ -162,8 +169,11 @@ async function readText(ctx: OpenFileCtx, pathRel: string): Promise<() => void> 
   // text is what destroyed spreadsheets before this existed (#2038). Both still offer Open in OS.
   if (res.ok) return () => adoptText(ctx, pathRel, data);
   if (res.status === 415 || res.status === 413) return () => adoptUnpreviewable(ctx, pathRel, data);
+  if (isSymlinkEscape(data)) throw new Error(symlinkProblem("symlinkNotShown", pathRel));
   throw new Error(failureReason(data, res.status));
 }
+
+const symlinkProblem = (key: "symlinkNotShown" | "missing", pathRel: string): string => i18n.global.t(`outsideFile.${key}`, { path: pathRel });
 
 /** A picture, PDF, video or sound: only its version is read, so the external-change check has
  *  something to compare and does not rebuild it on every tick. Over the edit cap the version route
@@ -171,10 +181,22 @@ async function readText(ctx: OpenFileCtx, pathRel: string): Promise<() => void> 
 async function readMedia(ctx: OpenFileCtx, pathRel: string): Promise<() => void> {
   const res = await fetchWithTimeout(`/api/files/browse/version?${qs(ctx, pathRel)}`);
   const data = await jsonBody(res);
+  if (showsThroughGrant(res.status, data, pathRel)) return await readGranted(ctx, pathRel);
   if (!res.ok && res.status !== 413) throw new Error(failureReason(data, res.status));
   const version = typeof data.version === "string" ? data.version : null;
   if (res.ok && version === null) throw new Error(`not found: ${pathRel}`);
   return () => adoptMedia(ctx, pathRel, version);
+}
+
+/** Media behind a symlink out of the project: shown through a one-file URL, with no version — the
+ *  version route refuses it as the raw route does, so the external-change check stands aside. */
+async function readGranted(ctx: OpenFileCtx, pathRel: string): Promise<() => void> {
+  const grant = await requestFileGrant(absoluteUnder(ctx.cwd(), pathRel));
+  if (!grant.ok) throw new Error(symlinkProblem(grant.reason === "missing" ? "missing" : "symlinkNotShown", pathRel));
+  return () => {
+    adoptMedia(ctx, pathRel, null);
+    ctx.grantedMediaSrc.value = grant.url;
+  };
 }
 
 function placeNow(ctx: OpenFileCtx): FilePlace {
@@ -225,6 +247,7 @@ function adoptText(ctx: OpenFileCtx, pathRel: string, data: Record<string, unkno
   ctx.openPath.value = pathRel;
   ctx.baseVersion.value = typeof data.version === "string" ? data.version : null;
   ctx.unpreviewable.value = null;
+  ctx.grantedMediaSrc.value = null;
   ctx.editor.value?.setDoc(typeof data.text === "string" ? data.text : "", pathRel.split("/").pop() ?? pathRel);
   ctx.dirty.value = false;
 }
@@ -235,6 +258,7 @@ function adoptText(ctx: OpenFileCtx, pathRel: string, data: Record<string, unkno
 function adoptUnpreviewable(ctx: OpenFileCtx, pathRel: string, data: Record<string, unknown>): void {
   ctx.openPath.value = pathRel;
   ctx.baseVersion.value = null;
+  ctx.grantedMediaSrc.value = null;
   ctx.dirty.value = false;
   ctx.editor.value?.setDoc("", pathRel.split("/").pop() ?? pathRel);
   ctx.unpreviewable.value = typeof data.error === "string" ? data.error : "this file cannot be shown as text";
@@ -398,6 +422,7 @@ async function closeFile(ctx: OpenFileCtx): Promise<boolean> {
   if (!(await flush(ctx))) return false;
   ctx.reqId.n += 1;
   ctx.openPath.value = null;
+  ctx.grantedMediaSrc.value = null;
   ctx.baseVersion.value = null;
   ctx.conflict.value = null;
   ctx.unpreviewable.value = null;
@@ -487,6 +512,7 @@ function newBuffer(): OpenFileBuffer {
     fileError: ref<string | null>(null),
     unpreviewable: ref<string | null>(null),
     baseVersion: ref<string | null>(null),
+    grantedMediaSrc: ref<string | null>(null),
     conflict: ref<FileConflict | null>(null),
     showPreview: ref(false),
     previewScrollTop: ref(0),
@@ -545,8 +571,11 @@ export function useOpenFile(cwd: () => string | null): OpenFile {
 }
 
 /** A picture, PDF, video or sound: no text to edit, so the "not text" panel shows the file itself (#2269, #2674). */
-export function openFileMedia(file: Pick<OpenFile, "openPath" | "baseVersion">, cwd: () => string | null) {
+export function openFileMedia(file: Pick<OpenFile, "openPath" | "baseVersion" | "grantedMediaSrc">, cwd: () => string | null) {
   const mediaKind = computed(() => (file.openPath.value ? fileMediaKind(file.openPath.value) : null));
-  const mediaSrc = computed(() => (file.openPath.value && mediaKind.value ? rawFileSrc(cwd(), file.openPath.value, file.baseVersion.value) : ""));
+  const mediaSrc = computed(() => {
+    if (!file.openPath.value || !mediaKind.value) return "";
+    return file.grantedMediaSrc.value ?? rawFileSrc(cwd(), file.openPath.value, file.baseVersion.value);
+  });
   return { mediaKind, mediaSrc };
 }

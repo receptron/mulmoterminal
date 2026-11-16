@@ -18,5 +18,6 @@ export const fileLinksKo = {
   outsideFile: {
     missing: "{path}을(를) 찾을 수 없습니다.",
     refused: "{path}을(를) 탭에서 열 수 없습니다.",
+    symlinkNotShown: "{path}은(는) 이 폴더 밖을 가리키는 심볼릭 링크 너머에 있어 여기에서 표시할 수 없습니다.",
   },
 };

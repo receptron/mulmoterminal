@@ -18,5 +18,6 @@ export const fileLinksZhTW = {
   outsideFile: {
     missing: "找不到 {path}。",
     refused: "無法在分頁中開啟 {path}。",
+    symlinkNotShown: "{path} 位於指向此資料夾之外的符號連結後面，因此無法在此顯示。",
   },
 };

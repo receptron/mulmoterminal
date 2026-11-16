@@ -20,5 +20,6 @@ export const fileLinksEn = {
   outsideFile: {
     missing: "{path} is not there anymore.",
     refused: "{path} could not be opened in a tab.",
+    symlinkNotShown: "{path} is behind a symbolic link that leads outside this folder, so it cannot be shown here.",
   },
 };

@@ -18,5 +18,6 @@ export const fileLinksZhCN = {
   outsideFile: {
     missing: "找不到 {path}。",
     refused: "无法在标签页中打开 {path}。",
+    symlinkNotShown: "{path} 位于指向此文件夹之外的符号链接后面，因此无法在此显示。",
   },
 };
