@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { defineComponent, h } from "vue";
 import { mount, flushPromises } from "@vue/test-utils";
-import { showsThroughGrant } from "../../../src/composables/symlinkedMedia";
+import { grantPathFor } from "../../../src/composables/symlinkedMedia";
 import { openFileMedia, useOpenFile, type OpenFile } from "../../../src/composables/useOpenFile";
-import { SYMLINK_ESCAPE, SYMLINK_ESCAPE_FIELD } from "../../../common/symlinkEscape";
+import { SYMLINK_ESCAPE, SYMLINK_ESCAPE_FIELD, SYMLINK_ESCAPE_PATH_FIELD } from "../../../common/symlinkEscape";
 import { fakeCmEditor } from "../../helpers/cmEditorDouble";
 
 // #3301. Media opened by a path inside the project whose symlink leads out is refused by the
@@ -17,13 +17,21 @@ vi.mock("../../../src/components/cmEditor", async (orig) => {
   return { ...actual, createEditor: () => fakeCmEditor("") };
 });
 
-const SYMLINK_REFUSAL = { error: "path escapes the project root", [SYMLINK_ESCAPE_FIELD]: SYMLINK_ESCAPE };
+// The absolute path is the SERVER's, deliberately unlike anything this side could rebuild from its
+// own cwd: the pane must grant what the server resolved, not a path of its own making.
+const RESOLVED = "/server/resolved/data/media/clip.mp4";
+const symlinkRefusal = (absolutePath: unknown = RESOLVED) => ({
+  error: "path escapes the project root",
+  [SYMLINK_ESCAPE_FIELD]: SYMLINK_ESCAPE,
+  [SYMLINK_ESCAPE_PATH_FIELD]: absolutePath,
+});
+const SYMLINK_REFUSAL = symlinkRefusal();
 const PLAIN_REFUSAL = { error: "path escapes the project root" };
 const GRANTED_URL = "/api/files/granted/abc/clip.mp4";
 
-describe("showsThroughGrant", () => {
+describe("grantPathFor", () => {
   it.each(["clip.mp4", "data/media/photo.png", "a/b/sound.mp3", "doc.pdf", "PHOTO.JPG"])("takes media behind a symlink: %s", (pathRel) => {
-    expect(showsThroughGrant(403, SYMLINK_REFUSAL, pathRel)).toBe(true);
+    expect(grantPathFor(403, SYMLINK_REFUSAL, pathRel)).toBe(RESOLVED);
   });
 
   it.each([
@@ -35,9 +43,12 @@ describe("showsThroughGrant", () => {
     ["a file with no extension", 403, SYMLINK_REFUSAL, "Makefile"],
     ["a body that is not an object", 403, "symlink", "clip.mp4"],
     ["no body", 403, null, "clip.mp4"],
-    ["a field with another value", 403, { [SYMLINK_ESCAPE_FIELD]: "path" }, "clip.mp4"],
+    ["a field with another value", 403, { [SYMLINK_ESCAPE_FIELD]: "path", [SYMLINK_ESCAPE_PATH_FIELD]: RESOLVED }, "clip.mp4"],
+    ["a symlink refusal with no path", 403, { error: "x", [SYMLINK_ESCAPE_FIELD]: SYMLINK_ESCAPE }, "clip.mp4"],
+    ["a symlink refusal with an empty path", 403, symlinkRefusal(""), "clip.mp4"],
+    ["a symlink refusal whose path is not a string", 403, symlinkRefusal(42), "clip.mp4"],
   ])("leaves %s alone", (_label, status, body, pathRel) => {
-    expect(showsThroughGrant(status, body, pathRel)).toBe(false);
+    expect(grantPathFor(status, body, pathRel)).toBeNull();
   });
 });
 
@@ -64,14 +75,14 @@ function serve(answers: Answers): { granted: string[] } {
   return { granted };
 }
 
-function mountOpenFile(): { file: OpenFile; mediaSrc: () => string; unmount: () => void } {
+function mountOpenFile(cwd: string | null = "/proj"): { file: OpenFile; mediaSrc: () => string; unmount: () => void } {
   let file!: OpenFile;
   let media!: ReturnType<typeof openFileMedia>;
   const host = mount(
     defineComponent({
       setup() {
-        file = useOpenFile(() => "/proj");
-        media = openFileMedia(file, () => "/proj");
+        file = useOpenFile(() => cwd);
+        media = openFileMedia(file, () => cwd);
         return () => h("div");
       },
     }),
@@ -89,13 +100,23 @@ describe("opening a file behind a symlink out of the project", () => {
   let session: ReturnType<typeof mountOpenFile> | null = null;
   afterEach(() => session?.unmount());
 
-  it("shows media through a grant for the file's own absolute path", async () => {
+  it("shows media through a grant for the absolute path the server resolved", async () => {
     const { granted } = serve({ version: { status: 403, body: SYMLINK_REFUSAL } });
     session = mountOpenFile();
     await open(session.file, "data/media/clip.mp4");
-    expect(granted).toEqual([JSON.stringify({ path: "/proj/data/media/clip.mp4" })]);
+    expect(granted).toEqual([JSON.stringify({ path: RESOLVED })]);
     expect(session.file.fileError.value).toBeNull();
     expect(session.file.openPath.value).toBe("data/media/clip.mp4");
+    expect(session.mediaSrc()).toBe(GRANTED_URL);
+  });
+
+  // The full-screen view with no `?cwd=` reads the server's default directory, which this side has
+  // no path for — rebuilding one from the request would hand the grant a relative path (Codex, #3302).
+  it("shows it from a pane with no cwd of its own", async () => {
+    const { granted } = serve({ version: { status: 403, body: SYMLINK_REFUSAL } });
+    session = mountOpenFile(null);
+    await open(session.file, "data/media/clip.mp4");
+    expect(granted).toEqual([JSON.stringify({ path: RESOLVED })]);
     expect(session.mediaSrc()).toBe(GRANTED_URL);
   });
 

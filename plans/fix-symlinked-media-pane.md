@@ -9,12 +9,15 @@ server's sentence, `path escapes the project root`, and nothing else.
 
 ## Change
 
-- The browse routes' 403 says when a symlink is what leads out: `{ error, escape: "symlink" }`
-  (`common/symlinkEscape.ts`). `escapesThroughSymlink` in `server/files/pathContainment.ts` decides
-  it: contained by spelling, not contained by real location. A climb by `..`, an absolute path, a
-  tilde out and a Windows device name get no field.
+- The browse routes' 403 says when a symlink is what leads out, and which absolute path it
+  resolved: `{ error, escape: "symlink", absolutePath }` (`common/symlinkEscape.ts`).
+  `symlinkEscapeOf` in `server/files/pathContainment.ts` decides it: contained by spelling, not
+  contained by real location. A climb by `..`, an absolute path, a tilde out and a Windows device
+  name get no fields. The path comes from the server because the pane may have no base to rebuild
+  it from: the full-screen view with no `?cwd=` reads the server's default directory.
 - The pane, for a picture, PDF, video or sound refused that way, asks for the one-file URL a click on
-  an outside file already gets (`/api/files/grant`) and shows the file through it
+  an outside file already gets (`/api/files/grant`), for the path the server named, and shows the
+  file through it
   (`src/composables/symlinkedMedia.ts`, `useOpenFile.ts`). The decision reads the field, never the
   sentence.
 - A text file refused that way, or a grant that fails, says why in the UI language
@@ -34,9 +37,9 @@ server's sentence, `path escapes the project root`, and nothing else.
 ## Verification
 
 - `yarn test`: the field is set for a symlink escape on `/browse/version` and `/browse/text` and for
-  no other refusal; `escapesThroughSymlink` agrees with `resolveContained`; the pane asks for a grant
-  only for that refusal and that kind, says why otherwise, and goes back to the raw route for the
-  next file.
+  no other refusal; `symlinkEscapeOf` agrees with `resolveContained`; the pane asks for a grant
+  only for that refusal and that kind, for the server's path even with no cwd of its own, says why
+  otherwise, and goes back to the raw route for the next file.
 - In Chromium and WebKit, against a scratch-HOME server built from this branch, `/files` opened a
   real H.264 file behind a symlink out of the project and played it through the granted URL; one
   inside played through the raw route; a text file and a missing file behind the link showed their

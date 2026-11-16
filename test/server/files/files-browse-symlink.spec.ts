@@ -31,7 +31,7 @@ describe("a 403 says when a symlink is what leads out", () => {
     const dir = project();
     const res = await routeCall(serveProject(dir))(`/api/files/browse/${route}?cwd=${encodeURIComponent(dir)}&path=media/clip.mp4`);
     expect(res.status).toBe(403);
-    expect(res.body).toEqual({ error: "path escapes the project root", escape: "symlink" });
+    expect(res.body).toEqual({ error: "path escapes the project root", escape: "symlink", absolutePath: path.join(dir, "media", "clip.mp4") });
   });
 
   it("not for a climb out by spelling", async () => {

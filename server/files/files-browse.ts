@@ -15,8 +15,8 @@ import os from "node:os";
 import { hasErrnoCode } from "../errors.js";
 import { backupCurrentFile, backupHolds, listBackups, readBackup, storeBackup } from "./backup-store.js";
 import { losslessText } from "./editableText.js";
-import { containedPath, escapesThroughSymlink, expandTilde, namedBase, resolveBase, resolveContained } from "./pathContainment.js";
-import { SYMLINK_ESCAPE, SYMLINK_ESCAPE_FIELD } from "../../common/symlinkEscape.js";
+import { containedPath, expandTilde, namedBase, resolveBase, resolveContained, symlinkEscapeOf } from "./pathContainment.js";
+import { SYMLINK_ESCAPE, SYMLINK_ESCAPE_FIELD, SYMLINK_ESCAPE_PATH_FIELD } from "../../common/symlinkEscape.js";
 import { servedImageSrc, type ServedDoc } from "./mdImageSrc.js";
 import { listProjectFiles } from "./project-files.js";
 import { browseEntryOf, type BrowseEntry } from "./browseEntry.js";
@@ -116,8 +116,9 @@ function containedUnder(base: string | null, req: Request, res: Response): strin
   }
   const abs = resolveContained(base, browseRel(req), os.homedir());
   if (!abs) {
-    const throughSymlink = escapesThroughSymlink(base, browseRel(req), os.homedir());
-    res.status(403).json({ error: "path escapes the project root", ...(throughSymlink ? { [SYMLINK_ESCAPE_FIELD]: SYMLINK_ESCAPE } : {}) });
+    const throughSymlink = symlinkEscapeOf(base, browseRel(req), os.homedir());
+    const symlinkFields = throughSymlink ? { [SYMLINK_ESCAPE_FIELD]: SYMLINK_ESCAPE, [SYMLINK_ESCAPE_PATH_FIELD]: throughSymlink } : {};
+    res.status(403).json({ error: "path escapes the project root", ...symlinkFields });
     return null;
   }
   return abs;

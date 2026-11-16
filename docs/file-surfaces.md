@@ -189,9 +189,11 @@ So do not widen `authorizedServingBase` to reach such a file: that would let any
 
 The pane uses the same grant for one case of its own (#3301): a picture, PDF, video or sound whose
 path is inside its directory by spelling but behind a symlink that leads out. The browse routes
-still refuse it, and their 403 says why with `escape: "symlink"` (`common/symlinkEscape.ts`), set
-only when the path is contained by spelling and not by real location. The pane decides from that
-field, never from the error sentence, and shows the file through a grant (`src/composables/symlinkedMedia.ts`).
+still refuse it, and their 403 says why with `escape: "symlink"` and the `absolutePath` the server
+resolved (`common/symlinkEscape.ts`), set only when the path is contained by spelling and not by
+real location. The pane decides from those fields, never from the error sentence, and shows the
+file through a grant for that path (`src/composables/symlinkedMedia.ts`) — the server's path, since
+the full-screen view with no `?cwd=` has no base of its own to rebuild one from.
 Any other refusal, or a text file, stays refused and says so.
 
 ## What to check before changing any of this

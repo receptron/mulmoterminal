@@ -23,8 +23,8 @@ import { MARKDOWN_FILE_SCOPE, fileChannelPath, pluginFileChannel } from "../../c
 import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import { requestFileGrant } from "./grantedTab";
-import { showsThroughGrant } from "./symlinkedMedia";
-import { isSymlinkEscape } from "../../common/symlinkEscape";
+import { grantPathFor } from "./symlinkedMedia";
+import { symlinkEscapePath } from "../../common/symlinkEscape";
 import { i18n } from "../i18n";
 
 /** What a save that came back 409 learned: the version now on disk, which "Overwrite" re-sends. */
@@ -169,7 +169,7 @@ async function readText(ctx: OpenFileCtx, pathRel: string): Promise<() => void> 
   // text is what destroyed spreadsheets before this existed (#2038). Both still offer Open in OS.
   if (res.ok) return () => adoptText(ctx, pathRel, data);
   if (res.status === 415 || res.status === 413) return () => adoptUnpreviewable(ctx, pathRel, data);
-  if (isSymlinkEscape(data)) throw new Error(symlinkProblem("symlinkNotShown", pathRel));
+  if (symlinkEscapePath(data) !== null) throw new Error(symlinkProblem("symlinkNotShown", pathRel));
   throw new Error(failureReason(data, res.status));
 }
 
@@ -181,7 +181,8 @@ const symlinkProblem = (key: "symlinkNotShown" | "missing", pathRel: string): st
 async function readMedia(ctx: OpenFileCtx, pathRel: string): Promise<() => void> {
   const res = await fetchWithTimeout(`/api/files/browse/version?${qs(ctx, pathRel)}`);
   const data = await jsonBody(res);
-  if (showsThroughGrant(res.status, data, pathRel)) return await readGranted(ctx, pathRel);
+  const grantPath = grantPathFor(res.status, data, pathRel);
+  if (grantPath !== null) return await readGranted(ctx, pathRel, grantPath);
   if (!res.ok && res.status !== 413) throw new Error(failureReason(data, res.status));
   const version = typeof data.version === "string" ? data.version : null;
   if (res.ok && version === null) throw new Error(`not found: ${pathRel}`);
@@ -190,8 +191,8 @@ async function readMedia(ctx: OpenFileCtx, pathRel: string): Promise<() => void>
 
 /** Media behind a symlink out of the project: shown through a one-file URL, with no version — the
  *  version route refuses it as the raw route does, so the external-change check stands aside. */
-async function readGranted(ctx: OpenFileCtx, pathRel: string): Promise<() => void> {
-  const grant = await requestFileGrant(absoluteUnder(ctx.cwd(), pathRel));
+async function readGranted(ctx: OpenFileCtx, pathRel: string, absPath: string): Promise<() => void> {
+  const grant = await requestFileGrant(absPath);
   if (!grant.ok) throw new Error(symlinkProblem(grant.reason === "missing" ? "missing" : "symlinkNotShown", pathRel));
   return () => {
     adoptMedia(ctx, pathRel, null);

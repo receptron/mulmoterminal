@@ -3,14 +3,15 @@
 // through the one-file URL a click on an outside file already gets (common/fileGrant.ts), which
 // serves that file and nothing beside it.
 import { grantKind } from "../../common/fileGrant";
-import { isSymlinkEscape } from "../../common/symlinkEscape";
+import { symlinkEscapePath } from "../../common/symlinkEscape";
 
 const HTTP_FORBIDDEN = 403;
 
-/** Whether a refused read should be shown through a one-file grant instead: refused because of a
- *  symlink, and a kind the granted route serves as itself. A page is left out — the pane previews
- *  one through the project's own page route, which a grant does not stand in for. */
-export function showsThroughGrant(status: number, body: unknown, pathRel: string): boolean {
+/** The absolute path to ask a one-file grant for, or null when the refused read is not one: refused
+ *  because of a symlink, and a kind the granted route serves as itself. A page is left out — the
+ *  pane previews one through the project's own page route, which a grant does not stand in for. */
+export function grantPathFor(status: number, body: unknown, pathRel: string): string | null {
   const name = pathRel.split("/").pop() ?? pathRel;
-  return status === HTTP_FORBIDDEN && isSymlinkEscape(body) && grantKind(name) === "raw";
+  if (status !== HTTP_FORBIDDEN || grantKind(name) !== "raw") return null;
+  return symlinkEscapePath(body);
 }
