@@ -246,6 +246,7 @@ const TOOL_HINTS = new Map<string, string>([
   ["renderShapeScript", "a picture of a 3D model from several angles at once, saved as a PNG"],
   ["exportShapeScriptUsdz", "a 3D model saved as a USDZ file — AR Quick Look on iPhone and iPad, Quick Look preview on a Mac"],
   ["exportShapeScriptStl", "a 3D model saved as an STL file for 3D printing — one watertight solid in millimetres, with a printability report"],
+  ["presentBrep", "a solid part for manufacturing, built from a replicad script and checked — with STEP, STL and drawings to download"],
   ["showInPane", "a file opened in the Files pane beside your terminal, in the view and at the line asked for"],
   ["requestCheck", "a checklist for you to mark OK or NG, sent back to the agent when you finish"],
   ["manageShapeScript", "the public 3D gallery on mulmoserver — publish, update and delete your own models, fetch any published one, list yours"],
