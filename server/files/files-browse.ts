@@ -14,6 +14,7 @@ import type { Express, Request, Response } from "express";
 import os from "node:os";
 import { hasErrnoCode } from "../errors.js";
 import { backupCurrentFile, backupHolds, listBackups, readBackup, storeBackup } from "./backup-store.js";
+import { writeVerified, type Recheck } from "./verifiedWrite.js";
 import { losslessText } from "./editableText.js";
 import { containedPath, expandTilde, namedBase, resolveBase, resolveContained, symlinkEscapeOf } from "./pathContainment.js";
 import { SYMLINK_ESCAPE, SYMLINK_ESCAPE_FIELD, SYMLINK_ESCAPE_PATH_FIELD } from "../../common/symlinkEscape.js";
@@ -139,8 +140,16 @@ const containedFor = (req: Request, res: Response, defaultCwd: string): string |
 /** `containedFor` for a request that CHANGES a file: a cwd that was named but is no longer a
  *  directory is refused rather than read as the default workspace, where the write would land on a
  *  same-named file in another folder (Codex on #2676). */
-const containedForChange = (req: Request, res: Response, defaultCwd: string): string | null =>
-  containedUnder(namedBase(typeof req.query.cwd === "string" ? req.query.cwd : null, defaultCwd, os.homedir()), req, res);
+const changeBase = (req: Request, defaultCwd: string): string | null =>
+  namedBase(typeof req.query.cwd === "string" ? req.query.cwd : null, defaultCwd, os.homedir());
+
+const containedForChange = (req: Request, res: Response, defaultCwd: string): string | null => containedUnder(changeBase(req, defaultCwd), req, res);
+
+/** The same check as `containedForChange`, asked again once the file is open (#3306). */
+const recheckForChange = (req: Request, defaultCwd: string): Recheck => {
+  const base = changeBase(req, defaultCwd);
+  return () => (base === null ? null : resolveContained(base, browseRel(req), os.homedir()));
+};
 
 /** The rendering of a file and its style, for whichever shell the request gets. `theme` is the
  *  app's colours when the Files pane asked for them (#2263), else null: a rendering that has no
@@ -614,7 +623,7 @@ function mountWriteRoute(app: Express, { defaultCwd, backupRoot, onDirConfigWrit
       // written must not turn into a refusal to save.
       backupCurrentFile(abs, backupRoot);
       const bytes = Buffer.from(text, "utf8");
-      fs.writeFileSync(abs, bytes);
+      if (writeVerified(abs, bytes, recheckForChange(req, defaultCwd)) === "escaped") return res.status(403).json({ error: "path escapes the project root" });
       // The LEXICAL path, not `abs`: containment resolved symlinks to decide the write was allowed,
       // but a view is keyed by the cwd string it launched with, and the signal is matched exactly —
       // a project opened through a symlink would never hear about its own config (#1002).

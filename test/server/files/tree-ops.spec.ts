@@ -84,8 +84,8 @@ describe("entryUnder", () => {
 describe("createEntry", () => {
   it("makes an empty file and a folder", () => {
     const root = tmp();
-    createEntry(path.join(root, "a.md"), "file");
-    createEntry(path.join(root, "d"), "dir");
+    expect(createEntry(path.join(root, "a.md"), "file", () => entryUnder(root, "a.md"))).toBe("written");
+    expect(createEntry(path.join(root, "d"), "dir", () => entryUnder(root, "d"))).toBe("written");
     expect(readFileSync(path.join(root, "a.md"), "utf8")).toBe("");
     expect(lstatSync(path.join(root, "d")).isDirectory()).toBe(true);
   });
@@ -93,7 +93,7 @@ describe("createEntry", () => {
   it("never overwrites what is there", () => {
     const root = tmp();
     writeFileSync(path.join(root, "a.md"), "keep");
-    expect(() => createEntry(path.join(root, "a.md"), "file")).toThrow();
+    expect(() => createEntry(path.join(root, "a.md"), "file", () => entryUnder(root, "a.md"))).toThrow();
     expect(readFileSync(path.join(root, "a.md"), "utf8")).toBe("keep");
   });
 });
