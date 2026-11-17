@@ -75,6 +75,24 @@ describe("writeVerified", () => {
     cleanup();
   });
 
+  // The known limit, pinned so a stronger check shows up as a change here: the identity is looked up by
+  // name, so a third swap timed between the re-check and that lookup passes it.
+  it("is passed by three swaps timed to the instant (documented limit)", () => {
+    const { root, outside, recheck, swapOut, swapBack, cleanup } = project();
+    writeFileSync(path.join(outside, "a.md"), "outside");
+    const abs = resolveContained(root, "docs/a.md", os.homedir()) ?? "";
+    swapOut();
+    const recheckThenSwapOutAgain = () => {
+      swapBack();
+      const contained = recheck("docs/a.md")();
+      swapOut();
+      return contained;
+    };
+    expect(writeVerified(abs, Buffer.from("third swap"), recheckThenSwapOutAgain)).toBe("written");
+    expect(readFileSync(path.join(outside, "a.md"), "utf8")).toBe("third swap");
+    cleanup();
+  });
+
   it.skipIf(process.platform === "win32")("refuses a last component that became a link", () => {
     const { root, outside, cleanup } = project();
     writeFileSync(path.join(outside, "a.md"), "outside, untouched");

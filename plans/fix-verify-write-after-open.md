@@ -19,9 +19,11 @@ write lands outside.
   name would be a second check-then-act, and a swap in that gap would delete someone else's file.
 - `O_NOFOLLOW` (POSIX) refuses a last component that became a link at the open itself.
 
-Node has no `openat`, so the open can still land outside; what holds is that nothing is written there.
-A swap undone before the re-check fails the comparison too, since the check then names the inside
-file.
+Node has no `openat`, so the open can still land outside. A swap before the open is caught, and so is
+one undone before the re-check, since the check then names the inside file. Three swaps each timed to
+the instant still pass (out before the open, back before the re-check, out again before the identity
+lookup, which goes by name). Binding that lookup to the open file needs a descriptor-relative call Node
+has only on Linux (`/proc/self/fd`); a spec pins the limit so a stronger check shows up as a change.
 
 ## Not changed
 
