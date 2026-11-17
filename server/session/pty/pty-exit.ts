@@ -36,7 +36,11 @@ export function ptyExitDisposition(facts: { stillRegistered: boolean; tmuxBacked
  *  usually a restart replacing the pty (the cell must stay), unless the close route asked for the
  *  session to end and its cell to go (#3067). */
 export const sessionEndedForCell = (disposition: PtyExitDisposition, closeRequested: boolean): boolean =>
-  disposition === "reap" || (disposition === "gone" && closeRequested);
+  disposition === "reap" || closedOnRequest(disposition, closeRequested);
+
+/** The close route ended this session. A restart or token switch (#1918, #2950) also exits `gone`,
+ *  but never sets the request — so only the request, not the disposition, says the server meant it. */
+export const closedOnRequest = (disposition: PtyExitDisposition, closeRequested: boolean): boolean => disposition === "gone" && closeRequested;
 
 /** Whether `entry` is still the pty registered under this id. An explicit close or a restart (#1918)
  *  removes it first and may register a replacement under the SAME id before the old process's exit
@@ -82,6 +86,8 @@ function applyPtyExit(sessionId: string, disposition: PtyExitDisposition, reap: 
 /** The program's own exit code when its recorder wrote one (#3272), else the client's. Asked only on a
  *  reap: a `keep` is a session still running, and a `gone` was ended by us, not by the program. */
 function programExitCode(sessionId: string, entry: PtyEntry, disposition: PtyExitDisposition, clientExitCode: number): number {
+  // The reap SIGHUPs the tmux client, which exits 1 on it: that is our close, not a crash (#3300).
+  if (closedOnRequest(disposition, !!entry.closeRequested)) return 0;
   if (disposition !== "reap" || !entry.tmux) return clientExitCode;
   const record = tmuxTakePaneExitRecord(sessionId);
   const recorded = record === null ? null : parsePaneExitRecord(record);

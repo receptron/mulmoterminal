@@ -23,7 +23,7 @@ vi.mock("../../../../server/session/registry.js", async (importOriginal) => ({
   markSessionPlaced: (id: string) => placed.ids.push(id),
 }));
 
-const { isCurrentPty, ptyExitDisposition, reportPtyExit, sessionEndedForCell } = await import("../../../../server/session/pty/pty-exit.js");
+const { closedOnRequest, isCurrentPty, ptyExitDisposition, reportPtyExit, sessionEndedForCell } = await import("../../../../server/session/pty/pty-exit.js");
 const { ptys } = await import("../../../../server/session/registry.js");
 
 type Entry = NonNullable<ReturnType<typeof ptys.get>>;
@@ -134,15 +134,16 @@ describe("reportPtyExit — what the exit frame tells the browser", () => {
     { name: "the session went with the program", tmuxAlive: false, registered: true, ended: true },
     { name: "only the tmux client died", tmuxAlive: true, registered: true, ended: false },
     { name: "an explicit close already reaped it", tmuxAlive: false, registered: false, ended: false },
-    // #3067: the close route reaps first too, but asked for the cell to go.
-    { name: "the close route reaped it", tmuxAlive: false, registered: false, ended: true, closeRequested: true },
-  ])("$name → ended: $ended", ({ tmuxAlive, registered, ended, closeRequested }) => {
+    // #3067: the close route reaps first too, but asked for the cell to go. Its client was SIGHUPed,
+    // which a real tmux client exits 1 on (#3300).
+    { name: "the close route reaped it", tmuxAlive: false, registered: false, ended: true, closeRequested: true, clientExitCode: 1 },
+  ])("$name → ended: $ended", ({ tmuxAlive, registered, ended, closeRequested, clientExitCode }) => {
     const { socket, frames } = socketRecording([]);
     const exiting = registered ? register("s-1", true, socket) : entryOf(true, socket);
     if (closeRequested) exiting.closeRequested = true;
     hasSession.mockReturnValue(tmuxAlive);
 
-    reportPtyExit("s-1", exiting, EXIT, vi.fn());
+    reportPtyExit("s-1", exiting, { ...EXIT, exitCode: clientExitCode ?? EXIT.exitCode }, vi.fn());
 
     expect(frames).toEqual([{ type: "exit", exitCode: 0, lifetimeMs: 60_000, reattached: false, ended }]);
   });
@@ -256,12 +257,55 @@ describe("sessionEndedForCell", () => {
   });
 });
 
+describe("closedOnRequest", () => {
+  it.each([
+    { disposition: "gone", closeRequested: true, closed: true },
+    { disposition: "gone", closeRequested: false, closed: false },
+    { disposition: "reap", closeRequested: true, closed: false },
+    { disposition: "reap", closeRequested: false, closed: false },
+    { disposition: "keep", closeRequested: true, closed: false },
+    { disposition: "keep", closeRequested: false, closed: false },
+  ] as const)("$disposition, close requested: $closeRequested → $closed", ({ disposition, closeRequested, closed }) => {
+    expect(closedOnRequest(disposition, closeRequested)).toBe(closed);
+  });
+});
+
+// The reap SIGHUPs the tmux client, and a tmux client exits 1 on SIGHUP — so these exits carry 1 (#3300).
 describe("reportPtyExit — a session the close route ended", () => {
+  const SIGHUPED_CLIENT = { exitCode: 1, signal: undefined, lifetimeMs: STARTUP_WINDOW_MS };
+  const recordingEntry = (closeRequested: boolean) => {
+    const frames: Array<{ exitCode?: unknown }> = [];
+    const socket = { readyState: 1, OPEN: 1, send: (d: string) => frames.push(JSON.parse(d)), close: () => undefined };
+    const exiting = entryOf(true, socket);
+    if (closeRequested) exiting.closeRequested = true;
+    return { exiting, frames };
+  };
+
   it("drops its unplaced mark, so no grid adopts it later", () => {
-    const closed = entryOf(true);
-    closed.closeRequested = true;
-    reportPtyExit("s-1", closed, { exitCode: 0, signal: undefined, lifetimeMs: STARTUP_WINDOW_MS }, vi.fn());
+    const { exiting } = recordingEntry(true);
+    reportPtyExit("s-1", exiting, SIGHUPED_CLIENT, vi.fn());
     expect(placed.ids).toEqual(["s-1"]);
+  });
+
+  it("reports exit code 0, not the SIGHUPed client's", () => {
+    const { exiting, frames } = recordingEntry(true);
+    reportPtyExit("s-1", exiting, SIGHUPED_CLIENT, vi.fn());
+    expect(frames[0]?.exitCode).toBe(0);
+  });
+
+  it("does so even for a pty that was never tmux-backed", () => {
+    const { exiting, frames } = recordingEntry(true);
+    exiting.tmux = false;
+    reportPtyExit("s-1", exiting, { ...SIGHUPED_CLIENT, exitCode: 129 }, vi.fn());
+    expect(frames[0]?.exitCode).toBe(0);
+  });
+
+  // A restart or token switch exits `gone` the same way, but did not ask for the cell to close.
+  it("leaves the client's code alone when no close was requested", () => {
+    const { exiting, frames } = recordingEntry(false);
+    reportPtyExit("s-1", exiting, SIGHUPED_CLIENT, vi.fn());
+    expect(frames[0]?.exitCode).toBe(1);
+    expect(placed.ids).toEqual([]);
   });
 });
 
