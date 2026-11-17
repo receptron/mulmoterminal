@@ -27,6 +27,8 @@ outside file's contents. Measured with the route spec below against the code bef
 - `/api/files/raw`: `sendRawFile` takes the check, opens verified, and streams from the descriptor,
   with the size taken from it. A one-file grant passes no check and is served by name as before: it
   has no root to stay inside, and `O_NOFOLLOW` would refuse a granted path that is a link.
+- `/api/files/page` (an HTML file in the Files pane's Preview) is contained as the raw route is, and
+  now streams from a verified descriptor the same way (`sendHtmlDocument` takes the check).
 - Thumbnails read verified (async), against `realContainedWithin` on the workspace root.
 
 ## Not changed
@@ -35,6 +37,12 @@ outside file's contents. Measured with the route spec below against the code bef
   identity is looked up by name; a hard link is the same file.
 - `/browse/list` (a directory listing) and `/browse/head` (`git show` run in the file's folder): there
   is no descriptor to compare, since Node's `opendir` exposes none and git opens the folder itself.
+- `/browse/search`: git reads the files from the project root itself.
+- The plugin file operations (`server/backends/files/fileOps.ts`) check real containment and then
+  read and write by name. That is the same gap on another surface, with a write half of its own;
+  it stays in #3306.
+- `/artifacts/html` checks containment only lexically, so a link under `artifacts/html` is followed
+  wherever it points. That is a missing check, not a race, and is a separate defect.
 - A folder made by the tree (`kind: "dir"`), rename and Trash: still open in #3306.
 - A FIFO swapped in after the check blocks the open, as `readFileSync` did before.
 

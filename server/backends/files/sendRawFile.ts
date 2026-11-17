@@ -11,7 +11,7 @@ import { create as contentDisposition } from "content-disposition";
 import { rawServingPlan } from "./rawServingPlan.js";
 import { servedFileName } from "./servedFileName.js";
 import { streamFileToResponse } from "./streamFile.js";
-import { openVerifiedForRead } from "../../files/verifiedRead.js";
+import { openVerifiedOr4xx } from "./openVerifiedOr4xx.js";
 import type { Recheck } from "../../files/verifiedWrite.js";
 
 /** The served file: its size, and the descriptor to read when one was opened. */
@@ -35,21 +35,6 @@ export function sendRawFile(req: Request, res: Response, abs: string, rel: strin
     if (!handedToStream.done) fs.closeSync(fd);
   }
 }
-
-function openVerifiedOr4xx(res: Response, abs: string, recheck: Recheck): number | null {
-  const fd = openOrMissing(abs, recheck);
-  if (fd === "missing") res.status(404).json({ error: "not found" });
-  else if (fd === null) res.status(403).json({ error: "path escapes the serving root" });
-  return fd === "missing" ? null : fd;
-}
-
-const openOrMissing = (abs: string, recheck: Recheck): number | null | "missing" => {
-  try {
-    return openVerifiedForRead(abs, recheck);
-  } catch {
-    return "missing";
-  }
-};
 
 /** The response for `file`; true once a stream has taken over its descriptor. */
 function sendBytes(req: Request, res: Response, file: ServedFile): boolean {

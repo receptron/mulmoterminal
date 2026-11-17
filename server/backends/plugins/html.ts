@@ -24,6 +24,8 @@ import { htmlByPath, resolveHtmlRequest } from "../files/openPath.js";
 import { mountSourceEditorDispatchRoute } from "../files/sourceEditorDispatchRoute.js";
 import { statFileOr404 } from "../files/statFileOr404.js";
 import { streamFileToResponse } from "../files/streamFile.js";
+import { openVerifiedOr4xx } from "../files/openVerifiedOr4xx.js";
+import type { Recheck } from "../../files/verifiedWrite.js";
 import { isWithin } from "../../infra/fs/path-within.js";
 
 // Curated CDN allowlist for an LLM-authored page that may pull a charting/util lib or font
@@ -60,12 +62,17 @@ const HTML_PREVIEW_CSP = [
 //
 // statSync follows symlinks, so isFile() judges the TARGET — a link to a directory or a FIFO
 // named `page.html` is refused here rather than hanging a read.
-export function sendHtmlDocument(res: Response, abs: string): void {
+//
+// `recheck`, when the caller has one, is its containment check asked again once the file is open, and
+// the page is then streamed from that descriptor (#3306).
+export function sendHtmlDocument(res: Response, abs: string, recheck?: Recheck): void {
   if (!statFileOr404(res, abs)) return;
+  const fd = recheck ? openVerifiedOr4xx(res, abs, recheck) : undefined;
+  if (fd === null) return;
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Content-Security-Policy", HTML_PREVIEW_CSP);
-  streamFileToResponse(abs, res);
+  streamFileToResponse(abs, res, undefined, fd);
 }
 
 /** Intercept the View's dispatch (loadHtml/saveHtml) on /api/plugin/presentHtml,
