@@ -18,8 +18,8 @@ export function makeFolderVerified(abs: string, recheck: Recheck): VerifiedOutco
   return isFolder(recheck()) ? "written" : "escaped";
 }
 
-/** Make every missing folder of `dirLexical`, top first, each through its parent's real path and each
- *  checked once made. An existing level is only checked. */
+/** Make every missing folder of `dirLexical`, top first, each made only under a parent the check
+ *  still names and checked once made. An existing level is only checked. */
 export function makeFoldersVerified(dirLexical: string, contained: Contained): VerifiedOutcome {
   const missing = missingLevels(dirLexical);
   const escaped = missing.some((level) => makeLevel(level, contained) === "escaped");
@@ -27,10 +27,9 @@ export function makeFoldersVerified(dirLexical: string, contained: Contained): V
 }
 
 function makeLevel(level: string, contained: Contained): VerifiedOutcome {
-  const parentReal = contained(path.dirname(level));
-  if (!isFolder(parentReal)) return "escaped";
+  if (!isFolder(contained(path.dirname(level)))) return "escaped";
   try {
-    return makeFolderVerified(path.join(parentReal, path.basename(level)), () => contained(level));
+    return makeFolderVerified(level, () => contained(level));
   } catch (error) {
     // Made meanwhile by someone else: as good as made here, once it too is checked.
     if (hasCode(error, "EEXIST")) return isFolder(contained(level)) ? "written" : "escaped";

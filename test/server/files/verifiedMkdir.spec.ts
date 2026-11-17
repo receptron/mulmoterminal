@@ -79,6 +79,18 @@ describe("makeFoldersVerified", () => {
     cleanup();
   });
 
+  it("counts a level another creator made meanwhile as made, once it too is checked", () => {
+    const { root, cleanup } = project();
+    const mkdir = fs.mkdirSync;
+    vi.spyOn(fs, "mkdirSync").mockImplementationOnce((...args: Parameters<typeof fs.mkdirSync>) => {
+      mkdir(...args); // the other creator, between the look and the make
+      return mkdir(...args);
+    });
+    expect(makeFoldersVerified(path.join(root, "docs", "a", "b"), containedIn(root))).toBe("written");
+    expect(lstatSync(path.join(root, "docs", "a", "b")).isDirectory()).toBe(true);
+    cleanup();
+  });
+
   it("makes nothing under an existing folder that already leads out", () => {
     const { root, outside, swapOut, cleanup } = project();
     swapOut();

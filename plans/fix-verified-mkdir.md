@@ -19,9 +19,10 @@ before its own re-check refused the file.
 - `makeFolderVerified(abs, recheck)` makes one folder, then asks the check again. If what the check
   names now is not a folder inside, the answer is "escaped". A name that is already there throws
   EEXIST, as `mkdir` does.
-- `makeFoldersVerified(dir, contained)` makes the missing levels top first. Each level is made under
-  its parent's REAL path and checked once made. It stops at the first level that did not land inside,
-  so nothing deeper is made. Existing levels are only checked.
+- `makeFoldersVerified(dir, contained)` makes the missing levels top first. A level is made only
+  while the check still names its parent as a folder inside, and is checked once made. It stops at
+  the first level that did not land inside, so nothing deeper is made. Existing levels are only
+  checked; a level another creator made meanwhile (EEXIST) counts once it too passes the check.
 
 Then:
 
@@ -45,6 +46,7 @@ What this does hold: at most one empty folder outside per call, and no content w
   - a swap at the first `mkdir`, which reports "escaped", leaves one empty folder outside, and makes
     nothing deeper;
   - an existing level that already leads out, under which nothing is made;
+  - a level made by another creator between the look and the make;
   - the undone swap, pinned as the limit;
   - EEXIST.
 - `test/server/files/verifiedWrite-routes.spec.ts`:
