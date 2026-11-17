@@ -37,8 +37,13 @@ describe("headerHookEffect", () => {
 
   // The distinction this rule exists for: /compact also arrives as SessionStart. Clearing on
   // it would wipe the user's task line and AI title mid-conversation.
-  it.each([["compact"], ["startup"], ["resume"], [undefined], [null], ["CLEAR"]])("does not clear on SessionStart source %j", (source) => {
+  it.each([["compact"], ["startup"], [undefined], [null], ["CLEAR"]])("does not clear on SessionStart source %j", (source) => {
     expect(headerHookEffect("SessionStart", { source })).toBeNull();
+  });
+
+  // Whether a resume moved the session off its own transcript depends on ids only the route has.
+  it("hands a resume up for the route to judge", () => {
+    expect(headerHookEffect("SessionStart", { source: "resume" })).toEqual({ kind: "resume" });
   });
 
   it("regenerates the title once a turn's reply is on disk", () => {

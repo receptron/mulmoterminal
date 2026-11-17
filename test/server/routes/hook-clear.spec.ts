@@ -20,14 +20,19 @@ vi.mock("../../../server/session/session-reads.js", () => ({ latestUserPrompt: v
 // ~/.mulmoterminal. Stubbing the writer keeps the route's own behaviour — including WHICH cwd it
 // hands over, which is the wiring that decides whether the mark can survive a restart at all.
 const markCalls: Array<[string, string | undefined]> = [];
+const claudeIds: Array<string | undefined> = [];
+const successors = new Map<string, string | undefined>();
 vi.mock("../../../server/session/transcript/cleared-transcripts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../server/session/transcript/cleared-transcripts")>();
   return {
     ...actual,
-    markTranscriptCleared: async (id: string, cwd: string | undefined) => {
+    markTranscriptCleared: async (id: string, cwd: string | undefined, claudeId?: string) => {
       markCalls.push([id, cwd]);
+      claudeIds.push(claudeId);
       actual.clearedTranscripts.add(id);
+      successors.set(id, claudeId);
     },
+    clearedClaudeIdOf: (id: string) => successors.get(id),
   };
 });
 
@@ -68,6 +73,8 @@ beforeEach(() => {
   lastResponses.delete(ID);
   clearedTranscripts.delete(ID);
   markCalls.length = 0;
+  claudeIds.length = 0;
+  successors.clear();
   vi.clearAllMocks();
 });
 
@@ -104,6 +111,52 @@ describe("SessionStart source=clear", () => {
   it("hands the mark the cwd the hook reported", async () => {
     await postHook({ hook_event_name: "SessionStart", source: "clear", cwd: "/work/other-project" });
     expect(markCalls).toEqual([[ID, "/work/other-project"]]);
+  });
+});
+
+// `/resume` typed inside the cell moves claude to ANOTHER conversation's transcript while the
+// session keeps its id. Left in memory, a restart then resumed the session's own id — abandoned, or
+// never written at all — and the cell came back as a brand-new conversation.
+describe("SessionStart source=resume", () => {
+  const OTHER = "99999999-8888-4777-8666-555555555555";
+
+  it("marks the session moved, with the conversation claude resumed as its successor", async () => {
+    lastPrompts.set(ID, "the abandoned task");
+    await postHook({ hook_event_name: "SessionStart", source: "resume", session_id: OTHER, cwd: "/work" });
+
+    expect(markCalls).toEqual([[ID, "/work"]]);
+    expect(claudeIds).toEqual([OTHER]);
+    expect(lastPrompts.get(ID)).toBe("");
+    expect(deps.forgetTitle).toHaveBeenCalledWith(ID);
+  });
+
+  // Every ordinary restart: claude resumes the session's own transcript.
+  it("leaves a session alone when claude resumed its own transcript", async () => {
+    lastPrompts.set(ID, "still the task");
+    await postHook({ hook_event_name: "SessionStart", source: "resume", session_id: ID, cwd: "/work" });
+
+    expect(markCalls).toEqual([]);
+    expect(lastPrompts.get(ID)).toBe("still the task");
+    expect(deps.forgetTitle).not.toHaveBeenCalled();
+  });
+
+  // The restart that resumes the successor fires the hook again; re-marking would blank the header
+  // on every restart.
+  it("does not mark again when claude resumed the successor already recorded", async () => {
+    await postHook({ hook_event_name: "SessionStart", source: "resume", session_id: OTHER, cwd: "/work" });
+    lastPrompts.set(ID, "the resumed task");
+    vi.clearAllMocks();
+
+    await postHook({ hook_event_name: "SessionStart", source: "resume", session_id: OTHER, cwd: "/work" });
+
+    expect(markCalls).toHaveLength(1);
+    expect(lastPrompts.get(ID)).toBe("the resumed task");
+    expect(deps.forgetTitle).not.toHaveBeenCalled();
+  });
+
+  it("ignores a resume that names no usable id", async () => {
+    await postHook({ hook_event_name: "SessionStart", source: "resume", session_id: "not-a-uuid", cwd: "/work" });
+    expect(markCalls).toEqual([]);
   });
 });
 
