@@ -8,6 +8,54 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@12.2.0 — 2026-11-17
+
+> **Setup guide:** [12.2.0 — Solid models for parts that are made](https://receptron.github.io/mulmoterminal/guide/en/v12.2.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v12.2.0.html))
+
+### presentBrep: solid models for parts that are made (#3297)
+
+`presentBrep`, from `@gui-chat-plugin/brep` 0.1.0, joins `presentShapeScript` in the Canvas. The agent writes a replicad script; the server builds it with the OpenCascade kernel, checks the result, and saves the script, a STEP file, an STL and a sheet of line drawings under `artifacts/brep/`. The card shows the model in 3D with the check report and a download button for each file. ShapeScript stays the tool for models that are looked at; this one is for parts that are made or must fit (exact surfaces, fillets and chamfers on chosen edges, a file a CAD program opens as a solid). The tool is in the `render` group and auto-approved, by the owner's decision: the script is JavaScript the agent wrote, run through `node:vm` in the server process with no sandbox, so enable Canvas only where the model may already run code on the machine. A build blocks the event loop while the kernel works; the 22 MB kernel loads on the first build, and the page bundle does not carry it.
+
+### Claude Code 2.1.326 no longer asks to trust the drops folder (#3315)
+
+Fixes #3313. Claude Code 2.1.326 shows a full-screen "Adding a new directory … Is this a directory you created or one you trust?" for an `--add-dir` folder it has not trusted, and every claude cell passes its drops folder that way. MulmoTerminal now marks the drops root trusted in the config file that cell's login uses (the account's `CLAUDE_CONFIG_DIR`, else the default), keyed by the real path of its parent plus its name so a root swapped for a link does not name the link's target. The write is the atomic one the usage probe's folder already used (#3206), now shared from `server/agents/claude/own-folder-trust.ts`; a config already known to carry the entry is not read again until its device, inode, size or mtime changes. No config file is created; if it cannot be written, the prompt appears as before.
+
+### File routes re-check containment after they act (#3306, #3307, #3308, #3311, #3312, #3314, #3316, #3317, #3318)
+
+A folder on a path could be swapped for a link out of the project between the containment check and the operation, which then acted outside. Each operation now checks again on what it actually touched:
+
+- **Writes** (`PUT /api/files/browse/write`, the tree's new file) open first and write only when the open file's device and inode match what the check names now; a mismatch is a 403 (#3307).
+- **Reads** (`/browse/text`, `/browse/version`, the rendered views, `/api/files/raw` with `Range`, `/api/files/page`, thumbnails, and the write route's own reads, which also fed the backup store) read through the verified descriptor (#3308).
+- **Plugin file operations** (`createFileOps`: artifacts, plugin data and config, MulmoScript stories) read and write through `@mulmoclaude/core/files`, as MulmoClaude does (#3311); their `stat` and `readDir` re-check after reading and require the root's real path to be unchanged (#3318).
+- **`/artifacts/html`** is opened with `openVerifiedWithinScope`, so a link under it is no longer followed anywhere, and only a regular file is served (#3312, fixes #3310).
+- **New folders** (the tree, and the parents a plugin write makes) are made one level at a time with a check after each (#3314).
+- **Rename and Trash** identify the entry before the move and verify afterwards that the same entry landed inside; otherwise a 403 (#3316).
+- **`/browse/list` and `/browse/head`** re-check after reading and send nothing on an escape; `/browse/search` is pinned by a spec not to follow links (#3317).
+
+### A dangling symlink out of the project no longer passes containment (#3304)
+
+Fixes #3303. `realContainedWithin` found the existing part of a path with `existsSync`, which follows a link, so a link to an outside target that did not exist yet read as "a file not created yet", and a write then created it outside. It now uses `lstat`, and follows a dangling link by walking its target one component at a time with one follow budget; on Windows a dangling link is refused.
+
+### Media behind a symlink out of the project shows in the pane (#3302)
+
+Fixes #3301. A picture, PDF, video or sound inside the project by spelling but behind a link to a folder outside showed only `path escapes the project root`. The 403 now says `escape: "symlink"` with the resolved path, and the pane asks for the one-file grant and shows it; a text file refused that way says why in the UI language.
+
+### Bracketed paste survives a reattach in tmux copy-mode (#3309)
+
+Fixes #3299. A reload or reconnect while a pane was in copy-mode broke the next paste after "Back to input". The replay now strips every query xterm answers (DECRQM, DECRQSS, OSC 4, chained OSC 10/11/12), whose replies reached tmux as keys and, under `mode-keys vi`, opened an invisible search that ate the paste. The 1 MiB replay cut learns DCS. And on leaving copy-mode the server re-sends `?2004h` / `?2004l` as tmux reports it.
+
+### A cell closed by the close route closes again (#3305)
+
+Fixes #3300. `POST /api/session/:id/close` left the cell as `[session ended — exit 1]`, because the reap's SIGHUP made the tmux client exit 1 and that was taken as the program's crash (#3274). A `gone` exit with `closeRequested` now reports 0, decided by one pure rule, `closedOnRequest`.
+
+### A request timeout says it timed out (#3294)
+
+Fixes #3293. A UI request that hit its deadline showed the browser's `signal is aborted without reason`. `fetchWithTimeout` now says the server did not answer within the limit, that it may be busy, and to restart if it keeps happening, in the UI language, for every `/api` read.
+
+### Dependency updates (#3298)
+
+Patch and minor updates to dompurify, marked, puppeteer, vue-i18n, vue-router, ws, vite, eslint, prettier, typescript-eslint, jsdom and others.
+
 ## mulmoterminal@12.1.2 — 2026-11-10
 
 > **Setup guide:** [12.1.2 — Token rotation stops choosing a subscription that cannot run Claude Code](https://receptron.github.io/mulmoterminal/guide/en/v12.1.2.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v12.1.2.html))

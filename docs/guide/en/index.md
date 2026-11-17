@@ -8,9 +8,8 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **12.1.2 is out.** Token rotation no longer starts sessions on a subscription that cannot run
-> Claude Code. [Setup guide](v12.1.2.html) — and 12.1.0 added compact roster rows and a roster you
-> can fold: [12.1.0 setup guide](v12.1.0.html)
+> **12.2.0 is out.** Agents can build solid models for parts that are made, with STEP and STL
+> downloads, and Claude Code 2.1.326 stops asking to trust the drops folder. [Setup guide](v12.2.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 

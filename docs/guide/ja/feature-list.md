@@ -4,7 +4,7 @@ nav_title: 全機能リスト
 layout: default
 parent: 日本語
 nav_order: 6.5
-as_of: 12.1.2
+as_of: 12.2.0
 description: MulmoTerminal のいまある機能を、入った版つきで領域ごとに一行ずつ並べた一覧（9.1.0 時点）。
 ---
 
@@ -314,6 +314,7 @@ description: MulmoTerminal のいまある機能を、入った版つきで領�
 
 詳しく: [コレクションから作る](from-collection.html) · [MulmoCast の動画](mulmocast.html) · [表計算とグラフ](spreadsheet.html)
 
+- エージェントが作る部品のソリッドモデルを組み（replicad と OpenCascade）、Canvas が検査の報告と STEP・STL・図面のダウンロード付きで 3D 表示する（presentBrep） (v12.2.0)
 - 同梱スキル /mulmoterminal-html-plan が、計画を Canvas のページにし、未決の選択肢をモックや操作できる部品で並べる。ページのボタンで、決めた内容があなたの次のメッセージとして届く (v11.3.0)
 - 表の計算式が、隣のセルまで埋める表を返せる（SORT、FILTER、UNIQUE、GROUPBY、PIVOTBY）。LET と LAMBDA、LINEST、FREQUENCY、FORECAST.ETS、検定も増える (v11.2.0)
 - グラフに日本地図・世界地図、まとまり分け、列ごとの箱ひげ図、表を追いかける曲線とヒストグラム、ワードクラウド、3D、SVG・CSV での保存、カードの横並びが加わる (v11.1.0)
