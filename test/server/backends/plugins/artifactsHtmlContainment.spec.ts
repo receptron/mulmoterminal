@@ -66,18 +66,23 @@ describe("/artifacts/html containment", () => {
     cleanup();
   });
 
-  it("answers 404 when the folder is swapped for a link out after the check", async () => {
+  // Before the open, the open lands outside; after it, the open file is inside but the folder no longer
+  // holds it. Both are refused by the check made once the handle is open.
+  it.each(["before", "after"] as const)("answers 404 when the folder is swapped for a link out %s the open", async (when) => {
     const { pages, outside, request, cleanup } = layout();
-    writeFileSync(path.join(outside, "page.html"), `<p>${SECRET}</p>`);
+    const swapOut = () => {
+      renameSync(path.join(pages, "sub"), path.join(pages, "sub-aside"));
+      symlinkSync(outside, path.join(pages, "sub"));
+    };
     const open = fs.promises.open;
     const swapped = { done: false };
-    vi.spyOn(fs.promises, "open").mockImplementation((...args: Parameters<typeof open>) => {
-      if (!swapped.done) {
-        swapped.done = true;
-        renameSync(path.join(pages, "sub"), path.join(pages, "sub-aside"));
-        symlinkSync(outside, path.join(pages, "sub"));
-      }
-      return open(...args);
+    vi.spyOn(fs.promises, "open").mockImplementation(async (...args: Parameters<typeof open>) => {
+      if (swapped.done) return open(...args);
+      swapped.done = true;
+      if (when === "before") swapOut();
+      const handle = await open(...args);
+      if (when === "after") swapOut();
+      return handle;
     });
     const res = await bodyOf(await request("/artifacts/html/sub/page.html"));
     expect(swapped.done).toBe(true);

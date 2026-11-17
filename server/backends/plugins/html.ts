@@ -89,7 +89,11 @@ async function openArtifactPage(workspace: string, relative: string): Promise<Fi
   const trustedReal = await realpathIfPresent(workspace);
   const handle = trustedReal === null ? null : await openVerifiedWithinScope({ trustedReal, scopeWithinTrusted: ARTIFACTS_HTML_DIR }, relative);
   if (handle === null) return null;
-  if ((await handle.stat()).isFile()) return handle;
+  const isFile = await handle.stat().then(
+    (stats) => stats.isFile(),
+    () => false,
+  );
+  if (isFile) return handle;
   await handle.close();
   return null;
 }
@@ -100,8 +104,14 @@ async function sendArtifactPage(res: Response, workspace: string, relative: stri
     res.status(404).json({ error: "not found" });
     return;
   }
-  setHtmlPreviewHeaders(res);
-  streamHandleToResponse(handle, res);
+  // The stream owns the handle once it exists; until then a throw must close it here.
+  try {
+    setHtmlPreviewHeaders(res);
+    streamHandleToResponse(handle, res);
+  } catch (err) {
+    await handle.close();
+    throw err;
+  }
 }
 
 /** Intercept the View's dispatch (loadHtml/saveHtml) on /api/plugin/presentHtml,
