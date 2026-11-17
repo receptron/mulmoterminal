@@ -51,12 +51,13 @@ function mountCreate(app: Express, deps: TreeRouteDeps): void {
     const base = deps.base(req.query.cwd);
     if (base === null) return res.status(404).json({ error: GONE });
     const dirRel = relPath(req);
-    const target = entryUnder(base, dirRel === "" ? name : `${dirRel}/${name}`);
+    const entryRel = dirRel === "" ? name : `${dirRel}/${name}`;
+    const target = entryUnder(base, entryRel);
     if (!target) return res.status(403).json({ error: "path escapes the project root" });
     if (entryExists(target)) return res.status(409).json({ error: "a file or folder with that name already exists" });
     try {
-      createEntry(target, kind);
-      res.json({ ok: true, path: dirRel === "" ? name : `${dirRel}/${name}` });
+      if (createEntry(target, kind, () => entryUnder(base, entryRel)) === "escaped") return res.status(403).json({ error: "path escapes the project root" });
+      res.json({ ok: true, path: entryRel });
     } catch {
       res.status(500).json({ error: "could not create it" });
     }
