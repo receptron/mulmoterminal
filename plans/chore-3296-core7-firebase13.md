@@ -25,7 +25,7 @@ MulmoTerminal の宣言は `^6.0.1` なので届かない。これを取り込�
   1.13.4 がポップアップでのログイン後に資格情報を保存できなかった）。13.4.0 が持つ
   `@firebase/auth@1.13.11` の dist に、その原因の「`hidden` をページ終了とみなす」処理が無いことを、
   今の 1.13.6 と比べて確かめた。
-- **`@receptron/sharedapp` の peer が core 7 を受けるまで、これは出せない。** 0.47.1 の peer は
+- **`@receptron/sharedapp` は 0.47.2 に上げる（receptron/sharedapp#124）。** 0.47.1 の peer は
   `^5.4.0 || ^6.0.0` で、core 7 と並べると npm が `ERESOLVE` で install を止める（手元で再現）。
   sharedapp 側で `|| ^7.0.0` を足して公開し、こちらはその版に上げる。
 - CI は PR を 22 → 24、Windows の日次を `[24.x, 26.x]` にする。
