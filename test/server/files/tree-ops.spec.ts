@@ -103,9 +103,9 @@ describe("renameEntry", () => {
     const root = tmp();
     writeFileSync(path.join(root, "a.md"), "a");
     writeFileSync(path.join(root, "b.md"), "b");
-    expect(renameEntry(path.join(root, "a.md"), path.join(root, "b.md"))).toBe("exists");
+    expect(renameEntry(path.join(root, "a.md"), path.join(root, "b.md"), () => entryUnder(root, "b.md"))).toBe("exists");
     expect(readFileSync(path.join(root, "b.md"), "utf8")).toBe("b");
-    expect(renameEntry(path.join(root, "a.md"), path.join(root, "c.md"))).toBe("renamed");
+    expect(renameEntry(path.join(root, "a.md"), path.join(root, "c.md"), () => entryUnder(root, "c.md"))).toBe("renamed");
     expect(readFileSync(path.join(root, "c.md"), "utf8")).toBe("a");
   });
 
@@ -113,7 +113,7 @@ describe("renameEntry", () => {
     const root = tmp();
     mkdirSync(path.join(root, "d"));
     writeFileSync(path.join(root, "d", "x.md"), "x");
-    expect(renameEntry(path.join(root, "d"), path.join(root, "e"))).toBe("renamed");
+    expect(renameEntry(path.join(root, "d"), path.join(root, "e"), () => entryUnder(root, "e"))).toBe("renamed");
     expect(readFileSync(path.join(root, "e", "x.md"), "utf8")).toBe("x");
   });
 
@@ -121,7 +121,7 @@ describe("renameEntry", () => {
     const root = tmp();
     const outside = tmp();
     symlinkSync(outside, path.join(root, "out"));
-    expect(renameEntry(path.join(root, "out"), path.join(root, "gone"))).toBe("renamed");
+    expect(renameEntry(path.join(root, "out"), path.join(root, "gone"), () => entryUnder(root, "gone"))).toBe("renamed");
     expect(lstatSync(path.join(root, "gone")).isSymbolicLink()).toBe(true);
     expect(existsSync(outside)).toBe(true);
   });
@@ -207,7 +207,7 @@ describe("moveToTrash", () => {
     const trash = tmp();
     writeFileSync(path.join(trash, "a.md"), "older");
     writeFileSync(path.join(root, "a.md"), "new");
-    expect(moveToTrash(path.join(root, "a.md"), { kind: "mac", files: trash }, new Date())).toBe("trashed");
+    expect(moveToTrash(path.join(root, "a.md"), { kind: "mac", files: trash }, new Date(), () => entryUnder(root, "a.md"))).toBe("trashed");
     expect(existsSync(path.join(root, "a.md"))).toBe(false);
     expect(readFileSync(path.join(trash, "a 2.md"), "utf8")).toBe("new");
   });
@@ -219,7 +219,7 @@ describe("moveToTrash", () => {
     const name = "y".repeat(250);
     writeFileSync(path.join(root, name), "long");
     const layout = { kind: "freedesktop" as const, files: path.join(trash, "files"), info: path.join(trash, "info") };
-    expect(moveToTrash(path.join(root, name), layout, new Date())).toBe("trashed");
+    expect(moveToTrash(path.join(root, name), layout, new Date(), () => entryUnder(root, name))).toBe("trashed");
     expect(existsSync(path.join(root, name))).toBe(false);
   });
 
@@ -228,7 +228,7 @@ describe("moveToTrash", () => {
     const trash = tmp();
     mkdirSync(path.join(root, "d"));
     const layout = { kind: "freedesktop" as const, files: path.join(trash, "files"), info: path.join(trash, "info") };
-    expect(moveToTrash(path.join(root, "d"), layout, new Date(2026, 0, 2, 3, 4, 5))).toBe("trashed");
+    expect(moveToTrash(path.join(root, "d"), layout, new Date(2026, 0, 2, 3, 4, 5), () => entryUnder(root, "d"))).toBe("trashed");
     expect(lstatSync(path.join(trash, "files", "d")).isDirectory()).toBe(true);
     expect(readFileSync(path.join(trash, "info", "d.trashinfo"), "utf8")).toContain(`Path=${path.join(root, "d")}`);
   });

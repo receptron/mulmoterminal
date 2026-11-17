@@ -61,18 +61,39 @@ export function createEntry(abs: string, kind: EntryKind, recheck: Recheck): Ver
   return kind === "file" ? createFileVerified(abs, recheck) : makeFolderVerified(abs, recheck);
 }
 
+// A rename or a move to the Trash acts by name after the containment check, and Node has no
+// `renameat`, so a folder above the entry swapped for a link out in between moves an OUTSIDE entry
+// (#3306). It cannot be stopped beforehand, so it is detected: the entry is identified (device and
+// inode) just before the move, and afterwards the check is asked again and must name a place holding
+// that same entry. A move that landed outside is reported, not undone — putting it back by name would
+// be another check-then-act. A swap made before the entry is identified and undone before the check is
+// asked again still passes.
+type EntryIdentity = { dev: bigint; ino: bigint };
+
+const identityOf = (abs: string): EntryIdentity | null => {
+  const stats = fs.lstatSync(abs, { bigint: true, throwIfNoEntry: false });
+  return stats ? { dev: stats.dev, ino: stats.ino } : null;
+};
+
+const holds = (abs: string | null, entry: EntryIdentity | null): boolean => {
+  const now = abs === null ? null : identityOf(abs);
+  return entry !== null && now !== null && now.dev === entry.dev && now.ino === entry.ino;
+};
+
 /** Rename in place. A name that differs only in case is the same entry on a case-insensitive disk,
- *  so that one is allowed through; any other existing name is refused.
+ *  so that one is allowed through; any other existing name is refused. `recheckTo` is the check for
+ *  the NEW name: "escaped" when, after the rename, it does not name the entry that was moved.
  *
  *  A file created at `to` between the check and the rename is replaced (POSIX `rename` does that). A
  *  link-then-unlink rename would refuse it, but where the old name cannot be removed (a deny-delete
  *  ACL, another user's file in a sticky folder) it leaves the file under BOTH names with no way back —
  *  worse than the race it closes, so it is not done (#2694). */
-export function renameEntry(from: string, to: string): "renamed" | "exists" {
+export function renameEntry(from: string, to: string, recheckTo: Recheck): "renamed" | "exists" | "escaped" {
   const sameEntry = from.toLowerCase() === to.toLowerCase() && entryExists(to) && fs.lstatSync(from).ino === fs.lstatSync(to).ino;
   if (entryExists(to) && !sameEntry) return "exists";
+  const moving = identityOf(from);
   fs.renameSync(from, to);
-  return "renamed";
+  return holds(recheckTo(), moving) ? "renamed" : "escaped";
 }
 
 /** Where deleted entries go on this machine, or null where it is not known. */
@@ -130,8 +151,10 @@ export function trashInfo(originalAbs: string, deletedAt: Date): string {
 }
 
 /** Move an entry into the Trash. `rename`, so an entry on another volume than the Trash is refused
- *  (EXDEV) rather than copied and deleted — a delete must not be the only copy's last step. */
-export function moveToTrash(abs: string, layout: NonNullable<TrashLayout>, now: Date): "trashed" | "other-volume" {
+ *  (EXDEV) rather than copied and deleted — a delete must not be the only copy's last step. `recheck`
+ *  is the entry's own check: "escaped" when, after the move, it no longer names a place inside, or what
+ *  reached the Trash is not the entry that was identified before the move. */
+export function moveToTrash(abs: string, layout: NonNullable<TrashLayout>, now: Date, recheck: Recheck): "trashed" | "other-volume" | "escaped" {
   fs.mkdirSync(layout.files, { recursive: true, mode: 0o700 });
   if (layout.kind === "freedesktop") fs.mkdirSync(layout.info, { recursive: true, mode: 0o700 });
   const infoFor = (name: string): string | null => (layout.kind === "freedesktop" ? path.join(layout.info, `${name}.trashinfo`) : null);
@@ -144,9 +167,11 @@ export function moveToTrash(abs: string, layout: NonNullable<TrashLayout>, now: 
   // The info file first, with `wx`: it reserves the name, and an entry in `files/` with no info is
   // one the file manager cannot put back.
   if (info) fs.writeFileSync(info, trashInfo(abs, now), { flag: "wx", mode: 0o600 });
+  const target = path.join(layout.files, name);
   try {
-    fs.renameSync(abs, path.join(layout.files, name));
-    return "trashed";
+    const moving = identityOf(abs);
+    fs.renameSync(abs, target);
+    return recheck() !== null && holds(target, moving) ? "trashed" : "escaped";
   } catch (error) {
     if (info) fs.rmSync(info, { force: true });
     if (error instanceof Error && "code" in error && error.code === "EXDEV") return "other-volume";
