@@ -7,6 +7,7 @@ import path from "node:path";
 import type { Response } from "express";
 import { streamErrorAction, streamFileToResponse, streamHandleToResponse } from "../../../../server/backends/files/streamFile.js";
 import { open } from "node:fs/promises";
+import { untilTrue } from "../../../helpers/untilTrue.js";
 import { makeTempDir } from "../../../support/tempDir";
 
 describe("streamErrorAction", () => {
@@ -36,6 +37,7 @@ function fakeRes(headersSent: boolean) {
 // buffer and failed. Wait for the outcome itself instead of guessing how long it takes.
 const SETTLE_TIMEOUT_MS = 3000;
 const LARGER_THAN_A_STREAM_BUFFER_BYTES = 4 * 1024 * 1024;
+const CLOSED_HANDLE_FD = -1;
 
 describe("streamFileToResponse", () => {
   it("serves an existing file", async () => {
@@ -84,9 +86,9 @@ describe("streamHandleToResponse", () => {
     const gone = new Promise((resolve) => stream.once("close", resolve));
     stream.destroy();
     await gone;
-    const closed = new Promise<string>((resolve) => handle.on("close", () => resolve("closed")));
-    const stillOpen = new Promise<string>((resolve) => setTimeout(() => resolve("still open"), SETTLE_TIMEOUT_MS));
     streamHandleToResponse(handle, res);
-    expect(await Promise.race([closed, stillOpen])).toBe("closed");
+    // A closed FileHandle reports its descriptor as -1.
+    await untilTrue(() => handle.fd === CLOSED_HANDLE_FD, "the handle closing", SETTLE_TIMEOUT_MS);
+    expect(handle.fd).toBe(CLOSED_HANDLE_FD);
   });
 });
