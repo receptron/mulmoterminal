@@ -1,11 +1,16 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
 import { swappableProject as project } from "../../support/swappableProject.js";
 import { resolveContained } from "../../../server/files/pathContainment";
-import { readVerified, readVerifiedAsync } from "../../../server/files/verifiedRead";
+import { openVerifiedForRead, readVerified, readVerifiedAsync } from "../../../server/files/verifiedRead";
+
+const VERIFIED_READ = fileURLToPath(new URL("../../../server/files/verifiedRead.ts", import.meta.url));
+const CHILD_DEADLINE_MS = 20_000;
 
 // #3306, the read side: once `docs` has become a link out, none of the outside file's bytes come back.
 const readers = [
@@ -72,6 +77,35 @@ describe.each(readers)("$name", ({ read }) => {
     rmSync(abs);
     symlinkSync(path.join(outside, "a.md"), abs);
     expect(await read(abs, () => abs)).toBeNull();
+    cleanup();
+  });
+});
+
+describe("openVerifiedForRead", () => {
+  const openDescriptors = () => readdirSync("/dev/fd").length;
+
+  it.skipIf(process.platform === "win32")("closes the descriptor when the re-check throws", () => {
+    const { root, cleanup } = project();
+    const before = openDescriptors();
+    const throwing = () => {
+      throw new Error("check failed");
+    };
+    expect(() => openVerifiedForRead(path.join(root, "docs", "a.md"), throwing)).toThrow("check failed");
+    expect(openDescriptors()).toBe(before);
+    cleanup();
+  });
+
+  // In a child with a deadline: a blocking open would hold this worker forever rather than fail.
+  it.skipIf(process.platform === "win32")("does not wait for a writer when a FIFO outside was swapped in", () => {
+    const { root, outside, swapOut, cleanup } = project();
+    execFileSync("/usr/bin/mkfifo", [path.join(outside, "pipe")]);
+    writeFileSync(path.join(root, "docs", "pipe"), "inside");
+    const abs = resolveContained(root, "docs/pipe", os.homedir()) ?? "";
+    swapOut();
+    const script = `import { readVerified } from ${JSON.stringify(VERIFIED_READ)}; process.stdout.write(String(readVerified(${JSON.stringify(abs)}, () => ${JSON.stringify(path.join(root, "docs-aside", "pipe"))})));`;
+    const child = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script], { timeout: CHILD_DEADLINE_MS, encoding: "utf8" });
+    expect(child.error).toBeUndefined();
+    expect(child.stdout).toBe("null");
     cleanup();
   });
 });

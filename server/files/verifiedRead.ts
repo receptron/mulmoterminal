@@ -7,16 +7,22 @@ import fs from "node:fs";
 import { hasErrnoCode } from "../errors.js";
 import { isOpenedFileAt, isSameFile, NO_FOLLOW, openUnlessLink, type Recheck } from "./verifiedWrite.js";
 
-const READ_FLAGS = fs.constants.O_RDONLY | NO_FOLLOW;
+// Nonblocking where the platform has it: a FIFO swapped in after the check would otherwise hold this
+// synchronous open, and the whole server with it, until a writer came — before the check could refuse.
+const READ_FLAGS = fs.constants.O_RDONLY | NO_FOLLOW | (fs.constants.O_NONBLOCK ?? 0);
 
 /** A descriptor open on `abs`, or null when what opened is not the file the check names now. Throws
  *  what the open throws (ENOENT, EISDIR, ...). The caller owns the descriptor and closes it. */
 export function openVerifiedForRead(abs: string, recheck: Recheck): number | null {
   const fd = openUnlessLink(abs, READ_FLAGS);
   if (fd === null) return null;
-  if (isSameFile(fd, recheck())) return fd;
-  fs.closeSync(fd);
-  return null;
+  const verified = { same: false };
+  try {
+    verified.same = isSameFile(fd, recheck());
+  } finally {
+    if (!verified.same) fs.closeSync(fd);
+  }
+  return verified.same ? fd : null;
 }
 
 /** The whole of `abs`, or null when it escaped. Throws what `readFileSync` would. */
