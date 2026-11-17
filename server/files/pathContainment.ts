@@ -200,25 +200,28 @@ export function realContainedWithin(base: string, absLexical: string): string | 
 // fail the request, since where the path leads could not be established.
 function realLocationOrNull(abs: string): string | null {
   try {
-    return realLocationOf(abs, MAX_LINK_HOPS);
+    return realLocationOf(abs, { hopsLeft: MAX_LINK_HOPS });
   } catch {
     return null;
   }
 }
 
-// A dangling link whose target is again a dangling link: past this many, refused rather than
-// followed. The kernel gives up in the same range (SYMLOOP_MAX), and a cycle never ends at all.
+// Dangling links one resolution may follow before it refuses. The kernel gives up in the same range
+// (SYMLOOP_MAX), and a cycle never ends at all. One budget for the whole resolution, nested links
+// included: a count per call would let targets that name other dangling links multiply the work.
 const MAX_LINK_HOPS = 40;
+interface LinkBudget {
+  hopsLeft: number;
+}
 
 /** Where `abs` really is: its existing portion resolved through symlinks, the not-yet-created rest
  *  appended. A DANGLING link is part of the existing portion and is followed to where it points,
  *  because a write through it creates the file there — `existsSync` follows the link and would call
- *  it absent. Null when a chain of links does not end. */
-function realLocationOf(abs: string, hopsLeft: number): string | null {
+ *  it absent. Null when the links do not end. */
+function realLocationOf(abs: string, budget: LinkBudget): string | null {
   const { existing, rest } = splitAtLastEntry(abs);
-  const target = danglingLinkTarget(existing);
-  if (target === null) return path.resolve(realpathOr(existing), ...rest);
-  return hopsLeft > 0 ? realLocationOf(path.resolve(target, ...rest), hopsLeft - 1) : null;
+  const real = realEntry(existing, budget);
+  return real === null ? null : path.resolve(real, ...rest);
 }
 
 function splitAtLastEntry(abs: string): { existing: string; rest: string[] } {
@@ -243,16 +246,36 @@ function hasEntry(p: string): boolean {
   }
 }
 
-/** The absolute path a symlink at `p` points to, when it cannot be resolved to the end (its target is
- *  missing, or the links loop). Null for anything that resolves, and for anything that is not a link. */
-function danglingLinkTarget(p: string): string | null {
+/** The real path of an entry that exists. A link that does not resolve to the end (its target is
+ *  missing, or the links loop) is followed to where it points, which is where a write through it lands. */
+function realEntry(entry: string, budget: LinkBudget): string | null {
   try {
-    fs.realpathSync.native(p);
-    return null;
+    return fs.realpathSync.native(entry);
   } catch {
-    if (!hasEntry(p) || !fs.lstatSync(p).isSymbolicLink()) return null;
-    // From the folder's REAL path: the OS reads a relative target's `..` from where the link really
-    // is, and the spelling may have reached that folder through another link.
-    return path.resolve(realpathOr(path.dirname(p)), fs.readlinkSync(p));
+    // dangling, looping, or unreadable: decided below
   }
+  if (!fs.lstatSync(entry).isSymbolicLink()) return entry;
+  if (budget.hopsLeft <= 0) return null;
+  budget.hopsLeft -= 1;
+  // From the folder's REAL path, as the OS does: the spelling may have reached it through another link.
+  return followTarget(realpathOr(path.dirname(entry)), fs.readlinkSync(entry), budget);
+}
+
+// A backslash is a separator only on Windows; on POSIX it is a character a name may contain.
+const TARGET_SEPARATORS = path.sep === "\\" ? /[\\/]+/ : /\/+/;
+
+/** Where a link's target leads, walked one component at a time as the OS walks it: a link met on the
+ *  way is followed BEFORE a later `..` applies. `path.resolve` would cancel `hop/..` on paper first,
+ *  and land somewhere the link does not point. */
+function followTarget(realFolder: string, target: string, budget: LinkBudget): string | null {
+  const root = path.isAbsolute(target) ? path.parse(target).root : "";
+  const parts = target.slice(root.length).split(TARGET_SEPARATORS);
+  return parts.reduce<string | null>((at, part) => (at === null ? null : stepInto(at, part, budget)), root === "" ? realFolder : root);
+}
+
+function stepInto(at: string, part: string, budget: LinkBudget): string | null {
+  if (part === "" || part === ".") return at;
+  if (part === "..") return path.dirname(at);
+  const next = path.join(at, part);
+  return hasEntry(next) ? realEntry(next, budget) : next;
 }

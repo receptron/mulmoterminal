@@ -14,10 +14,12 @@ existed, and the one case it let through was the one that created the target.
 ## Change
 
 - The existing part is found with `lstat`, so a link is an entry whether or not its target exists.
-- When that entry is a link that cannot be resolved to the end, it is followed one step
-  (`readlink`, a relative target read from the folder the link REALLY is in, since the spelling may
-  have reached that folder through another link) and the result is resolved again,
-  the rest appended. A chain longer than `MAX_LINK_HOPS`, or a cycle, is refused.
+- When that entry is a link that cannot be resolved to the end, its target is walked one component
+  at a time from the folder the link REALLY is in, as the OS walks it: a link met on the way is
+  followed before a later `..` applies (`hop/../x` with `hop` pointing out leads out; `path.resolve`
+  would cancel `hop/..` on paper). The rest of the path is then appended.
+- One budget of `MAX_LINK_HOPS` follows covers the whole resolution, nested links included, so a
+  cycle or a long chain is refused and crafted targets cannot multiply the work.
 - A link removed or swapped while it is being read makes `lstat`/`readlink` throw; that is a refusal,
   not an exception out of the gate.
 - A path with no such link on it resolves exactly as before.
@@ -40,4 +42,6 @@ file inside resolves to that file.
 - Old and new `realContainedWithin` run side by side over generated trees of folders, files and
   links (inside, outside, missing; absolute and relative): every difference has a dangling link on
   the path. For every path the new check accepts, a write to it creates or changes nothing outside
-  the project. That property stays as a spec with fixed seeds.
+  the project, and lands at the path the check answered. That property stays as a spec with fixed
+  seeds; it fails against the previous code, against reading a relative target from the spelled
+  folder, and against cancelling `..` on paper.

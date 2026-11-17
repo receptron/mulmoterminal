@@ -177,6 +177,17 @@ describe("realContainedWithin follows a dangling link to where it points", () =>
     cleanup();
   });
 
+  it("follows a link inside the target before a later `..` applies, as the OS does", () => {
+    const { root, outside, cleanup } = layout();
+    mkdirSync(path.join(outside, "sub"));
+    writeFileSync(path.join(root, "new.txt"), "inside");
+    symlinkSync(path.join(outside, "sub"), path.join(root, "hop"));
+    symlinkSync(["hop", "..", "new.txt"].join(path.sep), path.join(root, "notes")); // not path.join, which would cancel `hop/..`
+    // `hop/..` is the folder outside, not the root: the link points at outside/new.txt.
+    expect(realContainedWithin(root, path.join(root, "notes"))).toBeNull();
+    cleanup();
+  });
+
   it("refuses a path under a dangling link to a folder outside", () => {
     const { root, outside, cleanup } = layout();
     symlinkSync(path.join(outside, "not-yet"), path.join(root, "dir"));

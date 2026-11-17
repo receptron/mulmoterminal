@@ -6,8 +6,9 @@ import { makeTempDir } from "../../support/tempDir.js";
 import { realContainedWithin } from "../../../server/files/pathContainment";
 import { seededRandom, type SeededRandom } from "../../helpers/seededRandom.js";
 
-// #3303. Whatever `realContainedWithin` accepts, a write to it must land inside the root — checked by
-// writing, over trees of folders, files and links (inside, outside, missing; absolute and relative).
+// #3303. Whatever `realContainedWithin` accepts, a write to it must land inside the root, and at the
+// path it answered — checked by writing, over trees of folders, files and links (inside, outside,
+// missing; absolute, relative, and relative by way of another entry).
 const SEEDS = Array.from({ length: 40 }, (_, index) => index + 1);
 const TREES_PER_SEED = 8;
 const ENTRIES_PER_TREE = 14;
@@ -25,11 +26,18 @@ function addEntry(random: SeededRandom, dirs: string[], entries: string[], index
     mkdirSync(entry);
     dirs.push(entry);
   } else if (kind < 0.55) writeFileSync(entry, "x");
-  else {
-    const target = linkTarget(random, dirs, entries, index);
-    symlinkSync(random.fraction() < 0.5 ? target : path.relative(parent, target) || ".", entry);
-  }
+  else symlinkSync(spelledTarget(random, parent, linkTarget(random, dirs, entries, index), entries), entry);
   entries.push(entry);
+}
+
+// Absolute, relative, or relative by way of `<another entry>/..` — which the OS reads by following that
+// entry first, so a link there changes where the `..` lands. Joined by hand: path.join would cancel it.
+function spelledTarget(random: SeededRandom, parent: string, target: string, entries: string[]): string {
+  const relative = path.relative(parent, target) || ".";
+  const kind = random.fraction();
+  if (kind < 0.4) return target;
+  if (kind < 0.7 || entries.length === 0) return relative;
+  return [path.relative(parent, random.pick(entries)), "..", relative].join(path.sep);
 }
 
 function buildTree(random: SeededRandom, top: string): { root: string; outside: string; entries: string[] } {
@@ -61,22 +69,38 @@ const spelledChildren = (folder: string): string[] => {
   }
 };
 
+// What went wrong for one accepted path, or null: the write left the root, or it landed somewhere other
+// than the path the gate answered — which is the path every route then reads and writes.
+function probeOne(root: string, outside: string, target: string, mark: string): string | null {
+  const answered = realContainedWithin(root, target);
+  if (answered === null) return null;
+  try {
+    appendFileSync(target, mark);
+  } catch {
+    return null; // a folder, or a parent that is missing: nothing was written anywhere
+  }
+  if (outsideWasWritten(outside)) return `${path.relative(root, target)}: written outside`;
+  return readTextOrEmpty(answered).includes(mark) ? null : `${path.relative(root, target)}: written somewhere other than ${answered}`;
+}
+
+const readTextOrEmpty = (file: string): string => {
+  try {
+    return readFileSync(file, "utf8");
+  } catch {
+    return "";
+  }
+};
+
 function probeTree(random: SeededRandom, top: string): string[] {
   const { root, outside, entries } = buildTree(random, top);
   const named = [root, ...entries.filter((entry) => entry.startsWith(root + path.sep))];
   const candidates = [...named, ...named.flatMap(spelledChildren).flatMap((child) => [child, ...spelledChildren(child)])];
-  const escapes = Array.from({ length: QUERIES_PER_TREE }, (_, query) => {
+  const problems = Array.from({ length: QUERIES_PER_TREE }, (_, query) => {
     const picked = random.pick(candidates);
     const target = random.fraction() < 0.5 ? path.join(picked, `new${query}`) : picked;
-    if (realContainedWithin(root, target) === null) return null;
-    try {
-      appendFileSync(target, MARK);
-    } catch {
-      // a folder, or a parent that is missing: nothing was written anywhere
-    }
-    return outsideWasWritten(outside) ? path.relative(root, target) : null;
+    return probeOne(root, outside, target, `${MARK}-${query}`);
   });
-  return escapes.filter((escape): escape is string => escape !== null);
+  return problems.filter((problem): problem is string => problem !== null);
 }
 
 function probeFreshTree(random: SeededRandom): string[] {
@@ -88,10 +112,10 @@ function probeFreshTree(random: SeededRandom): string[] {
   }
 }
 
-describe("realContainedWithin: an accepted path is written inside the root", () => {
+describe("realContainedWithin: an accepted path is written inside the root, where it said", () => {
   it.each(SEEDS)("seed %i", (seed) => {
     const random = seededRandom(seed);
-    const escapes = Array.from({ length: TREES_PER_SEED }, () => probeFreshTree(random)).flat();
-    expect(escapes).toEqual([]);
+    const problems = Array.from({ length: TREES_PER_SEED }, () => probeFreshTree(random)).flat();
+    expect(problems).toEqual([]);
   });
 });
