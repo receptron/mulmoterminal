@@ -15,6 +15,8 @@
 // no-control-regex without a disable).
 const ESC = String.fromCharCode(0x1b);
 const BEL = String.fromCharCode(0x07);
+const CAN = String.fromCharCode(0x18);
+const SUB = String.fromCharCode(0x1a);
 
 const QUERY_PATTERNS: RegExp[] = [
   new RegExp(ESC + "\\[[>=]?\\d*c", "g"), // Device Attributes (DA1/DA2/DA3) — the "…c" symptom
@@ -22,7 +24,10 @@ const QUERY_PATTERNS: RegExp[] = [
   new RegExp(ESC + "\\[\\?u", "g"), // kitty keyboard flags query
   new RegExp(ESC + "\\[>\\d*q", "g"), // XTVERSION
   new RegExp(ESC + "\\[\\??\\d*(?:;\\d*)*\\$p", "g"), // DECRQM, ANSI and DEC private, any parameter count (the `?2026$p` of #3299)
-  new RegExp(ESC + "P\\$q[^" + ESC + BEL + "]*(?:" + BEL + "|" + ESC + "\\\\)", "g"), // DECRQSS
+  // DECRQSS, ended as xterm ends a DCS: by ST, or by any other ESC — which aborts it and is still
+  // answered. Never by BEL, which xterm keeps as payload; a CAN/SUB abort is not answered, so it
+  // is left alone, and so is one still open at the end of the replay (its reply is due live).
+  new RegExp(ESC + "P\\$q[^" + ESC + CAN + SUB + "]*(?:" + ESC + "\\\\|(?=" + ESC + "))", "g"),
   new RegExp(ESC + "\\]4(?:;\\d+;\\?)+(?:" + BEL + "|" + ESC + "\\\\)", "g"), // OSC 4 palette query, every index asked
   new RegExp(ESC + "\\]1[012](?:;\\?)+(?:" + BEL + "|" + ESC + "\\\\)", "g"), // OSC 10/11/12 fg/bg/cursor color query, chained or not
 ];
@@ -60,6 +65,9 @@ const CSI_FINAL = /[\x40-\x7E]/;
 // leaks into the retained output. The trailing `?` still matches a lone ESC, which is
 // how a terminal aborts an unfinished OSC.
 const OSC_TERMINATOR = new RegExp(BEL + "|" + ESC + "\\\\?");
+// A DCS (DECRQSS, sixel, passthrough) ends at ST, is aborted by CAN/SUB, or by any other ESC —
+// which starts the NEXT sequence, so it is looked at rather than consumed. BEL is payload.
+const DCS_END = new RegExp(ESC + "\\\\|[" + CAN + SUB + "]|(?=" + ESC + ")");
 
 // Past the END of the terminator, not past its first character — ST is two bytes wide.
 const firstMatchEnd = (text: string, terminator: RegExp): number => {
@@ -97,6 +105,10 @@ const splitSequenceLength = (combined: string, cutAt: number, cut: string): numb
   if (introducer === "]") {
     if (OSC_TERMINATOR.test(afterEscape.slice(1))) return 0;
     return consumedIntroducer + firstMatchEnd(retained, OSC_TERMINATOR);
+  }
+  if (introducer === "P") {
+    if (DCS_END.test(afterEscape.slice(1))) return 0;
+    return consumedIntroducer + firstMatchEnd(retained, DCS_END);
   }
   // A two-character sequence (ESC + one byte). It is complete unless that byte is the
   // first retained character, in which case dropping it alone is enough.

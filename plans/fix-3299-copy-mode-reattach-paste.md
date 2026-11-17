@@ -20,7 +20,11 @@ Two independent causes, both from the issue and both checked against the code.
 1. `QUERY_PATTERNS` covers every query xterm answers, not only the ones seen so far: DECRQM (ANSI
    and DEC private, any parameter count), DECRQSS, OSC 4 queries, and chained OSC 10/11/12 queries. A spec feeds each
    CSI/DCS query through `@xterm/headless` and asserts it is answered raw and not once stripped;
-   near misses (DECSET, replies, soft reset, colour SETs) are pinned as kept.
+   near misses (DECSET, replies, soft reset, colour SETs) are pinned as kept. DECRQSS is matched
+   the way xterm parses a DCS: it ends at ST or at any other ESC (an abort xterm still answers),
+   never at BEL (payload to xterm), and a CAN/SUB abort or a query still open at the end of the
+   replay is left alone. A spec renders each case raw and stripped and requires the same screen.
+   The 1 MiB tail cut also learns DCS, so a cut inside one no longer leaves its payload as text.
 2. `createPaneModePublisher` (`server/session/pty/pane-mode-publish.ts`): when the pane-mode watch
    publishes "left copy-mode", it flushes the session's queued output (so a 2004 set or reset in it
    cannot land after the answer), then sends `?2004h` or `?2004l` from `tmuxBracketedPaste`. That
