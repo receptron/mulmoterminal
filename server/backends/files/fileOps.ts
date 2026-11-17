@@ -16,7 +16,8 @@
 // @mulmoclaude/core's verified open and write, as MulmoClaude's confined ops do: a read proves the
 // open handle is the in-root file, and a write verifies its staging file before renaming it into
 // place. The anchor is the root's own realpath, so a ROOT replaced by a link is not caught, as
-// before. stat / exists / readDir / unlink stay check-then-act.
+// before. stat / exists / readDir / unlink stay check-then-act, and so do the parent folders a write
+// creates: a swap before that mkdir can leave empty folders outside (Node has no mkdirat).
 //
 // `rootFor` is invoked PER OPERATION rather than captured: the workspace is injected
 // at boot, after these ops are already bound into the plugin registry's closures.

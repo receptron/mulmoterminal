@@ -35,7 +35,11 @@ is not caught, as before: `createFileOps` is given only the root, not a trusted 
 - `stat`, `exists`, `readDir`, `unlink` stay check-then-act, as in MulmoClaude: none returns or writes
   file contents.
 - The core primitives' own limits (`plans/fix-3573-verified-open.md` in MulmoClaude): Node has no
-  `openat` or `renameat`, so a rename can still land in a folder the actor could already write.
+  `openat` or `renameat`, so a parent swapped between the staging file's check and the rename can
+  still carry the rename into a folder the actor could already write.
+- The parent folders a write creates are made by name before the check is asked again. A swap before
+  that `mkdir` can leave EMPTY folders outside; the check then refuses and nothing is written there.
+  Node has no `mkdirat` either; this is the same gap as the tree's new folder, still open in #3306.
 
 ## Verification
 
