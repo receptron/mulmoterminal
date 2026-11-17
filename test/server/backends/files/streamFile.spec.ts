@@ -5,7 +5,8 @@ import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Response } from "express";
-import { streamErrorAction, streamFileToResponse } from "../../../../server/backends/files/streamFile.js";
+import { streamErrorAction, streamFileToResponse, streamHandleToResponse } from "../../../../server/backends/files/streamFile.js";
+import { open } from "node:fs/promises";
 import { makeTempDir } from "../../../support/tempDir";
 
 describe("streamErrorAction", () => {
@@ -34,6 +35,7 @@ function fakeRes(headersSent: boolean) {
 // even delivered a byte after the 20ms sleep this used to use, so the test read an empty
 // buffer and failed. Wait for the outcome itself instead of guessing how long it takes.
 const SETTLE_TIMEOUT_MS = 3000;
+const LARGER_THAN_A_STREAM_BUFFER_BYTES = 4 * 1024 * 1024;
 
 describe("streamFileToResponse", () => {
   it("serves an existing file", async () => {
@@ -65,5 +67,26 @@ describe("streamFileToResponse", () => {
     streamFileToResponse(path.join(tmpdir(), "does-not-exist-xyz.bin"), res);
     await vi.waitFor(() => expect(destroy).toHaveBeenCalled(), { timeout: SETTLE_TIMEOUT_MS });
     expect(status).not.toHaveBeenCalled();
+  });
+});
+
+describe("streamHandleToResponse", () => {
+  // A client gone while the page was being opened: its `close` has already fired, so only the
+  // response's own state can say so, and the handle must still be closed.
+  it("closes the handle when the response was already closed", async () => {
+    const dir = makeTempDir("mt-stream-handle-");
+    const file = path.join(dir, "page.html");
+    // Larger than a read stream's buffer, so reading to the end cannot be what closes it.
+    writeFileSync(file, Buffer.alloc(LARGER_THAN_A_STREAM_BUFFER_BYTES));
+    const handle = await open(file, "r");
+    const { res, stream } = fakeRes(false);
+    // Its `close` has fired and gone before the call, as for a client lost during the open.
+    const gone = new Promise((resolve) => stream.once("close", resolve));
+    stream.destroy();
+    await gone;
+    const closed = new Promise<string>((resolve) => handle.on("close", () => resolve("closed")));
+    const stillOpen = new Promise<string>((resolve) => setTimeout(() => resolve("still open"), SETTLE_TIMEOUT_MS));
+    streamHandleToResponse(handle, res);
+    expect(await Promise.race([closed, stillOpen])).toBe("closed");
   });
 });
