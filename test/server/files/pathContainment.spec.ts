@@ -1,7 +1,7 @@
 // @vitest-environment node
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { makeTempDir } from "../../support/tempDir.js";
-import { writeFileSync, mkdirSync, rmSync, symlinkSync, realpathSync } from "node:fs";
+import fs, { writeFileSync, mkdirSync, rmSync, symlinkSync, realpathSync } from "node:fs";
 import path from "node:path";
 import {
   containedPath,
@@ -204,6 +204,29 @@ describe("realContainedWithin follows a dangling link to where it points", () =>
     expect(realContainedWithin(root, path.join(root, "alias.md"))).toBe(path.join(root, "docs", "later.md"));
     expect(realContainedWithin(root, path.join(root, "alias-dir", "new.md"))).toBe(path.join(root, "docs", "later", "new.md"));
     cleanup();
+  });
+
+  // Node reports a junction as a symbolic link; a dangling one to a folder outside must be refused.
+  it.runIf(process.platform === "win32")("refuses a path under a dangling junction to a folder outside", () => {
+    const { root, outside, cleanup } = layout();
+    symlinkSync(path.join(outside, "not-yet"), path.join(root, "junction"), "junction");
+    expect(realContainedWithin(root, path.join(root, "junction"))).toBeNull();
+    expect(realContainedWithin(root, path.join(root, "junction", "new.txt"))).toBeNull();
+    cleanup();
+  });
+
+  it("refuses, rather than throws, when the link changes while it is being read", () => {
+    const { root, outside, cleanup } = layout();
+    symlinkSync(path.join(outside, "planted.txt"), path.join(root, "notes.txt"));
+    const readlink = vi.spyOn(fs, "readlinkSync").mockImplementation(() => {
+      throw Object.assign(new Error("gone"), { code: "ENOENT" });
+    });
+    try {
+      expect(realContainedWithin(root, path.join(root, "notes.txt"))).toBeNull();
+    } finally {
+      readlink.mockRestore();
+      cleanup();
+    }
   });
 
   it("says which refusal it was: a dangling link out is a symlink escape", () => {

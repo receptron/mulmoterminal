@@ -192,8 +192,18 @@ export function realpathOr(p: string): string {
 // `base`. Returns the real absolute path, or null if it escapes.
 export function realContainedWithin(base: string, absLexical: string): string | null {
   const root = realpathOr(path.resolve(base));
-  const real = realLocationOf(absLexical, MAX_LINK_HOPS);
+  const real = realLocationOrNull(absLexical);
   return real !== null && isWithin(root, real) ? real : null;
+}
+
+// A link removed or swapped between the lstat and the readlink makes those throw: refuse rather than
+// fail the request, since where the path leads could not be established.
+function realLocationOrNull(abs: string): string | null {
+  try {
+    return realLocationOf(abs, MAX_LINK_HOPS);
+  } catch {
+    return null;
+  }
 }
 
 // A dangling link whose target is again a dangling link: past this many, refused rather than

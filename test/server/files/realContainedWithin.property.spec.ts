@@ -32,15 +32,14 @@ function addEntry(random: SeededRandom, dirs: string[], entries: string[], index
   entries.push(entry);
 }
 
-function buildTree(random: SeededRandom): { root: string; outside: string; entries: string[]; cleanup: () => void } {
-  const top = realpathSync(makeTempDir("mt-contain-"));
+function buildTree(random: SeededRandom, top: string): { root: string; outside: string; entries: string[] } {
   const root = path.join(top, "root");
   const outside = path.join(top, "outside");
   [root, outside].forEach((dir) => mkdirSync(dir));
   const dirs = [root, outside];
   const entries: string[] = [];
   Array.from({ length: ENTRIES_PER_TREE }, (_, index) => addEntry(random, dirs, entries, index));
-  return { root, outside, entries, cleanup: () => rmSync(top, { recursive: true, force: true }) };
+  return { root, outside, entries };
 }
 
 // Links are not followed: the tree has cycles, and a link points at a file that is checked where it is.
@@ -62,8 +61,8 @@ const spelledChildren = (folder: string): string[] => {
   }
 };
 
-function probeTree(random: SeededRandom): string[] {
-  const { root, outside, entries, cleanup } = buildTree(random);
+function probeTree(random: SeededRandom, top: string): string[] {
+  const { root, outside, entries } = buildTree(random, top);
   const named = [root, ...entries.filter((entry) => entry.startsWith(root + path.sep))];
   const candidates = [...named, ...named.flatMap(spelledChildren).flatMap((child) => [child, ...spelledChildren(child)])];
   const escapes = Array.from({ length: QUERIES_PER_TREE }, (_, query) => {
@@ -77,14 +76,22 @@ function probeTree(random: SeededRandom): string[] {
     }
     return outsideWasWritten(outside) ? path.relative(root, target) : null;
   });
-  cleanup();
   return escapes.filter((escape): escape is string => escape !== null);
+}
+
+function probeFreshTree(random: SeededRandom): string[] {
+  const top = realpathSync(makeTempDir("mt-contain-"));
+  try {
+    return probeTree(random, top);
+  } finally {
+    rmSync(top, { recursive: true, force: true });
+  }
 }
 
 describe("realContainedWithin: an accepted path is written inside the root", () => {
   it.each(SEEDS)("seed %i", (seed) => {
     const random = seededRandom(seed);
-    const escapes = Array.from({ length: TREES_PER_SEED }, () => probeTree(random)).flat();
+    const escapes = Array.from({ length: TREES_PER_SEED }, () => probeFreshTree(random)).flat();
     expect(escapes).toEqual([]);
   });
 });

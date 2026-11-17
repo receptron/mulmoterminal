@@ -18,7 +18,11 @@ existed, and the one case it let through was the one that created the target.
   (`readlink`, a relative target read from the folder the link REALLY is in, since the spelling may
   have reached that folder through another link) and the result is resolved again,
   the rest appended. A chain longer than `MAX_LINK_HOPS`, or a cycle, is refused.
+- A link removed or swapped while it is being read makes `lstat`/`readlink` throw; that is a refusal,
+  not an exception out of the gate.
 - A path with no such link on it resolves exactly as before.
+- A junction on Windows: Node reports it as a symbolic link, so it takes the same path. A
+  Windows-only spec pins a dangling junction out being refused.
 
 Every caller of `realContainedWithin` gets this: `resolveContained` (the browse, raw, git-status
 and pane-tool routes), `tree-ops.ts` (its parent check) and `thumbnailStore.ts`. A dangling link
