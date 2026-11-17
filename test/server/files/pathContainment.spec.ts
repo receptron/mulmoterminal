@@ -192,7 +192,19 @@ describe("realContainedWithin follows a dangling link to where it points", () =>
     const { root, cleanup } = layout();
     writeFileSync(path.join(root, "docs", "file.txt"), "x");
     symlinkSync(["docs", "file.txt", "..", "elsewhere.md"].join(path.sep), path.join(root, "past-file"));
+    symlinkSync(["docs", "file.txt", ""].join(path.sep), path.join(root, "file-as-folder"));
     expect(realContainedWithin(root, path.join(root, "past-file"))).toBeNull();
+    // A trailing separator after a file: Linux refuses it (ENOTDIR) and macOS resolves it to the file.
+    // Whatever the platform's own realpath says is the answer.
+    const asFolder = path.join(root, "file-as-folder");
+    const kernel = (() => {
+      try {
+        return fs.realpathSync.native(asFolder);
+      } catch {
+        return null;
+      }
+    })();
+    expect(realContainedWithin(root, asFolder)).toBe(kernel);
     cleanup();
   });
 

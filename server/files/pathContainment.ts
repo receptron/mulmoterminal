@@ -286,7 +286,7 @@ function followTarget(realFolder: string, target: string, budget: LinkBudget): s
 function stepInto(at: string, part: string, budget: LinkBudget): string | null {
   // The OS stops at a file with more of the path after it (ENOTDIR); going on would answer a path
   // the link does not lead to.
-  if (part !== "" && isExistingNonDirectory(at)) return null;
+  if (isExistingNonDirectory(at)) return null;
   if (part === "" || part === ".") return at;
   if (part === "..") return path.dirname(at);
   const next = path.join(at, part);
