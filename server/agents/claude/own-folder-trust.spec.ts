@@ -1,6 +1,19 @@
 // @vitest-environment node
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ensureFolderTrusted, folderTrustMarker, isFolderItself, withFolderTrusted } from "./own-folder-trust";
@@ -229,6 +242,28 @@ describe("folderTrustMarker (#3313)", () => {
     writeFileSync(file, JSON.stringify({ numStartups: 2 }));
     mark(file, DIR);
     expect(trustedIn(file)).toBe(true);
+  });
+
+  // Size and mtime alone would call these the same file; the link now names one without the entry.
+  it.skipIf(process.platform === "win32")("reads again when a linked config is pointed at another file of the same size and mtime", () => {
+    const mark = folderTrustMarker();
+    const trustedText = JSON.stringify({ projects: { [DIR]: { hasTrustDialogAccepted: true } } });
+    const bare = JSON.stringify({ projects: {}, pad: "" });
+    const untrustedText = JSON.stringify({ projects: {}, pad: "x".repeat(trustedText.length - bare.length) });
+    expect(untrustedText).toHaveLength(trustedText.length);
+    const trusted = configFile(trustedText);
+    const untrusted = configFile(untrustedText);
+    const sameTime = new Date("2026-01-01T00:00:00Z");
+    utimesSync(trusted, sameTime, sameTime);
+    utimesSync(untrusted, sameTime, sameTime);
+    const link = path.join(path.dirname(trusted), "linked.claude.json");
+    symlinkSync(trusted, link);
+    mark(link, DIR);
+
+    rmSync(link);
+    symlinkSync(untrusted, link);
+    mark(link, DIR);
+    expect(trustedIn(untrusted)).toBe(true);
   });
 
   it("remembers each config file on its own, and each marker on its own", () => {

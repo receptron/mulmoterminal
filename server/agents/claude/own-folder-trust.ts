@@ -110,11 +110,12 @@ export function folderTrustMarker(ensure: (configFile: string, dir: string) => T
   };
 }
 
-// Size and mtime, which every save moves; null for a file that cannot be stat'd, which is never remembered.
+// Which file (device and inode of the link's target, so a retargeted link is a different file) and
+// its size and mtime, which every save moves. Null for a file that cannot be stat'd: never remembered.
 const fileVersion = (file: string): string | null => {
   try {
     const stat = statSync(file);
-    return `${stat.size}:${stat.mtimeMs}`;
+    return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}`;
   } catch {
     return null;
   }
