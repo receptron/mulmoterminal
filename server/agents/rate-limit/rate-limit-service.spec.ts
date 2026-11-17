@@ -117,7 +117,7 @@ describe("the usage probes run in MulmoTerminal's own folder (#3200)", () => {
     rmSync(account, { recursive: true, force: true });
   });
 
-  // Claude Code's own save can land on top of the write (probe-trust.ts). The service must not take
+  // Claude Code's own save can land on top of the write (own-folder-trust.ts). The service must not take
   // its write as the last word: the next probe reads again, and writes again when the key is gone.
   it("writes the trust again when a later read no longer finds it", () => {
     const account = mkdtempSync(path.join(tmpdir(), "mt-ratelimit-acct-"));

@@ -1,16 +1,17 @@
-// Marking the probe's own folder as trusted for Claude Code (#3206), in the login's own config.
+// Marking a folder of MulmoTerminal's OWN as trusted for Claude Code, in the login's own config.
 //
-// The probe sends no keys (#1293), so a trust dialog it meets can only time it out — and its folder
-// (probe-cwd.ts) is one nobody runs `claude` in by hand, so without this every login on every
-// machine would need a person to go there once and accept the dialog before the gauge showed
-// anything. Claude Code keeps that answer as `projects[<dir>].hasTrustDialogAccepted` in its config
-// file, and its own message for unattended use says to set exactly that; this writes it.
+// Two folders need it. The usage probe's (#3206): the probe sends no keys (#1293), so a trust dialog
+// it meets can only time it out, and nobody runs `claude` in its folder (probe-cwd.ts) by hand. And
+// the drops root (#3313): every claude cell is handed its session's drop directory with --add-dir,
+// and from 2.1.326 Claude Code stops at startup to ask about any added folder that is not trusted.
+// Claude Code keeps that answer as `projects[<dir>].hasTrustDialogAccepted` in its config file, and
+// outside a git repository it also accepts the answer from any ANCESTOR, which is why trusting the
+// drops root covers every session directory made under it.
 //
 // This is NOT what #1293 removed. That was a blind Enter confirming the dialog in whatever folder the
-// probe happened to be in — the user's — so a folder nobody approved got trusted. Here the folder is
-// MulmoTerminal's own, created empty by the probe, so trusting it lets Claude Code read nothing it
-// would not read anyway. Only that folder is ever written; a caller passing a user's directory would
-// be a bug, not a feature.
+// probe happened to be in — the user's — so a folder nobody approved got trusted. Both folders here
+// are MulmoTerminal's own and hold only what it wrote, so trusting them lets Claude Code read nothing
+// it would not read anyway. A caller passing a user's directory would be a bug, not a feature.
 //
 // The file is Claude Code's, and Claude Code rewrites it while running, so the write is as small as
 // it can be made: only when the key is not already true, parsed and re-serialised in one step — the
@@ -20,8 +21,8 @@
 // inside it is overwritten, and one landing just after it overwrites ours. That is why the caller
 // trusts a WRITE only once a later read finds the key in place — a write that did not stick is
 // simply made again. A write that cannot be made — no file yet (a login that has never run claude),
-// unreadable, not JSON — does nothing, and the gauge's trust-prompt note stays as the fallback that
-// says what to do by hand.
+// unreadable, not JSON — does nothing: the probe's gauge keeps its trust-prompt note, and a cell
+// meets Claude Code's own prompt, as both did before.
 import { randomBytes } from "node:crypto";
 import { chmodSync, lstatSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -31,7 +32,7 @@ const TRUST_KEY = "hasTrustDialogAccepted";
 // Claude Code writes its config two-space indented; matching it keeps the rewrite a one-line diff.
 const CONFIG_INDENT = 2;
 const PERMISSION_BITS = 0o777;
-// Beside the pid, so two servers on one HOME — or one server's two probes — never share a name.
+// Beside the pid, so two servers on one HOME — or one server's two writes — never share a name.
 const TEMP_SUFFIX_BYTES = 4;
 
 /** What the config needs: nothing (already trusted), one rewrite, or nothing because it cannot be
@@ -42,7 +43,7 @@ export type TrustEdit = { outcome: "trusted" } | { outcome: "write"; text: strin
  *  — key order, the entry's other fields, and whether the file ends in a newline — so the rewrite
  *  changes one field and nothing else. An entry that is not an object is not Claude Code's; it is
  *  left alone rather than replaced. */
-export function withProbeFolderTrusted(configText: string, dir: string): TrustEdit {
+export function withFolderTrusted(configText: string, dir: string): TrustEdit {
   let config: unknown;
   try {
     config = JSON.parse(configText);
@@ -65,7 +66,7 @@ export function withProbeFolderTrusted(configText: string, dir: string): TrustEd
 export type TrustResult = "trusted" | "written" | "failed";
 
 /** Mark `dir` trusted in `configFile`, landed by rename. */
-export function ensureProbeFolderTrusted(configFile: string, dir: string): TrustResult {
+export function ensureFolderTrusted(configFile: string, dir: string): TrustResult {
   let edit: TrustEdit;
   let target: string;
   let mode: number;
@@ -75,7 +76,7 @@ export function ensureProbeFolderTrusted(configFile: string, dir: string): Trust
     // while the dotfiles copy stops moving.
     target = realpathSync(configFile);
     mode = statSync(target).mode & PERMISSION_BITS;
-    edit = withProbeFolderTrusted(readFileSync(target, "utf8"), dir);
+    edit = withFolderTrusted(readFileSync(target, "utf8"), dir);
   } catch {
     return "failed";
   }
@@ -95,10 +96,23 @@ export function ensureProbeFolderTrusted(configFile: string, dir: string): Trust
   }
 }
 
-/** Whether `dir` is the probe's own folder and not a link someone pointed elsewhere: trust written
+/** A marker for one folder: it writes the trust into a config file until a READ finds it there, and
+ *  from then on leaves that file unread for the life of the server — the file runs to a megabyte on
+ *  a long-lived install. A write alone is not remembered: Claude Code's own save can land on top of
+ *  it (see the header), so the next call reads again and finds it, or writes again. A user who
+ *  removes the entry after that read meets the prompt until the server restarts. */
+export function folderTrustMarker(): (configFile: string, dir: string) => void {
+  const configFilesTrusting = new Set<string>();
+  return (configFile, dir) => {
+    if (configFilesTrusting.has(configFile)) return;
+    if (ensureFolderTrusted(configFile, dir) === "trusted") configFilesTrusting.add(configFile);
+  };
+}
+
+/** Whether `dir` is a folder itself and not a link someone pointed elsewhere: trust written
  *  for a link lands on whatever it resolves to, which is exactly the directory nobody approved.
  *  Only the last component is checked — the state directory above it may legitimately be a link. */
-export function isProbeFolderItself(dir: string): boolean {
+export function isFolderItself(dir: string): boolean {
   try {
     return lstatSync(dir).isDirectory();
   } catch {
@@ -106,7 +120,7 @@ export function isProbeFolderItself(dir: string): boolean {
   }
 }
 
-// A temp file that cannot be removed is litter, not a reason to throw out of a probe's spawn.
+// A temp file that cannot be removed is litter, not a reason to throw out of a spawn.
 const discard = (file: string): void => {
   try {
     rmSync(file, { force: true });
