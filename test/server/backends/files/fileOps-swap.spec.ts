@@ -104,3 +104,36 @@ describe("a folder swapped for a link out while a write makes its parent folders
     cleanup();
   });
 });
+
+// A listing or a stat has no descriptor to compare: the check asked again afterwards refuses one taken
+// through a folder swapped for a link out, while the swap is still in place.
+describe("a folder swapped for a link out while readDir or stat reads it", () => {
+  it("readDir throws, and returns none of the outside names", async () => {
+    const { ops, swapOut, cleanup } = layout();
+    const readdir = fs.promises.readdir;
+    vi.spyOn(fs.promises, "readdir").mockImplementationOnce((...args: Parameters<typeof fs.promises.readdir>) => {
+      swapOut();
+      return readdir(...args);
+    });
+    await expect(ops.readDir("docs")).rejects.toThrow(/escapes its root/);
+    cleanup();
+  });
+
+  it("stat throws, and returns nothing about the outside file", async () => {
+    const { ops, swapOut, cleanup } = layout();
+    const stat = fs.promises.stat;
+    vi.spyOn(fs.promises, "stat").mockImplementationOnce((...args: Parameters<typeof fs.promises.stat>) => {
+      swapOut();
+      return stat(...args);
+    });
+    await expect(ops.stat("docs/a.md")).rejects.toThrow(/escapes its root/);
+    cleanup();
+  });
+
+  it("both still answer when nothing moves", async () => {
+    const { ops, cleanup } = layout();
+    expect(await ops.readDir("docs")).toEqual(["a.md"]);
+    expect((await ops.stat("docs/a.md")).size).toBe("inside".length);
+    cleanup();
+  });
+});

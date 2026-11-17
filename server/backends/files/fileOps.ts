@@ -16,9 +16,9 @@
 // @mulmoclaude/core's verified open and write, as MulmoClaude's confined ops do: a read proves the
 // open handle is the in-root file, and a write verifies its staging file before renaming it into
 // place. The anchor is the root's own realpath, so a ROOT replaced by a link is not caught, as
-// before. stat / exists / readDir / unlink stay check-then-act. The parent folders a write creates
-// are made one level at a time and checked after each (verifiedMkdir.ts): a swap can leave one
-// empty folder outside, and the write then stops.
+// before. stat and readDir check again once they have read; exists and unlink stay check-then-act.
+// The parent folders a write creates are made one level at a time and checked after each
+// (verifiedMkdir.ts): a swap can leave one empty folder outside, and the write then stops.
 //
 // `rootFor` is invoked PER OPERATION rather than captured: the workspace is injected
 // at boot, after these ops are already bound into the plugin registry's closures.
@@ -95,6 +95,14 @@ async function makeParentFolders(root: string, dir: string, rel: string): Promis
   }
 }
 
+// A listing or a stat has no descriptor to compare, so the check is asked again once it has been read:
+// one taken through a folder swapped for a link out, still in place, throws rather than reaching the
+// plugin (#3306). A swap undone before then is not seen.
+async function checkedAgain<T>(check: () => Promise<unknown>, value: T): Promise<T> {
+  await check();
+  return value;
+}
+
 export function createFileOps(rootFor: () => string, label: string): FileOps {
   const lexicalAbs = (rel: string): { root: string; abs: string } => {
     const root = path.resolve(rootFor());
@@ -141,11 +149,11 @@ export function createFileOps(rootFor: () => string, label: string): FileOps {
       await writeVerified(rel, content);
     },
     async readDir(rel) {
-      return fs.readdir(await safeAbs(rel));
+      return checkedAgain(() => safeAbs(rel), await fs.readdir(await safeAbs(rel)));
     },
     async stat(rel) {
       const s = await fs.stat(await safeAbs(rel));
-      return { mtimeMs: s.mtimeMs, size: s.size };
+      return checkedAgain(() => safeAbs(rel), { mtimeMs: s.mtimeMs, size: s.size });
     },
     async exists(rel) {
       // safeAbs runs before the try so an escaping path still throws — the catch is
