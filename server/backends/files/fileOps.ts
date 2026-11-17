@@ -16,9 +16,9 @@
 // @mulmoclaude/core's verified open and write, as MulmoClaude's confined ops do: a read proves the
 // open handle is the in-root file, and a write verifies its staging file before renaming it into
 // place. The anchor is the root's own realpath, so a ROOT replaced by a link is not caught, as
-// before. stat / exists / readDir / unlink stay check-then-act. The parent folders a write creates
-// are made one level at a time and checked after each (verifiedMkdir.ts): a swap can leave one
-// empty folder outside, and the write then stops.
+// before. stat and readDir check again once they have read; exists and unlink stay check-then-act.
+// The parent folders a write creates are made one level at a time and checked after each
+// (verifiedMkdir.ts): a swap can leave one empty folder outside, and the write then stops.
 //
 // `rootFor` is invoked PER OPERATION rather than captured: the workspace is injected
 // at boot, after these ops are already bound into the plugin registry's closures.
@@ -95,6 +95,30 @@ async function makeParentFolders(root: string, dir: string, rel: string): Promis
   }
 }
 
+// A listing or a stat has no descriptor to compare, so the check is asked again once it has been read,
+// and the root must still be the folder it was when the operation began: one taken through a folder —
+// or the root itself — swapped for a link out, still in place, throws rather than reaching the plugin
+// (#3306). A swap undone before then is not seen.
+function metadataOps(containedPaths: ContainedPaths, escapedVia: (rel: string) => Error): Pick<FileOps, "readDir" | "stat"> {
+  const readThenCheck = async <T>(rel: string, read: (abs: string) => Promise<T>): Promise<T> => {
+    const { abs, realRoot } = await containedPaths(rel);
+    const value = await read(abs);
+    if ((await containedPaths(rel)).realRoot !== realRoot) throw escapedVia(rel);
+    return value;
+  };
+  return {
+    readDir: (rel) => readThenCheck(rel, (abs) => fs.readdir(abs)),
+    stat: (rel) =>
+      readThenCheck(rel, async (abs) => {
+        const { mtimeMs, size } = await fs.stat(abs);
+        return { mtimeMs, size };
+      }),
+  };
+}
+
+/** `rel` checked, as the path it was asked by and as the real place it lands (links followed). */
+type ContainedPaths = (rel: string) => Promise<{ abs: string; realRoot: string; realAbs: string }>;
+
 export function createFileOps(rootFor: () => string, label: string): FileOps {
   const lexicalAbs = (rel: string): { root: string; abs: string } => {
     const root = path.resolve(rootFor());
@@ -105,13 +129,12 @@ export function createFileOps(rootFor: () => string, label: string): FileOps {
     return { root, abs };
   };
 
-  /** `rel` checked, as the path it was asked by and as the real place it lands (links followed). */
-  const containedPaths = async (rel: string): Promise<{ abs: string; realRoot: string; realAbs: string }> => {
+  const escapedVia = (rel: string): Error => new Error(`${label} path escapes its root via symlink: ${rel}`);
+
+  const containedPaths: ContainedPaths = async (rel) => {
     const { root, abs } = lexicalAbs(rel);
     const [realRoot, realAbs] = await Promise.all([realpathAllowingMissing(root), realpathAllowingMissing(abs)]);
-    if (!isWithin(realRoot, realAbs)) {
-      throw new Error(`${label} path escapes its root via symlink: ${rel}`);
-    }
+    if (!isWithin(realRoot, realAbs)) throw escapedVia(rel);
     return { abs, realRoot, realAbs };
   };
 
@@ -127,7 +150,7 @@ export function createFileOps(rootFor: () => string, label: string): FileOps {
     const { abs } = await containedPaths(rel);
     await makeParentFolders(path.resolve(rootFor()), path.dirname(abs), rel);
     const { realRoot, realAbs } = await containedPaths(rel);
-    if (!(await writeVerifiedFile(realRoot, realAbs, content))) throw new Error(`${label} path escapes its root via symlink: ${rel}`);
+    if (!(await writeVerifiedFile(realRoot, realAbs, content))) throw escapedVia(rel);
   };
 
   return {
@@ -140,13 +163,7 @@ export function createFileOps(rootFor: () => string, label: string): FileOps {
     async write(rel, content) {
       await writeVerified(rel, content);
     },
-    async readDir(rel) {
-      return fs.readdir(await safeAbs(rel));
-    },
-    async stat(rel) {
-      const s = await fs.stat(await safeAbs(rel));
-      return { mtimeMs: s.mtimeMs, size: s.size };
-    },
+    ...metadataOps(containedPaths, escapedVia),
     async exists(rel) {
       // safeAbs runs before the try so an escaping path still throws — the catch is
       // only meant to turn a missing file into `false`.
