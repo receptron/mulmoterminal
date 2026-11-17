@@ -114,7 +114,7 @@ CI runs Linux and macOS on every PR, and Windows nightly. There are Windows-spec
 
 ### What do I need?
 
-- **Node.js 22.12+**
+- **Node.js 24.15+**
 - `claude` or `codex` on your `PATH`
 - optional: `tmux`, for session persistence (on Windows, [psmux](https://github.com/psmux/psmux) 3.4.0+)
 
@@ -254,6 +254,29 @@ set, the cell gets `CLAUDE_CODE_NO_FLICKER=0`.
   MulmoTerminal then leaves it alone — and the scrollbar and long selections go with it.
 
 Either change applies to a cell started after it; restart a running one with **Restart the agent**.
+
+### Voice input types "Thank you for watching" when I am not speaking. Why? {#voice-hallucination}
+
+**Whisper invents a stock sentence when it is handed silence or noise.** Voice input sends every
+stretch the browser judged loud enough, so background noise reaches the transcriber, and Whisper
+fills it with phrases it saw often in training — "Thank you for watching", "ご視聴ありがとうございました".
+
+You can let whisper.cpp skip the parts with no speech. Set `WHISPER_SERVER_EXTRA_ARGS` in the shell
+that starts MulmoTerminal, or in the `.env` beside it, and restart MulmoTerminal:
+
+1. Check that your `whisper-server` has speech detection: `whisper-server --help 2>&1 | grep -- --vad`
+   should print a line.
+2. Download a Silero speech-detection model from
+   [ggml-org/whisper-vad](https://huggingface.co/ggml-org/whisper-vad).
+3. `export WHISPER_SERVER_EXTRA_ARGS='--vad --vad-model /path/to/ggml-silero-v6.2.0.bin'`
+
+- A path with spaces: write a JSON array, `'["--vad", "--vad-model", "/path with space/x.bin"]'`.
+- Without a model, `--no-speech-thold 0.4` also helps (the default is `0.6`; lower treats more as
+  silence).
+- `--model`, `--host`, `--port` and the other flags MulmoTerminal sets are refused; the server log
+  says `WHISPER_SERVER_EXTRA_ARGS ignored` and voice input runs as before.
+- A flag your `whisper-server` does not accept can stop it from starting. If voice input stops
+  working, remove the variable and restart.
 
 ---
 

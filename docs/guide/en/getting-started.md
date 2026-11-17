@@ -23,7 +23,7 @@ command-line experience assumed — work down the page and you will get there.
 
 ## Start it right now
 
-If you already have **Node.js 22.12+** and the **`claude`** command, this is the whole thing
+If you already have **Node.js 24.15+** and the **`claude`** command, this is the whole thing
 (no Claude Code? see [Starting without it](agents.html#default-agent)):
 
 ```bash
@@ -61,7 +61,7 @@ What to install, in order, and what you lose without each:
 
 | | Without it | Step |
 |---|---|---|
-| **Node.js 22.12+** | It won't start | [Step 1](#step1) |
+| **Node.js 24.15+** | It won't start | [Step 1](#step1) |
 | **Claude Code** | It won't start — unless you declare a different [default agent](agents.html#default-agent), which is then what gets checked | [Step 2](#step2) |
 | git / gh | It starts. You lose worktrees, diffs and the PR features | [Step 3](#step3) |
 | tmux | It starts. Sessions don't survive a server restart | [Step 3](#step3) |
@@ -89,7 +89,7 @@ If terminals are new to you, Claude Code's own
 ## Step 1 — install Node.js {#step1}
 
 **What for:** MulmoTerminal runs on it, and it brings the `npx` command.
-**Version needed:** **22.12 or newer** — the official LTS build is well past that.
+**Version needed:** **24.15 or newer** — the current official LTS build meets it.
 
 ### Check first
 
@@ -97,7 +97,7 @@ If terminals are new to you, Claude Code's own
 node -v
 ```
 
-If that prints `v22.12.0` or higher, skip this step. If it says `command not found` or shows
+If that prints `v24.15.0` or higher, skip this step. If it says `command not found` or shows
 a lower number, carry on.
 
 Started on an older Node, MulmoTerminal stops with a large **NODE TOO OLD** banner and, when it

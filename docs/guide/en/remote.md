@@ -31,7 +31,7 @@ has to be opened in a firewall, and nothing about the server's settings changes.
 
 ## On the server
 
-You need what a local install needs ([Getting started](getting-started.html)): Node.js 22.12 or
+You need what a local install needs ([Getting started](getting-started.html)): Node.js 24.15 or
 newer, `git`, `gh`, and the agent CLIs you use (`claude`, `codex`, …). `tmux` is optional but
 worth having: with it, terminals survive the server restarting and your laptop disconnecting.
 
@@ -88,7 +88,7 @@ Linux box; neither sign-in was completed there.
 ## In Docker
 
 There is no official image yet. This `Dockerfile` is an example — it was built and run for this
-guide (Node 22, `git`, `gh`, `tmux`, Claude Code; add the other agents you use):
+guide (Node 24, `git`, `gh`, `tmux`, Claude Code; add the other agents you use):
 
 ```dockerfile
 FROM node:22-bookworm

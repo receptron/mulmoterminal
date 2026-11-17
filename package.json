@@ -39,7 +39,7 @@
     "docs/facts.json"
   ],
   "engines": {
-    "node": ">=22.12"
+    "node": ">=24.15"
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -90,16 +90,16 @@
     "@mulmocast/types": "^2.24.0",
     "@mulmochat-plugin/generate-image": "^2.1.0",
     "@mulmochat-plugin/ui-image": "^0.4.1",
-    "@mulmoclaude/accounting-plugin": "^5.0.0",
-    "@mulmoclaude/chart-plugin": "^5.0.0",
-    "@mulmoclaude/collection-plugin": "^6.0.0",
-    "@mulmoclaude/core": "^6.0.1",
+    "@mulmoclaude/accounting-plugin": "^6.0.0",
+    "@mulmoclaude/chart-plugin": "^6.0.0",
+    "@mulmoclaude/collection-plugin": "^7.0.0",
+    "@mulmoclaude/core": "^7.2.0",
     "@mulmoclaude/form-plugin": "^2.2.0",
-    "@mulmoclaude/google-plugin": "^5.0.0",
-    "@mulmoclaude/html-plugin": "^6.0.0",
-    "@mulmoclaude/markdown-plugin": "^6.0.0",
+    "@mulmoclaude/google-plugin": "^6.0.0",
+    "@mulmoclaude/html-plugin": "^7.0.0",
+    "@mulmoclaude/markdown-plugin": "^7.0.0",
     "@mulmoclaude/markdown-utils": "^3.0.2",
-    "@mulmoclaude/mulmoscript-plugin": "^6.0.0",
+    "@mulmoclaude/mulmoscript-plugin": "^7.0.0",
     "@mulmoclaude/x-plugin": "^1.0.4",
     "@receptron/sharedapp": "^0.47.1",
     "@receptron/task-scheduler": "^1.0.3",
@@ -116,7 +116,7 @@
     "dompurify": "^3.4.18",
     "echarts": "^6.0.0",
     "express": "^5.3.0",
-    "firebase": "12.19.0",
+    "firebase": "13.4.0",
     "graphai": "^2.0.18",
     "gui-chat-protocol": "^2.3.0",
     "jinglescript": "^1.2.1",

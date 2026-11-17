@@ -67,7 +67,7 @@ ping to your phone when a task finishes. One `npx` command, no Electron, no conf
 npx mulmoterminal@latest        # starts on http://localhost:34567 and opens your browser
 ```
 
-Requires **Node ≥ 22.12**, and by default the [`claude`](https://claude.com/claude-code) CLI —
+Requires **Node ≥ 24.15**, and by default the [`claude`](https://claude.com/claude-code) CLI —
 on your `PATH` or named by `CLAUDE_BIN`, already logged in. Declare a different default agent
 (`--agent codex`, or `"defaultAgent"` in `~/.mulmoterminal/config.json`) and start-up checks that
 one instead. `npx mulmoterminal@latest init` reports what it can't find. On an older Node it stops
@@ -304,7 +304,7 @@ more.
 
 ## Install & run
 
-Needs **Node ≥ 22.12**, plus these CLIs — on your `PATH`, or named by the matching `<AGENT>_BIN`:
+Needs **Node ≥ 24.15**, plus these CLIs — on your `PATH`, or named by the matching `<AGENT>_BIN`:
 
 > **Never installed any of this before?** The guide walks it end to end, macOS and Windows,
 > assuming no command-line experience:
@@ -346,7 +346,7 @@ this machine, and `--port <port>` stops only that one). All three run the same s
 with `tmux` installed the agent sessions survive and come back under **Settings → Sessions that
 survived a restart**; without it they end with the server.
 
-**First-run setup (optional).** `npx mulmoterminal@latest init` checks your environment (Node ≥ 22.12
+**First-run setup (optional).** `npx mulmoterminal@latest init` checks your environment (Node ≥ 24.15
 and every CLI in the table above), says how to update when Node is behind the latest LTS of its line
 or Claude Code is behind its `stable` release, seeds the launcher's **directory
 presets** from the projects in your Claude Code history, and writes `~/.mulmoterminal/config.json`.
@@ -785,7 +785,7 @@ server under **WSL**.
 | Plugins  | GUI-protocol Vue plugins (`@mulmoclaude/*`, `@mulmochat-plugin/*`): markdown, form, image, chart, HTML, collection, accounting, mulmoscript (MulmoCast video/slides), google |
 | Tests    | Vitest + @vue/test-utils + jsdom |
 
-Requires **Node ≥ 22.12** (uses `node --env-file-if-exists`) and, by default, the `claude` CLI —
+Requires **Node ≥ 24.15** (uses `node --env-file-if-exists`) and, by default, the `claude` CLI —
 found on `PATH` or named by `CLAUDE_BIN`. Declaring a different default agent (`--agent codex`, or
 `"defaultAgent"` in `~/.mulmoterminal/config.json`) makes start-up check that agent instead (#2082):
 see [Starting without Claude Code](https://receptron.github.io/mulmoterminal/guide/en/agents.html#default-agent).
@@ -836,6 +836,7 @@ the `claude` / `codex` sessions themselves.
 | `MULMOCLAUDE_WORKSPACE_PATH` | `~/mulmoclaude` | Where the managed MulmoClaude workspace lives. MulmoTerminal seeds presets/helps **only** into this directory, so launching in an arbitrary project never writes them there (`server/backends/workspaceSetup.ts`), and it is what decides where MulmoTerminal's own runtime state goes — see the note under the table. Set it to the same value MulmoClaude uses. |
 | `MULMOTERMINAL_NO_SKILL_INSTALL` | unset | Set to any value to skip installing the bundled skills (`mulmoterminal-config` and the `-dirs` / `-theme` / `-header` / `-keys` / `-model` / `-notify` / `-bug-report` / `-decisions` / `-help` / `-shared-app` / `-data-analysis` / `-video-edit` family) into Claude's skills root (`~/.claude/skills/`, and `$CLAUDE_CONFIG_DIR/skills/` as well when that is set) and the Codex skills root on startup. |
 | `GEMINI_IMAGE_MODEL` | `gemini-3.1-flash-image-preview` | Model used for image generation (needs `GEMINI_API_KEY`). The default is a **preview** model Google schedules for retirement around mid-2026, so pin a stable one here (e.g. `gemini-2.5-flash-image`) rather than waiting for a code change. |
+| `WHISPER_SERVER_EXTRA_ARGS` | unset | Extra flags for the voice-input `whisper-server` (macOS), e.g. `--vad --vad-model /path/to/ggml-silero-v6.2.0.bin` to skip silence and noise so they no longer come back as invented text. Space-separated, or a JSON array of strings for a path with spaces. `--model`/`-m`, `--host`, `--port` and the other flags MulmoTerminal sets itself are refused, and a refused value is ignored with a warning in the server log. A flag your `whisper-server` does not accept can stop it from starting; voice input then fails until you remove the variable. [FAQ](https://receptron.github.io/mulmoterminal/guide/en/faq.html#voice-hallucination). |
 | `WAIT_REAP_GRACE_MS` | `1800000` | How long a **waiting** background session is kept before it's auto-reaped (`0` or negative = never). |
 
 **Where MulmoTerminal's own runtime state goes.** The launcher defaults the workspace to the

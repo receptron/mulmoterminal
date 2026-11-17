@@ -343,28 +343,28 @@ describe("SECOND_INSTANCE_NOTE", () => {
   });
 });
 
-// The `init` pre-flight tick, fed process.versions.node ("22.12.0", "22.12.0-nightly…").
+// The `init` pre-flight tick, fed process.versions.node ("24.15.0", "24.15.0-nightly…").
 // Display-only: a wrong answer changes a ✓/✗, it never blocks the launch.
 describe("nodeMeetsMinimum", () => {
   it("passes the minimum and anything above it", () => {
-    expect(nodeMeetsMinimum("22.12.0")).toBe(true);
-    expect(nodeMeetsMinimum("22.13.0")).toBe(true);
-    expect(nodeMeetsMinimum("23.0.0")).toBe(true);
+    expect(nodeMeetsMinimum("24.15.0")).toBe(true);
+    expect(nodeMeetsMinimum("24.16.0")).toBe(true);
+    expect(nodeMeetsMinimum("26.0.0")).toBe(true);
   });
 
   it("fails a lower minor on the boundary major", () => {
-    expect(nodeMeetsMinimum("22.11.0")).toBe(false);
+    expect(nodeMeetsMinimum("24.14.0")).toBe(false);
   });
 
   it("fails a lower major even with a high minor", () => {
-    expect(nodeMeetsMinimum("21.12.0")).toBe(false);
+    expect(nodeMeetsMinimum("22.22.0")).toBe(false);
   });
 
   // Number.parseInt stops at the first non-digit, so the nightly tag on the patch never
   // reaches the comparison — major.minor is all that gates.
   it("judges a nightly by its major.minor", () => {
-    expect(nodeMeetsMinimum("22.12.0-nightly20240101abcd")).toBe(true);
-    expect(nodeMeetsMinimum("22.11.0-nightly20240101abcd")).toBe(false);
+    expect(nodeMeetsMinimum("24.15.0-nightly20240101abcd")).toBe(true);
+    expect(nodeMeetsMinimum("24.14.0-nightly20240101abcd")).toBe(false);
   });
 
   // An unreadable version parses to NaN, and every comparison against NaN is false, so it
@@ -378,7 +378,7 @@ describe("nodeMeetsMinimum", () => {
   // The message's "needs ≥ x.y" and the comparison have to name the same minimum, or the
   // tick and the advice disagree.
   it("labels the minimum it enforces", () => {
-    expect(MIN_NODE_LABEL).toBe("22.12");
+    expect(MIN_NODE_LABEL).toBe("24.15");
     expect(nodeMeetsMinimum(`${MIN_NODE_LABEL}.0`)).toBe(true);
   });
 

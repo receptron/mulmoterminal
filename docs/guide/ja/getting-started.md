@@ -23,7 +23,7 @@ description: MulmoTerminal を起動するまでの手順を 1 ページにま�
 
 ## いますぐ起動する
 
-**Node.js 22.12 以上**と **`claude` コマンド**がすでに入っている方は、これだけです。
+**Node.js 24.15 以上**と **`claude` コマンド**がすでに入っている方は、これだけです。
 （Claude Code を使っていない場合は[Claude Code なしで起動する](agents.html#default-agent)）
 
 ```bash
@@ -61,7 +61,7 @@ npx mulmoterminal@latest
 
 | | 無いとどうなるか | 手順 |
 |---|---|---|
-| **Node.js 22.12+** | 起動できません | [ステップ 1](#step1) |
+| **Node.js 24.15+** | 起動できません | [ステップ 1](#step1) |
 | **Claude Code** | 起動できません（既定エージェントを宣言していれば不要 → [そちらのチェックに変わります](agents.html#default-agent)） | [ステップ 2](#step2) |
 | git / gh | 起動はします。worktree・差分・PR 機能が消えます | [ステップ 3](#step3) |
 | tmux | 起動はします。サーバ再起動でセッションが消えます | [ステップ 3](#step3) |
@@ -90,7 +90,7 @@ npx mulmoterminal@latest
 ## ステップ 1 — Node.js を入れる {#step1}
 
 **何のため:** MulmoTerminal 本体が動く土台です。あわせて `npx` コマンドが入ります。
-**必要なバージョン:** **22.12 以上**（公式の LTS 版を入れれば満たします）。
+**必要なバージョン:** **24.15 以上**（公式の LTS 版を入れれば満たします）。
 
 ### まず確認
 
@@ -98,7 +98,7 @@ npx mulmoterminal@latest
 node -v
 ```
 
-`v22.12.0` 以上の数字が出れば、このステップは飛ばしてください。
+`v24.15.0` 以上の数字が出れば、このステップは飛ばしてください。
 `command not found` と出るか、数字が小さければ下へ。
 
 古い Node のまま起動すると、MulmoTerminal は大きな **NODE TOO OLD** の表示を出して止まります。

@@ -24,7 +24,7 @@ Codex、Antigravity、Grok、Muse、GitHub Copilot CLI、Cursor CLI。單一代�
 npx mulmoterminal@latest        # 在 http://localhost:34567 啟動並開啟瀏覽器
 ```
 
-需要 **Node 22.12 以上**，以及 `PATH` 上已登入的
+需要 **Node 24.15 以上**，以及 `PATH` 上已登入的
 [`claude`](https://claude.com/claude-code) CLI。
 `npx mulmoterminal@latest init` 會告訴你缺了什麼。
 
@@ -112,7 +112,7 @@ Claude / Codex activity hook**，不是去解析螢幕上的文字。
 
 ## 安裝與執行
 
-需要 **Node 22.12 以上**，以及 `PATH` 上的這些 CLI：
+需要 **Node 24.15 以上**，以及 `PATH` 上的這些 CLI：
 
 | | 工具 | 它帶來什麼 | 安裝 |
 | --- | --- | --- | --- |

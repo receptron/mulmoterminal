@@ -69,7 +69,7 @@ jobs:
       # version in it, so this hits what ci.yml already saves on main.
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: yarn
 
       # knip resolves imports through the real dependency graph, so node_modules has

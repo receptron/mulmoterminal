@@ -31,7 +31,7 @@ SSH トンネルなら、その状態のまま使えます。ノート PC の `l
 
 ## サーバ側
 
-必要なものは手元に入れるときと同じです（[はじめに](getting-started.html)）。Node.js 22.12 以上、`git`、
+必要なものは手元に入れるときと同じです（[はじめに](getting-started.html)）。Node.js 24.15 以上、`git`、
 `gh`、使うエージェントの CLI（`claude`・`codex` など）。`tmux` は任意ですが、あると、サーバの再起動や
 ノート PC の切断があってもターミナルが残ります。
 
@@ -86,7 +86,7 @@ ssh -N -L 34567:127.0.0.1:34567 you@server
 ## Docker で動かす
 
 公式のイメージはまだありません。次の `Dockerfile` は例です。このガイドのために実際にビルドして動かしました
-（Node 22・`git`・`gh`・`tmux`・Claude Code 入り。ほかに使うエージェントは足してください）:
+（Node 24・`git`・`gh`・`tmux`・Claude Code 入り。ほかに使うエージェントは足してください）:
 
 ```dockerfile
 FROM node:22-bookworm

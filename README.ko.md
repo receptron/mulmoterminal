@@ -25,7 +25,7 @@
 npx mulmoterminal@latest        # http://localhost:34567 에서 띄우고 브라우저를 엽니다
 ```
 
-**Node 22.12 이상**과, `PATH`에 있고 로그인된
+**Node 24.15 이상**과, `PATH`에 있고 로그인된
 [`claude`](https://claude.com/claude-code) CLI가 필요합니다.
 `npx mulmoterminal@latest init`이 무엇이 빠졌는지 알려 줍니다.
 
@@ -120,7 +120,7 @@ tmux가 깔려 있으면 그 **위에서** 돌고, [재시작도 견딥니다](R
 
 ## 설치와 실행
 
-**Node 22.12 이상**과, `PATH`에 있는 아래 CLI들이 필요합니다.
+**Node 24.15 이상**과, `PATH`에 있는 아래 CLI들이 필요합니다.
 
 | | 도구 | 무엇을 해 주는가 | 설치 |
 | --- | --- | --- | --- |

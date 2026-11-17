@@ -3,7 +3,7 @@
 // repo runs on, not against the docs. The launcher passes this flag so a `.env` beside the
 // user's shell reaches the server (#795), and the whole feature is "which value does the key
 // end up with", so a Node release that changed either rule below would change what a user's
-// API key is without anything else failing. CI runs Node 22 and 24; this catches both.
+// API key is without anything else failing. CI runs Node 24 and 26; this catches both.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
