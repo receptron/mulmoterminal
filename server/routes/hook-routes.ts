@@ -19,7 +19,7 @@ import { runCompletionHook } from "../session/activity/completion-hooks.js";
 import { messageOf } from "../errors.js";
 import { headerHookEffect } from "../session/activity/header-hook.js";
 import { claudeSessionIds, lastPrompts, lastResponses, ptys } from "../session/registry.js";
-import { clearedTranscripts, markTranscriptCleared } from "../session/transcript/cleared-transcripts.js";
+import { clearedClaudeIdOf, clearedTranscripts, markTranscriptCleared } from "../session/transcript/cleared-transcripts.js";
 import { latestUserPrompt } from "../session/session-reads.js";
 import { notifyTaskFinished } from "../session/activity/task-push.js";
 import { preferredHeaderPrompt } from "../session/transcript/transcript.js";
@@ -190,6 +190,21 @@ async function clearHeaderPrompt(deps: HookDeps, sessionId: string, claudeId: st
   deps.publishActivity(sessionId);
 }
 
+// A `/resume` typed INSIDE the cell moves claude to another conversation's transcript, while the
+// session keeps its own id — exactly what `/clear` does, only towards an existing conversation
+// rather than a new one. Remembered in memory alone, the move was lost to the next restart: the
+// restart resumes the session's OWN id, whose transcript is the abandoned one or (for a cell that
+// resumed before its first prompt) none at all, and the latter mints a brand-new session. So it
+// takes the same durable mark as a clear, carrying claude's new id as the successor that
+// resolveSession resumes in its place.
+//
+// Not a move: claude resuming the session's own transcript (every ordinary restart), or the
+// successor a previous mark already names (the restart that resumed it fires this hook again —
+// marking anew would blank the header on every restart for nothing).
+function resumeMovedConversation(sessionId: string, claudeId: string | null): boolean {
+  return claudeId !== null && claudeId !== sessionId && claudeId !== clearedClaudeIdOf(sessionId);
+}
+
 // Header-prompt / AI-title side effects of a hook, per event: track the submitted prompt
 // (UserPromptSubmit), drop it on `/clear` (SessionStart source=clear), or (re)generate the
 // AI title once a turn's reply is on disk (Stop). Kept out of the route so its branching
@@ -208,13 +223,12 @@ async function applyHeaderHooks(deps: HookDeps, sessionId: string, event: string
     deps.publishPromptSubmitted(sessionId);
     return;
   }
-  if (effect.kind === "clear")
-    return clearHeaderPrompt(
-      deps,
-      sessionId,
-      claudeOwnSessionId(body.session_id, (id) => SESSION_ID_RE.test(id)),
-      cwd,
-    );
+  const claudeId = claudeOwnSessionId(body.session_id, (id) => SESSION_ID_RE.test(id));
+  if (effect.kind === "clear") return clearHeaderPrompt(deps, sessionId, claudeId, cwd);
+  if (effect.kind === "resume") {
+    if (resumeMovedConversation(sessionId, claudeId)) await clearHeaderPrompt(deps, sessionId, claudeId, cwd);
+    return;
+  }
   void deps.maybeGenerateTitle(sessionId, cwd);
 }
 

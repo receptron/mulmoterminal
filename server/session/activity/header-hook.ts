@@ -16,6 +16,10 @@ export type HeaderHookEffect =
   | { kind: "prompt"; text: string }
   // `/clear` restarted the conversation — the header must stop showing the pre-clear prompt.
   | { kind: "clear" }
+  // Claude (re)opened a conversation with `--resume` or its own `/resume` picker. Whether that MOVED
+  // the session off its own transcript depends on which id claude now reports, which only the caller
+  // can compare against the session's — so this says only that the question has to be asked.
+  | { kind: "resume" }
   // A turn's reply is on disk; (re)generate the AI title from it.
   | { kind: "title" };
 
@@ -23,7 +27,7 @@ export type HeaderHookEffect =
 export const LAST_PROMPT_CAP = 200;
 
 // Null means "this hook changes nothing about the header", which is the common case: every
-// tool hook, every SessionStart that is not a `/clear`, and — deliberately — a
+// tool hook, every SessionStart that is neither a `/clear` nor a resume, and — deliberately — a
 // UserPromptSubmit carrying a blank, non-string, or harness-injected prompt. Blanking the
 // header on an empty submit would erase the query the user is still waiting on.
 //
@@ -37,10 +41,13 @@ export function headerHookEffect(event: string, body: Record<string, unknown>, c
     if (isInjectedPrompt(body.prompt)) return null;
     return { kind: "prompt", text: body.prompt.trim().slice(0, cap) };
   }
-  // Only `source: "clear"`. A `/compact` also arrives as SessionStart, and clearing on it
-  // would wipe the user's task line and their title in the middle of a conversation that is
-  // still going.
-  if (event === "SessionStart") return body.source === "clear" ? { kind: "clear" } : null;
+  // Clear only on `source: "clear"`. A `/compact` also arrives as SessionStart, and clearing on
+  // it would wipe the user's task line and their title in the middle of a conversation that is
+  // still going. A `resume` is handed up for the caller to compare ids (the `resume` kind above).
+  if (event === "SessionStart") {
+    if (body.source === "clear") return { kind: "clear" };
+    return body.source === "resume" ? { kind: "resume" } : null;
+  }
   if (event === "Stop") return { kind: "title" };
   return null;
 }
