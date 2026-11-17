@@ -242,9 +242,9 @@ function splitAtLastEntry(abs: string): { existing: string; rest: string[] } {
   return { existing, rest };
 }
 
-function isExistingNonDirectory(p: string): boolean {
+function isExistingDirectory(p: string): boolean {
   try {
-    return !fs.statSync(p).isDirectory();
+    return fs.statSync(p).isDirectory();
   } catch {
     return false;
   }
@@ -288,9 +288,9 @@ function followTarget(realFolder: string, target: string, walk: LinkWalk): strin
 }
 
 function stepInto(at: string, part: string, walk: LinkWalk): string | null {
-  // The OS stops at a file with more of the path after it (ENOTDIR); going on would answer a path
-  // the link does not lead to.
-  if (isExistingNonDirectory(at)) return null;
+  // The OS goes on only from a folder that exists: past a file it stops with ENOTDIR, past a missing
+  // component with ENOENT. Going on would answer a path the link does not lead to.
+  if (!isExistingDirectory(at)) return null;
   if (part === "" || part === ".") return at;
   if (part === "..") return path.dirname(at);
   const next = path.join(at, part);

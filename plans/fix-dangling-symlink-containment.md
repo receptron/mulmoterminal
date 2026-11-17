@@ -18,7 +18,9 @@ existed, and the one case it let through was the one that created the target.
   at a time from the folder the link REALLY is in, as the OS walks it: a link met on the way is
   followed before a later `..` applies (`hop/../x` with `hop` pointing out leads out; `path.resolve`
   would cancel `hop/..` on paper). The rest of the path is then appended.
-- A target that goes on past an existing file is refused (the OS stops there with ENOTDIR).
+- The walk goes on only from a folder that exists: a target that continues past a file (ENOTDIR)
+  or past a missing component (ENOENT; this covers `missing/../x` and a trailing `/` or `/.`) is
+  refused.
 - On Windows a dangling link is refused, not walked. Windows cancels a relative target's `..` on
   paper before following anything and has target forms of its own (`C:foo`, `\\?\`); the walk
   disagreed with it in CI. Refusing costs only creating a file through a link whose target is not

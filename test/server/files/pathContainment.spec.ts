@@ -212,6 +212,24 @@ describe("realContainedWithin follows a dangling link to where it points", () =>
     cleanup();
   });
 
+  it("refuses a target that goes on past a missing component, where the OS stops with ENOENT", () => {
+    const { root, cleanup } = layout();
+    writeFileSync(path.join(root, "victim.txt"), "keep");
+    mkdirSync(path.join(root, "sub"));
+    symlinkSync(["missing", "..", "victim.txt"].join(path.sep), path.join(root, "through-missing"));
+    symlinkSync(["docs", "later", ""].join(path.sep), path.join(root, "missing-as-folder"));
+    symlinkSync(["docs", "later", "."].join(path.sep), path.join(root, "missing-dot"));
+    symlinkSync(["sub", "..", "docs", "later.md"].join(path.sep), path.join(root, "through-sub"));
+    ["through-missing", "missing-as-folder", "missing-dot"].forEach((name) => {
+      const link = path.join(root, name);
+      expect(realContainedWithin(root, link)).toBe(kernelRealpath(link));
+      expect(realContainedWithin(root, link, "linux")).toBeNull();
+    });
+    // `sub` exists, so the walk goes on through it and lands where the link points.
+    expect(realContainedWithin(root, path.join(root, "through-sub"), "linux")).toBe(path.join(root, "docs", "later.md"));
+    cleanup();
+  });
+
   it("refuses a path under a dangling link to a folder outside", () => {
     const { root, outside, cleanup } = layout();
     symlinkSync(path.join(outside, "not-yet"), path.join(root, "dir"));
