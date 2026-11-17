@@ -13,6 +13,7 @@ import path from "node:path";
 import { containedPath, namesAWindowsDevice, realContainedWithin } from "./pathContainment.js";
 import { isSamePath } from "../infra/fs/path-within.js";
 import { createFileVerified, type Recheck, type VerifiedOutcome } from "./verifiedWrite.js";
+import { makeFolderVerified } from "./verifiedMkdir.js";
 
 /** The longest name a new entry may have: what the common filesystems allow, in bytes. */
 const MAX_NAME_BYTES = 255;
@@ -57,11 +58,7 @@ export type EntryKind = "file" | "dir";
 /** Make an empty file or a folder. Never over something that is there: `wx` and `mkdir` both fail
  *  on an existing name, so a race with another writer cannot turn a create into an overwrite. */
 export function createEntry(abs: string, kind: EntryKind, recheck: Recheck): VerifiedOutcome {
-  if (kind === "file") return createFileVerified(abs, recheck);
-  // A folder is not re-checked: Node cannot open one to see where it landed on every platform, and what
-  // a swap could place outside is an empty folder (#3306).
-  fs.mkdirSync(abs);
-  return "written";
+  return kind === "file" ? createFileVerified(abs, recheck) : makeFolderVerified(abs, recheck);
 }
 
 /** Rename in place. A name that differs only in case is the same entry on a case-insensitive disk,

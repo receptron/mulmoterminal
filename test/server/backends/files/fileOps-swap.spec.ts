@@ -77,3 +77,17 @@ describe("a folder swapped for a link out between the check and the operation", 
     cleanup();
   });
 });
+
+describe("a folder swapped for a link out while a write makes its parent folders", () => {
+  it("stops at the first level that landed outside: one empty folder there, nothing written", async () => {
+    const { ops, outside, swapOut, cleanup } = layout();
+    const mkdir = fs.mkdirSync;
+    vi.spyOn(fs, "mkdirSync").mockImplementationOnce((...args: Parameters<typeof fs.mkdirSync>) => {
+      swapOut();
+      return mkdir(...args);
+    });
+    await expect(ops.write("docs/new/deeper/b.md", "redirected")).rejects.toThrow(/escapes its root/);
+    expect(readdirSync(path.join(outside, "new"))).toEqual([]);
+    cleanup();
+  });
+});
