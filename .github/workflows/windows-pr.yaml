@@ -95,17 +95,17 @@ jobs:
         if: steps.scope.outputs.code == 'true' && matrix.shard == 1
         with:
           path: node_modules
-          key: win-node-modules-22.x-${{ hashFiles('yarn.lock') }}
+          key: win-node-modules-24.x-${{ hashFiles('yarn.lock') }}
           restore-keys: |
-            win-node-modules-22.x-
+            win-node-modules-24.x-
 
       - uses: actions/cache/restore@v5
         if: steps.scope.outputs.code == 'true' && matrix.shard != 1
         with:
           path: node_modules
-          key: win-node-modules-22.x-${{ hashFiles('yarn.lock') }}
+          key: win-node-modules-24.x-${{ hashFiles('yarn.lock') }}
           restore-keys: |
-            win-node-modules-22.x-
+            win-node-modules-24.x-
 
       # Restored BEFORE install so puppeteer's postinstall skips its ~120 MB download.
       # Every shard may save, unlike node_modules: the download is what hangs (#3030), so a cold

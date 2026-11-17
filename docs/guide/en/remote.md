@@ -91,7 +91,7 @@ There is no official image yet. This `Dockerfile` is an example — it was built
 guide (Node 24, `git`, `gh`, `tmux`, Claude Code; add the other agents you use):
 
 ```dockerfile
-FROM node:22-bookworm
+FROM node:24-bookworm
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git tmux curl ca-certificates \
  && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /usr/share/keyrings/githubcli-archive-keyring.gpg \

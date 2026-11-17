@@ -89,7 +89,7 @@ ssh -N -L 34567:127.0.0.1:34567 you@server
 （Node 24・`git`・`gh`・`tmux`・Claude Code 入り。ほかに使うエージェントは足してください）:
 
 ```dockerfile
-FROM node:22-bookworm
+FROM node:24-bookworm
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git tmux curl ca-certificates \
  && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /usr/share/keyrings/githubcli-archive-keyring.gpg \

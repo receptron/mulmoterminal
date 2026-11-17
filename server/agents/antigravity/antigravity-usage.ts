@@ -86,8 +86,8 @@ async function readGenRows(file: string, limit: number): Promise<GenRow[] | null
     // Read-only, and through a URI so a database agy has open is opened as a reader rather than as
     // something that could take a write lock on the file the agent is working from.
     // A PLAIN path, not a `file:…?mode=ro` URI. node:sqlite does not enable SQLite's URI filenames
-    // on every Node this package supports (`>=22.12`), and where it does not, the URI is taken as a
-    // literal filename — the open fails, and every agy badge silently goes quiet on that runtime.
+    // on every Node release (not on the 22.x this package once supported), and where it does not,
+    // the URI is taken as a literal filename — the open fails, and every agy badge silently goes quiet on that runtime.
     // `readOnly` is the option that makes this a reader, and it is honoured everywhere.
     db = new DatabaseSync(file, { readOnly: true });
     // A NAMED parameter: `limit ?` binds fine in every other sqlite binding and throws
