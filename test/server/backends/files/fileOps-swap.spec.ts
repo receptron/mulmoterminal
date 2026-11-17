@@ -137,3 +137,34 @@ describe("a folder swapped for a link out while readDir or stat reads it", () =>
     cleanup();
   });
 });
+
+describe("the ROOT swapped for a link out while readDir or stat reads it", () => {
+  // The root here is `docs` itself, so the swap replaces the root: checking the path again alone would
+  // pass, since the path is still inside the (new, outside) root.
+  const rootedAtDocs = () => {
+    const project = layout();
+    return { ...project, ops: createFileOps(() => path.join(project.root, "docs"), "test") };
+  };
+
+  it("readDir throws", async () => {
+    const { ops, swapOut, cleanup } = rootedAtDocs();
+    const readdir = fs.promises.readdir;
+    vi.spyOn(fs.promises, "readdir").mockImplementationOnce((...args: Parameters<typeof fs.promises.readdir>) => {
+      swapOut();
+      return readdir(...args);
+    });
+    await expect(ops.readDir("")).rejects.toThrow(/escapes its root/);
+    cleanup();
+  });
+
+  it("stat throws", async () => {
+    const { ops, swapOut, cleanup } = rootedAtDocs();
+    const stat = fs.promises.stat;
+    vi.spyOn(fs.promises, "stat").mockImplementationOnce((...args: Parameters<typeof fs.promises.stat>) => {
+      swapOut();
+      return stat(...args);
+    });
+    await expect(ops.stat("a.md")).rejects.toThrow(/escapes its root/);
+    cleanup();
+  });
+});

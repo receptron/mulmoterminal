@@ -95,13 +95,29 @@ async function makeParentFolders(root: string, dir: string, rel: string): Promis
   }
 }
 
-// A listing or a stat has no descriptor to compare, so the check is asked again once it has been read:
-// one taken through a folder swapped for a link out, still in place, throws rather than reaching the
-// plugin (#3306). A swap undone before then is not seen.
-async function checkedAgain<T>(check: () => Promise<unknown>, value: T): Promise<T> {
-  await check();
-  return value;
+// A listing or a stat has no descriptor to compare, so the check is asked again once it has been read,
+// and the root must still be the folder it was when the operation began: one taken through a folder —
+// or the root itself — swapped for a link out, still in place, throws rather than reaching the plugin
+// (#3306). A swap undone before then is not seen.
+function metadataOps(containedPaths: ContainedPaths, escapedVia: (rel: string) => Error): Pick<FileOps, "readDir" | "stat"> {
+  const readThenCheck = async <T>(rel: string, read: (abs: string) => Promise<T>): Promise<T> => {
+    const { abs, realRoot } = await containedPaths(rel);
+    const value = await read(abs);
+    if ((await containedPaths(rel)).realRoot !== realRoot) throw escapedVia(rel);
+    return value;
+  };
+  return {
+    readDir: (rel) => readThenCheck(rel, (abs) => fs.readdir(abs)),
+    stat: (rel) =>
+      readThenCheck(rel, async (abs) => {
+        const { mtimeMs, size } = await fs.stat(abs);
+        return { mtimeMs, size };
+      }),
+  };
 }
+
+/** `rel` checked, as the path it was asked by and as the real place it lands (links followed). */
+type ContainedPaths = (rel: string) => Promise<{ abs: string; realRoot: string; realAbs: string }>;
 
 export function createFileOps(rootFor: () => string, label: string): FileOps {
   const lexicalAbs = (rel: string): { root: string; abs: string } => {
@@ -113,13 +129,12 @@ export function createFileOps(rootFor: () => string, label: string): FileOps {
     return { root, abs };
   };
 
-  /** `rel` checked, as the path it was asked by and as the real place it lands (links followed). */
-  const containedPaths = async (rel: string): Promise<{ abs: string; realRoot: string; realAbs: string }> => {
+  const escapedVia = (rel: string): Error => new Error(`${label} path escapes its root via symlink: ${rel}`);
+
+  const containedPaths: ContainedPaths = async (rel) => {
     const { root, abs } = lexicalAbs(rel);
     const [realRoot, realAbs] = await Promise.all([realpathAllowingMissing(root), realpathAllowingMissing(abs)]);
-    if (!isWithin(realRoot, realAbs)) {
-      throw new Error(`${label} path escapes its root via symlink: ${rel}`);
-    }
+    if (!isWithin(realRoot, realAbs)) throw escapedVia(rel);
     return { abs, realRoot, realAbs };
   };
 
@@ -135,7 +150,7 @@ export function createFileOps(rootFor: () => string, label: string): FileOps {
     const { abs } = await containedPaths(rel);
     await makeParentFolders(path.resolve(rootFor()), path.dirname(abs), rel);
     const { realRoot, realAbs } = await containedPaths(rel);
-    if (!(await writeVerifiedFile(realRoot, realAbs, content))) throw new Error(`${label} path escapes its root via symlink: ${rel}`);
+    if (!(await writeVerifiedFile(realRoot, realAbs, content))) throw escapedVia(rel);
   };
 
   return {
@@ -148,13 +163,7 @@ export function createFileOps(rootFor: () => string, label: string): FileOps {
     async write(rel, content) {
       await writeVerified(rel, content);
     },
-    async readDir(rel) {
-      return checkedAgain(() => safeAbs(rel), await fs.readdir(await safeAbs(rel)));
-    },
-    async stat(rel) {
-      const s = await fs.stat(await safeAbs(rel));
-      return checkedAgain(() => safeAbs(rel), { mtimeMs: s.mtimeMs, size: s.size });
-    },
+    ...metadataOps(containedPaths, escapedVia),
     async exists(rel) {
       // safeAbs runs before the try so an escaping path still throws — the catch is
       // only meant to turn a missing file into `false`.

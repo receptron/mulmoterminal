@@ -10,9 +10,11 @@ an outside folder's names. With the spec below, the code before this change did 
 
 ## Change
 
-Both ask the existing containment check again once they have read, and throw the existing escape
-error if it no longer names a place inside, so nothing read reaches the plugin. This is the same shape
-as `/browse/list` and `/browse/head` (#3317).
+Both ask the existing containment check again once they have read. The root's real path must also be
+the one the operation began with. If either fails, they throw the existing escape error, and nothing
+read reaches the plugin. This is the same shape as `/browse/list` and `/browse/head` (#3317), plus the
+root comparison: the root here is a folder of the app's choosing, and a root swapped for a link out
+would otherwise pass, since the path is still inside the (new, outside) root.
 
 ## Not changed / what this does not hold
 
@@ -27,7 +29,11 @@ as `/browse/list` and `/browse/head` (#3317).
     error;
   - with nothing moved, both answer;
   - against the code before this change, both resolved with the outside data.
-- Removing either re-check makes its case fail.
+  - the same with the ROOT swapped for a link out, which a path re-check alone would pass.
+- Removing the re-check makes all four swap cases fail. Keeping it but dropping the root comparison
+  makes the two root cases fail.
+- `read`, `readBytes` and `write` still anchor at the root's realpath taken per operation; their root
+  gap is the one #3311 documented and is not changed here.
 - No route in this repo calls them: the shipped MulmoScript plugin only forwards them. A plugin
   installed by the user is what calls them, against its own data and config folders. So they are
   verified through `createFileOps` on the real filesystem, not through a running server.
