@@ -19,11 +19,13 @@ import path from "node:path";
 import type { Express, Request, Response } from "express";
 import { executeHtmlDispatch, isHtmlDispatchArgs, HTML_FILE_MOUNT } from "@mulmoclaude/html-plugin";
 import { SANDBOXED_VIEW_CDN_ALLOWLIST } from "@mulmoclaude/core/remote-view";
+import { openVerifiedWithinScope, realpathIfPresent } from "@mulmoclaude/core/files";
+import type { FileHandle } from "node:fs/promises";
 import { artifactsFileOps } from "./artifacts.js";
 import { htmlByPath, resolveHtmlRequest } from "../files/openPath.js";
 import { mountSourceEditorDispatchRoute } from "../files/sourceEditorDispatchRoute.js";
 import { statFileOr404 } from "../files/statFileOr404.js";
-import { streamFileToResponse } from "../files/streamFile.js";
+import { streamFileToResponse, streamHandleToResponse } from "../files/streamFile.js";
 import { openVerifiedOr4xx } from "../files/openVerifiedOr4xx.js";
 import type { Recheck } from "../../files/verifiedWrite.js";
 import { isWithin } from "../../infra/fs/path-within.js";
@@ -69,10 +71,37 @@ export function sendHtmlDocument(res: Response, abs: string, recheck?: Recheck):
   if (!statFileOr404(res, abs)) return;
   const fd = recheck ? openVerifiedOr4xx(res, abs, recheck) : undefined;
   if (fd === null) return;
+  setHtmlPreviewHeaders(res);
+  streamFileToResponse(abs, res, undefined, fd);
+}
+
+function setHtmlPreviewHeaders(res: Response): void {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Content-Security-Policy", HTML_PREVIEW_CSP);
-  streamFileToResponse(abs, res, undefined, fd);
+}
+
+const ARTIFACTS_HTML_DIR = path.join("artifacts", "html");
+
+/** The regular file at `relative` under artifacts/html, through a handle proven after opening to be the
+ *  file that folder holds now — a link out of it, or a folder swapped for one, is null (#3310). */
+async function openArtifactPage(workspace: string, relative: string): Promise<FileHandle | null> {
+  const trustedReal = await realpathIfPresent(workspace);
+  const handle = trustedReal === null ? null : await openVerifiedWithinScope({ trustedReal, scopeWithinTrusted: ARTIFACTS_HTML_DIR }, relative);
+  if (handle === null) return null;
+  if ((await handle.stat()).isFile()) return handle;
+  await handle.close();
+  return null;
+}
+
+async function sendArtifactPage(res: Response, workspace: string, relative: string): Promise<void> {
+  const handle = await openArtifactPage(workspace, relative);
+  if (handle === null) {
+    res.status(404).json({ error: "not found" });
+    return;
+  }
+  setHtmlPreviewHeaders(res);
+  streamHandleToResponse(handle, res);
 }
 
 /** Intercept the View's dispatch (loadHtml/saveHtml) on /api/plugin/presentHtml,
@@ -93,9 +122,11 @@ export function mountHtmlDispatchRoute(app: Express): void {
 }
 
 /** Serve `GET /artifacts/html/<rest>` — the iframe preview source — from the
- *  workspace, with the HTML preview CSP. Path-contained to artifacts/html. */
+ *  workspace, with the HTML preview CSP. Contained to artifacts/html through links too, as
+ *  MulmoClaude's mount is: the lexical check below answers a malformed path, and the verified open
+ *  refuses a link out of the folder with the 404 of a missing page. */
 export function mountHtmlPreviewRoute(app: Express, deps: { workspace: string }): void {
-  const root = path.resolve(deps.workspace, "artifacts", "html");
+  const root = path.resolve(deps.workspace, ARTIFACTS_HTML_DIR);
   app.get(/^\/artifacts\/html\/(.+)/, (req: Request, res: Response) => {
     const rel = req.params[0] ?? "";
     const abs = path.resolve(root, rel);
@@ -107,7 +138,9 @@ export function mountHtmlPreviewRoute(app: Express, deps: { workspace: string })
       res.status(400).json({ error: "not an .html file" });
       return;
     }
-    sendHtmlDocument(res, abs);
+    sendArtifactPage(res, deps.workspace, path.relative(root, abs)).catch(() => {
+      if (!res.headersSent) res.status(404).json({ error: "not found" });
+    });
   });
 }
 
