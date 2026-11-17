@@ -1,10 +1,15 @@
 // Terminal "query" control sequences an application writes to probe the emulator — Device
-// Attributes, device/cursor status, OSC color, kitty-keyboard flags, XTVERSION. The emulator
-// auto-REPLIES to each. That's correct live, but when we replay a reattached session's buffered
+// Attributes, device/cursor status, mode and setting requests (DECRQM / DECRQSS), OSC color,
+// kitty-keyboard flags, XTVERSION. The emulator auto-REPLIES to each. That's correct live, but when we replay a reattached session's buffered
 // output, xterm re-answers the queries baked into it and the stale replies are sent back as
 // INPUT, surfacing as junk like "0;276;0c" in the app's prompt (codex writes several at startup).
 // Strip them from the replay only: they render nothing, so the visual restore is unchanged, and
 // the app re-queries live if it still needs to.
+//
+// A reply that leaks is worse than junk in a prompt when the pane is in tmux copy-mode: tmux reads
+// it as keys, and under `mode-keys vi` the `?` of a DECRQM reply opens a search prompt that eats the
+// next paste's opening bracket (#3299). So the list is every query xterm answers, not only the ones
+// seen so far — test/server/session/pty/terminal-replay.spec.ts feeds each through a real xterm.
 //
 // Built via new RegExp so the ESC/BEL control chars stay out of the regex source (satisfies
 // no-control-regex without a disable).
@@ -16,7 +21,10 @@ const QUERY_PATTERNS: RegExp[] = [
   new RegExp(ESC + "\\[\\??\\d*n", "g"), // device / cursor status report (DSR / CPR)
   new RegExp(ESC + "\\[\\?u", "g"), // kitty keyboard flags query
   new RegExp(ESC + "\\[>\\d*q", "g"), // XTVERSION
-  new RegExp(ESC + "\\]1[012];\\?(?:" + BEL + "|" + ESC + "\\\\)", "g"), // OSC 10/11/12 fg/bg/cursor color query
+  new RegExp(ESC + "\\[\\??\\d*\\$p", "g"), // DECRQM, ANSI and DEC private (the `?2026$p` of #3299)
+  new RegExp(ESC + "P\\$q[^" + ESC + BEL + "]*(?:" + BEL + "|" + ESC + "\\\\)", "g"), // DECRQSS
+  new RegExp(ESC + "\\]4(?:;\\d+;\\?)+(?:" + BEL + "|" + ESC + "\\\\)", "g"), // OSC 4 palette query, every index asked
+  new RegExp(ESC + "\\]1[012](?:;\\?)+(?:" + BEL + "|" + ESC + "\\\\)", "g"), // OSC 10/11/12 fg/bg/cursor color query, chained or not
 ];
 
 export function stripTerminalQueries(data: string): string {
@@ -36,6 +44,14 @@ export function stripTerminalQueries(data: string): string {
 // state survives the buffer switch). Preceding the replay is what matters.
 export function terminalModePrefix(modes: readonly number[]): string {
   return modes.map((mode) => `${ESC}[?${mode}h`).join("");
+}
+
+const BRACKETED_PASTE_MODE = 2004;
+
+/** Set or reset bracketed paste to match `modes`. Both directions, because the browser's copy may
+ *  be wrong either way — and unlike 1049, re-asserting 2004 redraws nothing. */
+export function bracketedPasteSequence(modes: readonly number[]): string {
+  return `${ESC}[?${BRACKETED_PASTE_MODE}${modes.includes(BRACKETED_PASTE_MODE) ? "h" : "l"}`;
 }
 
 // A CSI sequence closes with a final byte in 0x40-0x7E; an OSC string closes with BEL

@@ -2,6 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { appendBoundedOutput, boundedTail, growOutputTail, stripTerminalQueries, terminalModePrefix } from "../../../../server/session/pty/terminal-replay.js";
 import { seededRandom } from "../../../helpers/seededRandom.js";
+import headless from "@xterm/headless";
 
 const ESC = String.fromCharCode(0x1b);
 const BEL = String.fromCharCode(0x07);
@@ -39,6 +40,70 @@ describe("stripTerminalQueries", () => {
     const styled = `${ESC}[31mhello${ESC}[0m world`;
     expect(stripTerminalQueries(styled)).toBe(styled);
     expect(stripTerminalQueries("plain text")).toBe("plain text");
+  });
+
+  // #3299: a leaked DECRQM reply reaches tmux as keys, and in copy-mode-vi its `?` opens a search.
+  it("removes DECRQM, ANSI and DEC private", () => {
+    expect(stripTerminalQueries(`a${ESC}[?2026$pb`)).toBe("ab");
+    expect(stripTerminalQueries(`${ESC}[4$p`)).toBe("");
+  });
+
+  it("removes DECRQSS (BEL- or ST-terminated)", () => {
+    expect(stripTerminalQueries(`${ESC}P$qm${ESC}\\`)).toBe("");
+    expect(stripTerminalQueries(`${ESC}P$q q${BEL}`)).toBe("");
+  });
+
+  it("removes OSC 4 and chained OSC 10/11/12 queries", () => {
+    expect(stripTerminalQueries(`${ESC}]4;1;?${BEL}`)).toBe("");
+    expect(stripTerminalQueries(`${ESC}]4;1;?;2;?${ESC}\\`)).toBe("");
+    expect(stripTerminalQueries(`${ESC}]10;?;?${BEL}`)).toBe("");
+  });
+
+  // The near misses: each SETS or RESETS something, and dropping it from the replay would change
+  // what the browser draws or which modes it is in.
+  it.each([
+    ["a DECSET of the same mode", `${ESC}[?2026h`],
+    ["a DECRQM reply", `${ESC}[?2026;2$y`],
+    ["a soft reset (`!p`, not `$p`)", `${ESC}[!p`],
+    ["a DECRQSS reply", `${ESC}P1$r0m${ESC}\\`],
+    ["an OSC 4 that sets a colour", `${ESC}]4;1;rgb:ff/00/00${BEL}`],
+    ["an OSC 10 that sets the foreground", `${ESC}]10;#ffffff${BEL}`],
+  ])("keeps %s", (_name, sequence) => {
+    expect(stripTerminalQueries(sequence)).toBe(sequence);
+  });
+});
+
+// The list above is only right if it is every query the emulator in the browser answers. Ask one.
+// Headless answers the CSI and DCS queries; the OSC colour queries are answered by the browser's
+// renderer, which headless lacks, so those rest on the cases above.
+describe("stripTerminalQueries against a real xterm", () => {
+  const repliesTo = (data: string): Promise<string> =>
+    new Promise((resolve) => {
+      const term = new headless.Terminal({ allowProposedApi: true });
+      const replies: string[] = [];
+      term.onData((reply) => replies.push(reply));
+      term.write(data, () => {
+        term.dispose();
+        resolve(replies.join(""));
+      });
+    });
+
+  const ANSWERED = [
+    `${ESC}[c`,
+    `${ESC}[>c`,
+    `${ESC}[5n`,
+    `${ESC}[6n`,
+    `${ESC}[?6n`,
+    `${ESC}[?2026$p`,
+    `${ESC}[4$p`,
+    `${ESC}P$qm${ESC}\\`,
+    `${ESC}P$qr${ESC}\\`,
+    `${ESC}P$q q${ESC}\\`,
+  ];
+
+  it.each(ANSWERED)("%j is answered raw, and not once stripped", async (query) => {
+    expect(await repliesTo(`x${query}y`)).not.toBe("");
+    expect(await repliesTo(stripTerminalQueries(`x${query}y`))).toBe("");
   });
 });
 

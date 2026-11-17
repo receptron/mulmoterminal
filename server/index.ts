@@ -39,6 +39,7 @@ import { syncCursorDirectoryMcp } from "./agents/cursor/cursor-mcp.js";
 import { ensureWorktreeEnv } from "./config/worktree/worktree-env.js";
 import { TOOL_GROUPS } from "../common/toolGroups.js";
 import { createPaneModeWatch } from "./session/pty/pane-mode-watch.js";
+import { createPaneModePublisher } from "./session/pty/pane-mode-publish.js";
 import { createHeatWatch } from "./session/activity/heat-watch.js";
 import type { HeatFrame } from "../common/playfulEffects.js";
 import { listProcessRows } from "./infra/process/process-list.js";
@@ -185,9 +186,7 @@ const tmuxSizeSync = createTmuxSizeSync({
 // Whether the pane is in tmux copy-mode, for the banner that says why typing does nothing (#2207).
 const paneModeWatch = createPaneModeWatch({
   inModeOf: (id) => tmuxPaneInMode(id),
-  publish: (id, inCopyMode) => {
-    sendFrame(ptys.get(id)?.ws, { type: "paneMode", inCopyMode });
-  },
+  publish: createPaneModePublisher({ socketOf: (id) => ptys.get(id)?.ws, terminalModesOf: (id) => tmuxTerminalModes(id) }),
 });
 
 // playfulEffects: how hard each watched session is working, told to its browser.
