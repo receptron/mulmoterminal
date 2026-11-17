@@ -1,6 +1,7 @@
 // The bytes of one file the caller has already authorised: its type, the sandbox, the name a save
 // gets, and Range. Shared by the raw route and the one-file grants, so a granted file is served
 // exactly as the raw route would serve it. `rel` is what the save name is taken from.
+import fs from "node:fs";
 import type { Request, Response } from "express";
 import { statFileOr404 } from "./statFileOr404.js";
 import { parseByteRange } from "./byte-range.js";
@@ -10,15 +11,38 @@ import { create as contentDisposition } from "content-disposition";
 import { rawServingPlan } from "./rawServingPlan.js";
 import { servedFileName } from "./servedFileName.js";
 import { streamFileToResponse } from "./streamFile.js";
+import { openVerifiedOr4xx } from "./openVerifiedOr4xx.js";
+import type { Recheck } from "../../files/verifiedWrite.js";
 
-export function sendRawFile(req: Request, res: Response, abs: string, rel: string): void {
+/** The served file: its size, and the descriptor to read when one was opened. */
+type ServedFile = { abs: string; rel: string; size: number; fd?: number };
+
+/** `recheck` is the containment check the caller passed `abs` through, asked again once the file is
+ *  open (#3306); without one (a granted file has no root to stay inside) the file is read by name. */
+export function sendRawFile(req: Request, res: Response, abs: string, rel: string, recheck?: Recheck): void {
   const stat = statFileOr404(res, abs);
   if (!stat) return;
-
-  const plan = rawServingPlan(abs, stat.size);
-  if (plan.tooLarge) {
-    res.status(413).json({ error: `file too large (${stat.size} bytes)` });
+  if (!recheck) {
+    sendBytes(req, res, { abs, rel, size: stat.size });
     return;
+  }
+  const fd = openVerifiedOr4xx(res, abs, recheck);
+  if (fd === null) return;
+  const handedToStream = { done: false };
+  try {
+    handedToStream.done = sendBytes(req, res, { abs, rel, size: fs.fstatSync(fd).size, fd });
+  } finally {
+    if (!handedToStream.done) fs.closeSync(fd);
+  }
+}
+
+/** The response for `file`; true once a stream has taken over its descriptor. */
+function sendBytes(req: Request, res: Response, file: ServedFile): boolean {
+  const { abs, rel, size, fd } = file;
+  const plan = rawServingPlan(abs, size);
+  if (plan.tooLarge) {
+    res.status(413).json({ error: `file too large (${size} bytes)` });
+    return false;
   }
 
   res.setHeader("Content-Type", plan.contentType);
@@ -38,24 +62,25 @@ export function sendRawFile(req: Request, res: Response, abs: string, rel: strin
   // Range support (required for <video>/<audio> seeking in Safari).
   const rangeHeader = req.headers.range;
   if (rangeHeader) {
-    const range = parseByteRange(rangeHeader, stat.size);
+    const range = parseByteRange(rangeHeader, size);
     // A well-formed but unsatisfiable range earns a 416; a malformed / unsupported one is
     // ignored (fall through to the full 200), per RFC 7233 — a 416 breaks a media seek.
     if (range.kind === "unsatisfiable") {
-      res.status(416).setHeader("Content-Range", `bytes */${stat.size}`);
+      res.status(416).setHeader("Content-Range", `bytes */${size}`);
       res.json({ error: "range not satisfiable" });
-      return;
+      return false;
     }
     if (range.kind === "range") {
       res.status(206);
-      res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${stat.size}`);
+      res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${size}`);
       res.setHeader("Content-Length", String(range.end - range.start + 1));
-      streamFileToResponse(abs, res, { start: range.start, end: range.end });
-      return;
+      streamFileToResponse(abs, res, { start: range.start, end: range.end }, fd);
+      return true;
     }
     // range.kind === "ignore" → serve the whole file below.
   }
 
-  res.setHeader("Content-Length", String(stat.size));
-  streamFileToResponse(abs, res);
+  res.setHeader("Content-Length", String(size));
+  streamFileToResponse(abs, res, undefined, fd);
+  return true;
 }

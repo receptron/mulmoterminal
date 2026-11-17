@@ -21,7 +21,7 @@ const rawUrl = (cwd: string, pathRel: string): string => `/api/files/raw?cwd=${e
 /** The page itself, once its base is authorised: contained, then sent under the preview CSP. */
 function sendContainedPage(res: Response, base: string, pathRel: string): void {
   const abs = resolveContained(base, pathRel, os.homedir());
-  if (abs) sendHtmlDocument(res, abs);
+  if (abs) sendHtmlDocument(res, abs, () => resolveContained(base, pathRel, os.homedir()));
   else res.status(403).json({ error: "path escapes the serving root" });
 }
 
