@@ -9,7 +9,7 @@ import { createRateLimitStore } from "./rate-limit-store.js";
 import { startRateLimitProbe, probeSpawnEnv } from "./rate-limit-probe.js";
 import { newProbeSessionId } from "../probe/probe-session.js";
 import { probeCwd } from "../probe/probe-cwd.js";
-import { ensureProbeFolderTrusted, isProbeFolderItself } from "../probe/probe-trust.js";
+import { folderTrustMarker, isFolderItself } from "../claude/own-folder-trust.js";
 import { claudeProjectPath, claudeUserConfigFile } from "../../session/project-dir.js";
 import { writeProbeScreen } from "../probe/probe-stall.js";
 import { removeProbeTranscript } from "../probe/probe-transcript.js";
@@ -49,21 +49,15 @@ const claudeIsRunnable = (): boolean => {
 // probe meets the prompt on its own.
 const PROBE_CWD = probeCwd(MULMOTERMINAL_HOME);
 
-// Config files a READ has found holding the folder's trust, so each login's is read once per server
-// rather than on every probe — the file runs to a megabyte on a long-lived install. A write is not
-// recorded: Claude Code's own save can land on top of it (probe-trust.ts), so the next probe reads
-// again and finds it, or writes again. A user who removes the entry after that read gets the
-// trust-prompt note until the server restarts, which is the by-hand path working as documented.
-const configFilesTrustingProbeFolder = new Set<string>();
+const markProbeFolder = folderTrustMarker();
 
 // Trust for the folder goes in the config of the login the probe runs on (#3206): an account's own
 // CLAUDE_CONFIG_DIR, else the server's default — which is also what a rotation token's probe reads.
 // Keyed by the folder's real path, which is what claude sees as its cwd — so a folder that is a
 // LINK gets no trust at all, since the real path would then be somebody else's directory.
 const markProbeFolderTrusted = (cwd: string, loginEnv: Record<string, string>): void => {
-  const configFile = claudeUserConfigFile(loginEnv.CLAUDE_CONFIG_DIR);
-  if (configFilesTrustingProbeFolder.has(configFile) || !isProbeFolderItself(cwd)) return;
-  if (ensureProbeFolderTrusted(configFile, claudeProjectPath(cwd)) === "trusted") configFilesTrustingProbeFolder.add(configFile);
+  if (!isFolderItself(cwd)) return;
+  markProbeFolder(claudeUserConfigFile(loginEnv.CLAUDE_CONFIG_DIR), claudeProjectPath(cwd));
 };
 
 // The folder is made on the way in rather than at boot, so one removed while the server runs costs

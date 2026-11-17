@@ -1,9 +1,22 @@
 // @vitest-environment node
-import { describe, it, expect, afterEach } from "vitest";
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { ensureProbeFolderTrusted, isProbeFolderItself, withProbeFolderTrusted } from "./probe-trust";
+import { ensureFolderTrusted, folderTrustMarker, isFolderItself, withFolderTrusted } from "./own-folder-trust";
 
 const DIR = "/home/me/.mulmoterminal/probe";
 
@@ -17,9 +30,9 @@ const CONFIG = JSON.stringify(
 const parsed = (text: string): Record<string, unknown> => JSON.parse(text);
 const projectsOf = (text: string): Record<string, unknown> => parsed(text).projects as Record<string, unknown>;
 
-describe("withProbeFolderTrusted (#3206)", () => {
+describe("withFolderTrusted (#3206)", () => {
   it("adds the folder as a trusted project and changes nothing else", () => {
-    const edit = withProbeFolderTrusted(CONFIG, DIR);
+    const edit = withFolderTrusted(CONFIG, DIR);
     expect(edit.outcome).toBe("write");
     if (edit.outcome !== "write") return;
     expect(projectsOf(edit.text)).toEqual({
@@ -33,18 +46,18 @@ describe("withProbeFolderTrusted (#3206)", () => {
   // Claude Code may already hold other answers for the folder (a user who opened it once); those
   // stay, and only the one field is added.
   it("keeps an existing entry's other fields", () => {
-    const edit = withProbeFolderTrusted(JSON.stringify({ projects: { [DIR]: { hasTrustDialogAccepted: false, lastCost: 0.1 } } }), DIR);
+    const edit = withFolderTrusted(JSON.stringify({ projects: { [DIR]: { hasTrustDialogAccepted: false, lastCost: 0.1 } } }), DIR);
     expect(edit.outcome).toBe("write");
     if (edit.outcome !== "write") return;
     expect(projectsOf(edit.text)[DIR]).toEqual({ hasTrustDialogAccepted: true, lastCost: 0.1 });
   });
 
   it("writes nothing when the folder is already trusted", () => {
-    expect(withProbeFolderTrusted(JSON.stringify({ projects: { [DIR]: { hasTrustDialogAccepted: true } } }), DIR)).toEqual({ outcome: "trusted" });
+    expect(withFolderTrusted(JSON.stringify({ projects: { [DIR]: { hasTrustDialogAccepted: true } } }), DIR)).toEqual({ outcome: "trusted" });
   });
 
   it("creates the projects map when the config has none", () => {
-    const edit = withProbeFolderTrusted("{}", DIR);
+    const edit = withFolderTrusted("{}", DIR);
     expect(edit.outcome).toBe("write");
     if (edit.outcome !== "write") return;
     expect(projectsOf(edit.text)).toEqual({ [DIR]: { hasTrustDialogAccepted: true } });
@@ -52,31 +65,31 @@ describe("withProbeFolderTrusted (#3206)", () => {
 
   // Half-written by Claude Code, or not its file at all: nothing here may guess at a repair.
   it("refuses anything that is not Claude Code's config", () => {
-    expect(withProbeFolderTrusted("{ not json", DIR)).toEqual({ outcome: "unreadable" });
-    expect(withProbeFolderTrusted("", DIR)).toEqual({ outcome: "unreadable" });
-    expect(withProbeFolderTrusted("[]", DIR)).toEqual({ outcome: "unreadable" });
-    expect(withProbeFolderTrusted("null", DIR)).toEqual({ outcome: "unreadable" });
-    expect(withProbeFolderTrusted(JSON.stringify({ projects: "yes" }), DIR)).toEqual({ outcome: "unreadable" });
-    expect(withProbeFolderTrusted(JSON.stringify({ projects: [] }), DIR)).toEqual({ outcome: "unreadable" });
+    expect(withFolderTrusted("{ not json", DIR)).toEqual({ outcome: "unreadable" });
+    expect(withFolderTrusted("", DIR)).toEqual({ outcome: "unreadable" });
+    expect(withFolderTrusted("[]", DIR)).toEqual({ outcome: "unreadable" });
+    expect(withFolderTrusted("null", DIR)).toEqual({ outcome: "unreadable" });
+    expect(withFolderTrusted(JSON.stringify({ projects: "yes" }), DIR)).toEqual({ outcome: "unreadable" });
+    expect(withFolderTrusted(JSON.stringify({ projects: [] }), DIR)).toEqual({ outcome: "unreadable" });
   });
 
   // An entry that is not an object is not Claude Code's own; replacing it would drop whatever it was.
   it("leaves an entry that is not an object alone", () => {
-    expect(withProbeFolderTrusted(JSON.stringify({ projects: { [DIR]: "odd" } }), DIR)).toEqual({ outcome: "unreadable" });
-    expect(withProbeFolderTrusted(JSON.stringify({ projects: { [DIR]: null } }), DIR)).toEqual({ outcome: "unreadable" });
-    expect(withProbeFolderTrusted(JSON.stringify({ projects: { [DIR]: [true] } }), DIR)).toEqual({ outcome: "unreadable" });
+    expect(withFolderTrusted(JSON.stringify({ projects: { [DIR]: "odd" } }), DIR)).toEqual({ outcome: "unreadable" });
+    expect(withFolderTrusted(JSON.stringify({ projects: { [DIR]: null } }), DIR)).toEqual({ outcome: "unreadable" });
+    expect(withFolderTrusted(JSON.stringify({ projects: { [DIR]: [true] } }), DIR)).toEqual({ outcome: "unreadable" });
   });
 
   it("matches the file's indentation and its trailing newline, either way", () => {
-    const without = withProbeFolderTrusted("{}", DIR);
-    const withNewline = withProbeFolderTrusted("{}\n", DIR);
+    const without = withFolderTrusted("{}", DIR);
+    const withNewline = withFolderTrusted("{}\n", DIR);
     expect(without.outcome === "write" && without.text.endsWith("}")).toBe(true);
     expect(withNewline.outcome === "write" && withNewline.text.endsWith("}\n")).toBe(true);
     expect(without.outcome === "write" && without.text).toContain('\n  "projects": {\n    "');
   });
 });
 
-describe("ensureProbeFolderTrusted (#3206)", () => {
+describe("ensureFolderTrusted (#3206)", () => {
   const dirs: string[] = [];
   const home = (): string => {
     const dir = mkdtempSync(path.join(tmpdir(), "mt-probe-trust-"));
@@ -89,7 +102,7 @@ describe("ensureProbeFolderTrusted (#3206)", () => {
     const file = path.join(home(), ".claude.json");
     writeFileSync(file, CONFIG, { mode: 0o600 });
 
-    expect(ensureProbeFolderTrusted(file, DIR)).toBe("written");
+    expect(ensureFolderTrusted(file, DIR)).toBe("written");
 
     expect(projectsOf(readFileSync(file, "utf8"))[DIR]).toEqual({ hasTrustDialogAccepted: true });
     if (process.platform !== "win32") expect(statSync(file).mode & 0o777).toBe(0o600);
@@ -103,7 +116,7 @@ describe("ensureProbeFolderTrusted (#3206)", () => {
     writeFileSync(file, CONFIG);
     chmodSync(file, 0o666);
 
-    expect(ensureProbeFolderTrusted(file, DIR)).toBe("written");
+    expect(ensureFolderTrusted(file, DIR)).toBe("written");
 
     expect(statSync(file).mode & 0o777).toBe(0o666);
   });
@@ -117,7 +130,7 @@ describe("ensureProbeFolderTrusted (#3206)", () => {
     writeFileSync(target, CONFIG);
     symlinkSync(target, link);
 
-    expect(ensureProbeFolderTrusted(link, DIR)).toBe("written");
+    expect(ensureFolderTrusted(link, DIR)).toBe("written");
 
     expect(lstatSync(link).isSymbolicLink()).toBe(true);
     expect(projectsOf(readFileSync(target, "utf8"))[DIR]).toEqual({ hasTrustDialogAccepted: true });
@@ -130,7 +143,7 @@ describe("ensureProbeFolderTrusted (#3206)", () => {
     writeFileSync(file, text);
     const before = statSync(file).mtimeMs;
 
-    expect(ensureProbeFolderTrusted(file, DIR)).toBe("trusted");
+    expect(ensureFolderTrusted(file, DIR)).toBe("trusted");
 
     expect(readFileSync(file, "utf8")).toBe(text);
     expect(statSync(file).mtimeMs).toBe(before);
@@ -141,7 +154,7 @@ describe("ensureProbeFolderTrusted (#3206)", () => {
   it("creates nothing when the login has no config file yet", () => {
     const file = path.join(home(), ".claude.json");
 
-    expect(ensureProbeFolderTrusted(file, DIR)).toBe("failed");
+    expect(ensureFolderTrusted(file, DIR)).toBe("failed");
 
     expect(existsSync(file)).toBe(false);
   });
@@ -150,7 +163,7 @@ describe("ensureProbeFolderTrusted (#3206)", () => {
     const file = path.join(home(), ".claude.json");
     writeFileSync(file, '{"projects": {"/x": {"hasTrustDialogAccepted": tr');
 
-    expect(ensureProbeFolderTrusted(file, DIR)).toBe("failed");
+    expect(ensureFolderTrusted(file, DIR)).toBe("failed");
 
     expect(readFileSync(file, "utf8")).toBe('{"projects": {"/x": {"hasTrustDialogAccepted": tr');
   });
@@ -158,7 +171,7 @@ describe("ensureProbeFolderTrusted (#3206)", () => {
 
 // Trust is keyed by the folder's real path, so a probe folder that is a LINK would have trust
 // written for wherever it points — a directory nobody approved, which is the line this must not cross.
-describe("isProbeFolderItself (#3206)", () => {
+describe("isFolderItself (#3206)", () => {
   const dirs: string[] = [];
   const scratch = (): string => {
     const dir = mkdtempSync(path.join(tmpdir(), "mt-probe-folder-"));
@@ -171,10 +184,10 @@ describe("isProbeFolderItself (#3206)", () => {
     const dir = scratch();
     const folder = path.join(dir, "probe");
     mkdirSync(folder);
-    expect(isProbeFolderItself(folder)).toBe(true);
+    expect(isFolderItself(folder)).toBe(true);
     writeFileSync(path.join(dir, "file"), "");
-    expect(isProbeFolderItself(path.join(dir, "file"))).toBe(false);
-    expect(isProbeFolderItself(path.join(dir, "missing"))).toBe(false);
+    expect(isFolderItself(path.join(dir, "file"))).toBe(false);
+    expect(isFolderItself(path.join(dir, "missing"))).toBe(false);
   });
 
   it.skipIf(process.platform === "win32")("refuses a link, even one that points at a real directory", () => {
@@ -183,6 +196,97 @@ describe("isProbeFolderItself (#3206)", () => {
     mkdirSync(elsewhere);
     const link = path.join(dir, "probe");
     symlinkSync(elsewhere, link);
-    expect(isProbeFolderItself(link)).toBe(false);
+    expect(isFolderItself(link)).toBe(false);
+  });
+});
+
+describe("folderTrustMarker (#3313)", () => {
+  const dirs: string[] = [];
+  const configFile = (text: string): string => {
+    const dir = mkdtempSync(path.join(tmpdir(), "mt-folder-trust-"));
+    dirs.push(dir);
+    const file = path.join(dir, ".claude.json");
+    writeFileSync(file, text);
+    return file;
+  };
+  const trustedIn = (file: string): boolean => withFolderTrusted(readFileSync(file, "utf8"), DIR).outcome === "trusted";
+  afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+
+  it("writes the trust, and writes it again when a later read no longer finds it", () => {
+    const mark = folderTrustMarker();
+    const file = configFile("{}");
+    mark(file, DIR);
+    expect(trustedIn(file)).toBe(true);
+
+    writeFileSync(file, JSON.stringify({ projects: {} }));
+    mark(file, DIR);
+    expect(trustedIn(file)).toBe(true);
+  });
+
+  it("leaves an unchanged config file unread once a read has found the trust in it", () => {
+    const ensure = vi.fn(ensureFolderTrusted);
+    const mark = folderTrustMarker(ensure);
+    const file = configFile(JSON.stringify({ projects: { [DIR]: { hasTrustDialogAccepted: true } } }));
+    mark(file, DIR);
+    mark(file, DIR);
+    expect(ensure).toHaveBeenCalledTimes(1);
+  });
+
+  // A save that dropped the entry after it was found — a user's, or one made from a stale copy — is
+  // a CHANGED file, so it is read again and the entry goes back.
+  it("reads a config file again once it has changed, and restores a dropped entry", () => {
+    const mark = folderTrustMarker();
+    const file = configFile(JSON.stringify({ projects: { [DIR]: { hasTrustDialogAccepted: true } } }));
+    mark(file, DIR);
+
+    writeFileSync(file, JSON.stringify({ numStartups: 2 }));
+    mark(file, DIR);
+    expect(trustedIn(file)).toBe(true);
+  });
+
+  // Size and mtime alone would call these the same file; the link now names one without the entry.
+  it.skipIf(process.platform === "win32")("reads again when a linked config is pointed at another file of the same size and mtime", () => {
+    const mark = folderTrustMarker();
+    const trustedText = JSON.stringify({ projects: { [DIR]: { hasTrustDialogAccepted: true } } });
+    const bare = JSON.stringify({ projects: {}, pad: "" });
+    const untrustedText = JSON.stringify({ projects: {}, pad: "x".repeat(trustedText.length - bare.length) });
+    expect(untrustedText).toHaveLength(trustedText.length);
+    const trusted = configFile(trustedText);
+    const untrusted = configFile(untrustedText);
+    const sameTime = new Date("2026-01-01T00:00:00Z");
+    utimesSync(trusted, sameTime, sameTime);
+    utimesSync(untrusted, sameTime, sameTime);
+    const link = path.join(path.dirname(trusted), "linked.claude.json");
+    symlinkSync(trusted, link);
+    mark(link, DIR);
+
+    rmSync(link);
+    symlinkSync(untrusted, link);
+    mark(link, DIR);
+    expect(trustedIn(untrusted)).toBe(true);
+  });
+
+  it("remembers each config file on its own, and each marker on its own", () => {
+    const ensure = vi.fn(ensureFolderTrusted);
+    const mark = folderTrustMarker(ensure);
+    const trusted = configFile(JSON.stringify({ projects: { [DIR]: { hasTrustDialogAccepted: true } } }));
+    const other = configFile("{}");
+    mark(trusted, DIR);
+    mark(other, DIR);
+    expect(trustedIn(other)).toBe(true);
+    mark(trusted, DIR);
+    expect(ensure).toHaveBeenCalledTimes(2);
+
+    const fresh = vi.fn(ensureFolderTrusted);
+    folderTrustMarker(fresh)(trusted, DIR);
+    expect(fresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("creates no config file for a login that has none", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "mt-folder-trust-"));
+    dirs.push(dir);
+    const file = path.join(dir, ".claude.json");
+    folderTrustMarker()(file, DIR);
+    expect(existsSync(file)).toBe(false);
   });
 });

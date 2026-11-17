@@ -155,7 +155,11 @@ A drag inserts the file's **own** path where the browser exposes one via `file:/
 withholds it — **Chrome**, and every browser when MulmoTerminal is open **from another
 machine**, where a local path would name nothing on the host — the file's bytes are sent
 instead, saved to a private per-session directory under the OS temp dir, and *that* path is
-inserted. The session is granted that directory at launch (Claude Code's `--add-dir`), so the agent reads it without a permission prompt; the copies are removed
+inserted. The session is granted that directory at launch (Claude Code's `--add-dir`), so the agent reads it without a permission prompt.
+Claude Code 2.1.326 and later also ask at startup to trust any folder added that way, so
+MulmoTerminal marks the parent of these directories trusted in Claude Code's config
+(`projects[<path>].hasTrustDialogAccepted` in `~/.claude.json`, or in the account's own
+`CLAUDE_CONFIG_DIR`) before the first one is granted. The copies are removed
 when the session ends, and any left by a crash are swept at the next start. Up to 110 MiB per
 file — the same ceiling as a phone attachment. **A session already running when you upgrade
 was launched without that grant**, so drops into it still prompt; new sessions don't.

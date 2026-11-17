@@ -48,6 +48,7 @@ import { claudeRendererEnv } from "./claude-fullscreen-env.js";
 import { requireResolution, resolveProvider, type DirModelChoice } from "../setup/provider-env.js";
 import { settingsArgument, mcpConfigArgument, appendedPromptArgument, withSettingsCleanup, type AppendedPromptArgument } from "../../session-settings.js";
 import { ensureDropsDir } from "../../session-drops.js";
+import { markDropsRootTrusted } from "../../drops-trust.js";
 import { effectiveChoice } from "../launch-choice.js";
 import { customAgentLaunch } from "./custom-agent-command.js";
 import type { CustomAgent } from "../../../../common/customAgents.js";
@@ -189,7 +190,9 @@ function printMovedNotice(sessionId: string, ws: WebSocket | null, tokenId: stri
 
 function sessionAddDirs(sessionId: string, configured: string[] | null | undefined): string[] | null | undefined {
   const dropsDirectory = ensureDropsDir(sessionId);
-  return dropsDirectory ? [...(configured ?? []), dropsDirectory] : configured;
+  if (!dropsDirectory) return configured;
+  markDropsRootTrusted(sessionId);
+  return [...(configured ?? []), dropsDirectory];
 }
 
 /**
