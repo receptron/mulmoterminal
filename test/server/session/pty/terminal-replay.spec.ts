@@ -2,6 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { appendBoundedOutput, boundedTail, growOutputTail, stripTerminalQueries, terminalModePrefix } from "../../../../server/session/pty/terminal-replay.js";
 import { seededRandom } from "../../../helpers/seededRandom.js";
+import headless from "@xterm/headless";
 
 const ESC = String.fromCharCode(0x1b);
 const BEL = String.fromCharCode(0x07);
@@ -39,6 +40,98 @@ describe("stripTerminalQueries", () => {
     const styled = `${ESC}[31mhello${ESC}[0m world`;
     expect(stripTerminalQueries(styled)).toBe(styled);
     expect(stripTerminalQueries("plain text")).toBe("plain text");
+  });
+
+  // #3299: a leaked DECRQM reply reaches tmux as keys, and in copy-mode-vi its `?` opens a search.
+  it("removes DECRQM, ANSI and DEC private", () => {
+    expect(stripTerminalQueries(`a${ESC}[?2026$pb`)).toBe("ab");
+    expect(stripTerminalQueries(`${ESC}[4$p`)).toBe("");
+    expect(stripTerminalQueries(`a${ESC}[?1;2$pb`)).toBe("ab");
+  });
+
+  it("removes DECRQSS ended by ST, or aborted by the next sequence's ESC", () => {
+    expect(stripTerminalQueries(`${ESC}P$qm${ESC}\\`)).toBe("");
+    expect(stripTerminalQueries(`${ESC}P$q q${ESC}[31mred`)).toBe(`${ESC}[31mred`);
+  });
+
+  // xterm keeps BEL as DCS payload, so a BEL never ends the query — or the strip would leave the
+  // rest of the payload to be drawn as text.
+  it("does not end a DECRQSS at BEL", () => {
+    expect(stripTerminalQueries(`${ESC}P$qm${BEL}more${ESC}\\after`)).toBe("after");
+  });
+
+  it("removes OSC 4 and chained OSC 10/11/12 queries", () => {
+    expect(stripTerminalQueries(`${ESC}]4;1;?${BEL}`)).toBe("");
+    expect(stripTerminalQueries(`${ESC}]4;1;?;2;?${ESC}\\`)).toBe("");
+    expect(stripTerminalQueries(`${ESC}]10;?;?${BEL}`)).toBe("");
+  });
+
+  // The near misses: each SETS or RESETS something, and dropping it from the replay would change
+  // what the browser draws or which modes it is in.
+  it.each([
+    ["a DECSET of the same mode", `${ESC}[?2026h`],
+    ["a DECRQM reply", `${ESC}[?2026;2$y`],
+    ["a soft reset (`!p`, not `$p`)", `${ESC}[!p`],
+    ["a DECRQSS reply", `${ESC}P1$r0m${ESC}\\`],
+    ["a DECRQSS aborted by CAN, which xterm does not answer", `${ESC}P$qm${String.fromCharCode(0x18)}after`],
+    ["a DECRQSS still open at the end, whose reply is due live", `${ESC}P$qm`],
+    ["an OSC 4 that sets a colour", `${ESC}]4;1;rgb:ff/00/00${BEL}`],
+    ["an OSC 10 that sets the foreground", `${ESC}]10;#ffffff${BEL}`],
+  ])("keeps %s", (_name, sequence) => {
+    expect(stripTerminalQueries(sequence)).toBe(sequence);
+  });
+});
+
+// The list above is only right if it is every query the emulator in the browser answers. Ask one.
+// Headless answers the CSI and DCS queries; the OSC colour queries are answered by the browser's
+// renderer, which headless lacks, so those rest on the cases above.
+describe("stripTerminalQueries against a real xterm", () => {
+  const render = (data: string): Promise<{ replies: string; screen: string }> =>
+    new Promise((resolve) => {
+      const term = new headless.Terminal({ allowProposedApi: true, cols: 40, rows: 2 });
+      const replies: string[] = [];
+      term.onData((reply) => replies.push(reply));
+      term.write(data, () => {
+        const screen = term.buffer.active.getLine(0)?.translateToString(true) ?? "";
+        term.dispose();
+        resolve({ replies: replies.join(""), screen });
+      });
+    });
+
+  const ANSWERED = [
+    `${ESC}[c`,
+    `${ESC}[>c`,
+    `${ESC}[5n`,
+    `${ESC}[6n`,
+    `${ESC}[?6n`,
+    `${ESC}[?2026$p`,
+    `${ESC}[4$p`,
+    `${ESC}[?1;2$p`,
+    `${ESC}P$qm${ESC}\\`,
+    `${ESC}P$qr${ESC}\\`,
+    `${ESC}P$q q${ESC}\\`,
+  ];
+
+  it.each(ANSWERED)("%j is answered raw, and not once stripped", async (query) => {
+    expect((await render(`x${query}y`)).replies).not.toBe("");
+    expect((await render(stripTerminalQueries(`x${query}y`))).replies).toBe("");
+  });
+
+  // What the strip removes must be what xterm would never have drawn: the screen is the same
+  // with or without it, whatever surrounds the query.
+  const CAN = String.fromCharCode(0x18);
+  it.each([
+    `a${ESC}P$qm${ESC}\\b`,
+    `a${ESC}P$qm${BEL}hidden${ESC}\\b`,
+    `a${ESC}P$qhidden${ESC}[31mred`,
+    `a${ESC}P$qm${CAN}shown`,
+    `a${ESC}[?1;2$pb${ESC}[?2026hc`,
+    `a${ESC}[5n${ESC}[6nb`,
+  ])("%j draws the same screen stripped, and is never answered", async (replay) => {
+    const raw = await render(replay);
+    const stripped = await render(stripTerminalQueries(replay));
+    expect(stripped.screen).toBe(raw.screen);
+    expect(stripped.replies).toBe("");
   });
 });
 
@@ -129,6 +222,21 @@ describe("appendBoundedOutput", () => {
 
   it("keeps a long OSC payload that closed before the cut", () => {
     const stream = `${"x".repeat(50)}${ESC}]52;c;${"QUJDRA".repeat(500)}${BEL}visible text`;
+    expect(appendBoundedOutput(stream, "", 12)).toBe("visible text");
+  });
+
+  // A DCS (DECRQSS, sixel, passthrough) cut open would otherwise draw its payload as text.
+  it.each([
+    ["ended by ST", `${ESC}P$qmmmmmmm${ESC}\\after`, "after"],
+    ["with a BEL in its payload", `${ESC}P$qmm${BEL}mmmmm${ESC}\\after`, "after"],
+    ["aborted by CAN", `${ESC}P$qmmmmmmm${String.fromCharCode(0x18)}after`, "after"],
+    ["aborted by the next sequence, which is kept", `${ESC}P$qmmmmmmm${ESC}[31mred`, `${ESC}[31mred`],
+  ])("drops a split DCS %s", (_name, tail, kept) => {
+    expect(appendBoundedOutput(`${"x".repeat(50)}${tail}`, "", tail.length - 4)).toBe(kept);
+  });
+
+  it("keeps what follows a DCS that closed before the cut", () => {
+    const stream = `${"x".repeat(50)}${ESC}P$qm${ESC}\\visible text`;
     expect(appendBoundedOutput(stream, "", 12)).toBe("visible text");
   });
 

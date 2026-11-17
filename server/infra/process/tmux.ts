@@ -544,6 +544,14 @@ export function tmuxTerminalModes(id: string): number[] {
   return r.status === 0 ? parseTmuxTerminalModes(r.stdout) : [];
 }
 
+/** Whether the pane's program has bracketed paste on, or null when tmux cannot say — a tmux without
+ *  the variable renders it empty. Unlike tmuxTerminalModes, "unknown" is kept apart from "off": the
+ *  caller corrects the browser, and reading "cannot say" as "off" would turn paste protection off. */
+export function tmuxBracketedPaste(id: string): boolean | null {
+  const r = tmux(["display-message", "-p", "-t", tmuxPaneTarget(id), "#{bracket_paste_flag}"]);
+  return r.status === 0 ? parseTmuxFlag(r.stdout) : null;
+}
+
 // Which client ttys to repaint, from `list-clients -F '#{client_pid} #{client_tty}'`.
 //
 // A session can carry SEVERAL clients — another mulmoterminal server holding it (the case
@@ -605,9 +613,10 @@ export async function tmuxWindowSize(id: string): Promise<{ cols: number; rows: 
   return r.status === 0 ? parseTmuxWindowSize(r.stdout) : null;
 }
 
-/** Parse `#{pane_in_mode}`. Null for anything but the two values tmux prints, so an unreadable
- *  answer never reads as "left copy-mode" and hides a banner the user still needs. */
-export function parsePaneInMode(stdout: string): boolean | null {
+/** Parse a boolean format variable such as `#{pane_in_mode}`. Null for anything but the two values
+ *  tmux prints, so an unreadable answer is never taken for "off" — for copy-mode, that would hide a
+ *  banner the user still needs. */
+export function parseTmuxFlag(stdout: string): boolean | null {
   const text = stdout.trim();
   if (text === "1") return true;
   if (text === "0") return false;
@@ -618,7 +627,7 @@ export function parsePaneInMode(stdout: string): boolean | null {
 // than to the program. Async for tmuxWindowSize's reason: it runs after input, on the hot path.
 export async function tmuxPaneInMode(id: string): Promise<boolean | null> {
   const r = await tmuxAsync(["display-message", "-p", "-t", tmuxPaneTarget(id), "#{pane_in_mode}"]);
-  return r.status === 0 ? parsePaneInMode(r.stdout) : null;
+  return r.status === 0 ? parseTmuxFlag(r.stdout) : null;
 }
 
 // Leave copy-mode without writing a byte to the program: `-X cancel` is a copy-mode command, not a

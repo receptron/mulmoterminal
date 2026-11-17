@@ -14,7 +14,15 @@ import { sessionToken } from "./session/credentials/token-sessions.js";
 import { rotationLoginLabel } from "../common/tokenRotation.js";
 import { countLiveSessions } from "./agents/token/token-assignment.js";
 import { enforceKeymap } from "./config/keymap/keymap-check.js";
-import { tmuxCancelCopyMode, tmuxPaneInMode, tmuxPanePidsBySessionAsync, tmuxRedrawClient, tmuxTerminalModes, tmuxWindowSize } from "./infra/process/tmux.js";
+import {
+  tmuxBracketedPaste,
+  tmuxCancelCopyMode,
+  tmuxPaneInMode,
+  tmuxPanePidsBySessionAsync,
+  tmuxRedrawClient,
+  tmuxTerminalModes,
+  tmuxWindowSize,
+} from "./infra/process/tmux.js";
 import { browserOriginHostnames, createIsAllowedHost, createIsAllowedOrigin } from "./infra/http/allowed-origin.js";
 import { serverErrorExit } from "./infra/process/server-exit.js";
 import { PORT, BIND_HOST, CLAUDE_CWD } from "./config/env.js";
@@ -39,6 +47,7 @@ import { syncCursorDirectoryMcp } from "./agents/cursor/cursor-mcp.js";
 import { ensureWorktreeEnv } from "./config/worktree/worktree-env.js";
 import { TOOL_GROUPS } from "../common/toolGroups.js";
 import { createPaneModeWatch } from "./session/pty/pane-mode-watch.js";
+import { createPaneModePublisher } from "./session/pty/pane-mode-publish.js";
 import { createHeatWatch } from "./session/activity/heat-watch.js";
 import type { HeatFrame } from "../common/playfulEffects.js";
 import { listProcessRows } from "./infra/process/process-list.js";
@@ -185,9 +194,7 @@ const tmuxSizeSync = createTmuxSizeSync({
 // Whether the pane is in tmux copy-mode, for the banner that says why typing does nothing (#2207).
 const paneModeWatch = createPaneModeWatch({
   inModeOf: (id) => tmuxPaneInMode(id),
-  publish: (id, inCopyMode) => {
-    sendFrame(ptys.get(id)?.ws, { type: "paneMode", inCopyMode });
-  },
+  publish: createPaneModePublisher({ entryOf: (id) => ptys.get(id), bracketedPasteOf: (id) => tmuxBracketedPaste(id) }),
 });
 
 // playfulEffects: how hard each watched session is working, told to its browser.

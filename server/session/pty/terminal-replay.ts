@@ -1,22 +1,35 @@
 // Terminal "query" control sequences an application writes to probe the emulator — Device
-// Attributes, device/cursor status, OSC color, kitty-keyboard flags, XTVERSION. The emulator
-// auto-REPLIES to each. That's correct live, but when we replay a reattached session's buffered
+// Attributes, device/cursor status, mode and setting requests (DECRQM / DECRQSS), OSC color,
+// kitty-keyboard flags, XTVERSION. The emulator auto-REPLIES to each. That's correct live, but when we replay a reattached session's buffered
 // output, xterm re-answers the queries baked into it and the stale replies are sent back as
 // INPUT, surfacing as junk like "0;276;0c" in the app's prompt (codex writes several at startup).
 // Strip them from the replay only: they render nothing, so the visual restore is unchanged, and
 // the app re-queries live if it still needs to.
 //
+// A reply that leaks is worse than junk in a prompt when the pane is in tmux copy-mode: tmux reads
+// it as keys, and under `mode-keys vi` the `?` of a DECRQM reply opens a search prompt that eats the
+// next paste's opening bracket (#3299). So the list is every query xterm answers, not only the ones
+// seen so far — test/server/session/pty/terminal-replay.spec.ts feeds each through a real xterm.
+//
 // Built via new RegExp so the ESC/BEL control chars stay out of the regex source (satisfies
 // no-control-regex without a disable).
 const ESC = String.fromCharCode(0x1b);
 const BEL = String.fromCharCode(0x07);
+const CAN = String.fromCharCode(0x18);
+const SUB = String.fromCharCode(0x1a);
 
 const QUERY_PATTERNS: RegExp[] = [
   new RegExp(ESC + "\\[[>=]?\\d*c", "g"), // Device Attributes (DA1/DA2/DA3) — the "…c" symptom
   new RegExp(ESC + "\\[\\??\\d*n", "g"), // device / cursor status report (DSR / CPR)
   new RegExp(ESC + "\\[\\?u", "g"), // kitty keyboard flags query
   new RegExp(ESC + "\\[>\\d*q", "g"), // XTVERSION
-  new RegExp(ESC + "\\]1[012];\\?(?:" + BEL + "|" + ESC + "\\\\)", "g"), // OSC 10/11/12 fg/bg/cursor color query
+  new RegExp(ESC + "\\[\\??\\d*(?:;\\d*)*\\$p", "g"), // DECRQM, ANSI and DEC private, any parameter count (the `?2026$p` of #3299)
+  // DECRQSS, ended as xterm ends a DCS: by ST, or by any other ESC — which aborts it and is still
+  // answered. Never by BEL, which xterm keeps as payload; a CAN/SUB abort is not answered, so it
+  // is left alone, and so is one still open at the end of the replay (its reply is due live).
+  new RegExp(ESC + "P\\$q[^" + ESC + CAN + SUB + "]*(?:" + ESC + "\\\\|(?=" + ESC + "))", "g"),
+  new RegExp(ESC + "\\]4(?:;\\d+;\\?)+(?:" + BEL + "|" + ESC + "\\\\)", "g"), // OSC 4 palette query, every index asked
+  new RegExp(ESC + "\\]1[012](?:;\\?)+(?:" + BEL + "|" + ESC + "\\\\)", "g"), // OSC 10/11/12 fg/bg/cursor color query, chained or not
 ];
 
 export function stripTerminalQueries(data: string): string {
@@ -38,6 +51,12 @@ export function terminalModePrefix(modes: readonly number[]): string {
   return modes.map((mode) => `${ESC}[?${mode}h`).join("");
 }
 
+/** Set or reset bracketed paste. Both directions, because the browser's copy may be wrong either
+ *  way — and unlike 1049, re-asserting 2004 redraws nothing. */
+export function bracketedPasteSequence(on: boolean): string {
+  return `${ESC}[?2004${on ? "h" : "l"}`;
+}
+
 // A CSI sequence closes with a final byte in 0x40-0x7E; an OSC string closes with BEL
 // or ST. Neither can appear inside the sequence before its terminator, so the first
 // occurrence IS the end.
@@ -46,6 +65,9 @@ const CSI_FINAL = /[\x40-\x7E]/;
 // leaks into the retained output. The trailing `?` still matches a lone ESC, which is
 // how a terminal aborts an unfinished OSC.
 const OSC_TERMINATOR = new RegExp(BEL + "|" + ESC + "\\\\?");
+// A DCS (DECRQSS, sixel, passthrough) ends at ST, is aborted by CAN/SUB, or by any other ESC —
+// which starts the NEXT sequence, so it is looked at rather than consumed. BEL is payload.
+const DCS_END = new RegExp(ESC + "\\\\|[" + CAN + SUB + "]|(?=" + ESC + ")");
 
 // Past the END of the terminator, not past its first character — ST is two bytes wide.
 const firstMatchEnd = (text: string, terminator: RegExp): number => {
@@ -83,6 +105,10 @@ const splitSequenceLength = (combined: string, cutAt: number, cut: string): numb
   if (introducer === "]") {
     if (OSC_TERMINATOR.test(afterEscape.slice(1))) return 0;
     return consumedIntroducer + firstMatchEnd(retained, OSC_TERMINATOR);
+  }
+  if (introducer === "P") {
+    if (DCS_END.test(afterEscape.slice(1))) return 0;
+    return consumedIntroducer + firstMatchEnd(retained, DCS_END);
   }
   // A two-character sequence (ESC + one byte). It is complete unless that byte is the
   // first retained character, in which case dropping it alone is enough.
