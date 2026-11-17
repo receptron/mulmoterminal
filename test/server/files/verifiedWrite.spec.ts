@@ -113,6 +113,22 @@ describe("createFileVerified", () => {
     cleanup();
   });
 
+  it("is passed by three swaps timed to the instant (documented limit)", () => {
+    const { root, outside, recheck, swapOut, swapBack, cleanup } = project();
+    const abs = resolveContained(root, "docs/new.md", os.homedir()) ?? "";
+    swapOut();
+    const recheckThenSwapOutAgain = () => {
+      swapBack();
+      writeFileSync(path.join(root, "docs", "new.md"), ""); // what the check now names must exist to be named
+      const contained = recheck("docs/new.md")();
+      swapOut();
+      return contained;
+    };
+    expect(createFileVerified(abs, recheckThenSwapOutAgain)).toBe("written");
+    expect(readFileSync(path.join(outside, "new.md"), "utf8")).toBe("");
+    cleanup();
+  });
+
   it("answers escaped when the folder became a link out after the check", () => {
     const { root, recheck, swapOut, cleanup } = project();
     const abs = resolveContained(root, "docs/new.md", os.homedir()) ?? "";

@@ -6,8 +6,10 @@
 // and so is one undone before the re-check, since the check then names the inside file. What it does
 // not hold:
 // - the identity is looked up by NAME, so three swaps each timed to the instant (out before the open,
-//   back before the re-check, out again before that lookup) still pass it. Binding the lookup to the
-//   open file needs a descriptor-relative call that Node offers on no platform but Linux (/proc).
+//   back before the re-check, out again before that lookup) still pass it. Once it passes, the write
+//   itself goes through the descriptor, so a later rename cannot move it. Binding the lookup to the
+//   open file needs its path from the descriptor: Linux's /proc/self/fd gives one, macOS's /dev/fd
+//   answers only what fstat does (readlink is EINVAL there), and Node has no portable call.
 // - a file the open had to create outside is left there, EMPTY. Removing it by name would be a second
 //   check-then-act, and a swap in that gap would delete someone else's file.
 // - a hard link (or a bind mount) is the same file by device and inode, so writing to one inside the
