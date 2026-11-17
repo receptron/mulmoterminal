@@ -49,14 +49,23 @@ async function readHeadText(abs: string, maxBytes: number): Promise<string | nul
   return shown.ok ? shown.stdout : null;
 }
 
+const ESCAPES = { error: "path escapes the project root" };
+
 export function mountFilesGitStatusRoute(app: Express, deps: { base: (cwd: unknown) => string; maxHeadBytes: number; maxStatusEntries?: number }): void {
   const maxEntries = deps.maxStatusEntries ?? MAX_GIT_STATUS_ENTRIES;
   // GET /api/files/browse/head?cwd=&path= — what the editor marks changes against (#2497). The
   // same containment as the text route: the path may not leave the base, lexically or by a link.
+  //
+  // git runs in the file's folder and opens it itself, so the check is asked again once git is done:
+  // a HEAD read through a folder swapped for a link out — another repository's file — still in place
+  // is refused rather than answered (#3306). A swap undone before then is not seen.
   app.get("/api/files/browse/head", async (req, res) => {
-    const abs = resolveContained(deps.base(req.query.cwd), typeof req.query.path === "string" ? req.query.path : "", os.homedir());
-    if (abs) res.json({ text: await readHeadText(abs, deps.maxHeadBytes) });
-    else res.status(403).json({ error: "path escapes the project root" });
+    const contained = () => resolveContained(deps.base(req.query.cwd), typeof req.query.path === "string" ? req.query.path : "", os.homedir());
+    const abs = contained();
+    if (!abs) return res.status(403).json(ESCAPES);
+    const text = await readHeadText(abs, deps.maxHeadBytes);
+    if (contained() === null) return res.status(403).json(ESCAPES);
+    res.json({ text });
   });
 
   app.get("/api/files/browse/git-status", async (req, res) => {
