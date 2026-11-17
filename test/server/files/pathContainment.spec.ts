@@ -147,6 +147,15 @@ describe("realContainedWithin (symlink-safe containment)", () => {
   });
 });
 
+// What the platform's own realpath answers for `p`, or null where it cannot resolve it.
+const kernelRealpath = (p: string): string | null => {
+  try {
+    return fs.realpathSync.native(p);
+  } catch {
+    return null;
+  }
+};
+
 // #3303. A link whose target does not exist yet reads as absent to `existsSync`, so it used to be
 // taken for a file not yet created — and a write through it created the file where it points.
 describe("realContainedWithin follows a dangling link to where it points", () => {
@@ -183,8 +192,10 @@ describe("realContainedWithin follows a dangling link to where it points", () =>
     writeFileSync(path.join(root, "new.txt"), "inside");
     symlinkSync(path.join(outside, "sub"), path.join(root, "hop"));
     symlinkSync(["hop", "..", "new.txt"].join(path.sep), path.join(root, "notes")); // not path.join, which would cancel `hop/..`
-    // `hop/..` is the folder outside, not the root: the link points at outside/new.txt.
-    expect(realContainedWithin(root, path.join(root, "notes"))).toBeNull();
+    // POSIX follows `hop` before the `..`, so the link points at outside/new.txt and dangles; Windows
+    // cancels `hop/..` first and reaches root/new.txt. The platform's realpath is the answer either way.
+    const notes = path.join(root, "notes");
+    expect(realContainedWithin(root, notes)).toBe(kernelRealpath(notes));
     cleanup();
   });
 
@@ -197,14 +208,7 @@ describe("realContainedWithin follows a dangling link to where it points", () =>
     // A trailing separator after a file: Linux refuses it (ENOTDIR) and macOS resolves it to the file.
     // Whatever the platform's own realpath says is the answer.
     const asFolder = path.join(root, "file-as-folder");
-    const kernel = (() => {
-      try {
-        return fs.realpathSync.native(asFolder);
-      } catch {
-        return null;
-      }
-    })();
-    expect(realContainedWithin(root, asFolder)).toBe(kernel);
+    expect(realContainedWithin(root, asFolder)).toBe(kernelRealpath(asFolder));
     cleanup();
   });
 
@@ -228,12 +232,25 @@ describe("realContainedWithin follows a dangling link to where it points", () =>
     cleanup();
   });
 
-  it("accepts a dangling link that stays inside, as the file it would create", () => {
+  it.skipIf(process.platform === "win32")("accepts a dangling link that stays inside, as the file it would create", () => {
     const { root, cleanup } = layout();
     symlinkSync(path.join(root, "docs", "later.md"), path.join(root, "alias.md"));
     symlinkSync(path.join(root, "docs", "later"), path.join(root, "alias-dir"));
     expect(realContainedWithin(root, path.join(root, "alias.md"))).toBe(path.join(root, "docs", "later.md"));
     expect(realContainedWithin(root, path.join(root, "alias-dir", "new.md"))).toBe(path.join(root, "docs", "later", "new.md"));
+    cleanup();
+  });
+
+  // Windows reads a relative target's `..` on paper and has target forms of its own; the walk is not
+  // trusted to match it, so there a dangling link is refused even when it would stay inside.
+  it("refuses every dangling link on Windows, one that stays inside included", () => {
+    const { root, cleanup } = layout();
+    symlinkSync(path.join(root, "docs", "later.md"), path.join(root, "alias.md"));
+    writeFileSync(path.join(root, "docs", "there.md"), "x");
+    symlinkSync(path.join(root, "docs", "there.md"), path.join(root, "resolves.md"));
+    expect(realContainedWithin(root, path.join(root, "alias.md"), "win32")).toBeNull();
+    expect(realContainedWithin(root, path.join(root, "docs", "new.md"), "win32")).toBe(path.join(root, "docs", "new.md"));
+    expect(realContainedWithin(root, path.join(root, "resolves.md"), "win32")).toBe(path.join(root, "docs", "there.md"));
     cleanup();
   });
 

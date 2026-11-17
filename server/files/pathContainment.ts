@@ -5,7 +5,6 @@
 import path from "node:path";
 import fs from "node:fs";
 import { isSamePath, isWithin } from "../infra/fs/path-within.js";
-import { unwalkableLinkTarget } from "./linkTargetForm.js";
 
 // Resolve a client-supplied project dir: absolute + existing dir, else the default
 // workspace (mirrors index.ts resolveWorkspace). A leading `~` is expanded first — the browser
@@ -76,7 +75,7 @@ export function containedPath(base: string, rel: string): string | null {
 export function resolveContained(base: string, rel: string, homeDir: string, platform: NodeJS.Platform = process.platform): string | null {
   if (namesAWindowsDevice(rel, platform)) return null;
   const lexical = containedPath(base, expandTilde(rel, homeDir));
-  return lexical ? realContainedWithin(base, lexical) : null;
+  return lexical ? realContainedWithin(base, lexical, platform) : null;
 }
 
 /** The absolute path `rel` names under `base` when `resolveContained` refuses it ONLY because a
@@ -85,7 +84,7 @@ export function resolveContained(base: string, rel: string, homeDir: string, pla
 export function symlinkEscapeOf(base: string, rel: string, homeDir: string, platform: NodeJS.Platform = process.platform): string | null {
   if (namesAWindowsDevice(rel, platform)) return null;
   const lexical = containedPath(base, expandTilde(rel, homeDir));
-  return lexical !== null && realContainedWithin(base, lexical) === null ? lexical : null;
+  return lexical !== null && realContainedWithin(base, lexical, platform) === null ? lexical : null;
 }
 
 /** Contain a path a BROWSER named, against the directories this server already serves files
@@ -191,17 +190,17 @@ export function realpathOr(p: string): string {
 // that points outside it. This resolves symlinks in the path's existing portion (a
 // not-yet-created write target has none) and confirms the real path still lands within
 // `base`. Returns the real absolute path, or null if it escapes.
-export function realContainedWithin(base: string, absLexical: string): string | null {
+export function realContainedWithin(base: string, absLexical: string, platform: NodeJS.Platform = process.platform): string | null {
   const root = realpathOr(path.resolve(base));
-  const real = realLocationOrNull(absLexical);
+  const real = realLocationOrNull(absLexical, platform);
   return real !== null && isWithin(root, real) ? real : null;
 }
 
 // A link removed or swapped between the lstat and the readlink makes those throw: refuse rather than
 // fail the request, since where the path leads could not be established.
-function realLocationOrNull(abs: string): string | null {
+function realLocationOrNull(abs: string, platform: NodeJS.Platform): string | null {
   try {
-    return realLocationOf(abs, { hopsLeft: MAX_LINK_HOPS });
+    return realLocationOf(abs, { hopsLeft: MAX_LINK_HOPS, followsDangling: platform !== "win32" });
   } catch {
     return null;
   }
@@ -211,17 +210,23 @@ function realLocationOrNull(abs: string): string | null {
 // (SYMLOOP_MAX), and a cycle never ends at all. One budget for the whole resolution, nested links
 // included: a count per call would let targets that name other dangling links multiply the work.
 const MAX_LINK_HOPS = 40;
-interface LinkBudget {
+
+// Windows is not walked at all: it cancels a relative target's `..` on paper before following
+// anything, has drive-relative and `\\?\` targets of its own, and the walk below disagreed with it
+// in CI. A dangling link is refused there instead, which costs only creating a file through a link
+// whose target is not there yet.
+interface LinkWalk {
   hopsLeft: number;
+  followsDangling: boolean;
 }
 
 /** Where `abs` really is: its existing portion resolved through symlinks, the not-yet-created rest
  *  appended. A DANGLING link is part of the existing portion and is followed to where it points,
  *  because a write through it creates the file there — `existsSync` follows the link and would call
  *  it absent. Null when the links do not end. */
-function realLocationOf(abs: string, budget: LinkBudget): string | null {
+function realLocationOf(abs: string, walk: LinkWalk): string | null {
   const { existing, rest } = splitAtLastEntry(abs);
-  const real = realEntry(existing, budget);
+  const real = realEntry(existing, walk);
   return real === null ? null : path.resolve(real, ...rest);
 }
 
@@ -257,17 +262,17 @@ function hasEntry(p: string): boolean {
 
 /** The real path of an entry that exists. A link that does not resolve to the end (its target is
  *  missing, or the links loop) is followed to where it points, which is where a write through it lands. */
-function realEntry(entry: string, budget: LinkBudget): string | null {
+function realEntry(entry: string, walk: LinkWalk): string | null {
   try {
     return fs.realpathSync.native(entry);
   } catch {
     // dangling, looping, or unreadable: decided below
   }
   if (!fs.lstatSync(entry).isSymbolicLink()) return entry;
-  if (budget.hopsLeft <= 0) return null;
-  budget.hopsLeft -= 1;
+  if (!walk.followsDangling || walk.hopsLeft <= 0) return null;
+  walk.hopsLeft -= 1;
   // From the folder's REAL path, as the OS does: the spelling may have reached it through another link.
-  return followTarget(realpathOr(path.dirname(entry)), fs.readlinkSync(entry), budget);
+  return followTarget(realpathOr(path.dirname(entry)), fs.readlinkSync(entry), walk);
 }
 
 // A backslash is a separator only on Windows; on POSIX it is a character a name may contain.
@@ -276,19 +281,18 @@ const TARGET_SEPARATORS = path.sep === "\\" ? /[\\/]+/ : /\/+/;
 /** Where a link's target leads, walked one component at a time as the OS walks it: a link met on the
  *  way is followed BEFORE a later `..` applies. `path.resolve` would cancel `hop/..` on paper first,
  *  and land somewhere the link does not point. */
-function followTarget(realFolder: string, target: string, budget: LinkBudget): string | null {
-  if (unwalkableLinkTarget(target, process.platform)) return null;
+function followTarget(realFolder: string, target: string, walk: LinkWalk): string | null {
   const root = path.isAbsolute(target) ? path.parse(target).root : "";
   const parts = target.slice(root.length).split(TARGET_SEPARATORS);
-  return parts.reduce<string | null>((at, part) => (at === null ? null : stepInto(at, part, budget)), root === "" ? realFolder : root);
+  return parts.reduce<string | null>((at, part) => (at === null ? null : stepInto(at, part, walk)), root === "" ? realFolder : root);
 }
 
-function stepInto(at: string, part: string, budget: LinkBudget): string | null {
+function stepInto(at: string, part: string, walk: LinkWalk): string | null {
   // The OS stops at a file with more of the path after it (ENOTDIR); going on would answer a path
   // the link does not lead to.
   if (isExistingNonDirectory(at)) return null;
   if (part === "" || part === ".") return at;
   if (part === "..") return path.dirname(at);
   const next = path.join(at, part);
-  return hasEntry(next) ? realEntry(next, budget) : next;
+  return hasEntry(next) ? realEntry(next, walk) : next;
 }
