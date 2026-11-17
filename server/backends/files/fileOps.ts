@@ -11,12 +11,21 @@
 // a symlink placed by something else (a dependency, another process) from being followed
 // out of the sandbox.
 //
+// Those checks answer, and then the operation acts by name, so a folder swapped for a link out in
+// between would carry it out (#3306). The contents — read, readBytes, write — therefore go through
+// @mulmoclaude/core's verified open and write, as MulmoClaude's confined ops do: a read proves the
+// open handle is the in-root file, and a write verifies its staging file before renaming it into
+// place. The anchor is the root's own realpath, so a ROOT replaced by a link is not caught, as
+// before. stat / exists / readDir / unlink stay check-then-act, and so do the parent folders a write
+// creates: a swap before that mkdir can leave empty folders outside (Node has no mkdirat).
+//
 // `rootFor` is invoked PER OPERATION rather than captured: the workspace is injected
 // at boot, after these ops are already bound into the plugin registry's closures.
 import fs from "fs/promises";
 import { realpathSync } from "node:fs";
 import path from "path";
 import type { FileOps } from "gui-chat-protocol";
+import { openVerifiedWithinScope, realpathIfPresent, resolveExistingWithinRoot, writeFileVerifiedInScope, type VerifiedScope } from "@mulmoclaude/core/files";
 import { isWithin } from "../../infra/fs/path-within.js";
 
 const MAX_SYMLINK_DEPTH = 40;
@@ -50,6 +59,31 @@ async function realpathAllowingMissing(p: string, depth = 0): Promise<string> {
   }
 }
 
+const anchoredAt = (rootReal: string): VerifiedScope => ({ trustedReal: rootReal, scopeWithinTrusted: "" });
+
+/** `abs`'s bytes, read only through a handle proven to be the in-root file; null when it is missing,
+ *  outside, or swapped during the call — all of which a caller sees as ENOENT, so one treating a
+ *  missing file as "not there" stays closed. */
+async function readVerifiedFile(root: string, abs: string): Promise<Buffer | null> {
+  const rootReal = await realpathIfPresent(root);
+  const handle = rootReal === null ? null : await openVerifiedWithinScope(anchoredAt(rootReal), path.relative(root, abs));
+  if (handle === null) return null;
+  try {
+    return await handle.readFile();
+  } finally {
+    await handle.close();
+  }
+}
+
+/** Write to `realAbs`, the real place the check found, so a link is written THROUGH (its target is
+ *  replaced or created) rather than replaced itself. False when its folder is not in the root now. */
+async function writeVerifiedFile(realRoot: string, realAbs: string, content: string | Uint8Array): Promise<boolean> {
+  const dirReal = await resolveExistingWithinRoot(realRoot, path.relative(realRoot, path.dirname(realAbs)));
+  if (dirReal === null) return false;
+  await writeFileVerifiedInScope(anchoredAt(realRoot), dirReal, path.basename(realAbs), content);
+  return true;
+}
+
 export function createFileOps(rootFor: () => string, label: string): FileOps {
   const lexicalAbs = (rel: string): { root: string; abs: string } => {
     const root = path.resolve(rootFor());
@@ -60,26 +94,40 @@ export function createFileOps(rootFor: () => string, label: string): FileOps {
     return { root, abs };
   };
 
-  const safeAbs = async (rel: string): Promise<string> => {
+  /** `rel` checked, as the path it was asked by and as the real place it lands (links followed). */
+  const containedPaths = async (rel: string): Promise<{ abs: string; realRoot: string; realAbs: string }> => {
     const { root, abs } = lexicalAbs(rel);
     const [realRoot, realAbs] = await Promise.all([realpathAllowingMissing(root), realpathAllowingMissing(abs)]);
     if (!isWithin(realRoot, realAbs)) {
       throw new Error(`${label} path escapes its root via symlink: ${rel}`);
     }
-    return abs;
+    return { abs, realRoot, realAbs };
+  };
+
+  const safeAbs = async (rel: string): Promise<string> => (await containedPaths(rel)).abs;
+
+  const readVerified = async (rel: string): Promise<Buffer> => {
+    const bytes = await readVerifiedFile(path.resolve(rootFor()), await safeAbs(rel));
+    if (bytes === null) throw Object.assign(new Error(`${label} file is not inside its root: ${rel}`), { code: "ENOENT" });
+    return bytes;
+  };
+
+  const writeVerified = async (rel: string, content: string | Uint8Array): Promise<void> => {
+    const { abs } = await containedPaths(rel);
+    await fs.mkdir(path.dirname(abs), { recursive: true });
+    const { realRoot, realAbs } = await containedPaths(rel);
+    if (!(await writeVerifiedFile(realRoot, realAbs, content))) throw new Error(`${label} path escapes its root via symlink: ${rel}`);
   };
 
   return {
     async read(rel) {
-      return fs.readFile(await safeAbs(rel), "utf8");
+      return (await readVerified(rel)).toString("utf8");
     },
     async readBytes(rel) {
-      return new Uint8Array(await fs.readFile(await safeAbs(rel)));
+      return new Uint8Array(await readVerified(rel));
     },
     async write(rel, content) {
-      const abs = await safeAbs(rel);
-      await fs.mkdir(path.dirname(abs), { recursive: true });
-      await fs.writeFile(abs, content);
+      await writeVerified(rel, content);
     },
     async readDir(rel) {
       return fs.readdir(await safeAbs(rel));
