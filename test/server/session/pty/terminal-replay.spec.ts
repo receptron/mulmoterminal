@@ -46,6 +46,7 @@ describe("stripTerminalQueries", () => {
   it("removes DECRQM, ANSI and DEC private", () => {
     expect(stripTerminalQueries(`a${ESC}[?2026$pb`)).toBe("ab");
     expect(stripTerminalQueries(`${ESC}[4$p`)).toBe("");
+    expect(stripTerminalQueries(`a${ESC}[?1;2$pb`)).toBe("ab");
   });
 
   it("removes DECRQSS (BEL- or ST-terminated)", () => {
@@ -96,6 +97,7 @@ describe("stripTerminalQueries against a real xterm", () => {
     `${ESC}[?6n`,
     `${ESC}[?2026$p`,
     `${ESC}[4$p`,
+    `${ESC}[?1;2$p`,
     `${ESC}P$qm${ESC}\\`,
     `${ESC}P$qr${ESC}\\`,
     `${ESC}P$q q${ESC}\\`,

@@ -21,7 +21,7 @@ const QUERY_PATTERNS: RegExp[] = [
   new RegExp(ESC + "\\[\\??\\d*n", "g"), // device / cursor status report (DSR / CPR)
   new RegExp(ESC + "\\[\\?u", "g"), // kitty keyboard flags query
   new RegExp(ESC + "\\[>\\d*q", "g"), // XTVERSION
-  new RegExp(ESC + "\\[\\??\\d*\\$p", "g"), // DECRQM, ANSI and DEC private (the `?2026$p` of #3299)
+  new RegExp(ESC + "\\[\\??\\d*(?:;\\d*)*\\$p", "g"), // DECRQM, ANSI and DEC private, any parameter count (the `?2026$p` of #3299)
   new RegExp(ESC + "P\\$q[^" + ESC + BEL + "]*(?:" + BEL + "|" + ESC + "\\\\)", "g"), // DECRQSS
   new RegExp(ESC + "\\]4(?:;\\d+;\\?)+(?:" + BEL + "|" + ESC + "\\\\)", "g"), // OSC 4 palette query, every index asked
   new RegExp(ESC + "\\]1[012](?:;\\?)+(?:" + BEL + "|" + ESC + "\\\\)", "g"), // OSC 10/11/12 fg/bg/cursor color query, chained or not
@@ -46,12 +46,10 @@ export function terminalModePrefix(modes: readonly number[]): string {
   return modes.map((mode) => `${ESC}[?${mode}h`).join("");
 }
 
-const BRACKETED_PASTE_MODE = 2004;
-
-/** Set or reset bracketed paste to match `modes`. Both directions, because the browser's copy may
- *  be wrong either way — and unlike 1049, re-asserting 2004 redraws nothing. */
-export function bracketedPasteSequence(modes: readonly number[]): string {
-  return `${ESC}[?${BRACKETED_PASTE_MODE}${modes.includes(BRACKETED_PASTE_MODE) ? "h" : "l"}`;
+/** Set or reset bracketed paste. Both directions, because the browser's copy may be wrong either
+ *  way — and unlike 1049, re-asserting 2004 redraws nothing. */
+export function bracketedPasteSequence(on: boolean): string {
+  return `${ESC}[?2004${on ? "h" : "l"}`;
 }
 
 // A CSI sequence closes with a final byte in 0x40-0x7E; an OSC string closes with BEL

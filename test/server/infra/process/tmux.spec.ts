@@ -14,7 +14,7 @@ import {
   isResumableTmuxSession,
   parseTmuxEnvironment,
   parseAttachedClientCount,
-  parsePaneInMode,
+  parseTmuxFlag,
   parseTmuxClientSessions,
   parseTmuxSessionActivity,
   parseTmuxTerminalModes,
@@ -427,17 +427,17 @@ describe("tmuxClientUnsetNames", () => {
   });
 });
 
-describe("parsePaneInMode", () => {
+describe("parseTmuxFlag", () => {
   it("reads the two values tmux prints", () => {
-    expect(parsePaneInMode("1\n")).toBe(true);
-    expect(parsePaneInMode("0\n")).toBe(false);
-    expect(parsePaneInMode(" 1 ")).toBe(true);
+    expect(parseTmuxFlag("1\n")).toBe(true);
+    expect(parseTmuxFlag("0\n")).toBe(false);
+    expect(parseTmuxFlag(" 1 ")).toBe(true);
   });
 
   // A missing session makes `display-message` print an empty line and exit 0, so "" must not read
   // as "left copy-mode" — that would take the banner down while the keys are still being eaten.
   it("returns null for anything else", () => {
-    ["", "\n", "2", "true", "01", "no server running", "1\n1"].forEach((stdout) => expect(parsePaneInMode(stdout)).toBeNull());
+    ["", "\n", "2", "true", "01", "no server running", "1\n1"].forEach((stdout) => expect(parseTmuxFlag(stdout)).toBeNull());
   });
 });
 

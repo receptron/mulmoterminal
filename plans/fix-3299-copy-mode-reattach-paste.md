@@ -18,12 +18,14 @@ Two independent causes, both from the issue and both checked against the code.
 ## Fix
 
 1. `QUERY_PATTERNS` covers every query xterm answers, not only the ones seen so far: DECRQM (ANSI
-   and DEC private), DECRQSS, OSC 4 queries, and chained OSC 10/11/12 queries. A spec feeds each
+   and DEC private, any parameter count), DECRQSS, OSC 4 queries, and chained OSC 10/11/12 queries. A spec feeds each
    CSI/DCS query through `@xterm/headless` and asserts it is answered raw and not once stripped;
    near misses (DECSET, replies, soft reset, colour SETs) are pinned as kept.
 2. `createPaneModePublisher` (`server/session/pty/pane-mode-publish.ts`): when the pane-mode watch
-   publishes "left copy-mode", it also sends `bracketedPasteSequence(tmuxTerminalModes(id))` —
-   `?2004h` or `?2004l`, matching tmux. Hooked on the published transition rather than on the
+   publishes "left copy-mode", it flushes the session's queued output (so a 2004 set or reset in it
+   cannot land after the answer), then sends `?2004h` or `?2004l` from `tmuxBracketedPaste`. That
+   read is null when tmux cannot say — a failed query, or a tmux without `bracket_paste_flag` — and
+   then nothing is sent, so "unknown" never turns paste protection off. Hooked on the published transition rather than on the
    "Back to input" button, so every way out of copy-mode (button, `q`, scrolling to the bottom)
    resyncs. Only 2004: re-asserting 1049 would clear the alternate screen.
 
