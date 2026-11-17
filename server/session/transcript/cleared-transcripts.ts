@@ -92,12 +92,26 @@ export function markStillHolds(mark: ClearedMark, currentSize: number): boolean 
 
 const markerFile = (dir: string, id: string) => path.join(dir, `${id}.json`);
 
-async function transcriptSize(cwd: string, id: string): Promise<number> {
+/** The transcript's size, or null when there is none on disk. */
+async function statTranscript(cwd: string, id: string): Promise<number | null> {
   try {
     return (await fs.stat(claudeTranscriptFile(cwd, id))).size;
   } catch {
-    return 0; // no transcript on disk (a session cleared before its first turn was written)
+    return null;
   }
+}
+
+async function transcriptSize(cwd: string, id: string): Promise<number> {
+  return (await statTranscript(cwd, id)) ?? 0; // none: a session cleared before its first turn was written
+}
+
+/** Whether a mark still has a conversation to point at. Reap no longer drops marks (lifecycle.ts),
+ *  so without this they would pile up for sessions whose transcripts claude has long since cleaned
+ *  away. Our own file alone is not the test: a session cleared before its first turn has none, and
+ *  its mark is still what sends a restart to the successor (resolveSession). */
+async function markHasTranscript(mark: ClearedMark, id: string): Promise<boolean> {
+  if ((await statTranscript(mark.cwd, id)) !== null) return true;
+  return mark.claudeId !== undefined && (await statTranscript(mark.cwd, mark.claudeId)) !== null;
 }
 
 /** Mark a session's transcript frozen. Best-effort on disk: failing to persist must not stop the
@@ -149,7 +163,7 @@ async function restoreMark(dir: string, file: string): Promise<void> {
   // Awaited, unlike reap's fire-and-forget drop: nothing else is waiting on boot, and a marker
   // left behind would be re-examined on every restart from here on.
   const mark = parseClearedMark(await readMark(dir, id));
-  if (!mark || !markStillHolds(mark, await transcriptSize(mark.cwd, id))) return removeMarker(dir, id);
+  if (!mark || !markStillHolds(mark, await transcriptSize(mark.cwd, id)) || !(await markHasTranscript(mark, id))) return removeMarker(dir, id);
   clearedTranscripts.add(id);
   // Only when the mark carried a time: an older one freezes the transcript and draws no line, which
   // is what it meant when it was written.

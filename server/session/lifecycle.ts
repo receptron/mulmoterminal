@@ -33,7 +33,7 @@ import {
   isFailedWorker,
   isPinnedSession,
 } from "./registry.js";
-import { clearedTranscripts, forgetClearedTranscript } from "./transcript/cleared-transcripts.js";
+import { clearedTranscripts } from "./transcript/cleared-transcripts.js";
 import { forgetEntitledToolGroups } from "./bridge-session.js";
 import { forgetCursorBadges } from "../agents/cursor/cursor-usage.js";
 import { parseWaitGraceMs, reapDecisionFor, reapTimerDelay, shouldForgetActivity } from "./reaping/reap-policy.js";
@@ -184,9 +184,16 @@ function reap(deps: SessionLifecycleDeps, id: string) {
   // The resumed prompt-history scan is only true of the ids and the floor it was taken under, both
   // of which die with the session (#1750).
   forgetHistoryMemo(id);
-  // The transcript stops being frozen here: the next claude on this id (`--resume`, or a restart
-  // after `/exit` — which reaches reap through term.onExit) appends to that file again.
-  forgetClearedTranscript(id);
+  // NOT the cleared mark (cleared-transcripts.ts). It is what the NEXT spawn on this id reads to
+  // decide what to `--resume`, and reap is exactly what runs between the two halves of a Restart
+  // (and of an idle reap or an `/exit` followed by reopening the cell). Dropping it here made that
+  // spawn `--resume` our own id — the conversation the user ended with `/clear`, or the one a
+  // `/resume` inside the cell moved away from — rather than the one they were having.
+  //
+  // Nothing un-freezes the file in the meantime: resolveSession never resumes a cleared id's own
+  // transcript, only its successor, so the file stays exactly as frozen as the mark says. If
+  // something outside this server resumes it anyway, the size check drops the mark at the next
+  // boot, and a mark whose transcripts are all gone is pruned there too.
   deps.forgetTitle(id);
   deps.sessionActivityPublisher.forget(id); // drop the phone's copy so its picker has no ghosts
   deps.forgetWorkPhase(id); // the live turn dies with the session

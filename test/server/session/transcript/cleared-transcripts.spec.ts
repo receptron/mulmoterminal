@@ -111,6 +111,30 @@ describe("hydrateClearedTranscripts", () => {
     expect(await exists(markerFile())).toBe(false); // and the marker is cleaned up
   });
 
+  // Reap keeps marks now (a Restart needs them), so boot is where one for a conversation that no
+  // longer exists anywhere goes away — otherwise they pile up for every session ever cleared.
+  it("drops a mark when neither our transcript nor the successor's is on disk", async () => {
+    await markTranscriptCleared(SESSION, cwd, CLAUDE_ID, marksDir);
+    clearedTranscripts.clear();
+
+    await hydrateClearedTranscripts(marksDir);
+    expect(clearedTranscripts.has(SESSION)).toBe(false);
+    expect(await exists(markerFile())).toBe(false);
+  });
+
+  // Cleared before its first turn: our own file never existed, and the mark is still what sends a
+  // restart to the successor's conversation.
+  it("keeps a mark with no transcript of ours while the successor's is on disk", async () => {
+    await markTranscriptCleared(SESSION, cwd, CLAUDE_ID, marksDir);
+    clearedTranscripts.clear();
+    const dir = projectSessionsDir(cwd);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, `${CLAUDE_ID}.jsonl`), "{}\n");
+
+    await hydrateClearedTranscripts(marksDir);
+    expect(clearedTranscripts.has(SESSION)).toBe(true);
+  });
+
   it("discards a corrupt marker instead of trusting it", async () => {
     await fs.mkdir(marksDir, { recursive: true });
     await fs.writeFile(markerFile(), "{ not json");

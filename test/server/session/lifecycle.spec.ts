@@ -122,13 +122,16 @@ describe("reap", () => {
     expect(tmuxKillSession).toHaveBeenCalledWith(ID);
   });
 
-  // The mark says "our transcript is frozen on a conversation that ended". Teardown is where
-  // that stops being true: the next claude on this id appends to that file again (#1085).
-  it("stops treating the transcript as cleared", () => {
+  // The mark says "our transcript is frozen on a conversation that ended, and the live one moved
+  // to <successor>". A Restart is reap followed by a spawn that reads exactly that to pick what to
+  // `--resume`; dropping it here sent the restart back to the conversation the user had ended with
+  // `/clear` (or left with a `/resume` inside the cell). The spawn never resumes the frozen file
+  // itself, so teardown is not where the mark stops being true.
+  it("keeps treating the transcript as cleared", () => {
     ptys.set(ID, fakeEntry());
     clearedTranscripts.add(ID);
     createSessionLifecycle(makeDeps()).reap(ID);
-    expect(clearedTranscripts.has(ID)).toBe(false);
+    expect(clearedTranscripts.has(ID)).toBe(true);
   });
 
   it("does nothing for a session that was already reaped", () => {
