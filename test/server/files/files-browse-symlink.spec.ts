@@ -1,10 +1,10 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import express from "express";
 import { makeTempDir } from "../../support/tempDir.js";
-import { routeCall } from "../../helpers/routeCall";
+import { routeCall, jsonPost } from "../../helpers/routeCall";
 import { mountFilesBrowseRoutes } from "../../../server/files/files-browse";
 
 const tmp = () => makeTempDir("mt-files-");
@@ -39,5 +39,21 @@ describe("a 403 says when a symlink is what leads out", () => {
     const res = await routeCall(serveProject(dir))(`/api/files/browse/version?cwd=${encodeURIComponent(dir)}&path=../clip.mp4`);
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ error: "path escapes the project root" });
+  });
+});
+
+// #3303. A save through a link whose target does not exist yet would create that target.
+describe("a link out whose target does not exist yet", () => {
+  it("is refused by /browse/write, and nothing is created where it points", async () => {
+    const dir = realpathSync(tmp());
+    const planted = path.join(realpathSync(tmp()), "planted.txt");
+    symlinkSync(planted, path.join(dir, "notes.txt"));
+    const res = await routeCall(serveProject(dir))(`/api/files/browse/write?cwd=${encodeURIComponent(dir)}&path=notes.txt`, {
+      ...jsonPost({ text: "written through link\n", baseVersion: null }),
+      method: "PUT",
+    });
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ escape: "symlink" });
+    expect(existsSync(planted)).toBe(false);
   });
 });
