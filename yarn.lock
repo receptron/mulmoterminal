@@ -2591,12 +2591,12 @@
     modern-tar "^0.8.6"
     yargs "^18.0.0"
 
-"@receptron/sharedapp@^0.47.1":
-  version "0.47.1"
-  resolved "https://registry.yarnpkg.com/@receptron/sharedapp/-/sharedapp-0.47.1.tgz#1e2ea9a9db8a7827ffc71f6394368ae4d13cfa0c"
-  integrity sha512-gskUaEn2kd43GAYMv8QfZTAOK+GhyuDXT6T/+xZAUmN7VSXiiJ2kfQggX+vpoZkLHSBLpq5v+wqQi/aO8BSkNw==
+"@receptron/sharedapp@^0.47.2":
+  version "0.47.2"
+  resolved "https://registry.yarnpkg.com/@receptron/sharedapp/-/sharedapp-0.47.2.tgz#7c13beca49a0340dd4e3e0a23c2fdc00d39986bb"
+  integrity sha512-5p2h+Z3lBcDpGhVwDqxeuInOylTb5I5vTF2ntCZVCNSaZonRm+kfrb7zoOViXZs/oYDk6ISPU2eWj3+Obreh4A==
   dependencies:
-    zod "^4.6.5"
+    zod "^4.6.7"
 
 "@receptron/task-scheduler@^1.0.3":
   version "1.0.3"
