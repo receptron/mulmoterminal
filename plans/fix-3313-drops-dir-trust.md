@@ -22,7 +22,7 @@ claude セルは起動のたびに `$TMPDIR/mulmoterminal-drops<suffix>/<session
 
 ## 方針
 
-ドロップ置き場の**親**（`DROPS_ROOT`）の実パスを、そのセルが使うログインの設定ファイルで trust 済みにする。
+ドロップ置き場の**親**（`DROPS_ROOT`）を、そのセルが使うログインの設定ファイルで trust 済みにする。キーは「親の上の一時ディレクトリの実パス + 親の名前」（親そのものはたどらない。親がリンクにすり替えられても、リンク先を trust しないため）。
 セッションごとのディレクトリは祖先探索で全部それに入る。
 
 - #3206（利用状況プローブのフォルダ）と同じ理屈・同じ書き込み手順。親は MulmoTerminal が作る 0700 の
@@ -30,7 +30,8 @@ claude セルは起動のたびに `$TMPDIR/mulmoterminal-drops<suffix>/<session
 - 設定ファイルの選び方もプローブと同じ: セルがアカウントに束ねられていればその `CLAUDE_CONFIG_DIR`、
   それ以外は既定（サーバーの `CLAUDE_CONFIG_DIR`、なければ `~/.claude.json`）。
 - 書く条件: `ensureDropsDir` が成功したとき（= 親が自分たちの非リンクのディレクトリだと確認できたとき）だけ。
-- 読んで trust 済みと分かった設定ファイルはサーバーの生存中は覚え、毎回 1MB 近いファイルを読まない。
+- 読んで trust 済みと分かった設定ファイルは、そのファイルの dev・inode・サイズ・mtime と一緒に覚え、変わるまで
+  読み直さない（1MB 近いファイルを毎回読まない。保存でエントリが消えたら次の起動で書き戻す）。
   書いただけでは覚えない（Claude Code の保存に上書きされ得るので、次の起動で読み直す）。
 - 書けないとき（設定ファイルが無い・読めない・JSON でない）は何もしない。起動は続き、確認が出るだけ（今と同じ）。
 
@@ -40,7 +41,7 @@ claude セルは起動のたびに `$TMPDIR/mulmoterminal-drops<suffix>/<session
 
 - `server/agents/probe/probe-trust.ts` → `server/agents/claude/own-folder-trust.ts` に移し、関数名から probe を外す
   （`withFolderTrusted` / `ensureFolderTrusted` / `isFolderItself`）。挙動は変えない。呼び手が二つになるため。
-- `server/session/session-drops.ts`: `dropsRootTrustKey()`（親の実パス）を足す。
+- `server/session/drops-trust.ts`（新規）: `dropsRootTrustKey()` と `markDropsRootTrusted(sessionId)`。
 - `server/session/spawn/agents/spawn-claude.ts`: `sessionAddDirs` で、ドロップ置き場ができたらセルの設定ファイルに親の trust を書く。
 - `server/agents/rate-limit/rate-limit-service.ts`: 新しい名前で呼ぶだけ。
 
@@ -52,7 +53,7 @@ claude セルは起動のたびに `$TMPDIR/mulmoterminal-drops<suffix>/<session
 ## 検証
 
 - `yarn format` / `lint` / `typecheck` / `test`。
-- spec: アカウントに束ねたセルと既定のセルで、それぞれの設定ファイルに親の実パスで書くこと、trust 済みが
-  分かった設定ファイルは二度読まないこと、ドロップ置き場が作れなければ書かないこと。
+- spec: アカウントに束ねたセルと既定のセルで、それぞれの設定ファイルに親のキーで書くこと、親がリンクに
+  すり替わってもリンク先を名指ししないこと、trust 済みの設定ファイルは変わるまで読まず、変われば読み直すこと。
 - 実機: 使い捨て HOME のサーバーで新しい claude セル（2.1.326）を開き、確認が出ないこと、設定ファイルに
   親の実パスのエントリができることを確かめる。
