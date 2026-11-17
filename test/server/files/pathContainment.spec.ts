@@ -147,6 +147,74 @@ describe("realContainedWithin (symlink-safe containment)", () => {
   });
 });
 
+// #3303. A link whose target does not exist yet reads as absent to `existsSync`, so it used to be
+// taken for a file not yet created — and a write through it created the file where it points.
+describe("realContainedWithin follows a dangling link to where it points", () => {
+  const layout = () => {
+    const root = realpathSync(tmp());
+    const outside = realpathSync(tmp());
+    mkdirSync(path.join(root, "docs"));
+    const cleanup = () => [root, outside].forEach((dir) => rmSync(dir, { recursive: true, force: true }));
+    return { root, outside, cleanup };
+  };
+
+  it("refuses a dangling link to a file outside, by absolute and by relative target", () => {
+    const { root, outside, cleanup } = layout();
+    symlinkSync(path.join(outside, "planted.txt"), path.join(root, "absolute.txt"));
+    symlinkSync(path.relative(path.join(root, "docs"), path.join(outside, "planted.txt")), path.join(root, "docs", "relative.txt"));
+    expect(realContainedWithin(root, path.join(root, "absolute.txt"))).toBeNull();
+    expect(realContainedWithin(root, path.join(root, "docs", "relative.txt"))).toBeNull();
+    cleanup();
+  });
+
+  it("reads a relative target from the folder the link really is in, not the one it was reached by", () => {
+    const { root, cleanup } = layout();
+    mkdirSync(path.join(root, "a", "b"), { recursive: true });
+    symlinkSync(root, path.join(root, "a", "b", "back")); // a/b/back is the root itself
+    symlinkSync(path.join("..", "outside-of-root.txt"), path.join(root, "d"));
+    // Spelled `a/b/back/d`, the `..` would land in a/b; the link is really in the root, so it leads out.
+    expect(realContainedWithin(root, path.join(root, "a", "b", "back", "d"))).toBeNull();
+    cleanup();
+  });
+
+  it("refuses a path under a dangling link to a folder outside", () => {
+    const { root, outside, cleanup } = layout();
+    symlinkSync(path.join(outside, "not-yet"), path.join(root, "dir"));
+    expect(realContainedWithin(root, path.join(root, "dir"))).toBeNull();
+    expect(realContainedWithin(root, path.join(root, "dir", "new.txt"))).toBeNull();
+    cleanup();
+  });
+
+  it("refuses a chain whose last link leads out, and a cycle", () => {
+    const { root, outside, cleanup } = layout();
+    symlinkSync(path.join(outside, "planted.txt"), path.join(root, "last"));
+    symlinkSync(path.join(root, "last"), path.join(root, "first"));
+    symlinkSync(path.join(root, "loop-b"), path.join(root, "loop-a"));
+    symlinkSync(path.join(root, "loop-a"), path.join(root, "loop-b"));
+    expect(realContainedWithin(root, path.join(root, "first"))).toBeNull();
+    expect(realContainedWithin(root, path.join(root, "loop-a"))).toBeNull();
+    expect(realContainedWithin(root, path.join(root, "loop-a", "new.txt"))).toBeNull();
+    cleanup();
+  });
+
+  it("accepts a dangling link that stays inside, as the file it would create", () => {
+    const { root, cleanup } = layout();
+    symlinkSync(path.join(root, "docs", "later.md"), path.join(root, "alias.md"));
+    symlinkSync(path.join(root, "docs", "later"), path.join(root, "alias-dir"));
+    expect(realContainedWithin(root, path.join(root, "alias.md"))).toBe(path.join(root, "docs", "later.md"));
+    expect(realContainedWithin(root, path.join(root, "alias-dir", "new.md"))).toBe(path.join(root, "docs", "later", "new.md"));
+    cleanup();
+  });
+
+  it("says which refusal it was: a dangling link out is a symlink escape", () => {
+    const { root, outside, cleanup } = layout();
+    symlinkSync(path.join(outside, "planted.txt"), path.join(root, "notes.txt"));
+    expect(resolveContained(root, "notes.txt", "/home/user")).toBeNull();
+    expect(symlinkEscapeOf(root, "notes.txt", "/home/user")).toBe(path.join(root, "notes.txt"));
+    cleanup();
+  });
+});
+
 // #3301. The one refusal the pane treats differently, so it must be told apart from every other.
 describe("symlinkEscapeOf", () => {
   const HOME = "/home/user";

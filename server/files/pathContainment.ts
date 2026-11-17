@@ -192,15 +192,57 @@ export function realpathOr(p: string): string {
 // `base`. Returns the real absolute path, or null if it escapes.
 export function realContainedWithin(base: string, absLexical: string): string | null {
   const root = realpathOr(path.resolve(base));
+  const real = realLocationOf(absLexical, MAX_LINK_HOPS);
+  return real !== null && isWithin(root, real) ? real : null;
+}
+
+// A dangling link whose target is again a dangling link: past this many, refused rather than
+// followed. The kernel gives up in the same range (SYMLOOP_MAX), and a cycle never ends at all.
+const MAX_LINK_HOPS = 40;
+
+/** Where `abs` really is: its existing portion resolved through symlinks, the not-yet-created rest
+ *  appended. A DANGLING link is part of the existing portion and is followed to where it points,
+ *  because a write through it creates the file there — `existsSync` follows the link and would call
+ *  it absent. Null when a chain of links does not end. */
+function realLocationOf(abs: string, hopsLeft: number): string | null {
+  const { existing, rest } = splitAtLastEntry(abs);
+  const target = danglingLinkTarget(existing);
+  if (target === null) return path.resolve(realpathOr(existing), ...rest);
+  return hopsLeft > 0 ? realLocationOf(path.resolve(target, ...rest), hopsLeft - 1) : null;
+}
+
+function splitAtLastEntry(abs: string): { existing: string; rest: string[] } {
   const rest: string[] = [];
-  let existing = absLexical;
-  while (!fs.existsSync(existing)) {
-    rest.unshift(path.basename(existing));
+  let existing = abs;
+  while (!hasEntry(existing)) {
     const parent = path.dirname(existing);
     if (parent === existing) break; // reached the filesystem root
+    rest.unshift(path.basename(existing));
     existing = parent;
   }
-  const real = rest.length ? path.resolve(realpathOr(existing), ...rest) : realpathOr(existing);
-  if (!isWithin(root, real)) return null;
-  return real;
+  return { existing, rest };
+}
+
+// lstat, not exists: a link whose target is missing is still an entry here.
+function hasEntry(p: string): boolean {
+  try {
+    fs.lstatSync(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The absolute path a symlink at `p` points to, when it cannot be resolved to the end (its target is
+ *  missing, or the links loop). Null for anything that resolves, and for anything that is not a link. */
+function danglingLinkTarget(p: string): string | null {
+  try {
+    fs.realpathSync.native(p);
+    return null;
+  } catch {
+    if (!hasEntry(p) || !fs.lstatSync(p).isSymbolicLink()) return null;
+    // From the folder's REAL path: the OS reads a relative target's `..` from where the link really
+    // is, and the spelling may have reached that folder through another link.
+    return path.resolve(realpathOr(path.dirname(p)), fs.readlinkSync(p));
+  }
 }
