@@ -19,7 +19,7 @@ vi.mock("./session-home.js", () => ({
   },
 }));
 
-const { markDropsRootTrusted } = await import("./drops-trust");
+const { dropsRootTrustKey, markDropsRootTrusted } = await import("./drops-trust");
 
 const loginDir = (name: string): string => {
   const dir = path.join(scratch.dir, name);
@@ -34,12 +34,13 @@ describe("markDropsRootTrusted (#3313)", () => {
   beforeEach(() => {
     scratch.dir = mkdtempSync(path.join(tmpdir(), "mt-drops-trust-"));
     // The root is reached through a link, as os.tmpdir() is on macOS (/var -> /private/var): the
-    // entry has to name the real path, because that is the spelling Claude Code looks up.
+    // entry has to name the real path, because that is the spelling Claude Code looks up. `.native`,
+    // as Claude Code resolves it: on Windows only that expands a short name like RUNNER~1.
     const real = path.join(scratch.dir, "real-tmp");
     mkdirSync(path.join(real, "mulmoterminal-drops"), { recursive: true });
     // A junction on Windows: it needs no privilege, where a directory symlink does.
     symlinkSync(real, path.join(scratch.dir, "link-to-tmp"), "junction");
-    realRoot = realpathSync(path.join(scratch.dir, "link-to-tmp", "mulmoterminal-drops"));
+    realRoot = realpathSync.native(path.join(scratch.dir, "link-to-tmp", "mulmoterminal-drops"));
   });
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -76,5 +77,18 @@ describe("markDropsRootTrusted (#3313)", () => {
     markDropsRootTrusted("33333333-3333-4333-8333-333333333333");
 
     expect(existsSync(path.join(empty, ".claude.json"))).toBe(false);
+  });
+
+  // A root swapped for a link after ensureDropsDir checked it must not get its TARGET trusted.
+  it("names the root where it belongs, never where a link in its place points", () => {
+    const elsewhere = path.join(scratch.dir, "somebody-elses");
+    mkdirSync(elsewhere);
+    const linkedRoot = path.join(scratch.dir, "real-tmp", "linked-drops");
+    symlinkSync(elsewhere, linkedRoot, "junction");
+
+    const key = dropsRootTrustKey(path.join(scratch.dir, "link-to-tmp", "linked-drops"));
+
+    expect(key).toBe(path.join(realpathSync.native(path.join(scratch.dir, "real-tmp")), "linked-drops"));
+    expect(key).not.toBe(realpathSync.native(elsewhere));
   });
 });
