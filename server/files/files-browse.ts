@@ -502,6 +502,25 @@ function mountRenderedRoutes(app: Express, defaultCwd: string): void {
   );
 }
 
+function mountListRoute(app: Express, defaultCwd: string): void {
+  app.get("/api/files/browse/list", (req, res) => {
+    const root = browseBase(req, defaultCwd);
+    const abs = containedFor(req, res, defaultCwd);
+    if (!abs) return;
+    try {
+      if (!fs.statSync(abs).isDirectory()) return res.status(400).json({ error: "not a directory" });
+      // Node cannot list a folder through a descriptor, so the check is asked again once it has been
+      // read: a listing taken through a folder swapped for a link out, still in place, is refused
+      // rather than answered (#3306). A swap undone before then is not seen.
+      const entries = listEntries(abs);
+      if (recheckForRead(req, defaultCwd)() === null) return res.status(403).json(ESCAPES_ROOT);
+      res.json({ cwd: path.resolve(root), path: browseRel(req), entries });
+    } catch {
+      res.status(404).json({ error: "not found" });
+    }
+  });
+}
+
 export function mountFilesBrowseRoutes(app: Express, deps: BrowseDeps): void {
   const { defaultCwd, backupRoot } = deps;
 
@@ -510,17 +529,7 @@ export function mountFilesBrowseRoutes(app: Express, deps: BrowseDeps): void {
   mountCodeBlockRoute(app, defaultCwd);
   mountFilesGitStatusRoute(app, { base: baseResolver(defaultCwd), maxHeadBytes: MAX_EDIT_BYTES });
 
-  app.get("/api/files/browse/list", (req, res) => {
-    const root = browseBase(req, defaultCwd);
-    const abs = containedFor(req, res, defaultCwd);
-    if (!abs) return;
-    try {
-      if (!fs.statSync(abs).isDirectory()) return res.status(400).json({ error: "not a directory" });
-      res.json({ cwd: path.resolve(root), path: browseRel(req), entries: listEntries(abs) });
-    } catch {
-      res.status(404).json({ error: "not found" });
-    }
-  });
+  mountListRoute(app, defaultCwd);
 
   // Every file in the project as one flat list, for the pane's "open by name" finder (#2099).
   // Rooted at the project base and NOT at `?path=`: the finder hands what it picks straight to
