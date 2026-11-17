@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { makeTempDir } from "../../support/tempDir.js";
@@ -50,12 +50,13 @@ describe("writeVerified", () => {
     cleanup();
   });
 
-  it("removes a file the redirected open had to create outside", () => {
+  // Removing it by name would be a second check-then-act, so the file is left: empty, never written.
+  it("writes nothing into a file the redirected open had to create outside", () => {
     const { root, outside, recheck, swapOut, cleanup } = project();
     const abs = resolveContained(root, "docs/new.md", os.homedir()) ?? "";
     swapOut();
     expect(writeVerified(abs, Buffer.from("redirected"), recheck("docs/new.md"))).toBe("escaped");
-    expect(existsSync(path.join(outside, "new.md"))).toBe(false);
+    expect(readFileSync(path.join(outside, "new.md"), "utf8")).toBe("");
     cleanup();
   });
 
@@ -94,12 +95,11 @@ describe("createFileVerified", () => {
     cleanup();
   });
 
-  it("removes the file again when the folder became a link out after the check", () => {
-    const { root, outside, recheck, swapOut, cleanup } = project();
+  it("answers escaped when the folder became a link out after the check", () => {
+    const { root, recheck, swapOut, cleanup } = project();
     const abs = resolveContained(root, "docs/new.md", os.homedir()) ?? "";
     swapOut();
     expect(createFileVerified(abs, recheck("docs/new.md"))).toBe("escaped");
-    expect(existsSync(path.join(outside, "new.md"))).toBe(false);
     cleanup();
   });
 });

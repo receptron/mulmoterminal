@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, vi, afterEach } from "vitest";
-import fs, { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import fs, { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import express from "express";
 import { makeTempDir } from "../../support/tempDir.js";
@@ -62,14 +62,14 @@ describe("a folder swapped for a link out between the check and the open", () =>
     cleanup();
   });
 
-  it("/browse/create answers 403 and leaves nothing outside", async () => {
+  it("/browse/create answers 403, and what it leaves outside is an empty file", async () => {
     const { root, outside, cleanup } = layout();
     swapOutOnFirstWriteOpen(root, outside);
     const res = await routeCall(serve(root))(`/api/files/browse/create?cwd=${encodeURIComponent(root)}&path=docs`, {
       ...jsonPost({ name: "new.md", kind: "file" }),
     });
     expect(res.status).toBe(403);
-    expect(existsSync(path.join(outside, "new.md"))).toBe(false);
+    expect(readFileSync(path.join(outside, "new.md"), "utf8")).toBe("");
     cleanup();
   });
 });

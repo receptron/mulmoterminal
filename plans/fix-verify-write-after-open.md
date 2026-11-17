@@ -15,8 +15,8 @@ write lands outside.
   now names. Only when they match is the file truncated and written, through the descriptor.
 - `createFileVerified` (used by the tree's new-file, `POST /api/files/browse/create`) does the same
   for an exclusive create.
-- A mismatch answers 403. A file the open had to create outside is removed again, by name and only
-  while that name still leads to the file this call created.
+- A mismatch answers 403. A file the open had to create outside is left there, empty: removing it by
+  name would be a second check-then-act, and a swap in that gap would delete someone else's file.
 - `O_NOFOLLOW` (POSIX) refuses a last component that became a link at the open itself.
 
 Node has no `openat`, so the open can still land outside; what holds is that nothing is written there.
@@ -25,6 +25,8 @@ file.
 
 ## Not changed
 
+- A hard link (or a bind mount) is the same file by device and inode, so a write to one inside the
+  project changes it wherever else it appears. That is what a hard link is, not a path escaping.
 - Reads (`browse/text`, `browse/version`, raw, thumbnails, the backup taken before a write): the
   same gap lets them read a file outside. Left out by decision; this change is about writes.
 - A new folder (`browse/create` with `kind: "dir"`): Node cannot open a folder on every platform to
@@ -35,10 +37,10 @@ file.
 
 - `test/server/files/verifiedWrite.spec.ts`:
   - a swap before the open leaves an outside file untouched
-  - an outside file the open created is removed
+  - an outside file the open had to create is left empty, never written
   - a swap undone before the re-check is still refused
   - a last-component link is refused
-  - each part (the identity check, the clean-up, not truncating at the open, `O_NOFOLLOW`) fails a
-    case when removed
+  - each part (the identity check, not truncating at the open, `O_NOFOLLOW`) fails a case when
+    removed
 - `test/server/files/verifiedWrite-routes.spec.ts` drives the real routes, swapping `docs` just
   before the open for writing. It fails if a route goes back to a plain write.
