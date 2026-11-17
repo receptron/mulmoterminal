@@ -15,9 +15,10 @@ export function streamErrorAction(headersSent: boolean): StreamErrorAction {
 }
 
 // Pipe a file to the response with the error handling above. `range` streams a byte slice
-// (the caller has already set 206 + Content-Range); omit it for the whole file.
-export function streamFileToResponse(abs: string, res: Response, range?: { start: number; end: number }): void {
-  const stream = range ? createReadStream(abs, range) : createReadStream(abs);
+// (the caller has already set 206 + Content-Range); omit it for the whole file. `fd`, when given, is
+// a descriptor already open on `abs`: the stream reads it, and closes it when done.
+export function streamFileToResponse(abs: string, res: Response, range?: { start: number; end: number }, fd?: number): void {
+  const stream = createReadStream(abs, { ...range, ...(fd === undefined ? {} : { fd }) });
   stream.on("error", () => {
     if (streamErrorAction(res.headersSent) === "500") res.status(500).json({ error: "failed to read file" });
     else res.destroy();

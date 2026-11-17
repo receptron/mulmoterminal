@@ -5,7 +5,7 @@ import { writeFileSync, mkdirSync, rmSync, readFileSync, readdirSync, realpathSy
 import path from "node:path";
 import express from "express";
 import { routeCall, jsonPost } from "../../helpers/routeCall";
-import { currentVersion, listEntries, mdToHtmlDoc, mountFilesBrowseRoutes, MAX_EDIT_BYTES } from "../../../server/files/files-browse";
+import { listEntries, readOnDisk, mdToHtmlDoc, mountFilesBrowseRoutes, MAX_EDIT_BYTES } from "../../../server/files/files-browse";
 import { backupDirFor } from "../../../server/files/backup-store";
 
 /** What the tab's document renders, without the toolbar before it and the source after it. */
@@ -197,18 +197,19 @@ describe("conditional write", () => {
 // null is the token for "there is no file here", and a caller sends it to mean "I expect to
 // be creating this". Anything that merely FAILS TO READ an existing file must not answer null,
 // or that write sails past the conflict check and overwrites what it couldn't read.
-describe("currentVersion", () => {
-  it("reports null for a path that isn't there", () => {
+describe("readOnDisk", () => {
+  it("reports missing for a path that isn't there", () => {
     const dir = tmp();
-    expect(currentVersion(path.join(dir, "nope.md"))).toBeNull();
+    const nope = path.join(dir, "nope.md");
+    expect(readOnDisk(nope, () => nope)).toEqual({ kind: "missing" });
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("throws, rather than reporting null, when the path exists but can't be read", () => {
+  it("throws, rather than reporting missing, when the path exists but can't be read", () => {
     const dir = tmp();
     // A directory stands in for "exists, unreadable as a file": chmod is a no-op on Windows,
     // so a permissions-based case couldn't run on the whole CI matrix.
-    expect(() => currentVersion(dir)).toThrow();
+    expect(() => readOnDisk(dir, () => dir)).toThrow();
     rmSync(dir, { recursive: true, force: true });
   });
 });

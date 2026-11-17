@@ -1,33 +1,11 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { makeTempDir } from "../../support/tempDir.js";
+import { swappableProject as project } from "../../support/swappableProject.js";
 import { resolveContained } from "../../../server/files/pathContainment";
 import { createFileVerified, writeVerified } from "../../../server/files/verifiedWrite";
-
-// #3306. The check answers, then `docs` is swapped for a link out before the file is opened: what a
-// route does next must not reach the file outside.
-const project = () => {
-  const top = realpathSync(makeTempDir("mt-verified-"));
-  const root = path.join(top, "root");
-  const outside = path.join(top, "outside");
-  mkdirSync(path.join(root, "docs"), { recursive: true });
-  mkdirSync(outside);
-  writeFileSync(path.join(root, "docs", "a.md"), "inside");
-  const recheck = (rel: string) => () => resolveContained(root, rel, os.homedir());
-  // `docs` leads out from here on; the inside folder is kept aside so a swap back can restore it.
-  const swapOut = () => {
-    renameSync(path.join(root, "docs"), path.join(root, "docs-aside"));
-    symlinkSync(outside, path.join(root, "docs"));
-  };
-  const swapBack = () => {
-    rmSync(path.join(root, "docs"));
-    renameSync(path.join(root, "docs-aside"), path.join(root, "docs"));
-  };
-  return { root, outside, recheck, swapOut, swapBack, cleanup: () => rmSync(top, { recursive: true, force: true }) };
-};
 
 describe("writeVerified", () => {
   it("writes, and replaces what was there, when nothing moved", () => {

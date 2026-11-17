@@ -22,12 +22,13 @@ export type Recheck = () => string | null;
 export type VerifiedOutcome = "written" | "escaped";
 
 // Where the platform has it, a link as the LAST component is refused by the open itself (ELOOP).
-const NO_FOLLOW = fs.constants.O_NOFOLLOW ?? 0;
+export const NO_FOLLOW = fs.constants.O_NOFOLLOW ?? 0;
 
 /** Replace `abs`'s contents with `bytes`, or create it. Nothing is truncated before the check passes,
  *  so an escaped write leaves the file it reached as it was. */
 export function writeVerified(abs: string, bytes: Buffer, recheck: Recheck): VerifiedOutcome {
-  const fd = openForWrite(abs);
+  // Never `O_TRUNC`: the contents are only replaced once the check has passed.
+  const fd = openUnlessLink(abs, fs.constants.O_WRONLY | fs.constants.O_CREAT | NO_FOLLOW);
   if (fd === null) return "escaped";
   try {
     if (!isSameFile(fd, recheck())) return "escaped";
@@ -49,22 +50,29 @@ export function createFileVerified(abs: string, recheck: Recheck): VerifiedOutco
   }
 }
 
-/** The file open for writing, created when absent, or null when the last component is a link. Never
- *  `O_TRUNC`: the contents are only replaced once the check has passed. */
-function openForWrite(abs: string): number | null {
+/** `abs` opened with `flags`, or null when its last component is a link `NO_FOLLOW` refused. */
+export function openUnlessLink(abs: string, flags: number): number | null {
   try {
-    return fs.openSync(abs, fs.constants.O_WRONLY | fs.constants.O_CREAT | NO_FOLLOW);
+    return fs.openSync(abs, flags);
   } catch (error) {
     if (isCode(error, "ELOOP")) return null;
     throw error;
   }
 }
 
-// bigint: a Windows file id is 64 bits, and a number loses the low ones.
-function isSameFile(fd: number, contained: string | null): boolean {
+export const isSameFile = (fd: number, contained: string | null): boolean => {
+  try {
+    return isOpenedFileAt(fs.fstatSync(fd, { bigint: true }), contained);
+  } catch {
+    return false;
+  }
+};
+
+/** Whether the file `opened` describes is the one at `contained`, the path the check answered.
+ *  bigint: a Windows file id is 64 bits, and a number loses the low ones. */
+export function isOpenedFileAt(opened: fs.BigIntStats, contained: string | null): boolean {
   if (contained === null) return false;
   try {
-    const opened = fs.fstatSync(fd, { bigint: true });
     const named = fs.statSync(contained, { bigint: true });
     return opened.dev === named.dev && opened.ino === named.ino;
   } catch {

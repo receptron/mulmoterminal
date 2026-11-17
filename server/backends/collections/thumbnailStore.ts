@@ -9,13 +9,14 @@
 // (getWorkspaceRoot) rather than a MulmoClaude paths module, and containment
 // uses MulmoTerminal's containedPath. Results are cached by (path, mtime,
 // maxEdge) so repeated pages / "load more" scrolls never re-decode the source.
-import { readFile, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 
 import { getWorkspaceRoot } from "@mulmoclaude/core/collection/server";
 import type { ProjectScope } from "../../infra/fs/project-root.js";
 
 import { containedPath, realContainedWithin } from "../../files/pathContainment.js";
+import { readVerifiedAsync } from "../../files/verifiedRead.js";
 
 /** Decode → downscale to fit `maxEdge` (never enlarge) → re-encode JPEG.
  *  Injected so tests exercise the resolver without the native `sharp` binary. */
@@ -100,7 +101,11 @@ export function createThumbnailResolver(resize: ResizeToJpeg = sharpResize, root
     const cached = cacheGet(key, info.mtimeMs, maxEdge);
     if (cached) return cached;
     try {
-      const out = await resize(await readFile(real), maxEdge);
+      // Read only once the open file is still the one the check names: a folder swapped for a link
+      // out after the check would otherwise put an outside image on the phone (#3306).
+      const bytes = await readVerifiedAsync(real, () => realContainedWithin(root, abs));
+      if (bytes === null) return null;
+      const out = await resize(bytes, maxEdge);
       const dataUrl = `data:image/jpeg;base64,${out.toString("base64")}`;
       cacheSet(key, { mtimeMs: info.mtimeMs, maxEdge, dataUrl });
       return dataUrl;
