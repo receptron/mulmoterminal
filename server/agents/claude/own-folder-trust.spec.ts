@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -210,29 +210,41 @@ describe("folderTrustMarker (#3313)", () => {
     expect(trustedIn(file)).toBe(true);
   });
 
-  // Once a read has found the key, the file is not read again: an entry removed after that is left
-  // removed, which is what proves the marker stopped reading rather than happened to find it.
-  it("stops reading a config file once a read has found the trust in it", () => {
+  it("leaves an unchanged config file unread once a read has found the trust in it", () => {
+    const ensure = vi.fn(ensureFolderTrusted);
+    const mark = folderTrustMarker(ensure);
+    const file = configFile(JSON.stringify({ projects: { [DIR]: { hasTrustDialogAccepted: true } } }));
+    mark(file, DIR);
+    mark(file, DIR);
+    expect(ensure).toHaveBeenCalledTimes(1);
+  });
+
+  // A save that dropped the entry after it was found — a user's, or one made from a stale copy — is
+  // a CHANGED file, so it is read again and the entry goes back.
+  it("reads a config file again once it has changed, and restores a dropped entry", () => {
     const mark = folderTrustMarker();
     const file = configFile(JSON.stringify({ projects: { [DIR]: { hasTrustDialogAccepted: true } } }));
     mark(file, DIR);
 
-    writeFileSync(file, "{}");
+    writeFileSync(file, JSON.stringify({ numStartups: 2 }));
     mark(file, DIR);
-    expect(readFileSync(file, "utf8")).toBe("{}");
+    expect(trustedIn(file)).toBe(true);
   });
 
   it("remembers each config file on its own, and each marker on its own", () => {
-    const mark = folderTrustMarker();
+    const ensure = vi.fn(ensureFolderTrusted);
+    const mark = folderTrustMarker(ensure);
     const trusted = configFile(JSON.stringify({ projects: { [DIR]: { hasTrustDialogAccepted: true } } }));
     const other = configFile("{}");
     mark(trusted, DIR);
     mark(other, DIR);
     expect(trustedIn(other)).toBe(true);
+    mark(trusted, DIR);
+    expect(ensure).toHaveBeenCalledTimes(2);
 
-    writeFileSync(trusted, "{}");
-    folderTrustMarker()(trusted, DIR);
-    expect(trustedIn(trusted)).toBe(true);
+    const fresh = vi.fn(ensureFolderTrusted);
+    folderTrustMarker(fresh)(trusted, DIR);
+    expect(fresh).toHaveBeenCalledTimes(1);
   });
 
   it("creates no config file for a login that has none", () => {

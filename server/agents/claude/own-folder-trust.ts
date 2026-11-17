@@ -97,17 +97,28 @@ export function ensureFolderTrusted(configFile: string, dir: string): TrustResul
 }
 
 /** A marker for one folder: it writes the trust into a config file until a READ finds it there, and
- *  from then on leaves that file unread for the life of the server — the file runs to a megabyte on
- *  a long-lived install. A write alone is not remembered: Claude Code's own save can land on top of
- *  it (see the header), so the next call reads again and finds it, or writes again. A user who
- *  removes the entry after that read meets the prompt until the server restarts. */
-export function folderTrustMarker(): (configFile: string, dir: string) => void {
-  const configFilesTrusting = new Set<string>();
+ *  from then on reads that file again only once it has changed — the file runs to a megabyte on a
+ *  long-lived install. Changed means a different size or mtime, so a save that dropped the entry
+ *  (a user's, or a Claude Code save made from a stale copy) is read and the entry written back. A
+ *  write alone is not remembered: Claude Code's own save can land on top of it (see the header). */
+export function folderTrustMarker(ensure: (configFile: string, dir: string) => TrustResult = ensureFolderTrusted): (configFile: string, dir: string) => void {
+  const trustedVersions = new Map<string, string>();
   return (configFile, dir) => {
-    if (configFilesTrusting.has(configFile)) return;
-    if (ensureFolderTrusted(configFile, dir) === "trusted") configFilesTrusting.add(configFile);
+    const version = fileVersion(configFile);
+    if (version !== null && trustedVersions.get(configFile) === version) return;
+    if (ensure(configFile, dir) === "trusted" && version !== null) trustedVersions.set(configFile, version);
   };
 }
+
+// Size and mtime, which every save moves; null for a file that cannot be stat'd, which is never remembered.
+const fileVersion = (file: string): string | null => {
+  try {
+    const stat = statSync(file);
+    return `${stat.size}:${stat.mtimeMs}`;
+  } catch {
+    return null;
+  }
+};
 
 /** Whether `dir` is a folder itself and not a link someone pointed elsewhere: trust written
  *  for a link lands on whatever it resolves to, which is exactly the directory nobody approved.
