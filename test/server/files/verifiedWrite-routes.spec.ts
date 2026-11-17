@@ -62,6 +62,22 @@ describe("a folder swapped for a link out between the check and the open", () =>
     cleanup();
   });
 
+  it("/browse/create of a folder answers 403, and what it leaves outside is an empty folder", async () => {
+    const { root, outside, cleanup } = layout();
+    const mkdir = fs.mkdirSync;
+    vi.spyOn(fs, "mkdirSync").mockImplementationOnce((...args: Parameters<typeof fs.mkdirSync>) => {
+      renameSync(path.join(root, "docs"), path.join(root, "docs-aside"));
+      symlinkSync(outside, path.join(root, "docs"));
+      return mkdir(...args);
+    });
+    const res = await routeCall(serve(root))(`/api/files/browse/create?cwd=${encodeURIComponent(root)}&path=docs`, {
+      ...jsonPost({ name: "new", kind: "dir" }),
+    });
+    expect(res.status).toBe(403);
+    expect(fs.readdirSync(path.join(outside, "new"))).toEqual([]);
+    cleanup();
+  });
+
   it("/browse/create answers 403, and what it leaves outside is an empty file", async () => {
     const { root, outside, cleanup } = layout();
     swapOutOnFirstWriteOpen(root, outside);

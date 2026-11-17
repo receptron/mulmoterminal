@@ -16,8 +16,9 @@
 // @mulmoclaude/core's verified open and write, as MulmoClaude's confined ops do: a read proves the
 // open handle is the in-root file, and a write verifies its staging file before renaming it into
 // place. The anchor is the root's own realpath, so a ROOT replaced by a link is not caught, as
-// before. stat / exists / readDir / unlink stay check-then-act, and so do the parent folders a write
-// creates: a swap before that mkdir can leave empty folders outside (Node has no mkdirat).
+// before. stat / exists / readDir / unlink stay check-then-act. The parent folders a write creates
+// are made one level at a time and checked after each (verifiedMkdir.ts): a swap can leave one
+// empty folder outside, and the write then stops.
 //
 // `rootFor` is invoked PER OPERATION rather than captured: the workspace is injected
 // at boot, after these ops are already bound into the plugin registry's closures.
@@ -27,6 +28,8 @@ import path from "path";
 import type { FileOps } from "gui-chat-protocol";
 import { openVerifiedWithinScope, realpathIfPresent, resolveExistingWithinRoot, writeFileVerifiedInScope, type VerifiedScope } from "@mulmoclaude/core/files";
 import { isWithin } from "../../infra/fs/path-within.js";
+import { realContainedWithin } from "../../files/pathContainment.js";
+import { makeFoldersVerified } from "../../files/verifiedMkdir.js";
 
 const MAX_SYMLINK_DEPTH = 40;
 
@@ -84,6 +87,14 @@ async function writeVerifiedFile(realRoot: string, realAbs: string, content: str
   return true;
 }
 
+/** `dir` and its missing parents, the root made as asked and every level below it checked once made. */
+async function makeParentFolders(root: string, dir: string, rel: string): Promise<void> {
+  await fs.mkdir(root, { recursive: true });
+  if (makeFoldersVerified(dir, (abs) => realContainedWithin(root, abs)) === "escaped") {
+    throw new Error(`path escapes its root via symlink while making its folders: ${rel}`);
+  }
+}
+
 export function createFileOps(rootFor: () => string, label: string): FileOps {
   const lexicalAbs = (rel: string): { root: string; abs: string } => {
     const root = path.resolve(rootFor());
@@ -114,7 +125,7 @@ export function createFileOps(rootFor: () => string, label: string): FileOps {
 
   const writeVerified = async (rel: string, content: string | Uint8Array): Promise<void> => {
     const { abs } = await containedPaths(rel);
-    await fs.mkdir(path.dirname(abs), { recursive: true });
+    await makeParentFolders(path.resolve(rootFor()), path.dirname(abs), rel);
     const { realRoot, realAbs } = await containedPaths(rel);
     if (!(await writeVerifiedFile(realRoot, realAbs, content))) throw new Error(`${label} path escapes its root via symlink: ${rel}`);
   };
