@@ -223,6 +223,20 @@ describe("moveToTrash", () => {
     expect(existsSync(path.join(root, name))).toBe(false);
   });
 
+  // The entry is in the Trash by then, so its info file is what lets it be put back.
+  it.skipIf(process.platform === "win32")("keeps the info file when the check after the move throws", () => {
+    const root = tmp();
+    const trash = tmp();
+    writeFileSync(path.join(root, "a.md"), "a");
+    const layout = { kind: "freedesktop" as const, files: path.join(trash, "files"), info: path.join(trash, "info") };
+    const throwing = () => {
+      throw new Error("check failed");
+    };
+    expect(() => moveToTrash(path.join(root, "a.md"), layout, new Date(), throwing)).toThrow("check failed");
+    expect(readFileSync(path.join(trash, "files", "a.md"), "utf8")).toBe("a");
+    expect(existsSync(path.join(trash, "info", "a.md.trashinfo"))).toBe(true);
+  });
+
   it.skipIf(process.platform === "win32")("writes the freedesktop info file beside the moved entry", () => {
     const root = tmp();
     const trash = tmp();

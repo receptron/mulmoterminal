@@ -168,10 +168,20 @@ export function moveToTrash(abs: string, layout: NonNullable<TrashLayout>, now: 
   // one the file manager cannot put back.
   if (info) fs.writeFileSync(info, trashInfo(abs, now), { flag: "wx", mode: 0o600 });
   const target = path.join(layout.files, name);
+  const moving = moveUnlessReleased(abs, target, info);
+  if (moving === "other-volume") return moving;
+  // Checked only once the move is done: the info file then describes what is in the Trash, whatever
+  // the check says, and must stay so the entry can be put back.
+  return recheck() !== null && holds(target, moving) ? "trashed" : "escaped";
+}
+
+/** Move `abs` to `target`, with the identity it had just before; when the move fails, the reserved
+ *  info file is released, and a move across volumes is "other-volume". */
+function moveUnlessReleased(abs: string, target: string, info: string | null): EntryIdentity | null | "other-volume" {
   try {
     const moving = identityOf(abs);
     fs.renameSync(abs, target);
-    return recheck() !== null && holds(target, moving) ? "trashed" : "escaped";
+    return moving;
   } catch (error) {
     if (info) fs.rmSync(info, { force: true });
     if (error instanceof Error && "code" in error && error.code === "EXDEV") return "other-volume";
