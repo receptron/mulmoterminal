@@ -5,6 +5,7 @@
 import path from "node:path";
 import fs from "node:fs";
 import { isSamePath, isWithin } from "../infra/fs/path-within.js";
+import { unwalkableLinkTarget } from "./linkTargetForm.js";
 
 // Resolve a client-supplied project dir: absolute + existing dir, else the default
 // workspace (mirrors index.ts resolveWorkspace). A leading `~` is expanded first — the browser
@@ -236,6 +237,14 @@ function splitAtLastEntry(abs: string): { existing: string; rest: string[] } {
   return { existing, rest };
 }
 
+function isExistingNonDirectory(p: string): boolean {
+  try {
+    return !fs.statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 // lstat, not exists: a link whose target is missing is still an entry here.
 function hasEntry(p: string): boolean {
   try {
@@ -268,12 +277,16 @@ const TARGET_SEPARATORS = path.sep === "\\" ? /[\\/]+/ : /\/+/;
  *  way is followed BEFORE a later `..` applies. `path.resolve` would cancel `hop/..` on paper first,
  *  and land somewhere the link does not point. */
 function followTarget(realFolder: string, target: string, budget: LinkBudget): string | null {
+  if (unwalkableLinkTarget(target, process.platform)) return null;
   const root = path.isAbsolute(target) ? path.parse(target).root : "";
   const parts = target.slice(root.length).split(TARGET_SEPARATORS);
   return parts.reduce<string | null>((at, part) => (at === null ? null : stepInto(at, part, budget)), root === "" ? realFolder : root);
 }
 
 function stepInto(at: string, part: string, budget: LinkBudget): string | null {
+  // The OS stops at a file with more of the path after it (ENOTDIR); going on would answer a path
+  // the link does not lead to.
+  if (part !== "" && isExistingNonDirectory(at)) return null;
   if (part === "" || part === ".") return at;
   if (part === "..") return path.dirname(at);
   const next = path.join(at, part);

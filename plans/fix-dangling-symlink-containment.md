@@ -18,6 +18,9 @@ existed, and the one case it let through was the one that created the target.
   at a time from the folder the link REALLY is in, as the OS walks it: a link met on the way is
   followed before a later `..` applies (`hop/../x` with `hop` pointing out leads out; `path.resolve`
   would cancel `hop/..` on paper). The rest of the path is then appended.
+- A target that goes on past an existing file is refused (the OS stops there with ENOTDIR). On
+  Windows, a drive-relative target (`C:foo`) and one starting `\\` (UNC, `\\?\`, `\\.\`) are refused
+  rather than walked: their roots are not where `path.parse` cuts them (`server/files/linkTargetForm.ts`).
 - One budget of `MAX_LINK_HOPS` follows covers the whole resolution, nested links included, so a
   cycle or a long chain is refused and crafted targets cannot multiply the work.
 - A link removed or swapped while it is being read makes `lstat`/`readlink` throw; that is a refusal,
@@ -33,6 +36,11 @@ any other link out (#3301).
 
 A dangling link that stays inside resolves to the file it would create, as a link to an existing
 file inside resolves to that file.
+
+## Not changed
+
+- The gap between the check and the file operation, which a path swapped for a link in between
+  escapes, predates this and applies to every path: #3306.
 
 ## Verification
 

@@ -188,6 +188,14 @@ describe("realContainedWithin follows a dangling link to where it points", () =>
     cleanup();
   });
 
+  it("refuses a target that goes on past a file, where the OS stops with ENOTDIR", () => {
+    const { root, cleanup } = layout();
+    writeFileSync(path.join(root, "docs", "file.txt"), "x");
+    symlinkSync(["docs", "file.txt", "..", "elsewhere.md"].join(path.sep), path.join(root, "past-file"));
+    expect(realContainedWithin(root, path.join(root, "past-file"))).toBeNull();
+    cleanup();
+  });
+
   it("refuses a path under a dangling link to a folder outside", () => {
     const { root, outside, cleanup } = layout();
     symlinkSync(path.join(outside, "not-yet"), path.join(root, "dir"));
