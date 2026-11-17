@@ -15,7 +15,8 @@ existed, and the one case it let through was the one that created the target.
 
 - The existing part is found with `lstat`, so a link is an entry whether or not its target exists.
 - When that entry is a link that cannot be resolved to the end, it is followed one step
-  (`readlink`, a relative target taken from the link's folder) and the result is resolved again,
+  (`readlink`, a relative target read from the folder the link REALLY is in, since the spelling may
+  have reached that folder through another link) and the result is resolved again,
   the rest appended. A chain longer than `MAX_LINK_HOPS`, or a cycle, is refused.
 - A path with no such link on it resolves exactly as before.
 
