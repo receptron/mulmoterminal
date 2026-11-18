@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { withFolderTrusted } from "../agents/claude/own-folder-trust";
+import { claudeConfigProjectKey } from "../agents/claude/config-project-key";
 
 // The drops root and each login's config are this spec's own, so nothing here touches the machine's.
 const { scratch, accounts } = vi.hoisted(() => ({ scratch: { dir: "" }, accounts: new Map<string, string>() }));
@@ -27,7 +28,8 @@ const loginDir = (name: string): string => {
   writeFileSync(path.join(dir, ".claude.json"), "{}");
   return dir;
 };
-const trustedIn = (dir: string, key: string): boolean => withFolderTrusted(readFileSync(path.join(dir, ".claude.json"), "utf8"), key).outcome === "trusted";
+const trustedIn = (dir: string, key: string): boolean =>
+  withFolderTrusted(readFileSync(path.join(dir, ".claude.json"), "utf8"), claudeConfigProjectKey(key)).outcome === "trusted";
 
 describe("markDropsRootTrusted (#3313)", () => {
   let realRoot = "";
