@@ -27,6 +27,7 @@ import { randomBytes } from "node:crypto";
 import { chmodSync, lstatSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { isRecord } from "../../../common/isRecord.js";
+import { claudeConfigProjectKey } from "./config-project-key.js";
 
 const TRUST_KEY = "hasTrustDialogAccepted";
 // Claude Code writes its config two-space indented; matching it keeps the rewrite a one-line diff.
@@ -65,7 +66,7 @@ export function withFolderTrusted(configText: string, dir: string): TrustEdit {
  *  — which is only a claim until a later read finds it, see the header — or nothing could be done. */
 export type TrustResult = "trusted" | "written" | "failed";
 
-/** Mark `dir` trusted in `configFile`, landed by rename. */
+/** Mark `dir` trusted in `configFile`, landed by rename, under the key Claude Code looks it up by. */
 export function ensureFolderTrusted(configFile: string, dir: string): TrustResult {
   let edit: TrustEdit;
   let target: string;
@@ -76,7 +77,7 @@ export function ensureFolderTrusted(configFile: string, dir: string): TrustResul
     // while the dotfiles copy stops moving.
     target = realpathSync(configFile);
     mode = statSync(target).mode & PERMISSION_BITS;
-    edit = withFolderTrusted(readFileSync(target, "utf8"), dir);
+    edit = withFolderTrusted(readFileSync(target, "utf8"), claudeConfigProjectKey(dir));
   } catch {
     return "failed";
   }
