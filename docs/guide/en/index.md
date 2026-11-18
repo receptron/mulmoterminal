@@ -8,8 +8,8 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **12.2.0 is out.** Agents can build solid models for parts that are made, with STEP and STL
-> downloads, and Claude Code 2.1.326 stops asking to trust the drops folder. [Setup guide](v12.2.0.html)
+> **13.0.0 is out.** It needs Node.js 24.15 or later, and voice input can now skip silence and
+> noise. [Setup guide](v13.0.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 

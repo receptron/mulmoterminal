@@ -8,6 +8,26 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@13.0.0 — 2026-11-18
+
+> **Setup guide:** [13.0.0 — Node 24.15, and quieter voice input](https://receptron.github.io/mulmoterminal/guide/en/v13.0.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.0.0.html))
+
+### Node.js 24.15 or later is required (#3321)
+
+**Breaking.** `engines.node` moves from `>=22.12` to `>=24.15`, and the CLI's "Node too old" gate (`MIN_NODE_*` in `bin/cli-args.js`) moves with it, so `npx mulmoterminal` on Node 22 stops with the upgrade steps instead of starting. The cause is `@mulmoclaude/core` 7: its optional `firebase` peer is now `^13.0.0` only, and firebase 13 needs Node 24.12+. The floor is 24.15 to match MulmoClaude (receptron/mulmoclaude#3650); unlike MulmoClaude (`^24.15.0 || >=26.0.0`) it keeps the single-floor form `>=24.15`, which the CLI gate and its spec assume. README in five languages, the guides, `docs/facts.json`, `docs/llms.txt` and the remote-server Docker example (`node:24-bookworm`, built with `--pull`) say 24.15. CI's PR jobs run on Node 24, the Windows daily on 24.x and 26.x.
+
+### `WHISPER_SERVER_EXTRA_ARGS`: extra flags for voice input's whisper-server (#3321)
+
+For #3296. Given silence or noise, Whisper writes stock phrases ("Thank you for watching", "ご視聴ありがとうございました") into the prompt. `@mulmoclaude/core` 7.2.0 (receptron/mulmoclaude#3671) reads `WHISPER_SERVER_EXTRA_ARGS` and appends it to the `whisper-server` argv, so `--vad --vad-model <silero model>` lets whisper.cpp skip the parts with no speech. Space-separated, or a JSON array of strings. Flags the host sets (`--model`/`-m`, `--host`, `--port`, …) are refused with a `WHISPER_SERVER_EXTRA_ARGS ignored` warning and voice input runs unchanged; unset, nothing changes. `createWhisper` reads the variable itself, so MulmoTerminal has no source change. Documented in README's environment table and a new FAQ entry (en/ja). #3296 stays open for a default protection.
+
+### `@mulmoclaude/*` and firebase majors (#3321)
+
+`@mulmoclaude/core` ^6.0.1 → ^7.2.0, and the plugins that peer on it to their core-7 majors: accounting / chart / google 6.0.0, collection / html / markdown / mulmoscript 7.0.0 (their only change is the peer range). `firebase` 12.19.0 → 13.4.0, still pinned without a caret (#1731); the `@firebase/auth` 1.13.11 it carries has no "hidden means teardown" listener, the same as the 1.13.6 before it. `@receptron/sharedapp` → ^0.47.2, which accepts core 7 (receptron/sharedapp#124); 0.47.1 made npm refuse the install with `ERESOLVE`.
+
+### Dependency updates (#3319)
+
+`typescript-eslint` ^8.73.0; `@lezer/highlight` ^1.2.5, `marked` ^18.2.1, `vue-i18n` ^11.4.21. `marked` is deduplicated to one copy (two copies made `MarkedExtension` two types and failed `vue-tsc`). `fast-xml-parser` re-resolved for its advisory. `node-pty` stays on `1.2.0-beta.15` (the #1595 fd-leak fix).
+
 ## mulmoterminal@12.2.0 — 2026-11-17
 
 > **Setup guide:** [12.2.0 — Solid models for parts that are made](https://receptron.github.io/mulmoterminal/guide/en/v12.2.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v12.2.0.html))

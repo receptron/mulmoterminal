@@ -4,7 +4,7 @@ nav_title: Feature list
 layout: default
 parent: English
 nav_order: 6.5
-as_of: 12.2.0
+as_of: 13.0.0
 description: "Every capability MulmoTerminal has today, one line each with the release it arrived in, grouped by area (as of 9.1.0)."
 ---
 
@@ -453,6 +453,7 @@ More: [Feature reference](features.html)
 
 More: [Getting started](getting-started.html)
 
+- WHISPER_SERVER_EXTRA_ARGS passes extra flags to the voice-input whisper-server, such as --vad to skip silence and noise (v13.0.0)
 - On Windows, psmux keeps cells alive across a server restart (v11.1.0)
 - Settings → Release notes lists every version up to the running one with its dated guide (v8.0.0)
 - Experimental: run the server on another machine over an SSH tunnel, with remoteServer mode and a Settings box (v7.2.0)

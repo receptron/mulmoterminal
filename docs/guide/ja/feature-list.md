@@ -4,7 +4,7 @@ nav_title: 全機能リスト
 layout: default
 parent: 日本語
 nav_order: 6.5
-as_of: 12.2.0
+as_of: 13.0.0
 description: MulmoTerminal のいまある機能を、入った版つきで領域ごとに一行ずつ並べた一覧（9.1.0 時点）。
 ---
 
@@ -452,6 +452,7 @@ description: MulmoTerminal のいまある機能を、入った版つきで領�
 
 詳しく: [はじめに](getting-started.html)
 
+- WHISPER_SERVER_EXTRA_ARGS で音声入力の whisper-server に指定を足す（--vad で無音や雑音を飛ばす など） (v13.0.0)
 - Windows では psmux で、サーバを再起動してもセルが残る (v11.1.0)
 - 設定の「Release notes」で、動いている版までの全リリースとガイドを一覧する (v8.0.0)
 - 試験中: サーバーを別のマシンで動かし SSH トンネルでつなぐ（remoteServer、設定の入力欄） (v7.2.0)
