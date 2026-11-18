@@ -111,7 +111,7 @@ CMD ["mulmoterminal", "--no-open"]
 Build it, and run it published on your machine's `127.0.0.1` only:
 
 ```bash
-docker build -t mulmoterminal-server .
+docker build --pull -t mulmoterminal-server .
 docker run -p 127.0.0.1:34567:34567 -v "$HOME/work:/home/dev/work" mulmoterminal-server
 ```
 

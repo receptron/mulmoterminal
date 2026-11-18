@@ -109,7 +109,7 @@ CMD ["mulmoterminal", "--no-open"]
 ビルドして、自分のマシンの `127.0.0.1` にだけ公開して起動します:
 
 ```bash
-docker build -t mulmoterminal-server .
+docker build --pull -t mulmoterminal-server .
 docker run -p 127.0.0.1:34567:34567 -v "$HOME/work:/home/dev/work" mulmoterminal-server
 ```
 
