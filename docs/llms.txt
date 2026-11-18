@@ -11,7 +11,7 @@ sitemap: false
 > each agent CLI's own hooks and shows the difference in colour and sound. Claude Code, Codex,
 > Antigravity, Grok, Muse, GitHub Copilot CLI, Cursor CLI and a plain shell run as cells of the
 > same grid, nine to a page, persisted by tmux, reachable from a phone. Local, MIT,
-> `npx mulmoterminal@latest`, Node >= 22.12.
+> `npx mulmoterminal@latest`, Node >= 24.15.
 >
 > 日本語のページは /guide/ja/ 以下にあります。
 

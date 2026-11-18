@@ -11,7 +11,7 @@
 # already runs them once. Only `yarn test` behaves differently here, so only `yarn test` runs
 # here — that is what keeps this cheap enough to put on every pull request.
 #
-# One node version, not the daily's 22/24 matrix: this runs on every PR, the daily still covers
+# One node version, not the daily's 24/26 matrix: this runs on every PR, the daily still covers
 # both, and an ABI difference that only shows on one of them is not the class this gate is for.
 name: Windows (PR)
 
@@ -69,7 +69,7 @@ jobs:
         if: steps.scope.outputs.code == 'true'
         id: setup-node
         with:
-          node-version: 22.x
+          node-version: 24.x
 
       # NOTE: windows-daily.yaml disables Defender realtime monitoring here, because its realtime
       # scanning makes yarn's atomic renames fail with EPERM mid-install. This workflow does NOT,
@@ -95,17 +95,17 @@ jobs:
         if: steps.scope.outputs.code == 'true' && matrix.shard == 1
         with:
           path: node_modules
-          key: win-node-modules-22.x-${{ hashFiles('yarn.lock') }}
+          key: win-node-modules-24.x-${{ hashFiles('yarn.lock') }}
           restore-keys: |
-            win-node-modules-22.x-
+            win-node-modules-24.x-
 
       - uses: actions/cache/restore@v5
         if: steps.scope.outputs.code == 'true' && matrix.shard != 1
         with:
           path: node_modules
-          key: win-node-modules-22.x-${{ hashFiles('yarn.lock') }}
+          key: win-node-modules-24.x-${{ hashFiles('yarn.lock') }}
           restore-keys: |
-            win-node-modules-22.x-
+            win-node-modules-24.x-
 
       # Restored BEFORE install so puppeteer's postinstall skips its ~120 MB download.
       # Every shard may save, unlike node_modules: the download is what hangs (#3030), so a cold

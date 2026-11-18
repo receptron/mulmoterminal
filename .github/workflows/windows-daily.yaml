@@ -1,4 +1,4 @@
-# The WIDE Windows gate: lint, typecheck, build and test, across Node 22 and 24. It stays out
+# The WIDE Windows gate: lint, typecheck, build and test, across Node 24 and 26. It stays out
 # of pull_request because that breadth is what makes it slow (NTFS tar extraction, Defender, a
 # second tsc pass), and lint/typecheck/build answer the same on every platform — ci.yml already
 # runs them on ubuntu and macOS.
@@ -46,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [22.x, 24.x]
+        node-version: [24.x, 26.x]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -81,7 +81,7 @@ jobs:
       - run: yarn install --frozen-lockfile --network-timeout 120000
 
       # The resolved node version is part of the key, not decoration: eslint hashes
-      # `process.version` into every cache entry, so the 22.x and 24.x legs would otherwise share
+      # `process.version` into every cache entry, so the 24.x and 26.x legs would otherwise share
       # one key and invalidate each other's cache on every run. The lockfile hash is there because
       # eslint does NOT hash the dependency tree, so a cached type-aware result outlives the types
       # it was computed from. Both reasons are spelled out in ci.yml.

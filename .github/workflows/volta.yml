@@ -29,7 +29,7 @@ jobs:
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 22
+          node-version: 24
 
       - run: yarn install --frozen-lockfile
 
@@ -37,7 +37,7 @@ jobs:
 
       - name: Install a Node for Volta to run, and tmux
         run: |
-          volta install node@22
+          volta install node@24
           sudo apt-get update
           sudo apt-get install -y tmux
 
@@ -54,4 +54,4 @@ jobs:
       - name: Run the cell spec under volta run
         env:
           MULMO_VOLTA_E2E: "1"
-        run: volta run --node 22 --bundled-npm node node_modules/vitest/vitest.mjs run test/server/infra/process/voltaCell.spec.ts
+        run: volta run --node 24 --bundled-npm node node_modules/vitest/vitest.mjs run test/server/infra/process/voltaCell.spec.ts

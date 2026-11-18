@@ -10,7 +10,7 @@
   "version": "12.2.0",
   "install": "npx mulmoterminal@latest",
   "requires": {
-    "node": ">=22.12",
+    "node": ">=24.15",
     "agentCli": ["claude", "codex"],
     "tmux": "optional — required for session persistence; the latest release only (3.8 as of 2026-10-10)"
   },

@@ -9,7 +9,7 @@ whenever the PR touches something other than docs, plans and markdown — so a p
 is caught before it reaches `main`. (It always runs and always reports: a workflow filtered out at
 the trigger produces no check at all, which would leave a docs-only PR waiting forever on a
 required gate.) `windows-daily.yaml` is the fuller one: lint, typecheck, build and test
-across Node 22 and 24, daily and on pushes to `main`. Dispatch that one on a branch with
+across Node 24 and 26, daily and on pushes to `main`. Dispatch that one on a branch with
 `gh workflow run windows-daily.yaml --ref <branch>` when a change needs the wider check before
 merging.
 

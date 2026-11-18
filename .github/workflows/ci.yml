@@ -59,7 +59,7 @@ jobs:
         if: steps.scope.outputs.code == 'true'
         id: setup-node
         with:
-          node-version: 22
+          node-version: 24
 
       # node_modules directly, rather than `cache: yarn` on setup-node above. The yarn cache is
       # 1.6 GB here and restoring it only shortens an install that still has to run: on macOS that
@@ -88,7 +88,7 @@ jobs:
       # including dropping the lot when eslint.config.js changes.
       #
       # The RESOLVED node version is in the key because eslint hashes `process.version` into every
-      # cache entry, so one patch bump invalidates the lot. `node-version: 22` above resolves to
+      # cache entry, so one patch bump invalidates the lot. `node-version: 24` above resolves to
       # whatever the runner ships, and ubuntu flip-flopping 22.23.1 <-> 22.23.2 is what put the
       # lint step back to 110s twice. Per-version keys let each one keep its own cache across the
       # flip; no `-${{ runner.os }}-` fallback, since a cache from another version restores fine
@@ -174,7 +174,7 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         id: setup-node
         with:
-          node-version: 22
+          node-version: 24
 
       # The key the checks job above writes and reads; see the comment there for why the tree is
       # cached rather than the yarn download folder.
@@ -242,7 +242,7 @@ jobs:
       - uses: actions/setup-node@v6
         if: steps.scope.outputs.code == 'true'
         with:
-          node-version: 22
+          node-version: 24
           cache: yarn
 
       - if: steps.scope.outputs.code == 'true'

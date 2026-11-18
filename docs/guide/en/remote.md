@@ -31,7 +31,7 @@ has to be opened in a firewall, and nothing about the server's settings changes.
 
 ## On the server
 
-You need what a local install needs ([Getting started](getting-started.html)): Node.js 22.12 or
+You need what a local install needs ([Getting started](getting-started.html)): Node.js 24.15 or
 newer, `git`, `gh`, and the agent CLIs you use (`claude`, `codex`, …). `tmux` is optional but
 worth having: with it, terminals survive the server restarting and your laptop disconnecting.
 
@@ -88,10 +88,10 @@ Linux box; neither sign-in was completed there.
 ## In Docker
 
 There is no official image yet. This `Dockerfile` is an example — it was built and run for this
-guide (Node 22, `git`, `gh`, `tmux`, Claude Code; add the other agents you use):
+guide (Node 24, `git`, `gh`, `tmux`, Claude Code; add the other agents you use):
 
 ```dockerfile
-FROM node:22-bookworm
+FROM node:24-bookworm
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git tmux curl ca-certificates \
  && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
@@ -111,7 +111,7 @@ CMD ["mulmoterminal", "--no-open"]
 Build it, and run it published on your machine's `127.0.0.1` only:
 
 ```bash
-docker build -t mulmoterminal-server .
+docker build --pull -t mulmoterminal-server .
 docker run -p 127.0.0.1:34567:34567 -v "$HOME/work:/home/dev/work" mulmoterminal-server
 ```
 

@@ -111,7 +111,7 @@ CI は Linux と macOS を毎 PR、Windows を毎日回しています。Windows
 
 ### 必要なものは？
 
-- **Node.js 22.12 以上**
+- **Node.js 24.15 以上**
 - `claude` か `codex` の CLI が PATH にあること
 - （任意）`tmux` — セッションの永続化に使います（Windows では [psmux](https://github.com/psmux/psmux) 3.4.0 以降）
 
@@ -248,6 +248,27 @@ Claude の設定ファイル（`~/.claude/settings.json`、プロジェクトの
   同じです）。MulmoTerminal はそれに手を出しません。その代わり、スクロールバーと長い選択は使えません。
 
 どちらも、変えたあとに起動したセルから効きます。動いているセルは **エージェントを再起動** で起動し直します。
+
+### 話していないのに、音声入力が「ご視聴ありがとうございました」と入力します。なぜですか？ {#voice-hallucination}
+
+**Whisper は、無音や雑音を渡されると定番の文を作ってしまいます。** 音声入力は、ブラウザが「声が
+大きい」と判断した区間をすべて文字起こしに送るので、周りの雑音も届きます。Whisper はそこを、学習で
+よく見た「ご視聴ありがとうございました」のような文で埋めます。
+
+whisper.cpp に、声の無い部分を飛ばさせることができます。MulmoTerminal を起動するシェル、または横の
+`.env` に `WHISPER_SERVER_EXTRA_ARGS` を設定し、MulmoTerminal を起動し直します:
+
+1. お使いの `whisper-server` が発話判定に対応しているか確かめます。
+   `whisper-server --help 2>&1 | grep -- --vad` で 1 行出れば対応しています。
+2. Silero の発話判定モデルを [ggml-org/whisper-vad](https://huggingface.co/ggml-org/whisper-vad) から入手します。
+3. `export WHISPER_SERVER_EXTRA_ARGS='--vad --vad-model /path/to/ggml-silero-v6.2.0.bin'`
+
+- 空白を含むパスは JSON の配列で書きます: `'["--vad", "--vad-model", "/path with space/x.bin"]'`
+- モデル無しでも、`--no-speech-thold 0.4` が効きます（既定は `0.6`。下げるほど無音とみなされやすくなります）。
+- `--model`・`--host`・`--port` など MulmoTerminal が自分で渡す指定は受け付けません。サーバのログに
+  `WHISPER_SERVER_EXTRA_ARGS ignored` と出て、音声入力はこれまでどおり動きます。
+- `whisper-server` が受け付けない指定を書くと、起動しなくなることがあります。音声入力が使えなく
+  なったら、環境変数を消して起動し直してください。
 
 ---
 
