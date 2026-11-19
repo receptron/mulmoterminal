@@ -8,7 +8,7 @@ import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { prepareLibraryStore, readFileMark, takeLease } from "../../../../server/backends/library/index-store";
-import { conversationOfRow, conversationsForRepository, findConversation, listConversations } from "../../../../server/backends/library/index-queries";
+import { conversationOfRow, findConversation, listConversations, prCreators, prCreatorsQuery } from "../../../../server/backends/library/index-queries";
 import { searchLibrary } from "../../../../server/backends/library/library-search";
 import { runIndexPass, type IndexPassDeps } from "../../../../server/backends/library/indexer";
 import { HEAD_BYTES } from "../../../../server/backends/library/opened-file";
@@ -69,20 +69,35 @@ describe("runIndexPass", () => {
     expect(conversationOfRow(findConversation(db, "s1", "/w/nowhere") ?? {}).cwd).toBe("/w/other");
   });
 
-  it("finds the conversations that linked a PR in a repository, the earliest begun first", async () => {
+  it("names the conversation that made each PR asked about: the earliest begun that recorded it", async () => {
     const { db, deps, transcript } = setup();
     const at = (day: number, text: string): string =>
       line({ type: "user", cwd: "/w/app", timestamp: `2026-11-${String(day)}T08:00:00.000Z`, message: { content: text } });
     const prLink = (number: number, repository: string): string =>
       line({ type: "pr-link", prNumber: number, prUrl: `https://github.com/${repository}/pull/${String(number)}`, prRepository: repository });
-    transcript("later", at(18, "came back to it") + prLink(5, "receptron/mulmoterminal"));
+    transcript("later", at(18, "came back to it") + prLink(5, "receptron/mulmoterminal") + prLink(6, "receptron/mulmoterminal"));
     transcript("opener", at(10, "opened it") + prLink(5, "Receptron/MulmoTerminal"));
-    transcript("elsewhere", at(11, "another repo") + prLink(5, "receptron/other"));
+    transcript("elsewhere", at(9, "another repo") + prLink(5, "receptron/other") + prLink(6, "receptron/other"));
     transcript("none", at(12, "no PR"));
     await runIndexPass(deps);
-    const ids = (limit: number): string[] => conversationsForRepository(db, "receptron/mulmoterminal", limit).map((row) => conversationOfRow(row).id);
-    expect(ids(10)).toEqual(["opener", "later"]);
-    expect(ids(1)).toEqual(["opener"]);
+    const creators = (numbers: number[]): [number, string][] =>
+      prCreators(db, "receptron/mulmoterminal", numbers).map((row) => [Number(row.pr_number), conversationOfRow(row).id]);
+    expect(creators([5, 6, 7])).toEqual([
+      [5, "opener"],
+      [6, "later"],
+    ]);
+    expect(creators([6])).toEqual([[6, "later"]]);
+    expect(creators([])).toEqual([]);
+  });
+
+  it("reads only the conversations that recorded a PR, through the partial index", () => {
+    const { db } = setup();
+    const query = prCreatorsQuery("o/r", [1]);
+    const plan = db
+      .prepare(`explain query plan ${query.sql}`)
+      .all(...query.params)
+      .map((row) => String(row.detail));
+    expect(plan.join("\n")).toContain("USING INDEX conversations_with_prs");
   });
 
   it("does not prefer a copy with no project recorded when no project is asked for", async () => {

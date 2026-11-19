@@ -6,7 +6,9 @@ import {
   isLibraryConversation,
   isLibraryIndexStatus,
   isLibraryMarks,
+  isLibraryPrCreator,
   isLibrarySearchHit,
+  isRepositoryName,
   LIBRARY_NAME_MAX,
   type LibraryConversation,
 } from "../../common/library";
@@ -75,5 +77,30 @@ describe("isLibraryMarks", () => {
     ["a name on two lines", { pinned: [], names: { a: "A\nB" } }],
   ])("refuses %s", (_label, value) => {
     expect(isLibraryMarks(value)).toBe(false);
+  });
+});
+
+describe("isRepositoryName", () => {
+  it.each([
+    ["receptron/mulmoterminal", true],
+    ["a.b/c-d_e", true],
+    ["receptron", false],
+    ["a/b/c", false],
+    ["gitlab.com/group/project", false],
+    ["../x", false],
+    ["x/..", false],
+    ["a b/c", false],
+    ["", false],
+  ])("%s → %s", (name, ok) => {
+    expect(isRepositoryName(name)).toBe(ok);
+  });
+});
+
+describe("isLibraryPrCreator", () => {
+  it("needs an integer number and a conversation", () => {
+    expect(isLibraryPrCreator({ number: 3, conversation: valid })).toBe(true);
+    expect(isLibraryPrCreator({ number: 3, conversation: {} })).toBe(false);
+    expect(isLibraryPrCreator({ number: 3.5, conversation: null })).toBe(false);
+    expect(isLibraryPrCreator(null)).toBe(false);
   });
 });

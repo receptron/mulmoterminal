@@ -1,13 +1,17 @@
 // A worker message as a call on the Library service (#3328). The message crossed a thread boundary as
 // plain data, so every argument is read back through a guard rather than trusted. Pure.
 import { isRecord } from "../../../common/isRecord.js";
+import { PR_CREATORS_MAX } from "../../../common/library.js";
 import type { ConversationFilter } from "./index-queries.js";
 import type { LibraryCaller, LibraryMethod, LibraryRequest, LibraryService } from "./library-service.js";
 
-const METHODS: readonly LibraryMethod[] = ["status", "list", "conversation", "search", "forRepository"];
+const METHODS: readonly LibraryMethod[] = ["status", "list", "conversation", "search", "prCreators"];
 
 export const isLibraryRequest = (value: unknown): value is LibraryRequest =>
   isRecord(value) && typeof value.id === "string" && METHODS.some((method) => method === value.method) && Array.isArray(value.args);
+
+const prNumbers = (value: unknown): number[] =>
+  Array.isArray(value) ? value.filter((n): n is number => typeof n === "number" && Number.isInteger(n) && n > 0).slice(0, PR_CREATORS_MAX) : [];
 
 const count = (value: unknown): number => (typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : 0);
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
@@ -33,8 +37,8 @@ export function dispatchLibraryRequest(service: LibraryService, request: Library
       return service.conversation(text(first), typeof second === "string" && second !== "" ? second : null);
     case "search":
       return service.search(text(first), filterArg(second), count(third));
-    case "forRepository":
-      return service.forRepository(text(first), count(second));
+    case "prCreators":
+      return service.prCreators(text(first), prNumbers(second));
   }
 }
 

@@ -30,6 +30,6 @@ export const libraryViewZhTW = {
     marksUnreadable: "無法讀取釘選和名稱，因此未顯示。",
     saveFailed: "無法儲存此變更。請稍後再試。",
     more: "顯示更多",
-    openPrConversation: "開啟建立此 PR 的對話",
+    openPrConversation: "開啟建立 #{number} 的對話",
   },
 };

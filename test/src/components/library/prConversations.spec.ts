@@ -1,7 +1,7 @@
-// A conversation and the pull requests it made (#3330): which conversation made a PR, which PR links
-// may be opened, and the reader's grey line with its PRs apart.
+// A conversation and the pull requests it made (#3330): which PR links may be opened, and the reader's
+// grey line with its PRs apart.
 import { describe, it, expect } from "vitest";
-import { creatorsByPr, prPage } from "../../../../src/components/library/prConversations";
+import { prPage } from "../../../../src/components/library/prConversations";
 import { readerMetaParts } from "../../../../src/components/library/libraryRows";
 import type { LibraryConversation, LibraryPrLink } from "../../../../common/library";
 
@@ -15,28 +15,6 @@ const conversation = (id: string, prs: LibraryPrLink[], over: Partial<LibraryCon
   ...{ id, agent: "claude", title: id, cwd: "/w/app", gitBranch: "main", prs, costUsd: null, linesAdded: null, linesRemoved: null },
   ...{ startedAt: null, endedAt: NOW, skills: [], hookErrors: 0, userTurns: 1, isSidechain: false, parentId: null, isTemporary: false, entrypoint: "cli" },
   ...over,
-});
-
-describe("creatorsByPr", () => {
-  it("gives each PR the first conversation that linked it, in the order given (earliest begun first)", () => {
-    const opener = conversation("opener", [link(1), link(2)]);
-    const reviewer = conversation("review-loop", [link(2), link(3)]);
-    const creators = creatorsByPr([opener, reviewer], "receptron/mulmoterminal");
-    expect([...creators].map(([number, c]) => [number, c.id])).toEqual([
-      [1, "opener"],
-      [2, "opener"],
-      [3, "review-loop"],
-    ]);
-  });
-
-  it("matches the repository in any case, and nothing in another repository", () => {
-    const creators = creatorsByPr([conversation("a", [link(7, "Receptron/MulmoTerminal"), link(8, "receptron/other")])], "receptron/mulmoterminal");
-    expect([...creators.keys()]).toEqual([7]);
-  });
-
-  it("is empty with no conversations", () => {
-    expect(creatorsByPr([], "o/r").size).toBe(0);
-  });
 });
 
 describe("prPage", () => {

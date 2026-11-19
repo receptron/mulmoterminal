@@ -9,7 +9,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach } from "vitest";
 import { routeCall } from "../../helpers/routeCall";
-import { filterOf, isMarkableId, markChangeOf, mountLibraryRoutes, queryCount, REPOSITORY_CONVERSATIONS_MAX } from "../../../server/routes/library-routes";
+import { PR_CREATORS_MAX } from "../../../common/library";
+import { filterOf, isMarkableId, markChangeOf, mountLibraryRoutes, prNumbersOf, queryCount } from "../../../server/routes/library-routes";
 import { applyTranscriptScan, finishLease, prepareLibraryStore, takeLease } from "../../../server/backends/library/index-store";
 import { createLibraryIndex } from "../../../server/backends/library/library-index";
 import { createLocalLibraryService } from "../../../server/backends/library/library-service";
@@ -39,6 +40,30 @@ function appWithConversations(count: number) {
   return routeCall(app);
 }
 
+describe("prNumbersOf", () => {
+  it.each([
+    ["1,2,3", [1, 2, 3]],
+    ["7,7", [7]],
+    ["", null],
+    ["0", null],
+    ["-1", null],
+    ["1,,2", null],
+    ["1.5", null],
+    ["01", null],
+    ["12345678901", null],
+    [undefined, null],
+    [["1"], null],
+  ])("%j → %j", (value, expected) => {
+    expect(prNumbersOf(value)).toEqual(expected);
+  });
+
+  it("refuses more numbers than one lookup may ask about", () => {
+    const many = Array.from({ length: PR_CREATORS_MAX + 1 }, (_, i) => String(i + 1));
+    expect(prNumbersOf(many.slice(0, PR_CREATORS_MAX).join(","))).toHaveLength(PR_CREATORS_MAX);
+    expect(prNumbersOf(many.join(","))).toBeNull();
+  });
+});
+
 describe("/api/library", () => {
   it("pages the list, newest first, and says when there is more", async () => {
     const call = appWithConversations(3);
@@ -57,16 +82,22 @@ describe("/api/library", () => {
     expect((await call("/api/library/conversations/nope")).status).toBe(404);
   });
 
-  it("answers a repository's PR conversations, and refuses a name that is not owner/repo", async () => {
+  it("answers the creators of the PRs asked about, and refuses a malformed repository or number list", async () => {
     const asked: unknown[][] = [];
     const app = express();
     mountLibraryRoutes(app, { call: (method, args) => (asked.push([method, ...args]), Promise.resolve([])) });
     const call = routeCall(app);
-    expect((await call("/api/library/repository-conversations?repo=receptron%2Fmulmoterminal")).body).toEqual({ conversations: [] });
-    for (const bad of ["", "receptron", "a/b/c", "a b/c", "%2E%2E%2Fx"]) {
-      expect((await call(`/api/library/repository-conversations?repo=${bad}`)).status, bad).toBe(400);
-    }
-    expect(asked).toEqual([["forRepository", "receptron/mulmoterminal", REPOSITORY_CONVERSATIONS_MAX]]);
+    expect((await call("/api/library/pr-creators?repo=receptron%2Fmulmoterminal&numbers=3340,3341,3340")).body).toEqual({ creators: [] });
+    const bad = [
+      "repo=receptron&numbers=1",
+      "repo=a%2Fb%2Fc&numbers=1",
+      "repo=..%2Fx&numbers=1",
+      "repo=gitlab.com%2Fg%2Fp&numbers=1",
+      "repo=o%2Fr",
+      "repo=o%2Fr&numbers=",
+    ];
+    for (const query of bad) expect((await call(`/api/library/pr-creators?${query}`)).status, query).toBe(400);
+    expect(asked).toEqual([["prCreators", "receptron/mulmoterminal", [3340, 3341]]]);
   });
 
   it("passes the project a conversation is asked for in, so a session copied into two picks its own", async () => {

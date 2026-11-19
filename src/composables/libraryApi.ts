@@ -3,6 +3,9 @@
 import { isUnknownArray } from "../../common/isUnknownArray";
 import {
   isLibraryConversation,
+  isLibraryPrCreator,
+  PR_CREATORS_MAX,
+  type LibraryPrCreator,
   isLibraryIndexStatus,
   isLibraryMarks,
   isLibrarySearchHit,
@@ -51,10 +54,11 @@ export async function searchLibrary(query: string, signal: AbortSignal): Promise
   return body !== null && isUnknownArray(body.hits) ? body.hits.filter(isLibrarySearchHit) : null;
 }
 
-/** The conversations that linked a PR in `repository`, the earliest begun first. */
-export async function loadRepositoryConversations(repository: string): Promise<LibraryConversation[] | null> {
-  const body = await readJson(`/api/library/repository-conversations?repo=${encodeURIComponent(repository)}`);
-  return body !== null && isUnknownArray(body.conversations) ? body.conversations.filter(isLibraryConversation) : null;
+/** The conversation that made each of these PRs in `repository`, for those the Library knows. */
+export async function loadPrCreators(repository: string, numbers: readonly number[]): Promise<LibraryPrCreator[] | null> {
+  const asked = numbers.slice(0, PR_CREATORS_MAX).join(",");
+  const body = await readJson(`/api/library/pr-creators?repo=${encodeURIComponent(repository)}&numbers=${asked}`);
+  return body !== null && isUnknownArray(body.creators) ? body.creators.filter(isLibraryPrCreator) : null;
 }
 
 /** One conversation by id; `cwd` picks among copies of one session in several projects. */

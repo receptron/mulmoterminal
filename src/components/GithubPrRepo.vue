@@ -3,10 +3,9 @@
 // it, when the Library knows one (#3330).
 import { ref, watch } from "vue";
 import type { CiState, RepoPrs } from "../../common/ghItems";
-import type { LibraryConversation } from "../../common/library";
-import { loadRepositoryConversations } from "../composables/libraryApi";
+import { isRepositoryName, type LibraryConversation } from "../../common/library";
+import { loadPrCreators } from "../composables/libraryApi";
 import { libraryViewOpen } from "../composables/useLibraryView";
-import { creatorsByPr } from "./library/prConversations";
 import { relativeTimeFromIso } from "./cellDisplay";
 import { ciDotClass } from "./ciDot";
 import { useI18n } from "vue-i18n";
@@ -19,11 +18,15 @@ const props = defineProps<{ repo: RepoPrs }>();
 const creators = ref(new Map<number, LibraryConversation>());
 let lookups = 0;
 watch(
-  () => props.repo.repo,
-  async (repository) => {
+  () => [props.repo.repo, (props.repo.prs ?? []).map((pr) => pr.number).join(",")] as const,
+  async ([repository]) => {
     const mine = ++lookups;
-    const conversations = await loadRepositoryConversations(repository);
-    if (mine === lookups) creators.value = creatorsByPr(conversations ?? [], repository);
+    creators.value = new Map(); // never another repository's buttons while this one is asked
+    const numbers = (props.repo.prs ?? []).map((pr) => pr.number);
+    // Only `owner/repo` on GitHub: pr-link records are GitHub's, and a host-qualified name is not one.
+    if (!isRepositoryName(repository) || numbers.length === 0) return;
+    const found = await loadPrCreators(repository, numbers);
+    if (mine === lookups) creators.value = new Map((found ?? []).map((creator) => [creator.number, creator.conversation]));
   },
   { immediate: true },
 );
@@ -88,8 +91,8 @@ function reviewTagClass(review: string): string {
           type="button"
           data-testid="prs-open-conversation"
           class="flex h-7 w-7 flex-none cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-dim hover:bg-hover hover:text-fg"
-          :aria-label="t('libraryView.openPrConversation')"
-          :data-tip="t('libraryView.openPrConversation')"
+          :aria-label="t('libraryView.openPrConversation', { number: pr.number })"
+          :data-tip="t('libraryView.openPrConversation', { number: pr.number })"
           @click="openCreator(pr.number)"
         >
           <span class="material-symbols-outlined text-[16px]" aria-hidden="true">local_library</span>

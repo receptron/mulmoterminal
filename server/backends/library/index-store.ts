@@ -34,6 +34,8 @@ create table if not exists conversations (
 create index if not exists conversations_id on conversations (id);
 create index if not exists conversations_ended on conversations (ended_at);
 create index if not exists conversations_cwd on conversations (cwd);
+-- Only the few rows that recorded a PR: a PR lookup otherwise reads every conversation's links.
+create index if not exists conversations_with_prs on conversations (started_at) where prs != '[]';
 create virtual table if not exists titles_fts using fts5 (title, content = 'conversations', content_rowid = 'key', tokenize = 'trigram');
 create trigger if not exists conversations_ai after insert on conversations begin insert into titles_fts (rowid, title) values (new.key, new.title); end;
 create trigger if not exists conversations_ad after delete on conversations begin
