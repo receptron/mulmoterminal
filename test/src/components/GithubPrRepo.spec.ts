@@ -63,10 +63,11 @@ describe("GithubPrRepo and the Library", () => {
     expect(w.find("[data-testid=prs-open-conversation]").exists()).toBe(false);
   });
 
-  it("does not ask about a repository that is not GitHub's owner/repo", async () => {
+  it("asks about a GitHub repository however the entry spells it, and never about another forge", async () => {
+    mount(GithubPrRepo, { props: { repo: { repo: "github.com/Octo/Hello", prs: [pr(3)] } } });
     mount(GithubPrRepo, { props: { repo: { repo: "gitlab.com/group/project", prs: [pr(3)] } } });
     await flushPromises();
-    expect(asked).toEqual([]);
+    expect(asked).toEqual([["Octo/Hello", [3]]]);
   });
 
   it("drops the last repository's buttons while the next one is asked", async () => {

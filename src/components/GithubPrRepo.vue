@@ -3,7 +3,8 @@
 // it, when the Library knows one (#3330).
 import { ref, watch } from "vue";
 import type { CiState, RepoPrs } from "../../common/ghItems";
-import { isRepositoryName, type LibraryConversation } from "../../common/library";
+import type { LibraryConversation } from "../../common/library";
+import { githubRepoName } from "../../common/repoEntry";
 import { loadPrCreators } from "../composables/libraryApi";
 import { libraryViewOpen } from "../composables/useLibraryView";
 import { relativeTimeFromIso } from "./cellDisplay";
@@ -23,9 +24,10 @@ watch(
     const mine = ++lookups;
     creators.value = new Map(); // never another repository's buttons while this one is asked
     const numbers = (props.repo.prs ?? []).map((pr) => pr.number);
-    // Only `owner/repo` on GitHub: pr-link records are GitHub's, and a host-qualified name is not one.
-    if (!isRepositoryName(repository) || numbers.length === 0) return;
-    const found = await loadPrCreators(repository, numbers);
+    // GitHub only, by its `owner/repo`: pr-link records are GitHub's, whichever way the entry spells it.
+    const name = githubRepoName(repository);
+    if (name === null || numbers.length === 0) return;
+    const found = await loadPrCreators(name, numbers);
     if (mine === lookups) creators.value = new Map((found ?? []).map((creator) => [creator.number, creator.conversation]));
   },
   { immediate: true },
