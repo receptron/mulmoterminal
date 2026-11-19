@@ -31,5 +31,17 @@ export const libraryViewKo = {
     saveFailed: "변경 내용을 저장하지 못했습니다. 잠시 후 다시 시도하세요.",
     more: "더 보기",
     openPrConversation: "#{number}을(를) 만든 대화 열기",
+    files: {
+      title: "변경한 파일",
+      hint: "Claude Code의 편집 도구로 바꾼 파일입니다. 스크립트나 셸로 바꾼 것은 여기에 나오지 않습니다.",
+      steps: "어느 변경",
+      whole: "대화 전체",
+      step: "v{from} → v{to}",
+      stepToNow: "v{from} → 지금",
+      "too-large": "너무 커서 표시할 수 없습니다(1 MB 초과).",
+      binary: "텍스트 파일이 아닙니다.",
+      unreadable: "이 버전을 읽을 수 없었습니다.",
+      folded: "변경 없는 {count}줄",
+    },
   },
 };

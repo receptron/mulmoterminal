@@ -31,5 +31,17 @@ export const libraryViewEn = {
     saveFailed: "Could not save that change. Try again in a moment.",
     more: "Show more",
     openPrConversation: "Open the conversation that made #{number}",
+    files: {
+      title: "Changed files",
+      hint: "Files edited with Claude Code's own edit tools; a change made another way (a script, the shell) is not here.",
+      steps: "Which change",
+      whole: "Whole conversation",
+      step: "v{from} → v{to}",
+      stepToNow: "v{from} → now",
+      "too-large": "Too large to show here (over 1 MB).",
+      binary: "Not a text file.",
+      unreadable: "This version could not be read.",
+      folded: "{count} unchanged lines",
+    },
   },
 };

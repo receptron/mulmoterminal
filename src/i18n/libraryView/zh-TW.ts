@@ -31,5 +31,17 @@ export const libraryViewZhTW = {
     saveFailed: "無法儲存此變更。請稍後再試。",
     more: "顯示更多",
     openPrConversation: "開啟建立 #{number} 的對話",
+    files: {
+      title: "變更的檔案",
+      hint: "用 Claude Code 自己的編輯工具改過的檔案；用指令碼或 shell 做的變更不在這裡。",
+      steps: "哪次變更",
+      whole: "整個對話",
+      step: "v{from} → v{to}",
+      stepToNow: "v{from} → 現在",
+      "too-large": "太大，無法在此顯示（超過 1 MB）。",
+      binary: "不是文字檔案。",
+      unreadable: "無法讀取此版本。",
+      folded: "{count} 行未變更",
+    },
   },
 };
