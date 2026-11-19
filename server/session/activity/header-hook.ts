@@ -14,8 +14,6 @@ import { isInjectedPrompt } from "../transcript/transcript.js";
 export type HeaderHookEffect =
   // Record this as the session's current query. Already trimmed and capped.
   | { kind: "prompt"; text: string }
-  // `/clear` restarted the conversation — the header must stop showing the pre-clear prompt.
-  | { kind: "clear" }
   // A turn's reply is on disk; (re)generate the AI title from it.
   | { kind: "title" };
 
@@ -23,7 +21,7 @@ export type HeaderHookEffect =
 export const LAST_PROMPT_CAP = 200;
 
 // Null means "this hook changes nothing about the header", which is the common case: every
-// tool hook, every SessionStart that is not a `/clear`, and — deliberately — a
+// tool hook, every SessionStart (conversation-move.ts decides those), and — deliberately — a
 // UserPromptSubmit carrying a blank, non-string, or harness-injected prompt. Blanking the
 // header on an empty submit would erase the query the user is still waiting on.
 //
@@ -37,10 +35,6 @@ export function headerHookEffect(event: string, body: Record<string, unknown>, c
     if (isInjectedPrompt(body.prompt)) return null;
     return { kind: "prompt", text: body.prompt.trim().slice(0, cap) };
   }
-  // Only `source: "clear"`. A `/compact` also arrives as SessionStart, and clearing on it
-  // would wipe the user's task line and their title in the middle of a conversation that is
-  // still going.
-  if (event === "SessionStart") return body.source === "clear" ? { kind: "clear" } : null;
   if (event === "Stop") return { kind: "title" };
   return null;
 }

@@ -592,8 +592,8 @@ export async function sessionTranscriptPage(
   // keep reporting under ours, so from that moment `${id}.jsonl` holds the conversation the user
   // just ENDED (cleared-transcripts.ts) — it still exists, so a stat would happily serve it.
   //
-  // The plain `.has`, like every other reader of that file. A per-read `markStillHolds` here would
-  // make this view disagree with the cockpit, the summary and the push about the same session.
+  // The plain `.has`, like every other reader of that file, so this view cannot disagree with the
+  // cockpit, the summary and the push about the same session.
   if (clearedTranscripts.has(id)) return { view: { status: "cleared" }, older: null };
   // A `before` this host did not mint ends the walk, rather than falling back to the newest page:
   // the route refuses those with a 400, and this reader is not entitled to assume the route ran.

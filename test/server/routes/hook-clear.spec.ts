@@ -19,19 +19,27 @@ vi.mock("../../../server/session/session-reads.js", () => ({ latestUserPrompt: v
 // The mark's durable half has its own spec; what this one must not do is write into the real
 // ~/.mulmoterminal. Stubbing the writer keeps the route's own behaviour — including WHICH cwd it
 // hands over, which is the wiring that decides whether the mark can survive a restart at all.
-const markCalls: Array<[string, string | undefined]> = [];
+const markCalls: Array<[string, string | undefined, string | undefined]> = [];
+const successors = new Map<string, string>();
 vi.mock("../../../server/session/transcript/cleared-transcripts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../server/session/transcript/cleared-transcripts")>();
   return {
     ...actual,
-    markTranscriptCleared: async (id: string, cwd: string | undefined) => {
-      markCalls.push([id, cwd]);
+    markTranscriptCleared: async (id: string, cwd: string | undefined, claudeId?: string) => {
+      markCalls.push([id, cwd, claudeId]);
       actual.clearedTranscripts.add(id);
+      if (claudeId) successors.set(id, claudeId);
+    },
+    clearedClaudeIdOf: (id: string) => successors.get(id),
+    forgetClearedTranscript: (id: string) => {
+      actual.clearedTranscripts.delete(id);
+      successors.delete(id);
     },
   };
 });
 
 const ID = "11111111-2222-4333-8444-555555555555";
+const PICKED = "22222222-3333-4444-8555-666666666666";
 
 const deps = {
   setWorking: vi.fn(),
@@ -67,6 +75,7 @@ beforeEach(() => {
   lastPrompts.delete(ID);
   lastResponses.delete(ID);
   clearedTranscripts.delete(ID);
+  successors.clear();
   markCalls.length = 0;
   vi.clearAllMocks();
 });
@@ -103,7 +112,47 @@ describe("SessionStart source=clear", () => {
   // that has cd'd would otherwise be sized against a file in the wrong project.
   it("hands the mark the cwd the hook reported", async () => {
     await postHook({ hook_event_name: "SessionStart", source: "clear", cwd: "/work/other-project" });
-    expect(markCalls).toEqual([[ID, "/work/other-project"]]);
+    expect(markCalls).toEqual([[ID, "/work/other-project", undefined]]);
+  });
+});
+
+// An in-session `/resume` moves claude off our transcript exactly as `/clear` does (#3325).
+describe("SessionStart source=resume", () => {
+  it("marks the transcript with the picked conversation and blanks the header", async () => {
+    lastPrompts.set(ID, "continue GitHub issue 1048");
+
+    await postHook({ hook_event_name: "SessionStart", source: "resume", session_id: PICKED, cwd: "/work" });
+
+    expect(markCalls).toEqual([[ID, "/work", PICKED]]);
+    expect(lastPrompts.get(ID)).toBe("");
+    expect(deps.forgetTitle).toHaveBeenCalledWith(ID);
+  });
+
+  // Our own `--resume <successor>` after a restart reports the same thing; re-marking it would
+  // blank the header on every restart.
+  it("leaves the session alone when claude is on the recorded successor", async () => {
+    await postHook({ hook_event_name: "SessionStart", source: "resume", session_id: PICKED });
+    markCalls.length = 0;
+    lastPrompts.set(ID, "the successor's task");
+
+    await postHook({ hook_event_name: "SessionStart", source: "resume", session_id: PICKED });
+
+    expect(markCalls).toEqual([]);
+    expect(lastPrompts.get(ID)).toBe("the successor's task");
+  });
+
+  it("unmarks when claude comes back to our own transcript", async () => {
+    await postHook({ hook_event_name: "SessionStart", source: "resume", session_id: PICKED });
+
+    await postHook({ hook_event_name: "SessionStart", source: "resume", session_id: ID });
+
+    expect(clearedTranscripts.has(ID)).toBe(false);
+  });
+
+  it("does nothing when the hook names no usable id", async () => {
+    await postHook({ hook_event_name: "SessionStart", source: "resume", session_id: "not-a-uuid" });
+    expect(markCalls).toEqual([]);
+    expect(clearedTranscripts.has(ID)).toBe(false);
   });
 });
 

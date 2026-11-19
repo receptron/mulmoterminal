@@ -1,23 +1,25 @@
 // Which sessions' transcripts are frozen — and why that has to outlive this process.
 //
-// `/clear` makes claude mint a NEW session id and a new transcript, while hooks keep reporting
-// under ours (hook-settings.ts), so from that moment `${id}.jsonl` holds the conversation the
-// user just ended. Reading it is what put the pre-clear summary and reply back in the cockpit
-// (#1085), so every reader of that file asks this set first.
+// `/clear` makes claude mint a NEW session id and a new transcript, and an in-session `/resume`
+// moves it to the picked one, while hooks keep reporting under ours (hook-settings.ts), so from
+// that moment `${id}.jsonl` holds a conversation the cell no longer shows. Reading it is what put
+// the pre-clear summary and reply back in the cockpit (#1085), so every reader of that file asks
+// this set first — and the spawn resumes the mark's `claudeId` instead of it (#3325).
 //
 // It is PERSISTED because the window it covers is longer than one process: tmux keeps the
 // session's claude running across a server restart — which is what the activity state is
 // persisted for too — and an in-memory mark would be gone while the frozen file is still exactly
 // as frozen. The next turn would then re-read it and undo the fix (Codex).
 //
-// One file per id, holding the transcript's SIZE at the moment of the clear:
-//   - per id, because the home is shared by every server rooted at it, and a read-merge-write
-//     loses whichever of two instances finishes first (registry.ts says the same of its id logs).
-//     An id belongs to one server, so per-id files never race.
-//   - the size, because it is what lets a mark expire on its own. A later `--resume` appends to
-//     that file, so a file bigger than the recorded size means claude is writing to it again and
-//     the mark no longer describes anything. Without that, a server killed before reap would
-//     leave a mark that silences a resumed session's summary for good.
+// One file per id, because the home is shared by every server rooted at it, and a read-merge-write
+// loses whichever of two instances finishes first (registry.ts says the same of its id logs). An id
+// belongs to one server, so per-id files never race.
+//
+// A mark ends only when claude `/resume`s back to our own id (conversation-move.ts), or at boot when
+// neither our transcript nor the successor's is on disk. NOT by the file growing: claude appends a
+// cost-state line to the transcript it leaves AFTER the hook that announces the move, so any size
+// taken here is already too small and expired every mark on the next boot. The `size` is still
+// written because an older server rejects a mark without one.
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { MULMOTERMINAL_HOME, SESSION_ID_RE } from "../../config/env.js";
@@ -61,6 +63,7 @@ export const clearedClaudeIdOf = (id: string): string | undefined => clearedStat
 export interface ClearedMark {
   /** Where the frozen transcript lives, so hydration can stat it without the session's pty. */
   cwd: string;
+  /** Written for an older server's parser, which requires it. Nothing here reads it. */
   size: number;
   /** Epoch ms of the clear. Optional: marks written before #1749 have none. */
   at?: number;
@@ -84,12 +87,6 @@ export function parseClearedMark(raw: unknown): ClearedMark | null {
   return mark;
 }
 
-/** Whether the transcript is still the frozen one. Anything appended since means claude picked
- *  that file back up (`--resume`), which is the one thing that un-freezes it. */
-export function markStillHolds(mark: ClearedMark, currentSize: number): boolean {
-  return currentSize <= mark.size;
-}
-
 const markerFile = (dir: string, id: string) => path.join(dir, `${id}.json`);
 
 async function transcriptSize(cwd: string, id: string): Promise<number> {
@@ -98,6 +95,19 @@ async function transcriptSize(cwd: string, id: string): Promise<number> {
   } catch {
     return 0; // no transcript on disk (a session cleared before its first turn was written)
   }
+}
+
+const transcriptExists = (cwd: string, id: string): Promise<boolean> =>
+  fs.stat(claudeTranscriptFile(cwd, id)).then(
+    () => true,
+    () => false,
+  );
+
+/** Whether the mark still describes something: our frozen file, or the conversation it moved to.
+ *  Only the successor exists for a cell that moved before its first turn was written. */
+async function markHasTranscript(mark: ClearedMark, id: string): Promise<boolean> {
+  if (await transcriptExists(mark.cwd, id)) return true;
+  return mark.claudeId !== undefined && transcriptExists(mark.cwd, mark.claudeId);
 }
 
 /** Mark a session's transcript frozen. Best-effort on disk: failing to persist must not stop the
@@ -111,8 +121,8 @@ export async function markTranscriptCleared(id: string, cwd: string | undefined,
   // pane draws its line from that whether or not there is a file to freeze.
   const at = Date.now();
   clearedState.set(id, { at, claudeId });
-  // No cwd (a hook that reported none, for a session with no live pty) means no file to size, and
-  // a mark with nothing to compare against could never expire — so that one stays in memory only.
+  // No cwd (a hook that reported none, for a session with no live pty) means no transcript the boot
+  // prune could look for, so that mark could never be cleaned up — it stays in memory only.
   if (!cwd || !SESSION_ID_RE.test(id)) return;
   const mark: ClearedMark = { cwd, size: await transcriptSize(cwd, id), at, ...(claudeId ? { claudeId } : {}) };
   try {
@@ -126,8 +136,8 @@ export async function markTranscriptCleared(id: string, cwd: string | undefined,
 const removeMarker = (dir: string, id: string): Promise<void> =>
   fs.rm(markerFile(dir, id), { force: true }).catch((e) => console.error(`[cleared-transcripts] failed to drop ${id}: ${messageOf(e)}`));
 
-/** Drop the mark, on disk too. The removal is fire-and-forget because the caller (reap) is
- *  synchronous; a file that outlives the process is caught by hydration either way. */
+/** Drop the mark, on disk too. The removal is fire-and-forget because the caller (a hook) does not
+ *  wait on it; a file that outlives the process is caught by hydration either way. */
 export function forgetClearedTranscript(id: string, dir: string = CLEARED_DIR): void {
   clearedTranscripts.delete(id);
   clearedState.delete(id);
@@ -146,10 +156,10 @@ const readMark = (dir: string, id: string): Promise<unknown> =>
 async function restoreMark(dir: string, file: string): Promise<void> {
   const id = file.endsWith(".json") ? file.slice(0, -".json".length) : "";
   if (!SESSION_ID_RE.test(id)) return; // not ours / not a session id — leave it alone
-  // Awaited, unlike reap's fire-and-forget drop: nothing else is waiting on boot, and a marker
-  // left behind would be re-examined on every restart from here on.
+  // Awaited, unlike forgetClearedTranscript's fire-and-forget drop: nothing else is waiting on boot,
+  // and a marker left behind would be re-examined on every restart from here on.
   const mark = parseClearedMark(await readMark(dir, id));
-  if (!mark || !markStillHolds(mark, await transcriptSize(mark.cwd, id))) return removeMarker(dir, id);
+  if (!mark || !(await markHasTranscript(mark, id))) return removeMarker(dir, id);
   clearedTranscripts.add(id);
   // Only when the mark carried a time: an older one freezes the transcript and draws no line, which
   // is what it meant when it was written.
@@ -160,8 +170,8 @@ async function restoreMark(dir: string, file: string): Promise<void> {
  *
  *  Called from index.ts before the server listens — NOT at import. The readers are synchronous,
  *  so hydration has to be finished before the first hook can arrive; and because this discards
- *  marks it finds stale, an import-time run would reach into the real home from every spec that
- *  loads this module. */
+ *  marks with no transcript left, an import-time run would reach into the real home from every
+ *  spec that loads this module. */
 export async function hydrateClearedTranscripts(dir: string = CLEARED_DIR): Promise<void> {
   const files = await fs.readdir(dir).catch((): string[] => []);
   await Promise.all(files.map((file) => restoreMark(dir, file)));

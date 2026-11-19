@@ -14,12 +14,23 @@ export interface SessionFacts {
   // file is the conversation they ended (`cleared-transcripts.ts`, #1085). Resuming it brings the
   // cleared conversation back — and puts it in the next turn's request (#2013).
   cleared: boolean;
+  // Where that conversation went — the id claude took at the `/clear` or in-session `/resume` that
+  // froze it — when its transcript is on disk; null otherwise (#3325).
+  successorOnDisk: string | null;
 }
 
 export interface SessionResolution {
   reattachId: string | null; // reattach this same-process pty (no new claude)
-  resume: string | null; // `--resume` this on-disk transcript
-  sessionId: string; // the id claude effectively runs as
+  resume: string | null; // `--resume` this on-disk transcript — the successor's, for a cleared session
+  sessionId: string; // the session's id: what hooks are keyed by, and claude's own unless resume says otherwise
+}
+
+// A cleared transcript is never resumed — it is the conversation the user ENDED, and `--resume`
+// brings it back into the next turn's request (#2013). The conversation the cell went on to show is
+// the successor's, so that is what continues the session (#3325).
+function resumeTarget(requested: string, facts: SessionFacts): string | null {
+  if (facts.cleared) return facts.successorOnDisk;
+  return facts.onDisk ? requested : null;
 }
 
 // `resume` is set whenever a transcript exists on disk — REGARDLESS of tmux liveness.
@@ -32,17 +43,13 @@ export interface SessionResolution {
 // (the old behavior) left that window fatal.
 export function resolveSession(requested: string | null, facts: SessionFacts, mintId: () => string): SessionResolution {
   const reattachId = requested && facts.hasLivePty ? requested : null;
-  // A cleared transcript is never resumed — it is the conversation the user ENDED, and `--resume`
-  // brings it back into the next turn's request (#2013).
-  //
-  // Including while tmux says it is holding the session, which costs something and is still right.
-  // `tmuxAlive` is a probe: if that session dies before the spawn, `tmux new-session -A` runs the
-  // command, and there `--session-id <id>` against an id that is on disk makes claude refuse
-  // outright ("Session ID is already in use"). Keeping `--resume` for that window would instead
-  // resurrect the frozen conversation silently — the exact thing this decision exists to stop
-  // (Codex, PR #2014). A spawn that fails loudly is the better half of that trade: the next
-  // connect finds no tmux session, and mints a fresh id.
-  const resume = !reattachId && requested && facts.onDisk && !facts.cleared ? requested : null;
+  // Including while tmux says it is holding the session. `tmuxAlive` is a probe: if that session
+  // dies before the spawn, `tmux new-session -A` runs the command, so the command must be the right
+  // one. With no successor on disk that means `--session-id <id>`, which claude refuses outright
+  // for an id that is on disk ("Session ID is already in use") — still better than resurrecting the
+  // frozen conversation silently (Codex, PR #2014): the next connect finds no tmux session, and
+  // mints a fresh id.
+  const resume = !reattachId && requested ? resumeTarget(requested, facts) : null;
   // Reuse the requested id when we can actually serve it (reattach, a live tmux
   // session, or an on-disk transcript to resume); otherwise it can't be reused —
   // mint a fresh one.

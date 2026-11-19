@@ -19,7 +19,8 @@ import { runCompletionHook } from "../session/activity/completion-hooks.js";
 import { messageOf } from "../errors.js";
 import { headerHookEffect } from "../session/activity/header-hook.js";
 import { claudeSessionIds, lastPrompts, lastResponses, ptys } from "../session/registry.js";
-import { clearedTranscripts, markTranscriptCleared } from "../session/transcript/cleared-transcripts.js";
+import { clearedClaudeIdOf, clearedTranscripts, forgetClearedTranscript, markTranscriptCleared } from "../session/transcript/cleared-transcripts.js";
+import { conversationMove } from "../session/transcript/conversation-move.js";
 import { latestUserPrompt } from "../session/session-reads.js";
 import { notifyTaskFinished } from "../session/activity/task-push.js";
 import { preferredHeaderPrompt } from "../session/transcript/transcript.js";
@@ -191,11 +192,12 @@ async function clearHeaderPrompt(deps: HookDeps, sessionId: string, claudeId: st
 }
 
 // Header-prompt / AI-title side effects of a hook, per event: track the submitted prompt
-// (UserPromptSubmit), drop it on `/clear` (SessionStart source=clear), or (re)generate the
+// (UserPromptSubmit), drop it when the conversation moves (SessionStart), or (re)generate the
 // AI title once a turn's reply is on disk (Stop). Kept out of the route so its branching
 // doesn't inflate the handler. Runs before handleActivityHook so the activity publish it
 // triggers already carries the new lastPrompt.
 async function applyHeaderHooks(deps: HookDeps, sessionId: string, event: string, body: Record<string, unknown>, cwd: string | undefined): Promise<void> {
+  if (event === "SessionStart") return applyConversationMove(deps, sessionId, body, cwd);
   const effect = headerHookEffect(event, body);
   if (!effect) return;
   if (effect.kind === "prompt") {
@@ -208,14 +210,22 @@ async function applyHeaderHooks(deps: HookDeps, sessionId: string, event: string
     deps.publishPromptSubmitted(sessionId);
     return;
   }
-  if (effect.kind === "clear")
-    return clearHeaderPrompt(
-      deps,
-      sessionId,
-      claudeOwnSessionId(body.session_id, (id) => SESSION_ID_RE.test(id)),
-      cwd,
-    );
   void deps.maybeGenerateTitle(sessionId, cwd);
+}
+
+// A `/clear` or an in-session `/resume` moved claude to another transcript, or a `/resume` brought
+// it back to ours (conversation-move.ts). Both moves away blank the header the same way.
+async function applyConversationMove(deps: HookDeps, sessionId: string, body: Record<string, unknown>, cwd: string | undefined): Promise<void> {
+  const claudeId = claudeOwnSessionId(body.session_id, (id) => SESSION_ID_RE.test(id));
+  const move = conversationMove({
+    source: body.source,
+    sessionId,
+    claudeId,
+    recordedSuccessor: clearedClaudeIdOf(sessionId),
+    marked: clearedTranscripts.has(sessionId),
+  });
+  if (move === "mark") return clearHeaderPrompt(deps, sessionId, claudeId, cwd);
+  if (move === "unmark") forgetClearedTranscript(sessionId);
 }
 
 // The scalar fields the handler reads straight off a hook body, checked once here so the flow
