@@ -25,6 +25,10 @@ const mocks = vi.hoisted(() => ({
   grokHas: false,
   // Lets a test simulate the client leaving inside an admission await.
   onEnsureWorktreeEnv: () => {},
+  // Claude transcripts on disk, as `<cwd>:<id>` — what the connect asks before it resumes.
+  transcripts: [] as string[],
+  // The successor each cleared session's mark records (#3325).
+  successors: new Map<string, string>(),
 }));
 
 const ptys = new Map<string, unknown>();
@@ -51,10 +55,24 @@ vi.mock("../../../server/session/registry.js", () => ({
 
 // The #1537 guard's other evidence probes walk the developer's real home directories; each is
 // pinned so a survivor's identity in these tests comes only from what a test declares.
-vi.mock("../../../server/session/session-reads.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../../server/session/session-reads.js")>()),
-  claudeOnDiskSessionIds: () => new Set(mocks.claudeOnDisk),
-}));
+vi.mock("../../../server/session/session-reads.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../server/session/session-reads.js")>();
+  return {
+    ...actual,
+    claudeOnDiskSessionIds: () => new Set(mocks.claudeOnDisk),
+    sessionExistsOnDisk: (id: string, cwd: string) => mocks.transcripts.includes(`${cwd}:${id}`) || actual.sessionExistsOnDisk(id, cwd),
+  };
+});
+
+// The marks live in the real home; the connect only asks which sessions are cleared and to what.
+vi.mock("../../../server/session/transcript/cleared-transcripts.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../server/session/transcript/cleared-transcripts.js")>();
+  return {
+    ...actual,
+    clearedTranscripts: { has: (id: string) => mocks.successors.has(id) },
+    clearedClaudeIdOf: (id: string) => mocks.successors.get(id),
+  };
+});
 vi.mock("../../../server/agents/antigravity/antigravity-session.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../server/agents/antigravity/antigravity-session.js")>()),
   antigravityConversationExists: () => false,
@@ -155,6 +173,8 @@ beforeEach(() => {
   mocks.claudeOnDisk = [];
   mocks.grokHas = false;
   mocks.onEnsureWorktreeEnv = () => {};
+  mocks.transcripts = [];
+  mocks.successors.clear();
   nowMs += 60_000;
   registeredGuiMcpGroups.mockResolvedValue(["render"]);
   account.bound = false;
@@ -305,5 +325,41 @@ describe("/ws (claude) on a second login (#2215)", () => {
   it("hands none on the default login, where the cell reads them itself", async () => {
     await handleClaudeConnection(makeDeps(), fakeWs() as unknown as WebSocket, request("&gui=0"));
     expect(groupsPassed()).toMatchObject({ directoryMcpGroups: [] });
+  });
+});
+
+// Restart after a `/clear` or an in-cell `/resume` reconnects under the cell's own id; the spawn
+// must resume the conversation the cell moved to, never the frozen one (#3325).
+describe("/ws (claude) reconnect of a cleared session", () => {
+  const SUCCESSOR = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee03";
+  const resumed = (): unknown[] | undefined => {
+    const calls: unknown[][] = spawnClaudePty.mock.calls;
+    return calls.at(-1)?.slice(0, 2);
+  };
+
+  it.each([
+    ["with its own transcript on disk", true],
+    ["moved before its first turn", false],
+  ])("resumes the successor under the cell's id (%s)", async (_label, ownOnDisk) => {
+    mocks.successors.set(SID, SUCCESSOR);
+    mocks.transcripts = [`${dir}:${SUCCESSOR}`, ...(ownOnDisk ? [`${dir}:${SID}`] : [])];
+    await handleClaudeConnection(makeDeps(), fakeWs() as unknown as WebSocket, request(`&session=${SID}`));
+    expect(resumed()).toEqual([SID, SUCCESSOR]);
+  });
+
+  // claude looks a `--resume` target up under the cwd it is launched in.
+  it("does not resume a successor whose transcript is not under the connect's cwd", async () => {
+    mocks.successors.set(SID, SUCCESSOR);
+    mocks.transcripts = [`${dir}:${SID}`, `/somewhere-else:${SUCCESSOR}`];
+    await handleClaudeConnection(makeDeps(), fakeWs() as unknown as WebSocket, request(`&session=${SID}`));
+    const [sessionId, resume] = resumed() ?? [];
+    expect(resume).toBeNull();
+    expect(sessionId).not.toBe(SID);
+  });
+
+  it("resumes its own transcript when the session is not cleared", async () => {
+    mocks.transcripts = [`${dir}:${SID}`, `${dir}:${SUCCESSOR}`];
+    await handleClaudeConnection(makeDeps(), fakeWs() as unknown as WebSocket, request(`&session=${SID}`));
+    expect(resumed()).toEqual([SID, SID]);
   });
 });
