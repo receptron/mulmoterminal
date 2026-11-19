@@ -10,7 +10,7 @@ import { buildPushText } from "./activity-hook.js";
 import type { PushKind } from "../../../common/pushKinds.js";
 import { asTerminalAgent } from "../../../common/sessionAgent.js";
 import { aiTitles, lastResponses, ptys, pushClassification, translationWorkerIds } from "../registry.js";
-import { clearedTranscripts } from "../transcript/cleared-transcripts.js";
+import { transcriptIdOf } from "../transcript/cleared-transcripts.js";
 import { claudeCurrentTurnReply, sessionLastTurn, LAST_RESPONSE_MAX } from "../session-reads.js";
 import { buildPushDetail, pushWhere, shouldSuppressPush, wantsPushKind } from "./taskPushRules.js";
 
@@ -41,9 +41,9 @@ export interface PushHookText {
 // interrupted, or one that ended on a tool call, has no reply, and sessionLastTurn answers such a
 // turn with the PREVIOUS one's (#1650). Every other agent keeps that read, for the reason given at
 // claudeCurrentTurnReply.
-async function latestReply(sessionId: string, cwd: string): Promise<string | null> {
+async function latestReply(sessionId: string, transcriptId: string, cwd: string): Promise<string | null> {
   const agent = asTerminalAgent(ptys.get(sessionId)?.agent);
-  const turnReply = agent === "claude" ? await claudeCurrentTurnReply(cwd, sessionId) : (await sessionLastTurn(cwd, sessionId, agent)).reply;
+  const turnReply = agent === "claude" ? await claudeCurrentTurnReply(cwd, transcriptId) : (await sessionLastTurn(cwd, sessionId, agent)).reply;
   return capped(turnReply);
 }
 
@@ -58,16 +58,15 @@ function capped(text: string | null | undefined): string | null {
 // the read below reconstructs, from the event that reports the turn — so it cannot race the
 // transcript write, guess the wrong project directory, or miss a session id claude reissued.
 //
-// It is asked FIRST and asked without either gate: a session with no cwd, and one whose transcript
-// is frozen by a `/clear` (#1085), both still get a correct answer here, because the value never
-// came from that file. The frozen case is not a corner — the mark lifts only when that transcript
-// grows, and after a `/clear` claude writes to a different one, so every later turn of that session
-// fell through to the prompt (#1696).
+// It is asked FIRST and asked without either gate: a session with no cwd, and one that moved with
+// nowhere recorded (#1085), both still get a correct answer here, because the value never came from
+// a file (#1696). Otherwise the read follows the session to the transcript it is in now.
 async function finishedReply(sessionId: string, cwd: string | null, hookReply: string | undefined): Promise<string | null> {
   const fromHook = capped(hookReply);
   if (fromHook) return fromHook;
-  if (!cwd || clearedTranscripts.has(sessionId)) return null;
-  return latestReply(sessionId, cwd);
+  const transcriptId = transcriptIdOf(sessionId);
+  if (!cwd || transcriptId === null) return null;
+  return latestReply(sessionId, transcriptId, cwd);
 }
 
 // Notify the user's devices that a turn finished or is blocked, when Web Push is enabled.
@@ -85,8 +84,10 @@ export async function notifyTaskFinished(sessionId: string, kind: PushKind, hook
   if (shouldSuppressPush(background, translationWorkerIds.has(sessionId), userScheduled)) return;
   const cwd = ptys.get(sessionId)?.cwd ?? null;
   const where = pushWhere(cwd);
+  const readFrom = transcriptIdOf(sessionId);
   const reply = kind === "finished" ? await finishedReply(sessionId, cwd, hookText.reply) : null;
-  if (reply) lastResponses.set(sessionId, reply); // keep the roster in step; we just read it
+  // Keep the roster in step, unless the session moved while that ran and the reply is from before.
+  if (reply && transcriptIdOf(sessionId) === readFrom) lastResponses.set(sessionId, reply);
   const detail = buildPushDetail({ reply, aiTitle: aiTitles.get(sessionId) });
   const { title, body } = buildPushText(kind, where, detail, hookText.message, { title: PUSH_TITLE_MAX, body: PUSH_BODY_MAX });
   // The session id is what lets the phone open this session from the notification;

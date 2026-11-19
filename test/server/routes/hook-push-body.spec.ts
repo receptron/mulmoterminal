@@ -10,7 +10,7 @@ import express from "express";
 import { routeCall, jsonPost } from "../../helpers/routeCall";
 import { mountHookRoute } from "../../../server/routes/hook-routes";
 import { aiTitles, lastPrompts, lastResponses, ptys } from "../../../server/session/registry";
-import { clearedTranscripts } from "../../../server/session/transcript/cleared-transcripts";
+import { clearedTranscripts, forgetClearedTranscript, markTranscriptCleared } from "../../../server/session/transcript/cleared-transcripts";
 
 const pushes: Array<{ title: string; body: string }> = [];
 vi.mock("../../../server/infra/http/web-push.js", () => ({
@@ -34,7 +34,8 @@ vi.mock("../../../server/config/config-routes.js", async (importOriginal) => ({
 const transcript = vi.hoisted(() => ({ reply: null as string | null }));
 vi.mock("../../../server/session/session-reads.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../server/session/session-reads")>()),
-  claudeCurrentTurnReply: async () => transcript.reply,
+  // Keyed by transcript id, so a read of the frozen file instead of the successor's is visible.
+  claudeCurrentTurnReply: async (_cwd: string, id: string) => (id === "22222222-3333-4444-8555-666666666666" ? "移った先の会話の返事" : transcript.reply),
   latestUserPrompt: async () => null,
 }));
 
@@ -159,6 +160,21 @@ describe("a finished turn with no reply in the payload", () => {
     const { body } = await nextPush();
     expect(body).not.toContain("clear する前");
     expect(body).toBe("タスクが完了しました");
+  });
+});
+
+// After a `/clear` or an in-session `/resume` the turn happened in the successor's conversation, so
+// that is the transcript the fallback reads (#3347).
+describe("a finished turn of a session that moved", () => {
+  it("reads the successor's transcript, never the frozen one", async () => {
+    transcript.reply = "離れた会話の返事";
+    await markTranscriptCleared(ID, undefined, "22222222-3333-4444-8555-666666666666");
+    try {
+      await postHook({ hook_event_name: "Stop" });
+      expect((await nextPush()).body).toBe("移った先の会話の返事");
+    } finally {
+      await forgetClearedTranscript(ID, "/nonexistent-marks-dir");
+    }
   });
 });
 

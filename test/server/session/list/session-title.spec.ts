@@ -14,7 +14,7 @@ import {
   titlePending,
   titleTurnCounts,
 } from "../../../../server/session/registry.js";
-import { clearedTranscripts } from "../../../../server/session/transcript/cleared-transcripts.js";
+import { clearedTranscripts, forgetClearedTranscript, markTranscriptCleared } from "../../../../server/session/transcript/cleared-transcripts.js";
 import { VIEW_TITLE_REGEN_TURNS } from "../../../../server/config/header/header-title.js";
 
 const SESSION = "11111111-2222-3333-4444-555555555555";
@@ -25,11 +25,11 @@ let home = "";
 let cwd = "";
 let realHome: string | undefined;
 
-async function writeTranscript(lines: string[]) {
+async function writeTranscript(lines: string[], id: string = SESSION) {
   const { projectSessionsDir } = await import("../../../../server/session/project-dir.js");
   const dir = projectSessionsDir(cwd);
   await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(path.join(dir, `${SESSION}.jsonl`), lines.join("\n"));
+  await fs.writeFile(path.join(dir, `${id}.jsonl`), lines.join("\n"));
 }
 
 const userTurn = (text: string) => JSON.stringify({ type: "user", message: { role: "user", content: text } });
@@ -51,6 +51,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  await forgetClearedTranscript(SESSION, path.join(home, "marks")); // memory too, successor included
   if (realHome === undefined) delete process.env.HOME;
   else process.env.HOME = realHome;
   await fs.rm(home, { recursive: true, force: true });
@@ -131,10 +132,13 @@ describe("forgetTitle", () => {
     aiTitles.set(SESSION, "T");
     titleTurnCounts.set(SESSION, 5);
     titlePending.add(SESSION);
+    lastTitledUserTurns.set(SESSION, 7);
     forgetTitle(SESSION);
     expect(aiTitles.has(SESSION)).toBe(false);
     expect(titleTurnCounts.has(SESSION)).toBe(false);
     expect(titlePending.has(SESSION)).toBe(false);
+    // The next conversation counts its own turns: the old baseline would hold its title back (#3347).
+    expect(lastTitledUserTurns.has(SESSION)).toBe(false);
   });
 
   it("bumps the epoch, which is what voids a generation already in flight", () => {
@@ -150,6 +154,18 @@ describe("forgetTitle", () => {
 // and since #1772 it never streams the transcript either — session-reads folds `ai-title` out of
 // the file incrementally and caches it, so the manager stores what the route already read.
 describe("the ai-title the transcript carries (default source)", () => {
+  // A move during the read bumps the epoch; the title read is the conversation's the cell left.
+  it("does not store a title read before the session moved", async () => {
+    const { maybeGenerateTitle, forgetTitle, published } = setup();
+    await writeTranscript([userTurn("add a retry to the uploader"), aiTitleRecord("Uploader retry handling")]);
+    titlePending.add(SESSION);
+    const generating = maybeGenerateTitle(SESSION, cwd);
+    forgetTitle(SESSION); // a /clear lands while the summary is being read
+    await generating;
+    expect(aiTitles.has(SESSION)).toBe(false);
+    expect(published).toEqual([]);
+  });
+
   it("stores and publishes the title from disk, without summarizing", async () => {
     const { maybeGenerateTitle, published, summarized } = setup();
     await writeTranscript([aiTitleRecord("An earlier title"), userTurn("add a retry to the uploader"), aiTitleRecord("Uploader retry handling")]);
@@ -296,8 +312,8 @@ describe("maybeGenerateTitle (headless source)", () => {
   });
 
   it("titles again once the session is no longer cleared", async () => {
-    // reap() drops the mark, so resuming that id (which appends to the file again) restores
-    // the normal behaviour rather than leaving the roster row blank for good.
+    // A `/resume` back to our own id drops the mark, so titling from our file comes back rather
+    // than leaving the roster row blank for good.
     const { maybeGenerateTitle } = setup();
     await writeTranscript([userTurn("add a retry to the uploader")]);
     clearedTranscripts.add(SESSION);
@@ -306,6 +322,20 @@ describe("maybeGenerateTitle (headless source)", () => {
     clearedTranscripts.delete(SESSION);
     titlePending.add(SESSION);
     await maybeGenerateTitle(SESSION, cwd);
+    expect(aiTitles.get(SESSION)).toBe("Generated title");
+  });
+
+  // The cell is in the successor's conversation, so that is what gets titled (#3347).
+  it("titles a moved session from the successor's turns, never the frozen ones", async () => {
+    const successor = "22222222-3333-4444-8555-666666666666";
+    const { maybeGenerateTitle, summarized } = setup();
+    await writeTranscript([userTurn("continue GitHub issue 1048")]);
+    await writeTranscript([userTurn("draft the release notes")], successor);
+    await markTranscriptCleared(SESSION, undefined, successor);
+    titlePending.add(SESSION);
+    await maybeGenerateTitle(SESSION, cwd);
+    expect(JSON.stringify(summarized)).toContain("draft the release notes");
+    expect(JSON.stringify(summarized)).not.toContain("continue GitHub issue 1048");
     expect(aiTitles.get(SESSION)).toBe("Generated title");
   });
 

@@ -20,7 +20,7 @@ import {
   ptys,
   unpinSession,
 } from "../../../server/session/registry.js";
-import { clearedTranscripts } from "../../../server/session/transcript/cleared-transcripts.js";
+import { clearedTranscripts, forgetClearedTranscript, markTranscriptCleared } from "../../../server/session/transcript/cleared-transcripts.js";
 import { killPty } from "../../../server/session/pty/pty-kill.js";
 import { tmuxKillSession } from "../../../server/infra/process/tmux.js";
 
@@ -33,7 +33,8 @@ vi.mock("../../../server/session/session-settings.js", () => ({ cleanupSessionSe
 // The reply the roster shows is re-read from the transcript at the end of a turn; the tests
 // stand in for that file so the refresh can be observed without writing one.
 vi.mock("../../../server/session/session-reads.js", () => ({
-  readLatestResponse: vi.fn(() => "the reply on disk"),
+  // Keyed by transcript id, so a read of the wrong file is visible.
+  readLatestResponse: vi.fn((id: string) => (id === "22222222-3333-4444-8555-666666666666" ? "the successor's reply" : "the reply on disk")),
   // Reap drops the resumed prompt-history scan too (#1750); mocked because this spec has no fs.
   forgetHistoryMemo: vi.fn(),
 }));
@@ -211,6 +212,17 @@ describe("publishActivity's reply refresh", () => {
     lastResponses.delete(ID);
     endATurn("codex");
     expect(lastResponses.has(ID)).toBe(false);
+  });
+
+  // The cell is in the successor's conversation, so that is the reply to show (#3347).
+  it("re-reads a moved session's reply from the successor's transcript", async () => {
+    await markTranscriptCleared(ID, undefined, "22222222-3333-4444-8555-666666666666");
+    try {
+      endATurn();
+      expect(lastResponses.get(ID)).toBe("the successor's reply");
+    } finally {
+      await forgetClearedTranscript(ID, "/nonexistent-marks-dir");
+    }
   });
 
   it("leaves a cleared session's blank reply alone", () => {

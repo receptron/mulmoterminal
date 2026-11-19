@@ -32,6 +32,8 @@ import { isRecord } from "../../../common/isRecord.js";
 import { messageOf } from "../../errors.js";
 import { claudeTranscriptFile } from "../session-home.js";
 import { presenceOfStatError, shouldPruneMark, type TranscriptPresence } from "./mark-prune.js";
+import { currentTranscriptId } from "./current-transcript.js";
+import { createKeySerializer } from "../../infra/async/serialize-per-key.js";
 
 const CLEARED_DIR = path.join(MULMOTERMINAL_HOME, "cleared-transcripts");
 
@@ -66,6 +68,10 @@ export const clearedAtOf = (id: string): number | undefined => clearedState.get(
  *  re-learned from any hook and wins where it exists). */
 export const clearedClaudeIdOf = (id: string): string | undefined => clearedState.get(id)?.claudeId;
 
+/** The transcript id holding this session's current conversation, or null when it moved and claude
+ *  named no id to follow (current-transcript.ts). What every reader of "the cell's conversation" reads. */
+export const transcriptIdOf = (id: string): string | null => currentTranscriptId(id, { cleared: clearedTranscripts.has(id), successor: clearedClaudeIdOf(id) });
+
 export interface ClearedMark {
   /** Where the frozen transcript lives, so hydration can stat it without the session's pty. */
   cwd: string;
@@ -98,21 +104,8 @@ const markerFile = (dir: string, id: string) => path.join(dir, `${id}.json`);
 
 export const MARK_SIZE_NEVER_REACHED = Number.MAX_SAFE_INTEGER;
 
-// The tail of each id's marker writes and removals, so the disk ends in the state of the LAST call.
-const persistTails = new Map<string, Promise<unknown>>();
-
-function persistInOrder<T>(id: string, op: () => Promise<T>): Promise<T> {
-  const run = (persistTails.get(id) ?? Promise.resolve()).then(op, op);
-  const tail = run.then(
-    () => undefined,
-    () => undefined,
-  );
-  persistTails.set(id, tail);
-  void tail.then(() => {
-    if (persistTails.get(id) === tail) persistTails.delete(id);
-  });
-  return run;
-}
+// Each id's marker writes and removals, in call order, so the disk ends in the state of the LAST call.
+const persistInOrder = createKeySerializer();
 
 const transcriptPresence = (cwd: string, id: string): Promise<TranscriptPresence> =>
   fs.stat(claudeTranscriptFile(cwd, id)).then((): TranscriptPresence => "present", presenceOfStatError);

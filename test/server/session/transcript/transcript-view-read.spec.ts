@@ -11,7 +11,7 @@ import type { FileHandle } from "node:fs/promises";
 import type { Stats } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { clearedTranscripts } from "../../../../server/session/transcript/cleared-transcripts.js";
+import { clearedTranscripts, forgetClearedTranscript, markTranscriptCleared } from "../../../../server/session/transcript/cleared-transcripts.js";
 import { projectSessionsDir } from "../../../../server/session/project-dir.js";
 import {
   UNREAD_SOURCES,
@@ -33,11 +33,13 @@ const userLine = (text: string) => line({ type: "user", timestamp: "2026-08-18T0
 const assistantLine = (text: string) =>
   line({ type: "assistant", timestamp: "2026-08-18T00:00:01.000Z", message: { role: "assistant", content: [{ type: "text", text }] } });
 
-async function writeTranscript(...lines: string[]): Promise<void> {
+async function writeTranscriptOf(id: string, ...lines: string[]): Promise<void> {
   const dir = projectSessionsDir(cwd);
   await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(path.join(dir, `${SESSION}.jsonl`), lines.join(""));
+  await fs.writeFile(path.join(dir, `${id}.jsonl`), lines.join(""));
 }
+
+const writeTranscript = (...lines: string[]): Promise<void> => writeTranscriptOf(SESSION, ...lines);
 
 // A window that starts `bytesInto` bytes past the START of the last `fromLast` lines — so the read
 // deliberately begins mid-line, which is the case the whole widening rule exists for.
@@ -60,6 +62,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  await forgetClearedTranscript(SESSION, path.join(home, "marks")); // memory too, successor included
   await fs.rm(home, { recursive: true, force: true });
   clearedTranscripts.clear();
 });
@@ -129,10 +132,21 @@ describe("sessionTranscriptView", () => {
       expect(await sessionTranscriptView(cwd, SESSION)).toEqual({ status: "none" });
     });
 
-    it("cleared when /clear froze the file — which still exists, holding the conversation just ended", async () => {
+    it("cleared when the session moved with no successor recorded — the frozen file still exists", async () => {
       await writeTranscript(userLine("the conversation the user ended"), assistantLine("bye"));
       clearedTranscripts.add(SESSION);
       expect(await sessionTranscriptView(cwd, SESSION)).toEqual({ status: "cleared" });
+    });
+
+    // The cell is in the successor's conversation now, so that is what the view shows (#3347).
+    it("reads the successor's transcript for a session that moved, never the frozen one", async () => {
+      const successor = "22222222-3333-4444-8555-666666666666";
+      await writeTranscript(userLine("the conversation the user left"), assistantLine("bye"));
+      await writeTranscriptOf(successor, userLine("the picked conversation"), assistantLine("here it is"));
+      await markTranscriptCleared(SESSION, undefined, successor);
+      const view = await sessionTranscriptView(cwd, SESSION);
+      expect(JSON.stringify(view)).toContain("the picked conversation");
+      expect(JSON.stringify(view)).not.toContain("the conversation the user left");
     });
 
     it("too-large when the window widened to its ceiling without finding a turn", async () => {

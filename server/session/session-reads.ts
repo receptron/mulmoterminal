@@ -54,7 +54,7 @@ import {
 } from "./transcript/prompt-history.js";
 import type { PromptWindow } from "../../common/promptHistory.js";
 import { anchorOf, memoKeyFor, resumePlan, ANCHOR_BYTES, EMPTY_ANCHOR, type HistoryMemo } from "./transcript/prompt-history-memo.js";
-import { clearedAtOf, clearedClaudeIdOf, clearedTranscripts } from "./transcript/cleared-transcripts.js";
+import { clearedAtOf, clearedClaudeIdOf, transcriptIdOf } from "./transcript/cleared-transcripts.js";
 import { currentTurnReplyFromClaudeParsed, lastTurnFromClaudeParsed, lastTurnFromCodexRolloutDocs, EMPTY_TURN, type LastTurn } from "./transcript/last-turn.js";
 import { fileContains } from "../infra/fs/file-contains.js";
 import { forEachJsonlRecord, forEachJsonlRecordIn, readTailRecords } from "../infra/fs/jsonl-file.js";
@@ -345,13 +345,13 @@ const NO_PROMPTS: SessionPrompts = { prompts: [], truncated: false };
 // text a skill injected (#1748), so it answers only when the history file had nothing to say —
 // upstream changed the format, or the session predates it.
 //
-// Not for a CLEARED session. `${id}.jsonl` then holds the conversation the user ended, and every
-// reader of that file asks this set first (#1085) — a fallback is not a reason to be the one that
-// puts the ended conversation back on screen.
+// From the transcript the cell is in now (transcriptIdOf) — a fallback is not a reason to be the
+// one that puts a conversation the session left back on screen (#1085).
 function claudeTranscriptPrompts(cwd: string, id: string): SessionPrompts {
-  if (clearedTranscripts.has(id)) return NO_PROMPTS;
+  const transcriptId = transcriptIdOf(id);
+  if (transcriptId === null) return NO_PROMPTS;
   try {
-    return promptWindow(transcriptPrompts(readTailRecords(claudeTranscriptFile(cwd, id)), PROMPT_SCAN_LIMIT));
+    return promptWindow(transcriptPrompts(readTailRecords(claudeTranscriptFile(cwd, transcriptId)), PROMPT_SCAN_LIMIT));
   } catch {
     return NO_PROMPTS;
   }

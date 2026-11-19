@@ -21,7 +21,7 @@ import {
   VIEW_TITLE_REGEN_TURNS,
 } from "../../config/header/header-title.js";
 import { aiTitles, lastTitleAttemptMs, lastTitledUserTurns, titleEpoch, titleInFlight, titlePending, titleTurnCounts } from "../registry.js";
-import { clearedTranscripts } from "../transcript/cleared-transcripts.js";
+import { transcriptIdOf } from "../transcript/cleared-transcripts.js";
 import { claudeTranscriptFile } from "../session-home.js";
 import { readSessionSummary } from "../session-reads.js";
 
@@ -63,13 +63,13 @@ interface TitleInputs {
  *  `ai-title` Claude Code wrote (for the default source). Nothing here grows with the file: it is
  *  streamed because a transcript reaches 585 MB (#998), and retaining every parsed turn to pick six
  *  of them would have given that back. */
-async function readTitleInputs(sessionId: string, cwd: string): Promise<TitleInputs> {
+async function readTitleInputs(transcriptId: string, cwd: string): Promise<TitleInputs> {
   const window = emptyTitleWindow();
   let userTurns = 0;
   let anyTurn = false;
   let diskAiTitle: string | null = null;
   let read = true;
-  await forEachJsonlRecord(claudeTranscriptFile(cwd, sessionId), (record) => {
+  await forEachJsonlRecord(claudeTranscriptFile(cwd, transcriptId), (record) => {
     conversationTurnsFromParsed([record]).forEach((turn) => {
       anyTurn = true;
       if (turn.role === "user") userTurns++;
@@ -84,10 +84,10 @@ async function readTitleInputs(sessionId: string, cwd: string): Promise<TitleInp
 /** Store a title the caller already holds — the default source's whole job. `readSessionSummary`
  *  folds `ai-title` out of the transcript incrementally and caches it beside the file
  *  (#1377/#1386), so the roster route has the answer in hand on every poll and there is nothing to
- *  scan for. A cleared session is skipped for the same reason as everywhere else (#1085), and an
+ *  scan for. A session that moved with nowhere recorded is skipped (#1085), and an
  *  unchanged title does not publish — the roster would otherwise redraw on every poll. */
 function storeKnownTitle(sessionId: string, title: string | null, deps: TitleDeps): void {
-  if (!title || clearedTranscripts.has(sessionId) || aiTitles.get(sessionId) === title) return;
+  if (!title || transcriptIdOf(sessionId) === null || aiTitles.get(sessionId) === title) return;
   aiTitles.set(sessionId, title);
   titleTurnCounts.set(sessionId, 0);
   deps.publishActivity(sessionId);
@@ -97,11 +97,11 @@ function storeKnownTitle(sessionId: string, title: string | null, deps: TitleDep
  *  Epoch-guarded, so a /clear or teardown mid-generation drops the now-stale result; in-flight
  *  guarded, so a Stop hook and a roster view do not both summarize. Never throws — a failed or
  *  timed-out CLI just leaves the prior title. */
-async function summarizeAndStoreTitle(sessionId: string, cwd: string, deps: TitleDeps): Promise<void> {
+async function summarizeAndStoreTitle(sessionId: string, transcriptId: string, cwd: string, deps: TitleDeps): Promise<void> {
   titleInFlight.add(sessionId);
   const epoch = titleEpoch.get(sessionId) ?? 0;
   try {
-    const { turns, userTurns, anyTurn, diskAiTitle, read } = await readTitleInputs(sessionId, cwd);
+    const { turns, userTurns, anyTurn, diskAiTitle, read } = await readTitleInputs(transcriptId, cwd);
     const checked = read && anyTurn;
     const title = checked ? await deps.resolveTitle({ turns, diskAiTitle }) : null;
     if ((titleEpoch.get(sessionId) ?? 0) !== epoch) return;
@@ -125,6 +125,8 @@ export function createTitleManager(deps: TitleDeps) {
     aiTitles.delete(sessionId);
     titleTurnCounts.delete(sessionId);
     titlePending.delete(sessionId);
+    // The baseline counted the turns of the conversation that was titled; the next one starts again.
+    lastTitledUserTurns.delete(sessionId);
     titleEpoch.set(sessionId, (titleEpoch.get(sessionId) ?? 0) + 1);
   }
 
@@ -142,23 +144,25 @@ export function createTitleManager(deps: TitleDeps) {
     if (due) titlePending.add(sessionId);
   }
 
-  // Title the session, by whichever route its source needs. A cleared session is titled by
-  // neither: claude moved to a new transcript and ours is frozen on the conversation the user
-  // just ended, so this is where the pre-clear title kept coming back — forgetTitle makes the
-  // next turn think a title is DUE, and the only turns on disk are the ended ones (#1085). No
-  // title beats the wrong one; the header falls back to the live prompt.
+  // Title the session, by whichever route its source needs, from the transcript the cell is in now.
+  // Never from ours once claude has moved off it: that file is frozen on the conversation the user
+  // left, and this is where its title kept coming back (#1085). A move with nowhere recorded is
+  // titled by neither — no title beats the wrong one; the header falls back to the live prompt.
   async function generateAndStoreTitle(sessionId: string, cwd: string): Promise<void> {
-    if (titleInFlight.has(sessionId) || clearedTranscripts.has(sessionId)) return;
+    const transcriptId = transcriptIdOf(sessionId);
+    if (titleInFlight.has(sessionId) || transcriptId === null) return;
     // The default source needs one folded field, not the conversation — and session-reads keeps
     // that fold cached and incremental, so this costs the bytes that arrived since the last read
     // rather than the file. Before this branch existed, an untitled session streamed its whole
     // transcript once per turn to find a string that was already in memory.
     if (!titleNeedsTurns()) {
-      const { aiTitle } = await readSessionSummary(cwd, sessionId);
-      storeKnownTitle(sessionId, aiTitle, deps);
+      const epoch = titleEpoch.get(sessionId) ?? 0;
+      const { aiTitle } = await readSessionSummary(cwd, transcriptId);
+      // A move during the read bumped the epoch (forgetTitle): this title is the conversation's it left.
+      if ((titleEpoch.get(sessionId) ?? 0) === epoch) storeKnownTitle(sessionId, aiTitle, deps);
       return;
     }
-    await summarizeAndStoreTitle(sessionId, cwd, deps);
+    await summarizeAndStoreTitle(sessionId, transcriptId, cwd, deps);
   }
 
   // At Stop (the assistant's reply is now on disk), regenerate a pending title from the

@@ -43,6 +43,7 @@ import {
   transcriptFilesIn,
   sessionPrompts,
   sessionTimeline,
+  type SessionSummary,
 } from "../session/session-reads.js";
 import { formatHandoff, type HandoffShape } from "../session/transcript/handoff-text.js";
 import { agentHomeChoices, codexSessionsUnder } from "../session/session-home.js";
@@ -69,7 +70,8 @@ import { agentBadges } from "../session/activity/agent-badges.js";
 import { agentSessionTitle } from "../agents/agent-session-title.js";
 import { agentTitleKind, type AgentTitleKind } from "../../common/agentTitle.js";
 import { sessionDetailView } from "../session/list/session-detail-view.js";
-import { clearedTranscripts } from "../session/transcript/cleared-transcripts.js";
+import { transcriptIdOf } from "../session/transcript/cleared-transcripts.js";
+import { EMPTY_TURN } from "../session/transcript/last-turn.js";
 import { parseTranscriptCursor, sessionTranscriptPage } from "../session/transcript/transcript-view-read.js";
 import type { SessionAgent } from "../../common/sessionAgent.js";
 import { requestBody } from "./requestBody.js";
@@ -111,6 +113,11 @@ export interface SessionRouteDeps {
  *  summary the agent wrote for itself by looking at the string, and it has to: only the first may be
  *  read as a truncation of the prompt row beneath it.
  */
+// Claude's fold of the transcript the cell is in, or the empty one for another agent or a cell that
+// moved with nothing recorded to follow.
+const claudeSummaryOf = (cwd: string, transcriptId: string | null, agent: SessionAgent): Promise<SessionSummary> =>
+  agent === "claude" && transcriptId !== null ? readSessionSummary(cwd, transcriptId) : Promise.resolve(EMPTY_SUMMARY);
+
 async function agentTitleFields(cwd: string, id: string, agent: SessionAgent): Promise<{ agentTitle?: string | null; agentTitleKind?: AgentTitleKind | null }> {
   if (agent === "claude" || agent === "shell") return { agentTitle: null, agentTitleKind: null };
   const title = await agentSessionTitle(cwd, id, agent);
@@ -140,7 +147,9 @@ async function sessionDetail(req: Request<{ id: string }>, res: Response, freshe
   // `agentBadges`, their exchange from `sessionLastTurn`, and neither a work phase nor a title is
   // something claude's file can say about another agent's session. Reading it anyway also cost a
   // stat and a fold per poll to produce fields that were then discarded.
-  const claudeSummary = agent === "claude" ? await readSessionSummary(cwd, id) : EMPTY_SUMMARY;
+  // The transcript the cell is in now: after a `/clear` or an in-session `/resume` that is not ours.
+  const transcriptId = transcriptIdOf(id);
+  const claudeSummary = await claudeSummaryOf(cwd, transcriptId, agent);
   let badges = agent === "claude" ? { usage: claudeSummary.usage, context: claudeSummary.context } : await agentBadges(cwd, id, agent);
   // A cell that is actually running Muse but whose persisted `agent` is still "claude" (created
   // before the Muse feature, or reconnecting from an older client) would otherwise show no badge:
@@ -181,14 +190,15 @@ async function sessionDetail(req: Request<{ id: string }>, res: Response, freshe
   // wrote and, on the `headless` source, summarizes claude's TURNS. Handed another agent's session
   // it would re-title it from a file that is not that conversation — and the turn count it rations
   // that work by would be claude's too.
-  if (agent === "claude") freshenRosterTitle(id, cwd, claudeSummary.userTurns, claudeSummary.aiTitle);
+  // Not if the session moved while the summary was read: that title is the conversation's it left.
+  if (agent === "claude" && transcriptIdOf(id) === transcriptId) freshenRosterTitle(id, cwd, claudeSummary.userTurns, claudeSummary.aiTitle);
   await sessionMemosHydrated; // a cell seeding on boot must not be told its memo is gone
   await sessionCollectionsHydrated; // and a chat opened from a collection must not lose its mark to a restart
   const view = sessionDetailView(
     { lastPrompt: lastPrompts.get(id), lastResponse: lastResponses.get(id), aiTitle: aiTitles.get(id), memo: sessionMemos.get(id) },
     { lastPrompt: exchange.prompt, lastResponse: exchange.reply, customTitle: claudeSummary.customTitle },
     activity.get(id) ?? {},
-    clearedTranscripts.has(id),
+    transcriptId === null,
   );
   // Outside `view` with `workPhase`, deliberately: `sessionDetailView` exists for the `/clear`
   // precedence rule, and which collection a session was opened from is not a thing `/clear` can
@@ -268,7 +278,8 @@ async function toolTimeline(req: Request, res: Response) {
   const target = await sessionRouteTarget(req, res);
   if (target === null) return;
   const { session, cwd } = target;
-  res.json(await sessionTimeline(cwd, session));
+  const transcriptId = transcriptIdOf(session);
+  res.json(transcriptId === null ? { events: [], truncated: false } : await sessionTimeline(cwd, transcriptId));
 }
 
 // What the USER asked this session for, newest last (#1748) — the mirror of the timeline above,
@@ -319,7 +330,9 @@ async function lastTurn(req: Request, res: Response) {
   if (target === null) return;
   const { session, cwd } = target;
   const agent = normalizeAgent(req.query.agent);
-  const turn = await sessionLastTurn(cwd, session, agent);
+  // From the conversation the cell is in now, never one a `/clear` or `/resume` left.
+  const transcriptId = transcriptIdOf(session);
+  const turn = transcriptId === null ? EMPTY_TURN : await sessionLastTurn(cwd, transcriptId, agent);
   // ?as=reply drops the prompt block: the caller is relaying an ANSWER back to whoever
   // asked, and that prompt is the asker's own text coming home.
   const shape: HandoffShape = req.query.as === "reply" ? "reply" : "exchange";

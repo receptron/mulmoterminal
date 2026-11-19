@@ -20,7 +20,7 @@ import { routeCall } from "../../helpers/routeCall";
 import { mountSessionRoutes } from "../../../server/routes/session-routes";
 import { projectSessionsDir } from "../../../server/session/project-dir";
 import { lastPrompts, lastResponses } from "../../../server/session/registry";
-import { clearedTranscripts } from "../../../server/session/transcript/cleared-transcripts";
+import { clearedTranscripts, forgetClearedTranscript, markTranscriptCleared } from "../../../server/session/transcript/cleared-transcripts";
 import { clearAgentTitleCache } from "../../../server/agents/agent-session-title";
 
 // A codex session is addressed by the id codex minted for itself — what the sidebar hands over for
@@ -51,13 +51,13 @@ async function writeRollout(prompt: string, reply: string): Promise<void> {
   await fs.writeFile(path.join(dir, `rollout-2026-09-18T08-58-04-${SESSION}.jsonl`), body);
 }
 
-async function writeClaudeTranscript(prompt: string, reply: string): Promise<void> {
+async function writeClaudeTranscript(prompt: string, reply: string, id: string = SESSION): Promise<void> {
   const dir = projectSessionsDir(cwd);
   await fs.mkdir(dir, { recursive: true });
   const body =
     line({ type: "user", message: { role: "user", content: prompt } }) +
     line({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: reply }], stop_reason: "end_turn" } });
-  await fs.writeFile(path.join(dir, `${SESSION}.jsonl`), body);
+  await fs.writeFile(path.join(dir, `${id}.jsonl`), body);
 }
 
 /** The same, plus the two fields that are NOT the exchange: the title Claude Code writes for
@@ -209,6 +209,22 @@ describe("GET /api/session/:id — the exchange comes from the agent's own log",
       expect((await detail({ cwd, agent: "claude" })).body.customTitle).toBeNull();
     } finally {
       clearedTranscripts.delete(SESSION);
+    }
+  });
+
+  // After a `/clear` or an in-session `/resume` the cell is in the successor's conversation, so the
+  // exchange, the title and the badges come from that transcript, never the frozen one (#3347).
+  it("answers a moved claude session from its successor's transcript", async () => {
+    const successor = "02b0c2df-63df-4ff4-a7b4-7bf2a424b88c";
+    await writeClaudeTranscript("the conversation the cell left", "old reply");
+    await writeClaudeTranscript("the picked conversation", "picked reply", successor);
+    await markTranscriptCleared(SESSION, undefined, successor);
+    try {
+      const { body } = await detail({ cwd, agent: "claude" });
+      expect(body.lastPrompt).toBe("the picked conversation");
+      expect(body.lastResponse).toBe("picked reply");
+    } finally {
+      await forgetClearedTranscript(SESSION, path.join(home, "marks"));
     }
   });
 

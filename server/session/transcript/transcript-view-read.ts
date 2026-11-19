@@ -14,7 +14,7 @@ import { SESSION_ID_RE } from "../../config/env.js";
 import { isRecord } from "../../../common/isRecord.js";
 import { hasErrnoCode, messageOf } from "../../errors.js";
 import { forEachJsonlRecordIn } from "../../infra/fs/jsonl-file.js";
-import { clearedTranscripts } from "./cleared-transcripts.js";
+import { transcriptIdOf } from "./cleared-transcripts.js";
 import { emptyTranscriptScan, foldTranscriptView, trackTurnStarts, transcriptViewOf, type TranscriptScan } from "./transcript-view.js";
 import type { TranscriptPage, TranscriptView } from "../../../common/transcriptView.js";
 import { createCodexFold } from "./transcript-view-codex.js";
@@ -588,18 +588,17 @@ export async function sessionTranscriptPage(
     unreadSources = UNREAD_SOURCES,
   } = "tailBytes" in deps ? { window: deps, agentOf: undefined, unreadSources: undefined } : deps;
   if (!cwd || !SESSION_ID_RE.test(id)) return { view: { status: "none" }, older: null };
-  // Before any file is opened. `/clear` makes claude mint a new id and a new transcript while hooks
-  // keep reporting under ours, so from that moment `${id}.jsonl` holds the conversation the user
-  // just ENDED (cleared-transcripts.ts) — it still exists, so a stat would happily serve it.
-  //
-  // The plain `.has`, like every other reader of that file, so this view cannot disagree with the
-  // cockpit, the summary and the push about the same session.
-  if (clearedTranscripts.has(id)) return { view: { status: "cleared" }, older: null };
+  // Before any file is opened. A `/clear` or an in-session `/resume` moves claude to another
+  // transcript while hooks keep reporting under ours, so `${id}.jsonl` may hold a conversation the
+  // cell has left — it still exists, so a stat would happily serve it. transcriptIdOf names the one
+  // the cell is in, the same answer the cockpit, the summary and the push read.
+  const transcriptId = transcriptIdOf(id);
+  if (transcriptId === null) return { view: { status: "cleared" }, older: null };
   // A `before` this host did not mint ends the walk, rather than falling back to the newest page:
   // the route refuses those with a 400, and this reader is not entitled to assume the route ran.
   const cursor = before === null ? null : parseTranscriptCursor(before);
   if (before !== null && cursor === null) return { view: emptyPageView(), older: null };
-  const page = await pageFromCursor(cwd, id, cursor, window);
+  const page = await pageFromCursor(cwd, transcriptId, cursor, window);
   if (page !== null) return page;
   // Past a cursor, "no source has anything" is the end of the walk backwards rather than a verdict
   // on the session — the client is holding turns this host just served it.
