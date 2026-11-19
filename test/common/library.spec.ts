@@ -2,7 +2,14 @@
 // The Library's wire shapes read back on the client (#3329): what the server sends passes, and
 // anything off-shape is rejected rather than rendered.
 import { describe, it, expect } from "vitest";
-import { isLibraryConversation, isLibraryIndexStatus, isLibrarySearchHit, type LibraryConversation } from "../../common/library";
+import {
+  isLibraryConversation,
+  isLibraryIndexStatus,
+  isLibraryMarks,
+  isLibrarySearchHit,
+  LIBRARY_NAME_MAX,
+  type LibraryConversation,
+} from "../../common/library";
 
 const valid: LibraryConversation = {
   ...{ id: "s", agent: "claude", title: null, cwd: "/w", gitBranch: null, prs: [{ number: 1, url: "u", repository: "o/r" }], costUsd: 1.5 },
@@ -47,5 +54,24 @@ describe("isLibrarySearchHit and isLibraryIndexStatus", () => {
     expect(isLibrarySearchHit({ conversation: {}, snippet: null, role: null })).toBe(false);
     expect(isLibraryIndexStatus({ indexing: true, filesDone: 1, filesTotal: 2, finishedAt: null })).toBe(true);
     expect(isLibraryIndexStatus({ indexing: "yes", filesDone: 1, filesTotal: 2, finishedAt: null })).toBe(false);
+  });
+});
+
+describe("isLibraryMarks", () => {
+  it("accepts what the server writes", () => {
+    expect(isLibraryMarks({ pinned: ["a", "b"], names: { a: "Mine" } })).toBe(true);
+    expect(isLibraryMarks({ pinned: [], names: {} })).toBe(true);
+  });
+
+  it.each([
+    ["an empty id", { pinned: [""], names: {} }],
+    ["a pin twice", { pinned: ["a", "a"], names: {} }],
+    ["an empty name key", { pinned: [], names: { "": "x" } }],
+    ["a blank name", { pinned: [], names: { a: "  " } }],
+    ["a name past the cap", { pinned: [], names: { a: "x".repeat(LIBRARY_NAME_MAX + 1) } }],
+    ["a non-string name", { pinned: [], names: { a: 3 } }],
+    ["no names", { pinned: [] }],
+  ])("refuses %s", (_label, value) => {
+    expect(isLibraryMarks(value)).toBe(false);
   });
 });

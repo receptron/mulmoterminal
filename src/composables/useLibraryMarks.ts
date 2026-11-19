@@ -12,6 +12,7 @@ export function useLibraryMarks(isOpen: Ref<boolean>) {
   const pinned = shallowRef<LibraryConversation[]>([]);
   const saveFailed = ref(false);
   let request = 0;
+  let saveRequest = 0;
 
   async function readPinned(ids: readonly string[]): Promise<void> {
     const mine = ++request;
@@ -28,10 +29,14 @@ export function useLibraryMarks(isOpen: Ref<boolean>) {
     await readPinned(read.pinned);
   }
 
-  /** Saves one change; on failure nothing on screen changes and `saveFailed` says so. */
+  /** Saves one change; on failure nothing on screen changes and `saveFailed` says so. Only the newest
+   *  request's answer is applied: the server applies changes in order, so its last answer already
+   *  holds the earlier ones, while an earlier answer arriving late would undo the later change. */
   async function change(id: string, update: LibraryMarkChange): Promise<boolean> {
     saveFailed.value = false;
+    const mine = ++saveRequest;
     const saved = await saveLibraryMark(id, update);
+    if (mine !== saveRequest) return saved !== null;
     if (saved === null) {
       saveFailed.value = true;
       return false;
@@ -45,6 +50,7 @@ export function useLibraryMarks(isOpen: Ref<boolean>) {
     isOpen,
     (open) => {
       request++;
+      saveRequest++; // an answer for the screen as it was must not land on the next opening
       saveFailed.value = false;
       if (open) void load();
     },

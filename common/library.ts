@@ -124,12 +124,18 @@ export interface LibraryMarks {
 
 export const emptyLibraryMarks = (): LibraryMarks => ({ pinned: [], names: {} });
 
+const isMarkName = (name: unknown): boolean => typeof name === "string" && name.trim() !== "" && name.length <= LIBRARY_NAME_MAX;
+
+/** The shape this code writes and nothing looser: a file edited by hand into something else is
+ *  refused, not read and then written back. */
 export const isLibraryMarks = (value: unknown): value is LibraryMarks =>
   isRecord(value) &&
   Array.isArray(value.pinned) &&
-  value.pinned.every((id) => typeof id === "string") &&
+  value.pinned.every((id) => typeof id === "string" && id !== "") &&
+  new Set(value.pinned).size === value.pinned.length &&
   isRecord(value.names) &&
-  Object.values(value.names).every((name) => typeof name === "string");
+  Object.keys(value.names).every((id) => id !== "") &&
+  Object.values(value.names).every(isMarkName);
 
 /** One change to one conversation's marks; a field left out is left as it is. */
 export interface LibraryMarkChange {

@@ -2,7 +2,7 @@
 // One conversation, read (#3329): its title, one grey line of facts — including the cost and the
 // lines it changed, which the list leaves out — and the conversation itself, through the same
 // transcript view the terminal's side pane uses.
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import TranscriptPane from "../TranscriptPane.vue";
 import { LIBRARY_NAME_MAX, type LibraryConversation } from "../../../common/library";
@@ -31,6 +31,33 @@ function finishRename(): void {
   emit("rename", typed === "" || typed === props.conversation.title ? null : typed);
   draft.value = null;
 }
+const menu = ref<HTMLElement | null>(null);
+// While the menu is open, Esc and a click elsewhere close IT. Esc is caught on the way down
+// (capture), before the Library's own window-level Esc would close the whole screen.
+function onMenuKey(event: KeyboardEvent): void {
+  if (event.key !== "Escape") return;
+  event.stopPropagation();
+  event.preventDefault();
+  menuOpen.value = false;
+}
+function onOutsidePointer(event: PointerEvent): void {
+  if (event.target instanceof Node && menu.value?.contains(event.target)) return;
+  menuOpen.value = false;
+}
+watch(menuOpen, async (open) => {
+  window.removeEventListener("keydown", onMenuKey, true);
+  window.removeEventListener("pointerdown", onOutsidePointer, true);
+  if (!open) return;
+  window.addEventListener("keydown", onMenuKey, true);
+  window.addEventListener("pointerdown", onOutsidePointer, true);
+  await nextTick();
+  menu.value?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+});
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onMenuKey, true);
+  window.removeEventListener("pointerdown", onOutsidePointer, true);
+});
+
 function pickPin(): void {
   menuOpen.value = false;
   emit("pin", !props.pinned);
@@ -80,7 +107,7 @@ const lines = computed(() => {
     <!-- A row of its own rather than floating over the conversation, so the last lines are never under
          it; the notice wraps beside the button and drops above it when the row is narrow. -->
     <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-border px-4 py-2">
-      <div class="relative mr-auto">
+      <div ref="menu" class="relative mr-auto">
         <button
           type="button"
           data-testid="library-more-actions"

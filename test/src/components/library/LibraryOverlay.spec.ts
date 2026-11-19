@@ -17,6 +17,7 @@ let statusGate: Promise<void> = Promise.resolve();
 let marks: { pinned: string[]; names: Record<string, string> } = { pinned: [], names: {} };
 const saved: { id: string; change: { pinned?: boolean; name?: string | null } }[] = [];
 let saveFails = false;
+let saveGate: Promise<void> = Promise.resolve();
 let more: { conversations: LibraryConversation[]; hasMore: boolean; indexFinishedAt: number | null } | null = null;
 /** The finished pass the next first page says it reflects. */
 let pageFinished: number | null = 1;
@@ -39,13 +40,17 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
   searchLibrary: () => Promise.resolve(hits),
   loadLibraryMarks: () => Promise.resolve(marks),
   loadLibraryConversation: (id: string) => Promise.resolve(page.find((c) => c.id === id) ?? null),
-  saveLibraryMark: (id: string, change: { pinned?: boolean; name?: string | null }) => {
+  saveLibraryMark: async (id: string, change: { pinned?: boolean; name?: string | null }) => {
     saved.push({ id, change });
-    if (saveFails) return Promise.resolve(null);
+    // Applied and answered as of ARRIVAL, as the server does; only the delivery waits on the gate.
+    const gate = saveGate;
+    if (saveFails) return null;
     if (change.pinned !== undefined)
       marks = { ...marks, pinned: change.pinned ? [id, ...marks.pinned.filter((p) => p !== id)] : marks.pinned.filter((p) => p !== id) };
     if (change.name !== undefined) marks = { ...marks, names: change.name ? { ...marks.names, [id]: change.name } : {} };
-    return Promise.resolve(marks);
+    const answer = { ...marks };
+    await gate;
+    return answer;
   },
 }));
 
@@ -99,6 +104,7 @@ beforeEach(() => {
   marks = { pinned: [], names: {} };
   saved.length = 0;
   saveFails = false;
+  saveGate = Promise.resolve();
   libraryOpen.value = true;
   page = [conversation("a", "Burn subtitles"), conversation("b", "CI under ten minutes", { endedAt: NOW - 30 * 24 * 3_600_000 })];
   status = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
@@ -595,5 +601,35 @@ describe("LibraryOverlay", () => {
     await flushPromises();
     expect(wrapper.find("[role=status]").exists()).toBe(true);
     expect(wrapper.text()).not.toContain("Pinned");
+  });
+
+  it("closes the More menu on Esc without closing the Library, and on a click elsewhere", async () => {
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    expect(wrapper.find("[role=menu]").exists()).toBe(true);
+    await press("Escape");
+    expect(wrapper.find("[role=menu]").exists()).toBe(false);
+    expect(closeLibrary).not.toHaveBeenCalled();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    await flushPromises();
+    expect(wrapper.find("[role=menu]").exists()).toBe(false);
+  });
+
+  it("keeps the newest change when an older save answers last", async () => {
+    const wrapper = await mountLibrary();
+    let releaseFirst: () => void = () => {};
+    saveGate = new Promise((resolve) => (releaseFirst = resolve));
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-pin]").trigger("click"); // its answer is held
+    saveGate = Promise.resolve();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-rename-start]").trigger("click");
+    await wrapper.find("[data-testid=library-rename]").setValue("Newest");
+    await wrapper.find("[data-testid=library-rename]").trigger("keydown", { key: "Enter" });
+    await flushPromises(); // the rename answers first, with both changes
+    releaseFirst(); // then the pin's older answer arrives
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Newest");
   });
 });
