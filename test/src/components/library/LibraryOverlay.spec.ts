@@ -48,7 +48,10 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
   saveLibraryMark: async (id: string, change: { pinned?: boolean; name?: string | null }) => {
     // Applied and answered as of ARRIVAL, as the server does; only the delivery waits on the gate.
     const gate = saveGate;
-    if (saveFails) return null;
+    if (saveFails) {
+      await gate; // a failure is delivered as late as a success would be
+      return null;
+    }
     if (change.pinned !== undefined)
       marks = { ...marks, pinned: change.pinned ? [id, ...marks.pinned.filter((p) => p !== id)] : marks.pinned.filter((p) => p !== id) };
     if (change.name !== undefined) marks = { ...marks, names: change.name ? { ...marks.names, [id]: change.name } : {} };

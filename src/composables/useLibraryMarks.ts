@@ -51,13 +51,15 @@ export function useLibraryMarks(isOpen: Ref<boolean>) {
    *  request's answer is applied: the server applies changes in order, so its last answer already
    *  holds the earlier ones, while an earlier answer arriving late would undo the later change. */
   async function change(id: string, update: LibraryMarkChange, conversation?: LibraryConversation): Promise<boolean> {
-    saveFailedFor.value = null;
+    if (saveFailedFor.value === id) saveFailedFor.value = null; // another conversation's failure stands
     const mine = ++seq.saves;
     const saved = await saveLibraryMark(id, update);
     if (mine !== seq.saves) {
       // Too old to apply, but it did change the file — after a reopen, a read begun before it landed
       // may now be older still. Reading again makes the newest state win whatever the order.
       if (saved !== null && isOpen.value) void load();
+      // A failure is still its conversation's, even when a newer save answered first.
+      if (saved === null) saveFailedFor.value = id;
       return saved !== null;
     }
     if (saved === null) {

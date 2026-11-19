@@ -48,7 +48,8 @@ const chosenSeen = shallowRef<LibraryConversation | null>(null);
 const selected = computed(
   () =>
     shown.value.find((c) => conversationKey(c) === chosenKey.value) ??
-    (chosenSeen.value !== null && conversationKey(chosenSeen.value) === chosenKey.value ? chosenSeen.value : null) ??
+    // Held only while browsing: in search results, the row Enter acts on must be one of the results.
+    (!hits.value && chosenSeen.value !== null && conversationKey(chosenSeen.value) === chosenKey.value ? chosenSeen.value : null) ??
     shown.value[0] ??
     null,
 );
@@ -235,7 +236,11 @@ onBeforeUnmount(() => {
       <p v-else-if="hits && !hits.length && !searching" class="m-0 px-4 py-6 font-sans text-[13px] text-dim" data-testid="library-no-match">
         {{ t("libraryView.noMatch", { query: query.trim() }) }}
       </p>
-      <div v-else-if="!hits && !conversations.length && !pinned.length" class="px-4 py-6 font-sans text-[13px] text-dim" data-testid="library-empty">
+      <div
+        v-else-if="!hits && !conversations.length && !pinned.length && selected === null"
+        class="px-4 py-6 font-sans text-[13px] text-dim"
+        data-testid="library-empty"
+      >
         <p class="m-0">{{ t("libraryView.empty") }}</p>
         <!-- The reader carries this notice otherwise; with nothing listed there is no reader. -->
         <p v-if="marksFailed" class="m-0 mt-2 text-err-text" role="status">{{ t("libraryView.marksUnreadable") }}</p>

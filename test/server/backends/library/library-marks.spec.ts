@@ -15,7 +15,7 @@ import {
   tryAcquire,
   withMarksLock,
 } from "../../../../server/backends/library/library-marks";
-import { mkdirSync, utimesSync } from "node:fs";
+import { existsSync, mkdirSync, utimesSync } from "node:fs";
 import { emptyLibraryMarks, LIBRARY_NAME_MAX } from "../../../../common/library";
 
 const dirs: string[] = [];
@@ -141,5 +141,22 @@ describe("the cross-process lock", () => {
     expect(await tryAcquire(lock, "me")).toBe(true);
     await removeIfOwnedBy(lock, "me");
     expect(await tryAcquire(lock, "next")).toBe(true); // it was really released
+  });
+
+  it("does not take over a lock whose moved copy turns out to be young, even under the expected owner", async () => {
+    const file = scratchFile();
+    const lock = `${file}.lock`;
+    mkdirSync(path.dirname(lock), { recursive: true });
+    expect(await tryAcquire(lock, "fresh")).toBe(true); // a new lock, which only LOOKED stale before
+    await removeIfOwnedBy(lock, "fresh", { onlyIfStale: true });
+    expect(readFileSync(`${lock}/owner`, "utf8")).toBe("fresh");
+  });
+
+  it("never matches an owner it could not read", async () => {
+    const file = scratchFile();
+    const lock = `${file}.lock`;
+    mkdirSync(lock, { recursive: true }); // a lock with no owner file at all
+    await removeIfOwnedBy(lock, ""); // an unreadable owner must not equal any token, the empty one included
+    expect(existsSync(lock)).toBe(true);
   });
 });

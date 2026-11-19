@@ -54,7 +54,10 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
     saved.push({ id, change });
     // Applied and answered as of ARRIVAL, as the server does; only the delivery waits on the gate.
     const gate = saveGate;
-    if (saveFails) return null;
+    if (saveFails) {
+      await gate; // a failure is delivered as late as a success would be
+      return null;
+    }
     if (change.pinned !== undefined)
       marks = { ...marks, pinned: change.pinned ? [id, ...marks.pinned.filter((p) => p !== id)] : marks.pinned.filter((p) => p !== id) };
     if (change.name !== undefined) marks = { ...marks, names: change.name ? { ...marks.names, [id]: change.name } : {} };
@@ -433,5 +436,81 @@ describe("LibraryOverlay pins and names", () => {
     button.element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
     await button.trigger("click");
     expect(wrapper.find("[role=menu]").exists()).toBe(false);
+  });
+
+  it("records a late failure on its own conversation even after a newer save succeeded", async () => {
+    let releaseFirst: () => void = () => {};
+    saveGate = new Promise((resolve) => (releaseFirst = resolve));
+    saveFails = true;
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-pin]").trigger("click"); // a: will fail, late
+    saveGate = Promise.resolve();
+    saveFails = false;
+    await press("ArrowDown"); // b
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-pin]").trigger("click"); // b: succeeds first
+    await flushPromises();
+    releaseFirst();
+    await flushPromises();
+    expect(wrapper.find("[role=status]").exists()).toBe(false); // not b's
+    // Back to a by its row: b, now pinned, sits above it.
+    await wrapper
+      .findAll("[data-testid=library-row]")
+      .find((row) => row.text().includes("Burn subtitles"))
+      ?.trigger("click");
+    expect(wrapper.find("[role=status]").exists()).toBe(true);
+  });
+
+  it("keeps one conversation's failure when another is then saved", async () => {
+    saveFails = true;
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-pin]").trigger("click"); // a fails
+    await flushPromises();
+    saveFails = false;
+    await press("ArrowDown"); // b
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-rename-start]").trigger("click");
+    await wrapper.find("[data-testid=library-rename]").setValue("B named");
+    await wrapper.find("[data-testid=library-rename]").trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    await wrapper
+      .findAll("[data-testid=library-row]")
+      .find((row) => row.text().includes("Burn subtitles"))
+      ?.trigger("click");
+    expect(wrapper.find("[role=status]").exists()).toBe(true);
+  });
+
+  it("does not keep a conversation held from the list as the row Enter acts on in search results", async () => {
+    const old = conversation("old", "Pinned long ago", { endedAt: NOW - 400 * 24 * 3_600_000 });
+    marks = { pinned: ["old"], names: {} };
+    page = [...page, old];
+    const api = await import("../../../../src/composables/libraryApi");
+    vi.spyOn(api, "loadLibraryPage").mockResolvedValue({ conversations: page.slice(0, 2), hasMore: true, indexFinishedAt: 1 });
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-pin]").trigger("click"); // unpin: held, though no longer listed
+    await flushPromises();
+    vi.spyOn(api, "searchLibrary").mockResolvedValueOnce([{ conversation: page[1] ?? old, snippet: "ten", role: "user" }]);
+    await wrapper.find("[data-testid=library-search]").setValue("ten");
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("CI under ten minutes");
+    vi.mocked(api.loadLibraryPage).mockRestore();
+  });
+
+  it("keeps the reader on the last conversation when unpinning it empties the list", async () => {
+    const only = conversation("only", "The only one");
+    page = [only];
+    marks = { pinned: ["only"], names: {} };
+    const api = await import("../../../../src/composables/libraryApi");
+    vi.spyOn(api, "loadLibraryPage").mockResolvedValue({ conversations: [], hasMore: false, indexFinishedAt: 1 });
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-pin]").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("The only one");
+    vi.mocked(api.loadLibraryPage).mockRestore();
   });
 });

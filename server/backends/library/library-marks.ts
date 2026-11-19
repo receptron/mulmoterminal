@@ -88,7 +88,7 @@ async function acquire(lock: string, owner: string): Promise<void> {
   for (let attempt = 0; attempt < MARKS_LOCK_ATTEMPTS; attempt += 1) {
     if (await tryAcquire(lock, owner)) return;
     const staleOwner = await staleOwnerOf(lock);
-    if (staleOwner !== null) await removeIfOwnedBy(lock, staleOwner);
+    if (staleOwner !== null) await removeIfOwnedBy(lock, staleOwner, { onlyIfStale: true });
     else await new Promise((resolve) => setTimeout(resolve, MARKS_LOCK_RETRY_MS));
   }
   throw new Error(`${lock} is held by another process`);
@@ -114,29 +114,39 @@ export async function tryAcquire(lock: string, owner: string): Promise<boolean> 
 /** What a rename onto an existing lock reports: ENOTEMPTY/EEXIST on POSIX, EPERM on Windows. */
 const LOCK_TAKEN = new Set(["ENOTEMPTY", "EEXIST", "EPERM"]);
 
-/** The owner token of a lock old enough to be taken as abandoned, or null for a live lock. */
-async function staleOwnerOf(lock: string): Promise<string | null> {
+/** A lock's owner token, or null when it cannot be read — never a value that could match another. */
+const ownerOf = (lock: string): Promise<string | null> => fs.readFile(ownerFile(lock), "utf8").catch(() => null);
+
+const isOld = async (lock: string): Promise<boolean> => {
   try {
-    if (Date.now() - (await fs.stat(lock)).mtimeMs <= MARKS_LOCK_STALE_MS) return null;
-    return await fs.readFile(ownerFile(lock), "utf8").catch(() => "");
+    return Date.now() - (await fs.stat(lock)).mtimeMs > MARKS_LOCK_STALE_MS;
   } catch {
-    return null; // released between the two calls: try again
+    return false;
   }
+};
+
+/** The owner token of a lock old enough to be taken as abandoned, or null for a live lock. Both are
+ *  checked again on the copy actually moved aside (`removeIfOwnedBy`), since the lock at this path
+ *  can be replaced between these reads. */
+async function staleOwnerOf(lock: string): Promise<string | null> {
+  const owner = await ownerOf(lock);
+  return owner !== null && (await isOld(lock)) ? owner : null;
 }
 
 /** Removes the lock only if `owner` still holds it: moved aside first (atomic), checked, and put back
  *  if it turned out to be someone else's. Used to release one's own lock and to take an abandoned one
  *  out of the way — in both, removing by path could delete a lock another holder has just made. Should
  *  even the put-back lose a race, the holder whose lock moved is refused at its write (`stillHeld`). */
-export async function removeIfOwnedBy(lock: string, owner: string): Promise<void> {
+export async function removeIfOwnedBy(lock: string, owner: string, options: { onlyIfStale?: boolean } = {}): Promise<void> {
   const aside = `${lock}.${randomUUID()}.aside`;
   try {
     await fs.rename(lock, aside);
   } catch {
     return; // already gone or replaced: the next attempt sees what is there now
   }
-  const moved = await fs.readFile(ownerFile(aside), "utf8").catch(() => "");
-  if (moved === owner) {
+  const moved = await ownerOf(aside);
+  // Judged on the copy that was moved: its owner, and — for a takeover — its own age.
+  if (moved !== null && moved === owner && (options.onlyIfStale !== true || (await isOld(aside)))) {
     await fs.rm(aside, { recursive: true, force: true });
     return;
   }
