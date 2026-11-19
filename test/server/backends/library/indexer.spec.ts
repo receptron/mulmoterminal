@@ -90,6 +90,17 @@ describe("runIndexPass", () => {
     expect(creators([])).toEqual([]);
   });
 
+  it("passes over a run the Library does not list, even when it recorded the PR first", async () => {
+    const { db, deps, transcript } = setup();
+    const link = line({ type: "pr-link", prNumber: 9, prUrl: "https://github.com/o/r/pull/9", prRepository: "o/r" });
+    const opened = (day: number, entrypoint: string): string =>
+      line({ type: "user", cwd: "/w/app", entrypoint, timestamp: `2026-11-${String(day)}T08:00:00.000Z`, message: { content: "x" } });
+    transcript("scripted", opened(10, "sdk-cli") + link);
+    transcript("by-hand", opened(11, "cli") + link);
+    await runIndexPass(deps);
+    expect(prCreators(db, "o/r", [9]).map((row) => conversationOfRow(row).id)).toEqual(["by-hand"]);
+  });
+
   it("reads only the conversations that recorded a PR, through the partial index", () => {
     const { db } = setup();
     const query = prCreatorsQuery("o/r", [1]);

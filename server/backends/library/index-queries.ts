@@ -50,6 +50,8 @@ export function prCreators(db: DatabaseSync, repository: string, numbers: readon
 
 /** The statement `prCreators` runs, apart so its plan can be checked against the partial index. */
 export function prCreatorsQuery(repository: string, numbers: readonly number[]): { sql: string; params: SQLInputValue[] } {
+  // The Library's own default filter, on purpose: the button opens a conversation the Library lists, so
+  // a `claude -p` / SDK run, a temp-directory run or a sidechain that recorded the PR is passed over.
   const where = filterClause({});
   const linked = `select c.*, json_extract(j.value, '$.number') as pr_number,
       row_number() over (partition by json_extract(j.value, '$.number') order by c.started_at asc nulls last, c.path) as rank
