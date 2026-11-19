@@ -69,6 +69,15 @@ describe("runIndexPass", () => {
     expect(conversationOfRow(findConversation(db, "s1", "/w/nowhere") ?? {}).cwd).toBe("/w/other");
   });
 
+  it("does not prefer a copy with no project recorded when no project is asked for", async () => {
+    const { db, deps, transcript } = setup();
+    transcript("s1", line({ type: "user", timestamp: "2026-11-18T08:00:00.000Z", message: { content: "no cwd" } }));
+    transcript("s1", line({ type: "user", cwd: "/w/other", timestamp: "2026-11-19T08:00:00.000Z", message: { content: "newer" } }), "-w-other");
+    await runIndexPass(deps);
+    expect(conversationOfRow(findConversation(db, "s1") ?? {}).cwd).toBe("/w/other");
+    expect(conversationOfRow(findConversation(db, "s1", "/w/app") ?? {}).cwd).toBe("/w/other"); // nothing there: the newest
+  });
+
   it("reads only what was appended on the next pass", async () => {
     const { db, deps, transcript } = setup();
     // The title sits between the bytes that identify the file and the ones where the read stopped,

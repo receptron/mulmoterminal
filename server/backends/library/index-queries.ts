@@ -39,9 +39,10 @@ export function listConversations(db: DatabaseSync, filter: ConversationFilter, 
 }
 
 /** A conversation by session id. The same id can sit in two project directories (a copied or moved
- *  transcript): the one in `cwd` is preferred when given, else — or when none is there — the newest. */
+ *  transcript): the one in `cwd` is preferred when given, else — or when none is there — the newest. `=` rather than
+ *  `is`, so that no cwd given never prefers a copy that has none recorded. */
 export function findConversation(db: DatabaseSync, id: string, cwd: string | null = null): Record<string, unknown> | null {
-  return db.prepare("select * from conversations where id = ? order by (cwd is ?) desc, ended_at desc nulls last limit 1").get(id, cwd) ?? null;
+  return db.prepare("select * from conversations where id = ? order by coalesce(cwd = ?, 0) desc, ended_at desc nulls last limit 1").get(id, cwd) ?? null;
 }
 
 /** What a search matches with: an FTS5 phrase, or null to fall back to `like` (an escaped pattern),
