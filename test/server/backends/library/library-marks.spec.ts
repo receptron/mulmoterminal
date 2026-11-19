@@ -12,6 +12,7 @@ import {
   MARKS_LOCK_STALE_MS,
   readLibraryMarks,
   takeOverIfStill,
+  tryAcquire,
   withMarksLock,
 } from "../../../../server/backends/library/library-marks";
 import { mkdirSync, utimesSync } from "node:fs";
@@ -121,5 +122,15 @@ describe("the cross-process lock", () => {
     writeFileSync(`${lock}/owner`, "fresh-holder"); // judged stale under another owner, now someone else's
     await takeOverIfStill(lock, "the-stale-one");
     expect(readFileSync(`${lock}/owner`, "utf8")).toBe("fresh-holder");
+  });
+
+  it("acquires a free lock with its owner already in it, and never one that is held", async () => {
+    const file = scratchFile();
+    const lock = `${file}.lock`;
+    mkdirSync(path.dirname(lock), { recursive: true });
+    expect(await tryAcquire(lock, "first")).toBe(true);
+    expect(readFileSync(`${lock}/owner`, "utf8")).toBe("first");
+    expect(await tryAcquire(lock, "second")).toBe(false);
+    expect(readFileSync(`${lock}/owner`, "utf8")).toBe("first"); // the holder's token is untouched
   });
 });

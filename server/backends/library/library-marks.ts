@@ -88,19 +88,33 @@ async function release(lock: string, owner: string): Promise<void> {
 
 async function acquire(lock: string, owner: string): Promise<void> {
   for (let attempt = 0; attempt < MARKS_LOCK_ATTEMPTS; attempt += 1) {
-    try {
-      await fs.mkdir(lock);
-      await fs.writeFile(ownerFile(lock), owner);
-      return;
-    } catch (err) {
-      if (!(err instanceof Error && "code" in err && err.code === "EEXIST")) throw err;
-      const staleOwner = await staleOwnerOf(lock);
-      if (staleOwner !== null) await takeOverIfStill(lock, staleOwner);
-      else await new Promise((resolve) => setTimeout(resolve, MARKS_LOCK_RETRY_MS));
-    }
+    if (await tryAcquire(lock, owner)) return;
+    const staleOwner = await staleOwnerOf(lock);
+    if (staleOwner !== null) await takeOverIfStill(lock, staleOwner);
+    else await new Promise((resolve) => setTimeout(resolve, MARKS_LOCK_RETRY_MS));
   }
   throw new Error(`${lock} is held by another process`);
 }
+
+/** One attempt. The lock is built under a private name with its owner already written, then renamed
+ *  into place: a lock therefore never exists without its owner, so no other process can take it over
+ *  in between. The rename fails when a lock is already there (it is never empty). */
+export async function tryAcquire(lock: string, owner: string): Promise<boolean> {
+  const building = `${lock}.${randomUUID()}.new`;
+  await fs.mkdir(building);
+  await fs.writeFile(ownerFile(building), owner);
+  try {
+    await fs.rename(building, lock);
+    return true;
+  } catch (err) {
+    await fs.rm(building, { recursive: true, force: true });
+    if (err instanceof Error && "code" in err && LOCK_TAKEN.has(String(err.code))) return false;
+    throw err;
+  }
+}
+
+/** What a rename onto an existing lock reports: ENOTEMPTY/EEXIST on POSIX, EPERM on Windows. */
+const LOCK_TAKEN = new Set(["ENOTEMPTY", "EEXIST", "EPERM"]);
 
 /** The owner token of a lock old enough to be taken as abandoned, or null for a live lock. */
 async function staleOwnerOf(lock: string): Promise<string | null> {
