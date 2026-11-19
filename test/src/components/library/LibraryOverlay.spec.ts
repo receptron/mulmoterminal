@@ -413,4 +413,43 @@ describe("LibraryOverlay", () => {
     reads.mockRestore();
     host.unmount();
   });
+
+  it("asks for progress again after a read, since a read can start a pass", async () => {
+    const api = await import("../../../../src/composables/libraryApi");
+    const asks = vi.spyOn(api, "loadLibraryStatus");
+    const wrapper = await mountLibrary();
+    const interval = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 300));
+    await interval();
+    await interval();
+    const settled = asks.mock.calls.length;
+    await interval();
+    expect(asks.mock.calls).toHaveLength(settled); // quiet: the index idle, the list current
+    hits = [];
+    await wrapper.find("[data-testid=library-search]").setValue("anything");
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    await interval();
+    await flushPromises();
+    expect(asks.mock.calls.length).toBeGreaterThan(settled);
+    asks.mockRestore();
+  }, 25_000);
+
+  it("blocks Enter while a search re-run after a pass is pending", async () => {
+    const api = await import("../../../../src/composables/libraryApi");
+    status = { indexing: true, filesDone: 1, filesTotal: 2, finishedAt: 1 };
+    const wrapper = await mountLibrary();
+    hits = [{ conversation: page[0] ?? conversation("x", "x"), snippet: "first", role: "user" }];
+    await wrapper.find("[data-testid=library-search]").setValue("first");
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    await flushPromises();
+    // The pass ends; its search re-run is held, so it is pending when Enter arrives.
+    let releaseSearch: () => void = () => {};
+    vi.spyOn(api, "searchLibrary").mockImplementationOnce(() => new Promise((resolve) => (releaseSearch = () => resolve(hits))));
+    status = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 2 };
+    pageFinished = 2;
+    await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 200));
+    await press("Enter");
+    releaseSearch();
+    await flushPromises();
+    expect(opened).toEqual([]);
+  }, 10_000);
 });

@@ -3,7 +3,7 @@
 import type { LibraryConversation, LibraryConversationPage, LibraryIndexStatus, LibrarySearchHit } from "../../../common/library.js";
 import { conversationOfRow, findConversation, listConversations, type ConversationFilter } from "./index-queries.js";
 import type { LibraryIndex } from "./library-index.js";
-import { readLease } from "./index-store.js";
+import { inReadSnapshot, readLease } from "./index-store.js";
 import { searchLibrary } from "./library-search.js";
 
 export interface LibraryService {
@@ -23,11 +23,15 @@ export function createLocalLibraryService(index: LibraryIndex): LibraryService {
   return {
     status: () => answer(() => index.status()),
     list: (filter, offset, limit) =>
-      answer(() => {
-        const rows = listConversations(index.db, filter, offset, limit + 1);
-        const indexFinishedAt = readLease(index.db).finishedMs;
-        return { conversations: rows.slice(0, limit).map(conversationOfRow), hasMore: rows.length > limit, indexFinishedAt };
-      }),
+      answer(() =>
+        // One read transaction, so the rows and the pass they are labelled with come from the same
+        // snapshot: another server may commit a pass between two separate reads.
+        inReadSnapshot(index.db, () => {
+          const rows = listConversations(index.db, filter, offset, limit + 1);
+          const indexFinishedAt = readLease(index.db).finishedMs;
+          return { conversations: rows.slice(0, limit).map(conversationOfRow), hasMore: rows.length > limit, indexFinishedAt };
+        }),
+      ),
     conversation: (id) =>
       answer(() => {
         const row = findConversation(index.db, id);

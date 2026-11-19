@@ -7,6 +7,7 @@ import {
   applyHistoryScan,
   applyTranscriptScan,
   finishLease,
+  inReadSnapshot,
   LIBRARY_SCHEMA_VERSION,
   prepareLibraryStore,
   readFileMark,
@@ -200,6 +201,19 @@ describe("recordTail", () => {
     takeLease(db, "someone-else", 0, 100);
     recordTail(db, OWNER, "/p/a.jsonl", 10, "stale");
     expect(readFileMark(db, "/p/a.jsonl")?.tail).toBe("mine");
+  });
+});
+
+describe("inReadSnapshot", () => {
+  it("answers what the read returns, and leaves no transaction open, even when the read throws", () => {
+    const db = freshDb();
+    expect(inReadSnapshot(db, () => 7)).toBe(7);
+    expect(() =>
+      inReadSnapshot(db, () => {
+        throw new Error("boom");
+      }),
+    ).toThrow("boom");
+    expect(commit(db, "after", { turns: [turn("written after")] })).toBe(true); // a write still begins
   });
 });
 

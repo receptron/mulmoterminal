@@ -88,6 +88,17 @@ export function inTransaction<T>(db: DatabaseSync, work: () => T): T {
   }
 }
 
+/** Reads that must see one snapshot. In WAL mode a deferred transaction holds its first read's view
+ *  until it ends, and a reader never waits on a writer. */
+export function inReadSnapshot<T>(db: DatabaseSync, read: () => T): T {
+  db.exec("begin");
+  try {
+    return read();
+  } finally {
+    db.exec("commit");
+  }
+}
+
 // ---- where each file was left -------------------------------------------------------------
 
 export interface FileMark {

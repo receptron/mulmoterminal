@@ -33,6 +33,9 @@ export function useLibraryData(isOpen: Ref<boolean>) {
   watch(loadFailed, (failed) => {
     if (failed) poll.wake();
   });
+  // Any read can start a pass on the server (the index catches up when asked), so every answer wakes
+  // the poll; one that finds the index idle and the list current goes quiet again.
+  watch([conversations, hits], () => poll.wake());
 
   watch(
     isOpen,
@@ -181,6 +184,7 @@ function useDebouncedSearch(query: Ref<string>, hits: Ref<LibrarySearchHit[] | n
     void run(text);
   }
   async function run(text: string): Promise<void> {
+    searching.value = true; // a refresh runs without the keystroke that set it
     const controller = new AbortController();
     inFlight = controller;
     const found = await searchLibrary(text, controller.signal);
