@@ -562,4 +562,24 @@ describe("LibraryOverlay pins and names", () => {
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Asked for second");
     vi.mocked(api.loadLibraryPage).mockRestore();
   });
+
+  it("drops a request still loading when the Library is then opened plainly", async () => {
+    const asked = conversation("asked", "Asked for, then withdrawn", { endedAt: NOW - 400 * 24 * 3_600_000 });
+    page = [...page, asked];
+    const api = await import("../../../../src/composables/libraryApi");
+    vi.spyOn(api, "loadLibraryPage").mockResolvedValue({ conversations: page.slice(0, 2), hasMore: true, indexFinishedAt: 1 });
+    let release: () => void = () => {};
+    conversationGates.set("asked", new Promise((resolve) => (release = resolve)));
+    const { router } = await import("../../../../src/router");
+    const wrapper = await mountLibrary();
+    requested = { session: "asked", cwd: null };
+    await router.push({ name: "library", query: { session: "asked" } });
+    requested = null;
+    await router.push({ name: "library", query: {} });
+    await flushPromises();
+    release();
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).not.toContain("withdrawn");
+    vi.mocked(api.loadLibraryPage).mockRestore();
+  });
 });

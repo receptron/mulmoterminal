@@ -103,9 +103,9 @@ watch(
  *  it is not on the pages the list has read. */
 let focusRequests = 0;
 async function focusRequested(): Promise<void> {
+  const mine = ++focusRequests; // even with nothing asked: a plain open withdraws an earlier request
   const request = libraryRequested();
   if (request === null) return;
-  const mine = ++focusRequests;
   const opening = openings;
   const loaded = [...pinned.value, ...conversations.value];
   const listed = loaded.find((c) => c.id === request.session && c.cwd === request.cwd);
