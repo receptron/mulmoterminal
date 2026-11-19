@@ -5,7 +5,14 @@ import { describe, it, expect, afterEach } from "vitest";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { foldFileHistory, isBackupFileName, trackedFileOf, TRACKED_FILES_MAX, VERSIONS_PER_FILE_MAX } from "../../../../server/backends/library/file-history";
+import {
+  foldFileHistory,
+  isBackupFileName,
+  trackedFileOf,
+  TRACKED_FILES_MAX,
+  TRACKED_VERSIONS_MAX,
+  VERSIONS_PER_FILE_MAX,
+} from "../../../../server/backends/library/file-history";
 import { readBoundedText, readFileHistory, readKeptCopy } from "../../../../server/backends/library/file-history-read";
 import { LIBRARY_FILE_TEXT_MAX } from "../../../../common/libraryFiles";
 
@@ -74,6 +81,14 @@ describe("foldFileHistory", () => {
     const files = foldFileHistory(records);
     expect(files).toHaveLength(TRACKED_FILES_MAX);
     expect(files[0]?.backups).toHaveLength(VERSIONS_PER_FILE_MAX);
+  });
+
+  it("keeps at most the cap of versions in all, however they spread over files", () => {
+    const perFile = 100;
+    const fileCount = Math.ceil(TRACKED_VERSIONS_MAX / perFile) + 3;
+    const records = Array.from({ length: fileCount * perFile }, (_, i) => delta(`f${String(i % fileCount)}.ts`, backup(null, Math.floor(i / fileCount) + 1)));
+    const kept = foldFileHistory(records).reduce((sum, file) => sum + file.backups.length, 0);
+    expect(kept).toBe(TRACKED_VERSIONS_MAX);
   });
 
   it("has no disk path for a relative file whose directory was not recorded, and no time for an unreadable one", () => {
