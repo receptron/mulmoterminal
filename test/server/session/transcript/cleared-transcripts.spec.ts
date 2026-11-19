@@ -171,8 +171,8 @@ describe("forgetClearedTranscript", () => {
     expect(clearedTranscripts.has(SESSION)).toBe(false);
   });
 
-  // Boot would restore a marker left on disk, so memory must not claim it is gone.
-  it("keeps the mark in memory and on disk when the removal fails", async () => {
+  // This process must resume our own transcript at once; only the disk copy can be left behind.
+  it("drops the mark from memory and reports a removal that fails", async () => {
     await writeTranscript("a".repeat(10));
     await markTranscriptCleared(SESSION, cwd, CLAUDE_ID, marksDir);
     await fs.rm(markerFile());
@@ -180,8 +180,8 @@ describe("forgetClearedTranscript", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
 
     expect(await forgetClearedTranscript(SESSION, marksDir)).toBe(false);
-    expect(clearedTranscripts.has(SESSION)).toBe(true);
-    expect(clearedClaudeIdOf(SESSION)).toBe(CLAUDE_ID);
+    expect(clearedTranscripts.has(SESSION)).toBe(false);
+    expect(clearedClaudeIdOf(SESSION)).toBeUndefined();
     expect(await exists(markerFile())).toBe(true);
   });
 });

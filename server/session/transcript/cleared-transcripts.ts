@@ -136,21 +136,21 @@ export async function markTranscriptCleared(id: string, cwd: string | undefined,
 const removeMarker = (dir: string, id: string): Promise<void> =>
   fs.rm(markerFile(dir, id), { force: true }).catch((e) => console.error(`[cleared-transcripts] failed to drop ${id}: ${messageOf(e)}`));
 
-/** Drop the mark, on disk first. Boot keeps a marker whose transcripts exist, so one left behind
- *  would send the next restart to the conversation the session came back from. A failed removal
- *  therefore keeps the mark in memory too: both still agree, and the next unmark retries.
- *  Returns whether the mark is gone. */
+/** Drop the mark. Memory always, so this process resumes our own transcript from now on. A marker
+ *  that cannot be removed would be restored at boot (its transcripts exist) and send a restart after
+ *  that to the successor, so the failure is logged with its path and returned rather than retried.
+ *  Returns whether the marker is gone from disk too. */
 export async function forgetClearedTranscript(id: string, dir: string = CLEARED_DIR): Promise<boolean> {
+  clearedTranscripts.delete(id);
+  clearedState.delete(id);
   const file = markerFile(dir, id);
   try {
     await fs.rm(file, { force: true });
+    return true;
   } catch (e) {
-    console.error(`[cleared-transcripts] failed to drop ${file}, keeping the mark: ${messageOf(e)}`);
+    console.error(`[cleared-transcripts] failed to drop ${file}; a restart of this server would restore it: ${messageOf(e)}`);
     return false;
   }
-  clearedTranscripts.delete(id);
-  clearedState.delete(id);
-  return true;
 }
 
 // `.catch` AFTER the parse, not a second argument to `.then`: an onRejected handler passed
