@@ -64,14 +64,21 @@ const entryOf = (trackingPath: string, file: FoldedFile, cwd: string | null): Fi
   backups: [...file.versions.values()].sort((a, b) => a.version - b.version).map(({ version, at, backupFileName }) => ({ version, at, backupFileName })),
 });
 
+/** What one transcript's fold keeps at most. Far past any real conversation (a long one tracks tens of
+ *  files over a few versions); the cap is for a transcript that is not one, so what is kept stays small. */
+export const TRACKED_FILES_MAX = 2000;
+export const VERSIONS_PER_FILE_MAX = 500;
+
 /** A fold fed one record at a time, so a long transcript is never held whole: only the copies are kept. */
 export function createFileHistoryFold(cwd: string | null = null): { add(record: unknown): void; result(): FileHistoryEntry[] } {
   const files = new Map<string, FoldedFile>();
   return {
     add(record) {
       for (const [trackingPath, backup] of backupsIn(record)) {
-        const file = files.get(trackingPath) ?? { realParentDir: null, versions: new Map<number, Backup>() };
-        if (!file.versions.has(backup.version)) file.versions.set(backup.version, backup);
+        const known = files.get(trackingPath);
+        if (known === undefined && files.size >= TRACKED_FILES_MAX) continue;
+        const file = known ?? { realParentDir: null, versions: new Map<number, Backup>() };
+        if (!file.versions.has(backup.version) && file.versions.size < VERSIONS_PER_FILE_MAX) file.versions.set(backup.version, backup);
         file.realParentDir = backup.realParentDir ?? file.realParentDir;
         files.set(trackingPath, file);
       }

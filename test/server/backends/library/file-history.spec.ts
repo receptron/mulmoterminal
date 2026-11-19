@@ -5,7 +5,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { foldFileHistory, isBackupFileName, trackedFileOf } from "../../../../server/backends/library/file-history";
+import { foldFileHistory, isBackupFileName, trackedFileOf, TRACKED_FILES_MAX, VERSIONS_PER_FILE_MAX } from "../../../../server/backends/library/file-history";
 import { readBoundedText, readFileHistory, readKeptCopy } from "../../../../server/backends/library/file-history-read";
 import { LIBRARY_FILE_TEXT_MAX } from "../../../../common/libraryFiles";
 
@@ -66,6 +66,16 @@ describe("foldFileHistory", () => {
     expect(foldFileHistory([record], "relative")[0]?.path).toBeNull();
   });
 
+  it("keeps at most the cap of files, and of versions per file", () => {
+    const records = [
+      ...Array.from({ length: TRACKED_FILES_MAX + 5 }, (_, i) => delta(`f${String(i)}.ts`, backup(null, 1))),
+      ...Array.from({ length: VERSIONS_PER_FILE_MAX + 5 }, (_, i) => delta("f0.ts", backup(null, i + 2))),
+    ];
+    const files = foldFileHistory(records);
+    expect(files).toHaveLength(TRACKED_FILES_MAX);
+    expect(files[0]?.backups).toHaveLength(VERSIONS_PER_FILE_MAX);
+  });
+
   it("has no disk path for a relative file whose directory was not recorded, and no time for an unreadable one", () => {
     const [file] = foldFileHistory([snapshot({ "a.ts": { backupFileName: null, version: 2, backupTime: "never", realParentDir: "relative/dir" } })]);
     expect(file?.path).toBeNull();
@@ -119,6 +129,18 @@ describe("reading", () => {
     mkdirSync(path.join(root, "s1"));
     symlinkSync(path.join(root, "untracked.txt"), path.join(root, "s1", "aaaaaaaaaaaaaaaa@v1"));
     expect(await readKeptCopy(root, "s1", "aaaaaaaaaaaaaaaa@v1")).toEqual({ text: null, reason: "unreadable" });
+  });
+
+  it.skipIf(process.platform === "win32")("reads no copy through a session directory linked to another session's", async () => {
+    const root = scratch();
+    mkdirSync(path.join(root, "s2"));
+    writeFileSync(path.join(root, "s2", "aaaaaaaaaaaaaaaa@v1"), "another session's copy");
+    symlinkSync(path.join(root, "s2"), path.join(root, "s1"));
+    expect(await readKeptCopy(root, "s1", "aaaaaaaaaaaaaaaa@v1")).toEqual({ text: null, reason: "unreadable" });
+    // A linked ROOT is fine: the session directory under it is still its own.
+    const linkedRoot = path.join(scratch(), "linked-root");
+    symlinkSync(root, linkedRoot);
+    expect(await readKeptCopy(linkedRoot, "s2", "aaaaaaaaaaaaaaaa@v1")).toEqual({ text: "another session's copy" });
   });
 
   it("reads a kept copy only by a well-formed name in the session's own directory", async () => {

@@ -59,6 +59,8 @@ export async function readBoundedText(file: string): Promise<LibraryFileText> {
   try {
     // Not through a link: a link placed at a tracked path would show a file the conversation never
     // tracked. And the opened file must be the one looked at, or a swap in between gets through.
+    // Linked DIRECTORIES above it are followed on purpose — macOS's /tmp is one, a project folder
+    // often is, and the agent edited the file through that same path.
     const seen = await fs.lstat(file);
     if (!seen.isFile()) return { text: null, reason: "unreadable" };
     handle = await fs.open(file, "r");
@@ -76,12 +78,23 @@ export async function readBoundedText(file: string): Promise<LibraryFileText> {
   }
 }
 
+/** Whether the session's directory is its own: `<root>/<session>` resolved, not a link to another
+ *  session's copies. The root itself may be a link (a moved or shared Claude home). */
+async function isOwnSessionDir(fileHistoryRoot: string, sessionId: string): Promise<boolean> {
+  try {
+    const [root, dir] = await Promise.all([fs.realpath(fileHistoryRoot), fs.realpath(path.join(fileHistoryRoot, sessionId))]);
+    return dir === path.join(root, sessionId);
+  } catch {
+    return false;
+  }
+}
+
 /** One kept copy, by the name the transcript gave it, in that session's own directory only. Only a
  *  copy with no name means the file did not exist; a named copy that is gone is unreadable — drawn as
  *  "absent" it would show the whole file as created by that turn. */
 export async function readKeptCopy(fileHistoryRoot: string, sessionId: string, backupFileName: string | null): Promise<LibraryFileText> {
   if (backupFileName === null) return { text: null, reason: "absent" };
-  if (!isBackupFileName(backupFileName)) return { text: null, reason: "unreadable" };
+  if (!isBackupFileName(backupFileName) || !(await isOwnSessionDir(fileHistoryRoot, sessionId))) return { text: null, reason: "unreadable" };
   const kept = await readBoundedText(path.join(fileHistoryRoot, sessionId, backupFileName));
   return kept.reason === "absent" ? { text: null, reason: "unreadable" } : kept;
 }
