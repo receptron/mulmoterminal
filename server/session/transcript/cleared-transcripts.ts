@@ -33,6 +33,7 @@ import { messageOf } from "../../errors.js";
 import { claudeTranscriptFile } from "../session-home.js";
 import { presenceOfStatError, shouldPruneMark, type TranscriptPresence } from "./mark-prune.js";
 import { currentTranscriptId } from "./current-transcript.js";
+import { createKeySerializer } from "../../infra/async/serialize-per-key.js";
 
 const CLEARED_DIR = path.join(MULMOTERMINAL_HOME, "cleared-transcripts");
 
@@ -103,21 +104,8 @@ const markerFile = (dir: string, id: string) => path.join(dir, `${id}.json`);
 
 export const MARK_SIZE_NEVER_REACHED = Number.MAX_SAFE_INTEGER;
 
-// The tail of each id's marker writes and removals, so the disk ends in the state of the LAST call.
-const persistTails = new Map<string, Promise<unknown>>();
-
-function persistInOrder<T>(id: string, op: () => Promise<T>): Promise<T> {
-  const run = (persistTails.get(id) ?? Promise.resolve()).then(op, op);
-  const tail = run.then(
-    () => undefined,
-    () => undefined,
-  );
-  persistTails.set(id, tail);
-  void tail.then(() => {
-    if (persistTails.get(id) === tail) persistTails.delete(id);
-  });
-  return run;
-}
+// Each id's marker writes and removals, in call order, so the disk ends in the state of the LAST call.
+const persistInOrder = createKeySerializer();
 
 const transcriptPresence = (cwd: string, id: string): Promise<TranscriptPresence> =>
   fs.stat(claudeTranscriptFile(cwd, id)).then((): TranscriptPresence => "present", presenceOfStatError);

@@ -17,8 +17,14 @@ import { clearedTranscripts } from "../../../server/session/transcript/cleared-t
 // Keyed by transcript id: our own holds the pre-move task, the picked one its own last exchange.
 const PICKED_PROMPT = "pick up the release notes";
 const PICKED_REPLY = "The release notes are drafted.";
+// `pickedRead` lets a test hold the picked conversation's read open, to overlap two moves.
+const pickedRead = vi.hoisted(() => ({ gate: Promise.resolve() }));
 vi.mock("../../../server/session/session-reads.js", () => ({
-  latestUserPrompt: vi.fn(async (_cwd: string, id: string) => (id === "22222222-3333-4444-8555-666666666666" ? PICKED_PROMPT : "continue GitHub issue 1048")),
+  latestUserPrompt: vi.fn(async (_cwd: string, id: string) => {
+    if (id !== "22222222-3333-4444-8555-666666666666") return "continue GitHub issue 1048";
+    await pickedRead.gate;
+    return PICKED_PROMPT;
+  }),
   readLatestResponse: vi.fn((id: string) => (id === "22222222-3333-4444-8555-666666666666" ? PICKED_REPLY : null)),
 }));
 
@@ -37,6 +43,7 @@ vi.mock("../../../server/session/transcript/cleared-transcripts", async (importO
       if (claudeId) successors.set(id, claudeId);
     },
     clearedClaudeIdOf: (id: string) => successors.get(id),
+    transcriptIdOf: (id: string) => (actual.clearedTranscripts.has(id) ? (successors.get(id) ?? null) : id),
     forgetClearedTranscript: async (id: string) => {
       actual.clearedTranscripts.delete(id);
       successors.delete(id);
@@ -162,6 +169,26 @@ describe("SessionStart source=resume", () => {
     expect(deps.forgetTitle).toHaveBeenCalledTimes(2);
   });
 
+  // Two moves arriving together: the first one's read of the picked conversation must not land
+  // after the second has brought the cell back, or the header shows a conversation it left.
+  it("does not let an earlier move's header read land after a later move", async () => {
+    let release = () => {};
+    pickedRead.gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      const away = postHook({ hook_event_name: "SessionStart", source: "resume", session_id: PICKED, cwd: "/work" });
+      const back = postHook({ hook_event_name: "SessionStart", source: "resume", session_id: ID, cwd: "/work" });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      release();
+      await Promise.all([away, back]);
+    } finally {
+      pickedRead.gate = Promise.resolve();
+    }
+    expect(clearedTranscripts.has(ID)).toBe(false);
+    expect(lastPrompts.get(ID)).toBe("continue GitHub issue 1048");
+  });
+
   it("does nothing when the hook names no usable id", async () => {
     await postHook({ hook_event_name: "SessionStart", source: "resume", session_id: "not-a-uuid" });
     expect(markCalls).toEqual([]);
@@ -181,16 +208,10 @@ describe("UserPromptSubmit after a restart", () => {
 
   // After a move the cell is in the successor's conversation, so that is what seeds it (#3347).
   it("seeds a moved session from its successor's transcript", async () => {
-    const real = await vi.importActual<typeof import("../../../server/session/transcript/cleared-transcripts")>(
-      "../../../server/session/transcript/cleared-transcripts",
-    );
-    await real.markTranscriptCleared(ID, undefined, PICKED);
-    try {
-      await postHook({ hook_event_name: "UserPromptSubmit", prompt: "ok", cwd: "/work" });
-      expect(lastPrompts.get(ID)).toBe(PICKED_PROMPT);
-    } finally {
-      await real.forgetClearedTranscript(ID, "/nonexistent-marks-dir");
-    }
+    clearedTranscripts.add(ID);
+    successors.set(ID, PICKED);
+    await postHook({ hook_event_name: "UserPromptSubmit", prompt: "ok", cwd: "/work" });
+    expect(lastPrompts.get(ID)).toBe(PICKED_PROMPT);
   });
 
   it("does not seed a cleared session — it takes the new prompt as-is", async () => {

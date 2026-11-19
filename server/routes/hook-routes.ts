@@ -27,6 +27,7 @@ import {
   transcriptIdOf,
 } from "../session/transcript/cleared-transcripts.js";
 import { conversationMove } from "../session/transcript/conversation-move.js";
+import { createKeySerializer } from "../infra/async/serialize-per-key.js";
 import { latestUserPrompt, readLatestResponse } from "../session/session-reads.js";
 import { notifyTaskFinished } from "../session/activity/task-push.js";
 import { preferredHeaderPrompt } from "../session/transcript/transcript.js";
@@ -188,12 +189,12 @@ function rememberClaudeSessionId(sessionId: string, bodyValue: unknown): void {
 // Publish LAST, and after the mark is durable: the publish itself re-reads the reply for a session
 // that is `waiting`, which must read the successor and not ours.
 async function clearHeaderPrompt(deps: HookDeps, sessionId: string, claudeId: string | null, cwd: string | undefined): Promise<void> {
-  await showConversationIn(sessionId, claudeId, cwd);
   // The mark carries claude's NEW id as well as the moment, because the prompts pane needs both to
   // find the new conversation in claude's seamless prompt history — and a restart that remembers
   // only the boundary leaves that pane empty until the next hook (#1749). This hook is where the id
   // is announced, so it is passed rather than read back from the live mapping.
   await markTranscriptCleared(sessionId, cwd, claudeId ?? undefined);
+  await showCurrentConversation(sessionId, cwd);
   deps.forgetTitle(sessionId);
   deps.publishActivity(sessionId);
 }
@@ -204,7 +205,7 @@ async function clearHeaderPrompt(deps: HookDeps, sessionId: string, claudeId: st
 // doesn't inflate the handler. Runs before handleActivityHook so the activity publish it
 // triggers already carries the new lastPrompt.
 async function applyHeaderHooks(deps: HookDeps, sessionId: string, event: string, body: Record<string, unknown>, cwd: string | undefined): Promise<void> {
-  if (event === "SessionStart") return applyConversationMove(deps, sessionId, body, cwd);
+  if (event === "SessionStart") return conversationMoves(sessionId, () => applyConversationMove(deps, sessionId, body, cwd));
   const effect = headerHookEffect(event, body);
   if (!effect) return;
   if (effect.kind === "prompt") {
@@ -235,9 +236,15 @@ async function applyConversationMove(deps: HookDeps, sessionId: string, body: Re
   if (move === "unmark") return returnToOwnConversation(deps, sessionId, cwd);
 }
 
-// The header's prompt and reply, from the transcript the cell is now in; "" when there is nothing to
-// read, which beats the `?? transcriptPrompt` fallback in /api/session.
-async function showConversationIn(sessionId: string, transcriptId: string | null, cwd: string | undefined): Promise<void> {
+// One SessionStart at a time per session: each moves the mark and then reads the header from the
+// conversation it moved to, and two overlapping would let the first store a header for the
+// conversation the second moved away from.
+const conversationMoves = createKeySerializer();
+
+// The header's prompt and reply, from the transcript the cell is in after the move; "" when there is
+// nothing to read, which beats the `?? transcriptPrompt` fallback in /api/session.
+async function showCurrentConversation(sessionId: string, cwd: string | undefined): Promise<void> {
+  const transcriptId = transcriptIdOf(sessionId);
   const prompt = transcriptId && cwd ? await latestUserPrompt(cwd, transcriptId) : null;
   lastPrompts.set(sessionId, prompt ?? "");
   lastResponses.set(sessionId, (transcriptId && cwd ? readLatestResponse(transcriptId, cwd) : null) ?? "");
@@ -247,7 +254,7 @@ async function showConversationIn(sessionId: string, transcriptId: string | null
 // left, so they are re-read from ours, the same way a move away sets them.
 async function returnToOwnConversation(deps: HookDeps, sessionId: string, cwd: string | undefined): Promise<void> {
   await forgetClearedTranscript(sessionId);
-  await showConversationIn(sessionId, sessionId, cwd);
+  await showCurrentConversation(sessionId, cwd);
   deps.forgetTitle(sessionId);
   deps.publishActivity(sessionId);
 }
