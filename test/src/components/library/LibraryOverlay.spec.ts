@@ -503,4 +503,29 @@ describe("LibraryOverlay", () => {
     asks.mockRestore();
     poll.stop();
   }, 10_000);
+
+  it("drops a resume still checking when another conversation is chosen", async () => {
+    let release: () => void = () => {};
+    loadGate = new Promise((resolve) => (release = resolve));
+    await mountLibrary();
+    await press("Enter");
+    await press("ArrowDown");
+    release();
+    await flushPromises();
+    expect(opened).toEqual([]);
+  });
+
+  it("keeps a refusal on screen through a list reload of the same row", async () => {
+    openIds.push("a");
+    status = { indexing: true, filesDone: 1, filesTotal: 2, finishedAt: 1 };
+    const wrapper = await mountLibrary();
+    await press("Enter");
+    expect(wrapper.find("[role=status]").exists()).toBe(true);
+    page = page.map((c) => ({ ...c })); // the same rows as new objects
+    status = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 2 };
+    pageFinished = 2;
+    await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 300));
+    await flushPromises();
+    expect(wrapper.find("[role=status]").exists()).toBe(true);
+  }, 10_000);
 });

@@ -72,7 +72,9 @@ watch(
   },
   { immediate: true },
 );
-watch(selected, () => (notice.value = null));
+// By key: a reload replaces every object, and must not clear a refusal about the row still selected.
+const selectedKey = computed(() => (selected.value ? conversationKey(selected.value) : null));
+watch(selectedKey, () => (notice.value = null));
 
 const RESUME_REFUSALS: Record<Exclude<LibraryResume["kind"], "open">, string> = {
   busy: "libraryView.resumeBusy",
@@ -111,8 +113,10 @@ async function resume(): Promise<void> {
 
 async function resumeConversation(conversation: LibraryConversation): Promise<void> {
   const opening = openings;
+  const key = conversationKey(conversation);
   const list = conversation.cwd === null ? null : await readResumableList(conversation.cwd, "claude");
-  if (opening !== openings) return; // the screen was closed (and maybe reopened) while this checked
+  // Closed (and maybe reopened), or moved to another conversation, while this checked: it stands down.
+  if (opening !== openings || selectedKey.value !== key) return;
   const decision = libraryResume(conversation, list, paletteTerminals.value?.openSessionIds() ?? []);
   if (decision.kind !== "open") {
     notice.value = t(RESUME_REFUSALS[decision.kind]);
