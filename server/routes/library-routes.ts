@@ -9,9 +9,11 @@ import type { LibraryCaller, LibraryMethod } from "../backends/library/library-s
 import { changeLibraryMark, readLibraryMarks } from "../backends/library/library-marks.js";
 import { LIBRARY_NAME_MAX, type LibraryMarkChange } from "../../common/library.js";
 import { requestBody } from "./requestBody.js";
+import { SESSION_ID_RE } from "../config/env.js";
 
-/** A session id as the agents write them: letters, digits and dashes (subagents use `agent-…`). */
-const SESSION_ID_SHAPE = /^[A-Za-z0-9-]{1,128}$/;
+/** A conversation the index can hold: a session (the repo's UUID shape) or a subagent's `agent-<hex>`. */
+const SUBAGENT_ID_RE = /^agent-[0-9a-f]{8,64}$/;
+export const isMarkableId = (id: string): boolean => SESSION_ID_RE.test(id) || SUBAGENT_ID_RE.test(id);
 
 export const LIBRARY_PAGE_DEFAULT = 50;
 export const LIBRARY_PAGE_MAX = 200;
@@ -104,7 +106,7 @@ function mountMarkRoutes(app: Express, marksFile: string | undefined): void {
   });
   app.put("/api/library/marks/:id", async (req, res) => {
     const change = markChangeOf(requestBody(req.body));
-    if (change === null || !SESSION_ID_SHAPE.test(req.params.id)) {
+    if (change === null || !isMarkableId(req.params.id)) {
       res.status(400).json({ error: "expected { pinned?: boolean, name?: string | null } for a session id" });
       return;
     }

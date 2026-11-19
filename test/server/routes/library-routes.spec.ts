@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach } from "vitest";
 import { routeCall } from "../../helpers/routeCall";
-import { filterOf, markChangeOf, mountLibraryRoutes, queryCount } from "../../../server/routes/library-routes";
+import { filterOf, isMarkableId, markChangeOf, mountLibraryRoutes, queryCount } from "../../../server/routes/library-routes";
 import { applyTranscriptScan, finishLease, prepareLibraryStore, takeLease } from "../../../server/backends/library/index-store";
 import { createLibraryIndex } from "../../../server/backends/library/library-index";
 import { createLocalLibraryService } from "../../../server/backends/library/library-service";
@@ -116,18 +116,22 @@ describe("/api/library/marks", () => {
   it("saves a pin and a name, and reads them back", async () => {
     const call = appWithMarks();
     expect((await call("/api/library/marks")).body).toEqual({ pinned: [], names: {} });
-    await call("/api/library/marks/abc-1", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ pinned: true }) });
-    const saved = await call("/api/library/marks/abc-1", {
+    await call("/api/library/marks/0f6a7c2e-1b2c-4d3e-8f90-123456789abc", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pinned: true }),
+    });
+    const saved = await call("/api/library/marks/0f6a7c2e-1b2c-4d3e-8f90-123456789abc", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: "Mine" }),
     });
-    expect(saved.body).toEqual({ pinned: ["abc-1"], names: { "abc-1": "Mine" } });
+    expect(saved.body).toEqual({ pinned: ["0f6a7c2e-1b2c-4d3e-8f90-123456789abc"], names: { "0f6a7c2e-1b2c-4d3e-8f90-123456789abc": "Mine" } });
   });
 
   it.each([
-    ["an empty body", "{}", "abc"],
-    ["a wrong-typed field", JSON.stringify({ pinned: "yes" }), "abc"],
+    ["an empty body", "{}", "0f6a7c2e-1b2c-4d3e-8f90-123456789abc"],
+    ["a wrong-typed field", JSON.stringify({ pinned: "yes" }), "0f6a7c2e-1b2c-4d3e-8f90-123456789abc"],
     ["an id that is not a session id", JSON.stringify({ pinned: true }), "..%2Fetc"],
   ])("refuses %s", async (_label, body, id) => {
     const call = appWithMarks();
@@ -160,5 +164,19 @@ describe("/api/library/marks failures", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("isMarkableId", () => {
+  it.each([
+    ["0f6a7c2e-1b2c-4d3e-8f90-123456789abc", true],
+    ["agent-a1b2c3d4e5f60718", true],
+    ["abc-1", false],
+    ["--resume", false],
+    ["agent-", false],
+    ["../marks", false],
+    ["", false],
+  ])("%s → %s", (id, expected) => {
+    expect(isMarkableId(id)).toBe(expected);
   });
 });
