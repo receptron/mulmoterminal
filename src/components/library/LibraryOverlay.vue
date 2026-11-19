@@ -113,6 +113,8 @@ async function focusRequested(): Promise<void> {
   const found = listed ?? (await loadLibraryConversation(request.session, request.cwd));
   // A newer request, or a newer open, decides instead.
   if (found === null || mine !== focusRequests || opening !== openings) return;
+  // Search results would hide a conversation outside them: the request is for this one, so leave the search.
+  query.value = "";
   chosenKey.value = conversationKey(found);
   chosenSeen.value = found;
   readerShown.value = true;

@@ -620,4 +620,20 @@ describe("LibraryOverlay pins and names", () => {
     expect(wrapper.find("[data-testid=library-reader] h2").text()).not.toContain("passed over");
     vi.mocked(api.loadLibraryPage).mockRestore();
   });
+
+  it("leaves a search to show the conversation a cell asked for", async () => {
+    const asked = conversation("asked-while-searching", "Asked for during a search", { endedAt: NOW - 400 * 24 * 3_600_000 });
+    page = [...page, asked];
+    hits = [{ conversation: page[0] ?? asked, snippet: "ten", role: "user" }];
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-search]").setValue("ten");
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    await flushPromises();
+    requested = { session: "asked-while-searching", cwd: null };
+    const { router } = await import("../../../../src/router");
+    await router.push({ name: "library", query: { session: "asked-while-searching" } });
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Asked for during a search");
+    expect((wrapper.find("[data-testid=library-search]").element as HTMLInputElement).value).toBe("");
+  });
 });
