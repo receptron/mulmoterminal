@@ -46,8 +46,8 @@ export const clearedTranscripts = new Set<string>(); // id
 const clearedState = new Map<string, ClearedState>(); // id -> { at, claudeId }
 
 interface ClearedState {
-  /** Epoch ms of the clear. */
-  at: number;
+  /** Epoch ms of the clear. Absent for a mark written without one, which draws no boundary. */
+  at?: number | undefined;
   /** The id claude reported for itself in the very hook that announced the clear. */
   claudeId?: string | undefined;
 }
@@ -169,9 +169,9 @@ async function restoreMark(dir: string, file: string): Promise<void> {
   const mark = parseClearedMark(await readMark(dir, id));
   if (!mark || !(await markHasTranscript(mark, id))) return removeMarker(dir, id);
   clearedTranscripts.add(id);
-  // Only when the mark carried a time: an older one freezes the transcript and draws no line, which
-  // is what it meant when it was written.
-  if (mark.at !== undefined) clearedState.set(id, { at: mark.at, claudeId: mark.claudeId });
+  // The successor even without a time: the spawn resumes it, and the mark was kept for its sake.
+  // A mark with neither draws no line, which is what an older one meant when it was written.
+  if (mark.at !== undefined || mark.claudeId !== undefined) clearedState.set(id, { at: mark.at, claudeId: mark.claudeId });
 }
 
 /** Read the marks back at boot. Absent directory (first run) => nothing frozen.

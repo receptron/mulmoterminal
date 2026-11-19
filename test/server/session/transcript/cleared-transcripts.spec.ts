@@ -280,4 +280,19 @@ describe("when the clear happened", () => {
     expect(parseClearedMark({ cwd: "/x", size: 5, at: -1 })).toEqual({ cwd: "/x", size: 5 });
     expect(parseClearedMark({ cwd: "/x", size: 5, at: 7 })).toEqual({ cwd: "/x", size: 5, at: 7 });
   });
+
+  // The spawn resumes the successor, so it must come back even when the time did not.
+  it.each([
+    ["absent", undefined],
+    ["malformed", "yesterday"],
+  ])("brings the successor back when the time is %s", async (_label, at) => {
+    await writeTranscript("{}\n", CLAUDE_ID);
+    await fs.mkdir(marksDir, { recursive: true });
+    await fs.writeFile(markerFile(), JSON.stringify({ cwd, size: 0, at, claudeId: CLAUDE_ID }));
+
+    await hydrateClearedTranscripts(marksDir);
+    expect(clearedTranscripts.has(SESSION)).toBe(true);
+    expect(clearedClaudeIdOf(SESSION)).toBe(CLAUDE_ID);
+    expect(clearedAtOf(SESSION)).toBeUndefined();
+  });
 });
