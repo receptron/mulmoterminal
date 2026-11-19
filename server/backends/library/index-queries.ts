@@ -43,6 +43,10 @@ export interface SearchPattern {
   like: string;
 }
 
+/** Which conversation a turn belongs to: a transcript turn to the file it came from, a prompt-history
+ *  row (no path) to every conversation with its session id. */
+const OWNS_TURN = "c.id = t.conv and (t.path is null or t.path = c.path)";
+
 const turnHit = (pattern: SearchPattern): string =>
   pattern.match === null ? "t.text like ? escape '\\'" : "t.id in (select rowid from turns_fts where turns_fts match ?)";
 
@@ -51,17 +55,20 @@ const turnHit = (pattern: SearchPattern): string =>
  *  which was most of the time a common word took. */
 export function searchTurns(db: DatabaseSync, pattern: SearchPattern, filter: ConversationFilter, limit: number): Record<string, unknown>[] {
   const where = filterClause(filter);
-  const sql = `with hits as (select distinct t.conv from turns t where ${turnHit(pattern)})
-    select c.* from hits h join conversations c on c.id = h.conv where ${where.sql} order by c.ended_at desc nulls last limit ?`;
+  const sql = `with hits as (select distinct t.conv, t.path from turns t where ${turnHit(pattern)})
+    select c.* from conversations c where c.key in (
+      select owner.key from hits h join conversations owner on owner.id = h.conv and (h.path is null or h.path = owner.path))
+    and ${where.sql} order by c.ended_at desc nulls last limit ?`;
   return db.prepare(sql).all(pattern.match ?? pattern.like, ...where.params, limit);
 }
 
-/** The first matching turn of each conversation named, for its snippet. */
-export function matchingTurns(db: DatabaseSync, pattern: SearchPattern, conversationIds: readonly string[]): Record<string, unknown>[] {
-  if (conversationIds.length === 0) return [];
-  const ids = conversationIds.map(() => "?").join(", ");
-  const sql = `select t.conv, t.text, t.role from turns t where t.conv in (${ids}) and ${turnHit(pattern)} order by t.id`;
-  return db.prepare(sql).all(...conversationIds, pattern.match ?? pattern.like);
+/** The matching turns of each conversation named (by its row key), oldest first, for a snippet. */
+export function matchingTurns(db: DatabaseSync, pattern: SearchPattern, conversationKeys: readonly number[]): Record<string, unknown>[] {
+  if (conversationKeys.length === 0) return [];
+  const keys = conversationKeys.map(() => "?").join(", ");
+  const sql = `select c.key as conv_key, t.text, t.role from turns t join conversations c on ${OWNS_TURN}
+    where c.key in (${keys}) and ${turnHit(pattern)} order by t.id`;
+  return db.prepare(sql).all(...conversationKeys, pattern.match ?? pattern.like);
 }
 
 export function searchTitles(db: DatabaseSync, pattern: SearchPattern, filter: ConversationFilter, limit: number): Record<string, unknown>[] {

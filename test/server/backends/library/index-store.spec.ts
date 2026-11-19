@@ -150,6 +150,29 @@ describe("removeMissingTranscripts", () => {
   });
 });
 
+describe("two transcripts with the same session id", () => {
+  // Two project directories can each hold `<id>.jsonl` for one id; each keeps its own turns.
+  it("re-reads and removes one without touching the other's turns", () => {
+    const db = freshDb();
+    const second = { path: "/q/dup.jsonl" };
+    applyTranscriptScan(db, scanOf("dup", { turns: [turn("first copy words")], state: { endedAt: 1 } }));
+    applyTranscriptScan(db, scanOf("dup", { ...second, turns: [turn("second copy words")], state: { endedAt: 2 } }));
+    expect(searchLibrary(db, "copy words", {}, 10)).toHaveLength(2);
+    // The first is read again from the start, then deleted: the second's turns survive both.
+    applyTranscriptScan(db, scanOf("dup", { expectedScannedTo: 10, turns: [turn("first copy rewritten")], state: { endedAt: 1 } }));
+    expect(searchLibrary(db, "second copy", {}, 10).map((hit) => hit.snippet)).toEqual(["second copy words"]);
+    removeMissingTranscripts(db, OWNER, new Set([second.path]));
+    expect(searchLibrary(db, "copy", {}, 10).map((hit) => hit.snippet)).toEqual(["second copy words"]);
+  });
+
+  it("shows each conversation its own matching turn", () => {
+    const db = freshDb();
+    applyTranscriptScan(db, scanOf("dup", { turns: [turn("needle in the first")], state: { endedAt: 1 } }));
+    applyTranscriptScan(db, scanOf("dup", { path: "/q/dup.jsonl", turns: [turn("needle in the second")], state: { endedAt: 2 } }));
+    expect(searchLibrary(db, "needle", {}, 10).map((hit) => hit.snippet)).toEqual(["needle in the second", "needle in the first"]);
+  });
+});
+
 describe("removeMissingTranscripts without the lease", () => {
   it("deletes nothing for a process that no longer holds it", () => {
     const db = freshDb();

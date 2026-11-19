@@ -13,7 +13,7 @@ import { conversationTitle, isConversationState, type ConversationState, type In
 import type { HistoryPrompt } from "./history-fold.js";
 
 /** Bump when a column or what a column means changes: the next open drops and rebuilds. */
-export const LIBRARY_SCHEMA_VERSION = 3;
+export const LIBRARY_SCHEMA_VERSION = 4;
 // A write that meets another process's lock waits SYNCHRONOUSLY, with the event loop stopped, for up
 // to this long; a reader in WAL mode never waits. So it stays short: a write that gives up is a pass
 // that runs again later, while a long wait is a frozen server.
@@ -41,8 +41,11 @@ create trigger if not exists conversations_ad after delete on conversations begi
 create trigger if not exists conversations_au after update on conversations begin
   insert into titles_fts (titles_fts, rowid, title) values ('delete', old.key, old.title);
   insert into titles_fts (rowid, title) values (new.key, new.title); end;
-create table if not exists turns (id integer primary key, conv text not null, role text not null, at integer, text text not null);
+-- path is the transcript a turn came from (null for a prompt-history row). Two projects can hold a
+-- transcript with the same session id, so a transcript's turns are owned by its path, not its id.
+create table if not exists turns (id integer primary key, conv text not null, path text, role text not null, at integer, text text not null);
 create index if not exists turns_conv on turns (conv);
+create index if not exists turns_path on turns (path);
 create virtual table if not exists turns_fts using fts5 (text, content = 'turns', content_rowid = 'id', tokenize = 'trigram');
 create trigger if not exists turns_ai after insert on turns begin insert into turns_fts (rowid, text) values (new.id, new.text); end;
 create trigger if not exists turns_ad after delete on turns begin insert into turns_fts (turns_fts, rowid, text) values ('delete', old.id, old.text); end;
@@ -162,10 +165,10 @@ export function applyTranscriptScan(db: DatabaseSync, scan: TranscriptScan): boo
   return inTransaction(db, () => {
     if (!claimHolds(db, scan.path, scan)) return false;
     // A conversation found to be temporary only once its cwd arrived keeps no text from before.
-    if (scan.restart || scan.isTemporary) deleteConversationTurns(db, scan.id);
+    if (scan.restart || scan.isTemporary) deleteTranscriptTurns(db, scan.path);
     writeFileMark(db, scan.path, "transcript", { ...scan.stamp, head: scan.head, scannedTo: scan.to }, JSON.stringify(scan.state));
     writeConversation(db, scan);
-    insertTurns(db, scan.id, scan.turns);
+    insertTurns(db, scan.id, scan.path, scan.turns);
     return true;
   });
 }
@@ -195,14 +198,14 @@ function writeConversation(db: DatabaseSync, scan: TranscriptScan): void {
   ).run(...values);
 }
 
-function insertTurns(db: DatabaseSync, conv: string, turns: readonly { role: LibraryTurnRole; text: string; at: number | null }[]): void {
-  const insert = db.prepare("insert into turns (conv, role, at, text) values (?, ?, ?, ?)");
-  turns.forEach((turn) => insert.run(conv, turn.role, turn.at, turn.text));
+function insertTurns(db: DatabaseSync, conv: string, path: string, turns: readonly { role: LibraryTurnRole; text: string; at: number | null }[]): void {
+  const insert = db.prepare("insert into turns (conv, path, role, at, text) values (?, ?, ?, ?, ?)");
+  turns.forEach((turn) => insert.run(conv, path, turn.role, turn.at, turn.text));
 }
 
-// The prompt-history rows are the history file's, and outlive a re-read of the transcript.
-function deleteConversationTurns(db: DatabaseSync, conv: string): void {
-  db.prepare("delete from turns where conv = ? and role != 'prompt'").run(conv);
+// The prompt-history rows have no path: they are the history file's, and outlive a re-read.
+function deleteTranscriptTurns(db: DatabaseSync, path: string): void {
+  db.prepare("delete from turns where path = ?").run(path);
 }
 
 /** Drops every transcript the last walk did not see: the index holds nothing its source does not.
@@ -212,16 +215,17 @@ export function removeMissingTranscripts(db: DatabaseSync, owner: string, seen: 
   return inTransaction(db, () => {
     if (db.prepare("select owner from lease where id = 1").get()?.owner !== owner) return null;
     const gone = db
-      .prepare("select f.path, c.id from files f left join conversations c on c.path = f.path where f.kind = 'transcript'")
+      .prepare("select path from files where kind = 'transcript'")
       .all()
-      .filter((row) => typeof row.path === "string" && !seen.has(row.path));
-    gone.forEach((row) => removeTranscript(db, readString(row.path), typeof row.id === "string" ? row.id : null));
+      .map((row) => readString(row.path))
+      .filter((path) => !seen.has(path));
+    gone.forEach((path) => removeTranscript(db, path));
     return gone.length;
   });
 }
 
-function removeTranscript(db: DatabaseSync, path: string, id: string | null): void {
-  if (id !== null) deleteConversationTurns(db, id);
+function removeTranscript(db: DatabaseSync, path: string): void {
+  deleteTranscriptTurns(db, path);
   db.prepare("delete from conversations where path = ?").run(path);
   db.prepare("delete from files where path = ?").run(path);
 }
