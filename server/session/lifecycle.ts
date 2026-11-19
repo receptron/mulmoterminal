@@ -33,7 +33,7 @@ import {
   isFailedWorker,
   isPinnedSession,
 } from "./registry.js";
-import { clearedTranscripts } from "./transcript/cleared-transcripts.js";
+import { transcriptIdOf } from "./transcript/cleared-transcripts.js";
 import { forgetEntitledToolGroups } from "./bridge-session.js";
 import { forgetCursorBadges } from "../agents/cursor/cursor-usage.js";
 import { parseWaitGraceMs, reapDecisionFor, reapTimerDelay, shouldForgetActivity } from "./reaping/reap-policy.js";
@@ -78,8 +78,8 @@ export interface SessionLifecycleDeps {
 // Timers live per process, not per factory call — there is one server.
 const reapTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-function refreshLastResponse(id: string, cwd: string): void {
-  const text = readLatestResponse(id, cwd);
+function refreshLastResponse(id: string, transcriptId: string, cwd: string): void {
+  const text = readLatestResponse(transcriptId, cwd);
   if (text) lastResponses.set(id, text); // a failed read leaves any prior value
 }
 
@@ -240,7 +240,8 @@ function publishActivity(deps: SessionLifecycleDeps, id: string) {
   // sound (<cwd>/.mulmoterminal.json). Null for a session with no live PTY.
   const entry = ptys.get(id);
   const cwd = entry?.cwd ?? null;
-  if (shouldRefreshReply(a, cwd, clearedTranscripts.has(id), entry?.agent)) refreshLastResponse(id, cwd);
+  const transcriptId = transcriptIdOf(id);
+  if (shouldRefreshReply(a, cwd, transcriptId === null, entry?.agent) && transcriptId !== null) refreshLastResponse(id, transcriptId, cwd);
   const row = sessionRow(id, a, cwd, {
     lastPrompt: lastPrompts.get(id),
     aiTitle: aiTitles.get(id),

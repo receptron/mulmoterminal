@@ -8,7 +8,7 @@ import { dirIconFor } from "../../config/dir/dir-config.js";
 import { agentOfSession, cwdOfSession } from "../../session/list/session-lookup.js";
 import { resumableSessionPredicate } from "../../session/list/resumable-sessions.js";
 import { claudeTitleFields, type TitleFields } from "../../session/session-reads.js";
-import { clearedTranscripts } from "../../session/transcript/cleared-transcripts.js";
+import { transcriptIdOf } from "../../session/transcript/cleared-transcripts.js";
 import { agentSessionTitle } from "../../agents/agent-session-title.js";
 import {
   aiTitles,
@@ -43,8 +43,12 @@ interface RowReads {
 
 // A tmux-only session has no recorded agent, and on this host that is claude far more often than
 // not — its transcript is simply absent otherwise, which reads as "nothing on disk".
-const claudeFieldsOf = (id: string, cwd: string, agent: SessionAgent | null): Promise<TitleFields | null> =>
-  !cwd || clearedTranscripts.has(id) || (agent !== null && agent !== "claude") ? Promise.resolve(null) : claudeTitleFields(cwd, id);
+// Read from the transcript the session is in now (transcriptIdOf); nothing when it moved with
+// nowhere recorded.
+function claudeFieldsOf(id: string, cwd: string, agent: SessionAgent | null): Promise<TitleFields | null> {
+  const transcriptId = transcriptIdOf(id);
+  return !cwd || transcriptId === null || (agent !== null && agent !== "claude") ? Promise.resolve(null) : claudeTitleFields(cwd, transcriptId);
+}
 
 const agentTitleOf = async (id: string, cwd: string, agent: SessionAgent | null): Promise<string | null> =>
   !cwd || agent === null || agent === "claude" || agent === "shell" ? null : ((await agentSessionTitle(cwd, id, agent)) ?? null);
@@ -59,7 +63,7 @@ async function readRow(id: string, untitledLive: boolean): Promise<RowReads> {
   const prompt = promptOf(id, fields);
   if (!untitledLive) return { prompt, untitledName: "" };
   const untitledName = diskTitle({
-    cleared: clearedTranscripts.has(id),
+    cleared: transcriptIdOf(id) === null,
     livePrompt: lastPrompts.get(id),
     diskCustomTitle: fields?.customTitle ?? null,
     diskAiTitle: fields?.aiTitle ?? null,

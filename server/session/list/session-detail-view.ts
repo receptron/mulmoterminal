@@ -50,8 +50,8 @@ export interface SessionDetailView {
   memo: string | null;
 }
 
-// `transcriptCleared`: whether `/clear` has left this session's transcript describing the
-// conversation the user ENDED (cleared-transcripts.ts). Separate from the "" sentinel because the
+// `transcriptCleared`: whether the session moved off its transcript with no successor to read
+// (transcriptIdOf answered null), so `transcript` describes nothing the cell shows. Separate from the "" sentinel because the
 // two survive different things — the sentinel lives in a map this process loses on restart, while
 // the mark is persisted.
 export function sessionDetailView(

@@ -44,6 +44,7 @@ const { mountSessionRoutes } = await import("../../../server/routes/session-rout
 const { projectSessionsDir } = await import("../../../server/session/project-dir.js");
 const { CLAUDE_CWD } = await import("../../../server/config/env.js");
 const { lastPrompts, lastResponses } = await import("../../../server/session/registry.js");
+const { forgetClearedTranscript, markTranscriptCleared } = await import("../../../server/session/transcript/cleared-transcripts.js");
 
 afterAll(() => scratchHome.release());
 
@@ -55,11 +56,11 @@ const line = (record: unknown): string => `${JSON.stringify(record)}\n`;
 
 /** A claude transcript for SESSION under `cwd`, with `marker` in its prompt, its tool call and its
  *  reply — so one assertion serves every route, whichever of the three each of them reads. */
-async function writeTranscript(cwd: string, marker: string): Promise<void> {
+async function writeTranscript(cwd: string, marker: string, id: string = SESSION): Promise<void> {
   const dir = projectSessionsDir(cwd);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(
-    path.join(dir, `${SESSION}.jsonl`),
+    path.join(dir, `${id}.jsonl`),
     line({ type: "user", message: { role: "user", content: `asked in ${marker}` } }) +
       line({
         type: "assistant",
@@ -106,6 +107,28 @@ describe("a route about one session, asked with no ?cwd=", () => {
     const res = await call(`${url}${url.includes("?") ? "&" : "?"}${new URLSearchParams({ cwd: WORKSPACE })}`);
     expect(res.status).toBe(200);
     expect(res.text).toContain("workspace-decoy");
+    expect(res.text).not.toContain("own-directory");
+  });
+});
+
+// The same routes after a `/clear` or an in-session `/resume`: the cell is in the successor's
+// conversation, and each route must read that transcript rather than the frozen one under our id
+// (#3347). Exhaustive for the same reason as above.
+describe("a route about one session that moved to another transcript", () => {
+  const SUCCESSOR = "4e1a2b63-9d52-4c88-8a1b-32447d1baf8c";
+
+  beforeAll(async () => {
+    await writeTranscript(OWN_CWD, "successor-conversation", SUCCESSOR);
+    await markTranscriptCleared(SESSION, undefined, SUCCESSOR);
+  });
+  afterAll(async () => {
+    await forgetClearedTranscript(SESSION, path.join(scratchHome.path, "marks-unused"));
+  });
+
+  it.each(SESSION_ROUTES)("answers %s out of the successor's transcript", async (url) => {
+    const res = await call(url);
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("successor-conversation");
     expect(res.text).not.toContain("own-directory");
   });
 });

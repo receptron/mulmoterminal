@@ -14,7 +14,13 @@ import { clearedTranscripts } from "../../../server/session/transcript/cleared-t
 
 // The prompt seed reads the transcript for a session this process has no prompt for; the tests
 // stand in for that read so the seeding branch can be observed without a transcript on disk.
-vi.mock("../../../server/session/session-reads.js", () => ({ latestUserPrompt: vi.fn(async () => "continue GitHub issue 1048") }));
+// Keyed by transcript id: our own holds the pre-move task, the picked one its own last exchange.
+const PICKED_PROMPT = "pick up the release notes";
+const PICKED_REPLY = "The release notes are drafted.";
+vi.mock("../../../server/session/session-reads.js", () => ({
+  latestUserPrompt: vi.fn(async (_cwd: string, id: string) => (id === "22222222-3333-4444-8555-666666666666" ? PICKED_PROMPT : "continue GitHub issue 1048")),
+  readLatestResponse: vi.fn((id: string) => (id === "22222222-3333-4444-8555-666666666666" ? PICKED_REPLY : null)),
+}));
 
 // The mark's durable half has its own spec; what this one must not do is write into the real
 // ~/.mulmoterminal. Stubbing the writer keeps the route's own behaviour — including WHICH cwd it
@@ -119,13 +125,15 @@ describe("SessionStart source=clear", () => {
 
 // An in-session `/resume` moves claude off our transcript exactly as `/clear` does (#3325).
 describe("SessionStart source=resume", () => {
-  it("marks the transcript with the picked conversation and blanks the header", async () => {
+  // The header follows the cell to the conversation it picked, rather than going blank (#3347).
+  it("marks the transcript with the picked conversation and shows that conversation's last exchange", async () => {
     lastPrompts.set(ID, "continue GitHub issue 1048");
 
     await postHook({ hook_event_name: "SessionStart", source: "resume", session_id: PICKED, cwd: "/work" });
 
     expect(markCalls).toEqual([[ID, "/work", PICKED]]);
-    expect(lastPrompts.get(ID)).toBe("");
+    expect(lastPrompts.get(ID)).toBe(PICKED_PROMPT);
+    expect(lastResponses.get(ID)).toBe(PICKED_REPLY);
     expect(deps.forgetTitle).toHaveBeenCalledWith(ID);
   });
 
@@ -165,6 +173,20 @@ describe("UserPromptSubmit after a restart", () => {
   it("seeds the header from the transcript for an ordinary session", async () => {
     await postHook({ hook_event_name: "UserPromptSubmit", prompt: "ok", cwd: "/work" });
     expect(lastPrompts.get(ID)).toBe("continue GitHub issue 1048");
+  });
+
+  // After a move the cell is in the successor's conversation, so that is what seeds it (#3347).
+  it("seeds a moved session from its successor's transcript", async () => {
+    const real = await vi.importActual<typeof import("../../../server/session/transcript/cleared-transcripts")>(
+      "../../../server/session/transcript/cleared-transcripts",
+    );
+    await real.markTranscriptCleared(ID, undefined, PICKED);
+    try {
+      await postHook({ hook_event_name: "UserPromptSubmit", prompt: "ok", cwd: "/work" });
+      expect(lastPrompts.get(ID)).toBe(PICKED_PROMPT);
+    } finally {
+      await real.forgetClearedTranscript(ID, "/nonexistent-marks-dir");
+    }
   });
 
   it("does not seed a cleared session — it takes the new prompt as-is", async () => {

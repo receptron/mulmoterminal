@@ -32,6 +32,7 @@ import { isRecord } from "../../../common/isRecord.js";
 import { messageOf } from "../../errors.js";
 import { claudeTranscriptFile } from "../session-home.js";
 import { presenceOfStatError, shouldPruneMark, type TranscriptPresence } from "./mark-prune.js";
+import { currentTranscriptId } from "./current-transcript.js";
 
 const CLEARED_DIR = path.join(MULMOTERMINAL_HOME, "cleared-transcripts");
 
@@ -65,6 +66,10 @@ export const clearedAtOf = (id: string): number | undefined => clearedState.get(
 /** The id claude took at that clear, for a reader that has no fresher one (the live mapping is
  *  re-learned from any hook and wins where it exists). */
 export const clearedClaudeIdOf = (id: string): string | undefined => clearedState.get(id)?.claudeId;
+
+/** The transcript id holding this session's current conversation, or null when it moved and claude
+ *  named no id to follow (current-transcript.ts). What every reader of "the cell's conversation" reads. */
+export const transcriptIdOf = (id: string): string | null => currentTranscriptId(id, { cleared: clearedTranscripts.has(id), successor: clearedClaudeIdOf(id) });
 
 export interface ClearedMark {
   /** Where the frozen transcript lives, so hydration can stat it without the session's pty. */
