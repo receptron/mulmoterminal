@@ -55,7 +55,7 @@ import { handleCommandFrame } from "../session/pty/pty-connection.js";
 import { closeWithError } from "../session/ws-frames.js";
 import { settleCredential } from "../session/credentials/credential-announce.js";
 import { sessionExistsOnDisk } from "../session/session-reads.js";
-import { clearedTranscripts } from "../session/transcript/cleared-transcripts.js";
+import { clearedClaudeIdOf, clearedTranscripts } from "../session/transcript/cleared-transcripts.js";
 import { canStartLauncher, isContinuingSession, resolveReattachableId, resolveSession, type SessionResolution } from "../session/list/session-resolve.js";
 import type { PtyEntry } from "../session/types.js";
 import type {
@@ -137,7 +137,9 @@ function resolveClaudeSession(requested: string | null, cwd: string): SessionRes
   // Whether that transcript is the frozen pre-`/clear` one. The mark is hydrated from disk at boot,
   // so it answers across the restart this decision is usually made after (#2013).
   const cleared = !hasLivePty && !!requested && clearedTranscripts.has(requested);
-  return resolveSession(requested, { hasLivePty, tmuxAlive, onDisk, cleared }, randomUUID);
+  const successor = cleared && requested ? clearedClaudeIdOf(requested) : undefined;
+  const successorOnDisk = successor && sessionExistsOnDisk(successor, cwd) ? successor : null;
+  return resolveSession(requested, { hasLivePty, tmuxAlive, onDisk, cleared, successorOnDisk }, randomUUID);
 }
 
 // The params every terminal WebSocket reads: the request URL, the validated

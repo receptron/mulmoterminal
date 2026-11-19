@@ -33,7 +33,7 @@ import {
   isFailedWorker,
   isPinnedSession,
 } from "./registry.js";
-import { clearedTranscripts, forgetClearedTranscript } from "./transcript/cleared-transcripts.js";
+import { clearedTranscripts } from "./transcript/cleared-transcripts.js";
 import { forgetEntitledToolGroups } from "./bridge-session.js";
 import { forgetCursorBadges } from "../agents/cursor/cursor-usage.js";
 import { parseWaitGraceMs, reapDecisionFor, reapTimerDelay, shouldForgetActivity } from "./reaping/reap-policy.js";
@@ -184,9 +184,8 @@ function reap(deps: SessionLifecycleDeps, id: string) {
   // The resumed prompt-history scan is only true of the ids and the floor it was taken under, both
   // of which die with the session (#1750).
   forgetHistoryMemo(id);
-  // The transcript stops being frozen here: the next claude on this id (`--resume`, or a restart
-  // after `/exit` — which reaches reap through term.onExit) appends to that file again.
-  forgetClearedTranscript(id);
+  // Not the cleared mark: the next spawn on this id reads it to resume the successor, so the frozen
+  // file is never appended to again (#3325). Boot prunes marks whose transcripts are gone.
   deps.forgetTitle(id);
   deps.sessionActivityPublisher.forget(id); // drop the phone's copy so its picker has no ghosts
   deps.forgetWorkPhase(id); // the live turn dies with the session

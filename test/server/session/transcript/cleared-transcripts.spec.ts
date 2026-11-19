@@ -3,7 +3,7 @@
 // The durable half of the /clear fix (#1085). The in-memory set is what the readers ask, but the
 // window it covers outlives one process — tmux keeps the session's claude running across a server
 // restart — so what is pinned here is that the mark comes back, and that it comes back ONLY while
-// the transcript is still the frozen one.
+// a transcript it describes is still on disk.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { promises as fs } from "node:fs";
 import os from "node:os";
@@ -14,7 +14,7 @@ import {
   clearedTranscripts,
   forgetClearedTranscript,
   hydrateClearedTranscripts,
-  markStillHolds,
+  MARK_SIZE_NEVER_REACHED,
   markTranscriptCleared,
   parseClearedMark,
 } from "../../../../server/session/transcript/cleared-transcripts.js";
@@ -38,10 +38,10 @@ const exists = (file: string) =>
     () => false,
   );
 
-async function writeTranscript(text: string) {
+async function writeTranscript(text: string, id: string = SESSION) {
   const dir = projectSessionsDir(cwd);
   await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(path.join(dir, `${SESSION}.jsonl`), text);
+  await fs.writeFile(path.join(dir, `${id}.jsonl`), text);
 }
 
 beforeEach(async () => {
@@ -64,20 +64,41 @@ afterEach(async () => {
 });
 
 describe("markTranscriptCleared", () => {
-  it("marks the session and records the transcript's size at the clear", async () => {
+  // An older server sharing this home parses the mark only with a size, and expires it once the
+  // file outgrows that size — which claude's post-hook cost-state append always does.
+  it("writes a size no transcript reaches, so an older server keeps the mark", async () => {
     await writeTranscript("a".repeat(120));
     await markTranscriptCleared(SESSION, cwd, undefined, marksDir);
     expect(clearedTranscripts.has(SESSION)).toBe(true);
-    // objectContaining, because the mark also carries WHEN the clear happened (#1749); the size is
-    // what this test is about and what the expiry rule reads.
-    expect(JSON.parse(await fs.readFile(markerFile(), "utf8"))).toEqual(expect.objectContaining({ cwd, size: 120 }));
+    const written: unknown = JSON.parse(await fs.readFile(markerFile(), "utf8"));
+    expect(written).toEqual(expect.objectContaining({ cwd, size: MARK_SIZE_NEVER_REACHED }));
+    const parsed = parseClearedMark(written);
+    expect(parsed).not.toBeNull();
+    // The rule an older server applies at boot (`currentSize <= mark.size`), after the append.
+    await writeTranscript("a".repeat(120) + '{"type":"cost-state"}\n');
+    const grown = (await fs.stat(path.join(projectSessionsDir(cwd), `${SESSION}.jsonl`))).size;
+    expect(grown <= (parsed?.size ?? -1)).toBe(true);
   });
 
-  // A session cleared before its first turn was written has no file to size; 0 is the honest
-  // answer and still expires the moment claude writes anything to that id.
-  it("records size 0 when there is no transcript yet", async () => {
-    await markTranscriptCleared(SESSION, cwd, undefined, marksDir);
-    expect(JSON.parse(await fs.readFile(markerFile(), "utf8")).size).toBe(0);
+  // A mark's write landing after a later unmark's removal would restore the successor at boot.
+  it("leaves no marker when an unmark is called while the mark is still being written", async () => {
+    const realWrite = fs.writeFile.bind(fs);
+    const released: { release: () => void } = { release: () => {} };
+    const gate = new Promise<void>((resolve) => {
+      released.release = resolve;
+    });
+    vi.spyOn(fs, "writeFile").mockImplementation(async (...args: Parameters<typeof fs.writeFile>) => {
+      await gate;
+      return realWrite(...args);
+    });
+
+    const marking = markTranscriptCleared(SESSION, cwd, CLAUDE_ID, marksDir);
+    const unmarking = forgetClearedTranscript(SESSION, marksDir);
+    released.release();
+    await marking;
+    expect(await unmarking).toBe(true);
+    expect(await exists(markerFile())).toBe(false);
+    expect(clearedTranscripts.has(SESSION)).toBe(false);
   });
 
   it("stays in memory only when the hook reported no cwd", async () => {
@@ -97,18 +118,55 @@ describe("hydrateClearedTranscripts", () => {
     expect(clearedTranscripts.has(SESSION)).toBe(true);
   });
 
-  // The one thing that un-freezes a transcript: claude picked it back up (`--resume`) and is
-  // appending again. Without this, a server killed before reap would silence that session's
-  // summary for good.
-  it("drops a mark whose transcript has grown since the clear", async () => {
-    await writeTranscript("a".repeat(120));
-    await markTranscriptCleared(SESSION, cwd, undefined, marksDir);
+  // Claude appends a cost-state line to the transcript it leaves AFTER the hook that announced the
+  // clear, so the file is always bigger than the recorded size by the next boot. Expiring on growth
+  // dropped every mark and resumed the conversation the user ended (#3325).
+  // Written on disk only, with the size measured at the clear as an earlier server recorded it, so
+  // both assertions come from hydration rather than from state the mark left in memory.
+  it("keeps a mark whose transcript has grown since the clear", async () => {
+    await writeTranscript("a".repeat(200));
+    await fs.mkdir(marksDir, { recursive: true });
+    await fs.writeFile(markerFile(), JSON.stringify({ cwd, size: 120, at: 5, claudeId: CLAUDE_ID }));
+
+    await hydrateClearedTranscripts(marksDir);
+    expect(clearedTranscripts.has(SESSION)).toBe(true);
+    expect(clearedClaudeIdOf(SESSION)).toBe(CLAUDE_ID);
+  });
+
+  // A cell that moved before its first turn was written has no file of its own.
+  it("keeps a mark when only the successor's transcript is on disk", async () => {
+    await writeTranscript("{}\n", CLAUDE_ID);
+    await markTranscriptCleared(SESSION, cwd, CLAUDE_ID, marksDir);
     clearedTranscripts.clear();
-    await writeTranscript("a".repeat(200)); // resumed, and writing to that file again
+
+    await hydrateClearedTranscripts(marksDir);
+    expect(clearedTranscripts.has(SESSION)).toBe(true);
+  });
+
+  // A permission or I/O failure says nothing about the file; dropping the mark on it loses the
+  // successor for good.
+  it("keeps a mark when the transcript check fails for a reason other than a missing file", async () => {
+    await markTranscriptCleared(SESSION, cwd, CLAUDE_ID, marksDir);
+    clearedTranscripts.clear();
+    const denied = Object.assign(new Error("permission denied"), { code: "EACCES" });
+    vi.spyOn(fs, "stat").mockRejectedValue(denied);
+
+    await hydrateClearedTranscripts(marksDir);
+    vi.mocked(fs.stat).mockRestore();
+    expect(clearedTranscripts.has(SESSION)).toBe(true);
+    expect(await exists(markerFile())).toBe(true);
+  });
+
+  it.each([
+    ["with a successor id", CLAUDE_ID],
+    ["without one", undefined],
+  ])("prunes a mark when no transcript it describes is on disk (%s)", async (_label, claudeId) => {
+    await markTranscriptCleared(SESSION, cwd, claudeId, marksDir);
+    clearedTranscripts.clear();
 
     await hydrateClearedTranscripts(marksDir);
     expect(clearedTranscripts.has(SESSION)).toBe(false);
-    expect(await exists(markerFile())).toBe(false); // and the marker is cleaned up
+    expect(await exists(markerFile())).toBe(false);
   });
 
   it("discards a corrupt marker instead of trusting it", async () => {
@@ -141,9 +199,29 @@ describe("forgetClearedTranscript", () => {
     await writeTranscript("a".repeat(10));
     await markTranscriptCleared(SESSION, cwd, undefined, marksDir);
 
-    forgetClearedTranscript(SESSION, marksDir);
+    expect(await forgetClearedTranscript(SESSION, marksDir)).toBe(true);
     expect(clearedTranscripts.has(SESSION)).toBe(false);
-    await vi.waitFor(async () => expect(await exists(markerFile())).toBe(false));
+    expect(await exists(markerFile())).toBe(false);
+  });
+
+  it("succeeds for a mark that was never written to disk", async () => {
+    await markTranscriptCleared(SESSION, undefined, CLAUDE_ID, marksDir);
+    expect(await forgetClearedTranscript(SESSION, marksDir)).toBe(true);
+    expect(clearedTranscripts.has(SESSION)).toBe(false);
+  });
+
+  // This process must resume our own transcript at once; only the disk copy can be left behind.
+  it("drops the mark from memory and reports a removal that fails", async () => {
+    await writeTranscript("a".repeat(10));
+    await markTranscriptCleared(SESSION, cwd, CLAUDE_ID, marksDir);
+    await fs.rm(markerFile());
+    await fs.mkdir(path.join(markerFile(), "blocker"), { recursive: true }); // rm without recursive refuses a directory
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(await forgetClearedTranscript(SESSION, marksDir)).toBe(false);
+    expect(clearedTranscripts.has(SESSION)).toBe(false);
+    expect(clearedClaudeIdOf(SESSION)).toBeUndefined();
+    expect(await exists(markerFile())).toBe(true);
   });
 });
 
@@ -152,27 +230,14 @@ describe("parseClearedMark", () => {
     expect(parseClearedMark({ cwd: "/ws", size: 12 })).toEqual({ cwd: "/ws", size: 12 });
   });
 
-  // A hand-edited or truncated file must read as "no mark", not as a mark with a nonsense size —
-  // a negative or missing size would make markStillHolds answer for a file it never described.
+  // A hand-edited or truncated file must read as "no mark". The size is required because an older
+  // server requires it, so a mark this one accepts is one that one accepts too.
   it.each([[null], [undefined], ["x"], [{ cwd: "/ws" }], [{ size: 3 }], [{ cwd: "", size: 3 }], [{ cwd: "/ws", size: -1 }], [{ cwd: "/ws", size: "3" }]])(
     "rejects %s",
     (raw) => {
       expect(parseClearedMark(raw)).toBeNull();
     },
   );
-});
-
-describe("markStillHolds", () => {
-  it("holds while the transcript is no bigger than it was at the clear", () => {
-    expect(markStillHolds({ cwd: "/ws", size: 100 }, 100)).toBe(true);
-    // Smaller than recorded is not a resume — a truncated or replaced file says nothing was
-    // appended, so the frozen conversation is still all there is to read.
-    expect(markStillHolds({ cwd: "/ws", size: 100 }, 40)).toBe(true);
-  });
-
-  it("stops holding once anything has been appended", () => {
-    expect(markStillHolds({ cwd: "/ws", size: 100 }, 101)).toBe(false);
-  });
 });
 
 // The prompts pane draws its line at the MOMENT of the clear: claude's own prompt history is one
@@ -242,7 +307,7 @@ describe("when the clear happened", () => {
 
   it("is dropped with the mark", async () => {
     await markTranscriptCleared(SESSION, cwd, undefined, marksDir);
-    forgetClearedTranscript(SESSION, marksDir);
+    await forgetClearedTranscript(SESSION, marksDir);
     expect(clearedAtOf(SESSION)).toBeUndefined();
   });
 
@@ -253,5 +318,20 @@ describe("when the clear happened", () => {
     expect(parseClearedMark({ cwd: "/x", size: 5, at: "yesterday" })).toEqual({ cwd: "/x", size: 5 });
     expect(parseClearedMark({ cwd: "/x", size: 5, at: -1 })).toEqual({ cwd: "/x", size: 5 });
     expect(parseClearedMark({ cwd: "/x", size: 5, at: 7 })).toEqual({ cwd: "/x", size: 5, at: 7 });
+  });
+
+  // The spawn resumes the successor, so it must come back even when the time did not.
+  it.each([
+    ["absent", undefined],
+    ["malformed", "yesterday"],
+  ])("brings the successor back when the time is %s", async (_label, at) => {
+    await writeTranscript("{}\n", CLAUDE_ID);
+    await fs.mkdir(marksDir, { recursive: true });
+    await fs.writeFile(markerFile(), JSON.stringify({ cwd, size: 0, at, claudeId: CLAUDE_ID }));
+
+    await hydrateClearedTranscripts(marksDir);
+    expect(clearedTranscripts.has(SESSION)).toBe(true);
+    expect(clearedClaudeIdOf(SESSION)).toBe(CLAUDE_ID);
+    expect(clearedAtOf(SESSION)).toBeUndefined();
   });
 });
