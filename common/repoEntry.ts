@@ -45,6 +45,13 @@ export function parseRepoEntry(entry: string): RepoEntry | null {
  */
 export const canonicalRepo = (entry: string): string => parseRepoEntry(entry)?.path.join("/") ?? entry.trim();
 
+/** `owner/repo` for an entry on GitHub, spelled with its host or without; null for any other forge
+ *  or shape. What a GitHub record (a transcript's PR link) names the repository by. */
+export function githubRepoName(entry: string): string | null {
+  const parsed = parseRepoEntry(entry);
+  return parsed !== null && parsed.host === GITHUB_HOST && parsed.path.length === NAMESPACED ? parsed.path.join("/") : null;
+}
+
 /** The identity used to MATCH a configured entry against a resolved clone: always host-qualified.
  *
  *  Distinct from `canonicalRepo`, which strips the host because that is what a CLI's `--repo`

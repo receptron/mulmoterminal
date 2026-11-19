@@ -30,5 +30,6 @@ export const libraryViewEn = {
     marksUnreadable: "Your pins and names could not be read, so none are shown.",
     saveFailed: "Could not save that change. Try again in a moment.",
     more: "Show more",
+    openPrConversation: "Open the conversation that made #{number}",
   },
 };

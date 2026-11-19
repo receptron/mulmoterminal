@@ -473,4 +473,44 @@ describe("LibraryOverlay", () => {
     await flushPromises();
     expect(wrapper.find("[role=status]").exists()).toBe(true);
   }, 10_000);
+
+  it("links the reader's PR numbers to their pages", async () => {
+    page = [
+      conversation("a", "Burn subtitles", {
+        prs: [{ number: 3345, repository: "receptron/mulmoterminal", url: "https://github.com/receptron/mulmoterminal/pull/3345" }],
+      }),
+    ];
+    const wrapper = await mountLibrary();
+    const link = wrapper.find("[data-testid=library-reader-prs] a");
+    expect(link.text()).toBe("#3345");
+    expect(link.attributes("href")).toBe("https://github.com/receptron/mulmoterminal/pull/3345");
+    expect(link.attributes("rel")).toContain("noopener");
+  });
+
+  it("links the same PR number from two repositories as two PRs", async () => {
+    page = [
+      conversation("a", "Two repositories", {
+        prs: [
+          { number: 1, repository: "o/one", url: "https://github.com/o/one/pull/1" },
+          { number: 1, repository: "o/two", url: "https://github.com/o/two/pull/1" },
+        ],
+      }),
+    ];
+    page = [
+      ...page,
+      conversation("b", "Two more", {
+        prs: [
+          { number: 1, repository: "o/three", url: "https://github.com/o/three/pull/1" },
+          { number: 1, repository: "o/four", url: "https://github.com/o/four/pull/1" },
+        ],
+      }),
+    ];
+    const wrapper = await mountLibrary();
+    await wrapper.findAll("[data-testid=library-row]")[1]?.trigger("click"); // the links update in place
+    await flushPromises();
+    expect(wrapper.findAll("[data-testid=library-reader-prs] a").map((link) => link.attributes("href"))).toEqual([
+      "https://github.com/o/four/pull/1",
+      "https://github.com/o/three/pull/1",
+    ]);
+  });
 });
