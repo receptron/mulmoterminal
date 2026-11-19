@@ -19,6 +19,8 @@ export function useLibraryData(isOpen: Ref<boolean>) {
   /** Null while nothing is typed; the list shows instead. */
   const hits = shallowRef<LibrarySearchHit[] | null>(null);
   const searching = ref(false);
+  /** The last search could not be answered — not the same as "nothing matches". */
+  const searchFailed = ref(false);
   let pageRequest = 0;
 
   async function reload(): Promise<void> {
@@ -46,7 +48,7 @@ export function useLibraryData(isOpen: Ref<boolean>) {
   }
 
   const poll = usePolledStatus(status, () => void reload());
-  const search = useDebouncedSearch(query, hits, searching);
+  const search = useDebouncedSearch(query, hits, searching, searchFailed);
 
   watch(
     isOpen,
@@ -58,6 +60,7 @@ export function useLibraryData(isOpen: Ref<boolean>) {
         query.value = "";
         hits.value = null;
         searching.value = false;
+        searchFailed.value = false;
         return;
       }
       void reload();
@@ -70,7 +73,7 @@ export function useLibraryData(isOpen: Ref<boolean>) {
     search.cancel();
   });
 
-  return { conversations, hasMore, loaded, loadFailed, status, query, hits, searching, loadMore, reload };
+  return { conversations, hasMore, loaded, loadFailed, status, query, hits, searching, searchFailed, loadMore, reload };
 }
 
 /** Polls progress while the index is being built, and reloads the list when a pass finishes. */
@@ -107,7 +110,7 @@ function usePolledStatus(status: Ref<LibraryIndexStatus | null>, onFinished: () 
 }
 
 /** Sends what is typed after a pause, and drops an answer the next keystroke made stale. */
-function useDebouncedSearch(query: Ref<string>, hits: Ref<LibrarySearchHit[] | null>, searching: Ref<boolean>) {
+function useDebouncedSearch(query: Ref<string>, hits: Ref<LibrarySearchHit[] | null>, searching: Ref<boolean>, failed: Ref<boolean>) {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let inFlight: AbortController | null = null;
   const cancel = (): void => {
@@ -118,6 +121,7 @@ function useDebouncedSearch(query: Ref<string>, hits: Ref<LibrarySearchHit[] | n
   };
   watch(query, (typed) => {
     cancel();
+    failed.value = false;
     const text = typed.trim();
     if (text === "") {
       hits.value = null;
@@ -133,6 +137,7 @@ function useDebouncedSearch(query: Ref<string>, hits: Ref<LibrarySearchHit[] | n
     const found = await searchLibrary(text, controller.signal);
     if (controller.signal.aborted) return;
     hits.value = found ?? [];
+    failed.value = found === null;
     searching.value = false;
   }
   return { cancel };

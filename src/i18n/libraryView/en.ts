@@ -14,6 +14,7 @@ export const libraryViewEn = {
     loadFailed: "Could not read the library index.",
     empty: "No conversations yet. Conversations you have with Claude appear here.",
     noMatch: "No conversation matches “{query}”. Try fewer or different words.",
+    searchFailed: "Could not search right now. Try again in a moment.",
     searching: "Searching…",
     back: "List",
     resume: "Resume",

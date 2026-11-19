@@ -14,6 +14,7 @@ export const libraryViewZhCN = {
     loadFailed: "无法读取资料库索引。",
     empty: "还没有对话。与 Claude 的对话会显示在这里。",
     noMatch: "没有与“{query}”匹配的对话。请缩短或换个词再试。",
+    searchFailed: "暂时无法搜索。请稍后再试。",
     searching: "正在搜索…",
     back: "列表",
     resume: "继续",

@@ -14,6 +14,7 @@ export const libraryViewKo = {
     loadFailed: "라이브러리 색인을 읽지 못했습니다.",
     empty: "아직 대화가 없습니다. Claude와 나눈 대화가 여기에 표시됩니다.",
     noMatch: "“{query}”와 일치하는 대화가 없습니다. 더 짧거나 다른 단어로 검색해 보세요.",
+    searchFailed: "지금은 검색할 수 없습니다. 잠시 후 다시 시도하세요.",
     searching: "검색 중…",
     back: "목록",
     resume: "재개",

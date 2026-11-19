@@ -29,6 +29,7 @@ const title = (conversation: LibraryConversation): string => conversation.title 
         :key="hit.conversation.id + (hit.conversation.cwd ?? '')"
         type="button"
         data-testid="library-row"
+        data-library-row
         class="block w-full cursor-pointer border-0 border-l-2 px-4 py-2 text-left font-sans"
         :class="hit.conversation.id === selectedId ? 'border-accent bg-hover' : 'border-transparent bg-transparent hover:bg-hover'"
         :aria-current="hit.conversation.id === selectedId"
@@ -47,6 +48,7 @@ const title = (conversation: LibraryConversation): string => conversation.title 
           :key="conversation.id + (conversation.cwd ?? '')"
           type="button"
           data-testid="library-row"
+          data-library-row
           class="block w-full cursor-pointer border-0 border-l-2 px-4 py-2 text-left font-sans"
           :class="conversation.id === selectedId ? 'border-accent bg-hover' : 'border-transparent bg-transparent hover:bg-hover'"
           :aria-current="conversation.id === selectedId"

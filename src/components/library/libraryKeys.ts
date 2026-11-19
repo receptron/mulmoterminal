@@ -9,6 +9,9 @@ export interface LibraryKeyEvent {
   inSearch: boolean;
   /** Typed into any OTHER editable field — keys there are that field's. */
   inOtherField: boolean;
+  /** Focus is on another control (a button in the conversation, a link): Enter and the arrows are
+   *  its own. The list's rows are not "another control" — moving and resuming is what they are for. */
+  onOtherControl: boolean;
   /** An input method is composing: Enter there commits the text, it is not a command. */
   composing: boolean;
   modified: boolean;
@@ -17,6 +20,7 @@ export interface LibraryKeyEvent {
 export function libraryKeyAction(event: LibraryKeyEvent): LibraryKeyAction | null {
   if (event.composing || event.modified || event.inOtherField) return null;
   if (event.key === "/" && !event.inSearch) return "focus-search";
+  if (event.onOtherControl) return null;
   if (event.key === "ArrowUp") return "up";
   if (event.key === "ArrowDown") return "down";
   return event.key === "Enter" ? "primary" : null;

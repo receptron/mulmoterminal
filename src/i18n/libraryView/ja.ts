@@ -14,6 +14,7 @@ export const libraryViewJa = {
     loadFailed: "ライブラリの索引を読めませんでした。",
     empty: "まだ会話がありません。Claude と話した会話がここに並びます。",
     noMatch: "「{query}」に一致する会話はありません。言葉を短くするか、別の言葉で探してください。",
+    searchFailed: "いまは探せませんでした。少し待ってからもう一度試してください。",
     searching: "探しています…",
     back: "一覧",
     resume: "再開",

@@ -46,6 +46,7 @@ describe("libraryKeyAction", () => {
     key: k,
     inSearch: false,
     inOtherField: false,
+    onOtherControl: false,
     composing: false,
     modified: false,
     ...over,
@@ -61,6 +62,9 @@ describe("libraryKeyAction", () => {
     [key("Enter", { inOtherField: true }), null],
     [key("ArrowDown", { modified: true }), null],
     [key("a"), null],
+    [key("Enter", { onOtherControl: true }), null],
+    [key("ArrowDown", { onOtherControl: true }), null],
+    [key("/", { onOtherControl: true }), "focus-search"],
   ] as const)("%j → %s", (event, expected) => {
     expect(libraryKeyAction(event)).toBe(expected);
   });

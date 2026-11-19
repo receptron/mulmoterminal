@@ -22,7 +22,7 @@ import type { LibraryConversation } from "../../../common/library";
 const { t } = useI18n();
 const { isOpen, close } = useLibraryView();
 useEscapeToClose(isOpen, close);
-const { conversations, hasMore, loaded, loadFailed, status, query, hits, searching, loadMore } = useLibraryData(isOpen);
+const { conversations, hasMore, loaded, loadFailed, status, query, hits, searching, searchFailed, loadMore } = useLibraryData(isOpen);
 
 const searchField = ref<HTMLInputElement | null>(null);
 const chosen = shallowRef<LibraryConversation | null>(null);
@@ -98,13 +98,16 @@ async function resumeConversation(conversation: LibraryConversation): Promise<vo
   openCellAt(cellForPanelResume({ id: decision.id, cwd: decision.cwd, agent: "claude", account: decision.account }), null);
 }
 
+const OTHER_CONTROLS = "button, a[href], summary, [role=button], [contenteditable=true]";
+
 function onKey(event: KeyboardEvent): void {
   if (!isOpen.value) return;
   const target = event.target instanceof HTMLElement ? event.target : null;
   const inSearch = target !== null && searchField.value?.isSameNode(target) === true;
   const editable = target !== null && isEditableTarget(target.tagName, [...target.classList]);
   const modified = event.metaKey || event.ctrlKey || event.altKey;
-  const action = libraryKeyAction({ key: event.key, inSearch, inOtherField: editable && !inSearch, composing: event.isComposing, modified });
+  const onOtherControl = target?.closest(OTHER_CONTROLS) != null && target.closest("[data-library-row]") === null;
+  const action = libraryKeyAction({ key: event.key, inSearch, inOtherField: editable && !inSearch, onOtherControl, composing: event.isComposing, modified });
   if (action === null) return;
   event.preventDefault();
   if (action === "focus-search") searchField.value?.focus();
@@ -149,6 +152,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 
       <p v-if="loadFailed" class="m-0 px-4 py-6 font-sans text-[13px] text-err-text">{{ t("libraryView.loadFailed") }}</p>
       <p v-else-if="!loaded" class="m-0 px-4 py-6 font-sans text-[13px] text-dim">{{ t("libraryView.loading") }}</p>
+      <p v-else-if="searchFailed && !searching" class="m-0 px-4 py-6 font-sans text-[13px] text-err-text" data-testid="library-search-failed">
+        {{ t("libraryView.searchFailed") }}
+      </p>
       <p v-else-if="hits && !hits.length && !searching" class="m-0 px-4 py-6 font-sans text-[13px] text-dim" data-testid="library-no-match">
         {{ t("libraryView.noMatch", { query: query.trim() }) }}
       </p>

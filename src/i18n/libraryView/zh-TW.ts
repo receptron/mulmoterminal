@@ -14,6 +14,7 @@ export const libraryViewZhTW = {
     loadFailed: "無法讀取資料庫索引。",
     empty: "還沒有對話。與 Claude 的對話會顯示在這裡。",
     noMatch: "沒有與「{query}」相符的對話。請縮短或換個詞再試。",
+    searchFailed: "暫時無法搜尋。請稍後再試。",
     searching: "正在搜尋…",
     back: "列表",
     resume: "繼續",

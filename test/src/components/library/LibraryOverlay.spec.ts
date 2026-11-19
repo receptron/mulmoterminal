@@ -233,4 +233,25 @@ describe("LibraryOverlay", () => {
     expect(state.hits.value).toBeNull();
     host.unmount();
   });
+
+  it("leaves Enter to a button inside the conversation", async () => {
+    const wrapper = await mountLibrary();
+    const control = document.createElement("button");
+    wrapper.find("[data-testid=library-reader]").element.appendChild(control);
+    control.focus();
+    control.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await flushPromises();
+    expect(opened).toEqual([]);
+  });
+
+  it("says the search failed rather than that nothing matched", async () => {
+    const api = await import("../../../../src/composables/libraryApi");
+    vi.spyOn(api, "searchLibrary").mockResolvedValueOnce(null);
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-search]").setValue("anything");
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-search-failed]").exists()).toBe(true);
+    expect(wrapper.find("[data-testid=library-no-match]").exists()).toBe(false);
+  });
 });
