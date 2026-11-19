@@ -5,24 +5,15 @@
 // lease, so the servers sharing a HOME do the work once between them. Files are read one at a time
 // as a stream, and the pass hands the event loop back between files: the first pass over a long
 // history is long, and nothing else in the server may wait on it.
-import { promises as fs } from "node:fs";
 import type { DatabaseSync } from "node:sqlite";
 import { setImmediate as yieldToLoop } from "node:timers/promises";
 import { isRecord } from "../../../common/isRecord.js";
 import { forEachJsonlRecordIn } from "../../infra/fs/jsonl-file.js";
 import { emptyConversationState, foldConversationRecord, type IndexedTurn } from "./conversation-fold.js";
 import { historyPromptOf, type HistoryPrompt } from "./history-fold.js";
-import {
-  applyHistoryScan,
-  applyTranscriptScan,
-  finishLease,
-  readFileMark,
-  recordProgress,
-  removeMissingTranscripts,
-  takeLease,
-  type FileStampRead,
-} from "./index-store.js";
-import { resumePlan } from "./resume-plan.js";
+import { applyHistoryScan, applyTranscriptScan, finishLease, readFileMark, recordProgress, removeMissingTranscripts, takeLease } from "./index-store.js";
+import { resumePlan, unlessReplaced } from "./resume-plan.js";
+import { withOpenedFile } from "./opened-file.js";
 import { isTemporaryCwd } from "./temporary-path.js";
 import { listTranscriptFiles, type TranscriptFile } from "./transcript-files.js";
 
@@ -70,28 +61,27 @@ async function scanTranscriptSafely(deps: IndexPassDeps, file: TranscriptFile): 
 
 const isMissingFile = (err: unknown): boolean => isRecord(err) && err.code === "ENOENT";
 
-async function stampOf(file: string): Promise<FileStampRead> {
-  const stat = await fs.stat(file);
-  return { size: stat.size, mtimeMs: stat.mtimeMs };
-}
-
 export async function scanTranscript(deps: IndexPassDeps, file: TranscriptFile): Promise<void> {
-  const stamp = await stampOf(file.path);
-  const mark = readFileMark(deps.db, file.path);
-  const plan = resumePlan(mark, stamp);
-  if (plan.kind === "skip") return;
-  // A stored state that no longer parses cannot be continued; reading from the start can.
-  const resumable = plan.kind === "resume" && mark?.state ? { from: plan.from, state: mark.state } : null;
-  const { from, state } = resumable ?? { from: 0, state: emptyConversationState() };
-  const turns: IndexedTurn[] = [];
-  const to = await forEachJsonlRecordIn(file.path, { from, atLineStart: true }, (record) => {
-    const turn = foldConversationRecord(state, record);
-    if (turn !== null) turns.push(turn);
-  });
-  const isTemporary = isTemporaryCwd(state.cwd, deps.temporaryRoots);
-  applyTranscriptScan(deps.db, {
-    ...{ path: file.path, id: file.id, agent: "claude", parentId: file.parentId, isTemporary, stamp },
-    ...{ from, to, restart: resumable === null, state, turns: isTemporary ? [] : turns },
+  await withOpenedFile(file.path, async (opened) => {
+    const mark = readFileMark(deps.db, file.path);
+    const plan = resumePlan(mark, await opened.stamp());
+    if (plan.kind === "skip") return;
+    const head = await opened.head();
+    const confirmed = unlessReplaced(plan, mark?.head ?? null, head);
+    // A stored state that no longer parses cannot be continued; reading from the start can.
+    const resumable = confirmed.kind === "resume" && mark?.state ? { from: confirmed.from, state: mark.state } : null;
+    const { from, state } = resumable ?? { from: 0, state: emptyConversationState() };
+    const turns: IndexedTurn[] = [];
+    const to = await forEachJsonlRecordIn(opened.handle, { from, atLineStart: true }, (record) => {
+      const turn = foldConversationRecord(state, record);
+      if (turn !== null) turns.push(turn);
+    });
+    const isTemporary = isTemporaryCwd(state.cwd, deps.temporaryRoots);
+    applyTranscriptScan(deps.db, {
+      ...{ path: file.path, id: file.id, agent: "claude", parentId: file.parentId, isTemporary },
+      ...{ owner: deps.owner, expectedScannedTo: mark?.scannedTo ?? null, stamp: await opened.stamp(), head, to },
+      ...{ restart: resumable === null, state, turns: isTemporary ? [] : turns },
+    });
   });
 }
 
@@ -104,14 +94,21 @@ async function scanHistorySafely(deps: IndexPassDeps): Promise<void> {
 }
 
 export async function scanHistory(deps: IndexPassDeps): Promise<void> {
-  const stamp = await stampOf(deps.historyFile);
-  const plan = resumePlan(readFileMark(deps.db, deps.historyFile), stamp);
-  if (plan.kind === "skip") return;
-  const from = plan.kind === "resume" ? plan.from : 0;
-  const prompts: HistoryPrompt[] = [];
-  const to = await forEachJsonlRecordIn(deps.historyFile, { from, atLineStart: true }, (record) => {
-    const prompt = historyPromptOf(record);
-    if (prompt !== null) prompts.push(prompt);
+  await withOpenedFile(deps.historyFile, async (opened) => {
+    const mark = readFileMark(deps.db, deps.historyFile);
+    const plan = resumePlan(mark, await opened.stamp());
+    if (plan.kind === "skip") return;
+    const head = await opened.head();
+    const confirmed = unlessReplaced(plan, mark?.head ?? null, head);
+    const from = confirmed.kind === "resume" ? confirmed.from : 0;
+    const prompts: HistoryPrompt[] = [];
+    const to = await forEachJsonlRecordIn(opened.handle, { from, atLineStart: true }, (record) => {
+      const prompt = historyPromptOf(record);
+      if (prompt !== null) prompts.push(prompt);
+    });
+    applyHistoryScan(deps.db, {
+      ...{ path: deps.historyFile, owner: deps.owner, expectedScannedTo: mark?.scannedTo ?? null },
+      ...{ stamp: await opened.stamp(), head, to, restart: confirmed.kind === "restart", prompts },
+    });
   });
-  applyHistoryScan(deps.db, { path: deps.historyFile, stamp, from, to, restart: plan.kind === "restart", prompts });
 }

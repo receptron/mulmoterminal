@@ -18,3 +18,8 @@ export function resumePlan(remembered: RememberedOffset | null, stamp: FileStamp
   if (remembered.scannedTo > stamp.size) return { kind: "restart" };
   return { kind: "resume", from: remembered.scannedTo };
 }
+
+/** A resume is only safe on the SAME file. One that grew but no longer starts the way it did was
+ *  replaced, and its new bytes do not continue the old ones. */
+export const unlessReplaced = (plan: ResumePlan, rememberedHead: string | null, currentHead: string): ResumePlan =>
+  plan.kind === "resume" && rememberedHead !== currentHead ? { kind: "restart" } : plan;

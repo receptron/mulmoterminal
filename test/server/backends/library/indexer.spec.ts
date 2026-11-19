@@ -11,6 +11,7 @@ import { prepareLibraryStore, readFileMark, takeLease } from "../../../../server
 import { conversationOfRow, findConversation, listConversations } from "../../../../server/backends/library/index-queries";
 import { searchLibrary } from "../../../../server/backends/library/library-search";
 import { runIndexPass, type IndexPassDeps } from "../../../../server/backends/library/indexer";
+import { HEAD_BYTES } from "../../../../server/backends/library/opened-file";
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
@@ -58,7 +59,8 @@ describe("runIndexPass", () => {
 
   it("reads only what was appended on the next pass", async () => {
     const { db, deps, transcript } = setup();
-    const file = transcript("s1", line({ type: "ai-title", aiTitle: "AAAA" }) + prompt("first"));
+    // The title sits past the bytes that identify the file, so rewriting it is not a replacement.
+    const file = transcript("s1", prompt(`first ${"x".repeat(HEAD_BYTES)}`) + line({ type: "ai-title", aiTitle: "AAAA" }));
     await runIndexPass(deps);
     // Rewrite the already-read title in place (same length), then append. A pass that re-read the
     // file would pick up "BBBB"; one that resumed never sees it.
@@ -69,6 +71,16 @@ describe("runIndexPass", () => {
     expect(hits(db, "appended")).toEqual(["s1"]);
     expect(hits(db, "first")).toEqual(["s1"]);
     expect(readFileMark(db, file)?.scannedTo).toBe(statSync(file).size);
+  });
+
+  it("reads a file again from the start when it was replaced by one that is longer", async () => {
+    const { db, deps, transcript } = setup();
+    const file = transcript("s1", prompt("original words"));
+    await runIndexPass(deps);
+    writeFileSync(file, prompt("replacement words") + reply("and a reply that makes it longer"));
+    await runIndexPass(deps);
+    expect(hits(db, "original")).toEqual([]);
+    expect(hits(db, "replacement")).toEqual(["s1"]);
   });
 
   it("does not read a file again when nothing changed", async () => {

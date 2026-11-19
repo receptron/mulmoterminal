@@ -20,20 +20,27 @@ import { conversationOfRow, findConversation, listConversations } from "../../..
 import { searchLibrary } from "../../../../server/backends/library/library-search";
 import { emptyConversationState, type ConversationState, type IndexedTurn } from "../../../../server/backends/library/conversation-fold";
 
+const OWNER = "me";
+
 const freshDb = (): DatabaseSync => {
   const db = new DatabaseSync(":memory:");
   prepareLibraryStore(db);
+  takeLease(db, OWNER, 0, Number.MAX_SAFE_INTEGER);
   return db;
 };
 
-const scanOf = (id: string, overrides: Omit<Partial<TranscriptScan>, "state"> & { state?: Partial<ConversationState> } = {}): TranscriptScan => ({
+type ScanOverrides = Omit<Partial<TranscriptScan>, "state"> & { state?: Partial<ConversationState> };
+
+const scanOf = (id: string, overrides: ScanOverrides = {}): TranscriptScan => ({
   path: `/p/${id}.jsonl`,
   id,
   agent: "claude",
   parentId: null,
   isTemporary: false,
   stamp: { size: 10, mtimeMs: 1 },
-  from: 0,
+  head: "h",
+  owner: OWNER,
+  expectedScannedTo: null,
   to: 10,
   restart: true,
   ...overrides,
@@ -41,13 +48,17 @@ const scanOf = (id: string, overrides: Omit<Partial<TranscriptScan>, "state"> & 
   turns: overrides.turns ?? [],
 });
 
+/** A scan that read the file where the index left it, unless the case says otherwise. */
+const commit = (db: DatabaseSync, id: string, overrides: ScanOverrides = {}): boolean =>
+  applyTranscriptScan(db, scanOf(id, { expectedScannedTo: readFileMark(db, `/p/${id}.jsonl`)?.scannedTo ?? null, ...overrides }));
+
 const turn = (text: string, role: IndexedTurn["role"] = "user"): IndexedTurn => ({ role, text, at: null });
 const turnCount = (db: DatabaseSync): number => Number(db.prepare("select count(*) as n from turns").get()?.n);
 
 describe("prepareLibraryStore", () => {
   it("keeps the data across a reopen at the same schema, and drops it at another", () => {
     const db = freshDb();
-    applyTranscriptScan(db, scanOf("a", { turns: [turn("hello world")] }));
+    commit(db, "a", { turns: [turn("hello world")] });
     prepareLibraryStore(db);
     expect(listConversations(db, {}, 0, 10)).toHaveLength(1);
     db.prepare("update meta set value = ? where key = 'schema'").run(String(LIBRARY_SCHEMA_VERSION + 1));
@@ -61,26 +72,42 @@ describe("prepareLibraryStore", () => {
 describe("applyTranscriptScan", () => {
   it("continues only from the offset it found, and refuses a scan another process overtook", () => {
     const db = freshDb();
-    expect(applyTranscriptScan(db, scanOf("a", { to: 10, turns: [turn("one")] }))).toBe(true);
-    expect(applyTranscriptScan(db, scanOf("a", { restart: false, from: 10, to: 20, stamp: { size: 20, mtimeMs: 2 }, turns: [turn("two")] }))).toBe(true);
+    expect(commit(db, "a", { to: 10, turns: [turn("one")] })).toBe(true);
+    expect(commit(db, "a", { restart: false, to: 20, stamp: { size: 20, mtimeMs: 2 }, turns: [turn("two")] })).toBe(true);
     // Started from 10 too, but the index is at 20 now: its turns would be a duplicate.
-    expect(applyTranscriptScan(db, scanOf("a", { restart: false, from: 10, to: 20, turns: [turn("two")] }))).toBe(false);
+    expect(commit(db, "a", { restart: false, expectedScannedTo: 10, to: 20, turns: [turn("two")] })).toBe(false);
     expect(turnCount(db)).toBe(2);
     expect(readFileMark(db, "/p/a.jsonl")?.scannedTo).toBe(20);
   });
 
+  it("refuses a restart that read a file another process has since indexed", () => {
+    const db = freshDb();
+    expect(commit(db, "a", { turns: [turn("fresh")] })).toBe(true);
+    // This scan began before the row existed; committing it would replace a newer one.
+    expect(commit(db, "a", { expectedScannedTo: null, turns: [turn("stale")] })).toBe(false);
+    expect(searchLibrary(db, "stale", {}, 10)).toEqual([]);
+  });
+
+  it("refuses every scan once this process no longer holds the lease", () => {
+    const db = freshDb();
+    finishLease(db, OWNER, 0);
+    takeLease(db, "someone-else", 0, 100);
+    expect(commit(db, "a", { turns: [turn("late")] })).toBe(false);
+    const history = { path: "/h", stamp: { size: 5, mtimeMs: 1 }, head: "h", owner: OWNER, expectedScannedTo: null, to: 5, restart: true };
+    expect(applyHistoryScan(db, { ...history, prompts: [{ sessionId: "a", text: "late prompt", at: 1 }] })).toBe(false);
+    expect(Number(db.prepare("select count(*) as n from turns").get()?.n)).toBe(0);
+  });
+
   it("replaces a conversation's turns on a restart, but keeps its prompt-history rows", () => {
     const db = freshDb();
-    applyTranscriptScan(db, scanOf("a", { turns: [turn("old text")] }));
+    commit(db, "a", { turns: [turn("old text")] });
     applyHistoryScan(db, {
-      path: "/h",
-      stamp: { size: 5, mtimeMs: 1 },
-      from: 0,
+      ...{ path: "/h", stamp: { size: 5, mtimeMs: 1 }, head: "h", owner: OWNER, expectedScannedTo: null },
       to: 5,
       restart: true,
       prompts: [{ sessionId: "a", text: "typed prompt", at: 1 }],
     });
-    applyTranscriptScan(db, scanOf("a", { turns: [turn("new text")] }));
+    commit(db, "a", { turns: [turn("new text")] });
     expect(searchLibrary(db, "old text", {}, 10)).toEqual([]);
     expect(searchLibrary(db, "new text", {}, 10)).toHaveLength(1);
     expect(searchLibrary(db, "typed prompt", {}, 10)[0]?.role).toBe("prompt");
@@ -88,8 +115,8 @@ describe("applyTranscriptScan", () => {
 
   it("drops the text of a conversation once it turns out to be temporary", () => {
     const db = freshDb();
-    applyTranscriptScan(db, scanOf("a", { turns: [turn("early text")] }));
-    applyTranscriptScan(db, scanOf("a", { restart: false, from: 10, to: 20, isTemporary: true }));
+    commit(db, "a", { turns: [turn("early text")] });
+    commit(db, "a", { restart: false, to: 20, isTemporary: true });
     expect(turnCount(db)).toBe(0);
     expect(conversationOfRow(findConversation(db, "a") ?? {}).isTemporary).toBe(true);
   });
@@ -100,7 +127,7 @@ describe("applyTranscriptScan", () => {
       ...{ aiTitle: "Title", cwd: "/w", gitBranch: "main", costUsd: 1.5, linesAdded: 3, linesRemoved: 1, startedAt: 100, endedAt: 200 },
       ...{ prs: [{ number: 7, url: "https://x/7", repository: "o/r" }], skills: ["s"], hookErrors: 2, userTurns: 4 },
     };
-    applyTranscriptScan(db, scanOf("a", { parentId: "parent", state }));
+    commit(db, "a", { parentId: "parent", state });
     expect(conversationOfRow(findConversation(db, "a") ?? {})).toEqual({
       id: "a",
       agent: "claude",
@@ -114,8 +141,8 @@ describe("applyTranscriptScan", () => {
 describe("removeMissingTranscripts", () => {
   it("drops the rows and text of every file the walk did not see", () => {
     const db = freshDb();
-    applyTranscriptScan(db, scanOf("kept", { turns: [turn("kept text")] }));
-    applyTranscriptScan(db, scanOf("gone", { turns: [turn("gone text")] }));
+    commit(db, "kept", { turns: [turn("kept text")] });
+    commit(db, "gone", { turns: [turn("gone text")] });
     expect(removeMissingTranscripts(db, new Set(["/p/kept.jsonl"]))).toBe(1);
     expect(listConversations(db, {}, 0, 10).map((row) => row.id)).toEqual(["kept"]);
     expect(readFileMark(db, "/p/gone.jsonl")).toBeNull();
@@ -125,7 +152,8 @@ describe("removeMissingTranscripts", () => {
 
 describe("the lease", () => {
   it("goes to one owner at a time until it expires or is finished", () => {
-    const db = freshDb();
+    const db = new DatabaseSync(":memory:");
+    prepareLibraryStore(db);
     expect(takeLease(db, "one", 1000, 100)).toBe(true);
     expect(takeLease(db, "two", 1050, 100)).toBe(false);
     expect(takeLease(db, "one", 1050, 100)).toBe(true); // renewing
@@ -141,10 +169,10 @@ describe("the lease", () => {
 describe("listConversations and searchLibrary", () => {
   const seeded = (): DatabaseSync => {
     const db = freshDb();
-    applyTranscriptScan(db, scanOf("old", { state: { aiTitle: "Old one", cwd: "/w", endedAt: 1 }, turns: [turn("字幕を動画に焼き込む")] }));
-    applyTranscriptScan(db, scanOf("new", { state: { aiTitle: "Worktree cleanup", cwd: "/v", endedAt: 3 }, turns: [turn("prune 100% of it", "assistant")] }));
-    applyTranscriptScan(db, scanOf("tmp", { isTemporary: true, state: { aiTitle: "fixture", cwd: "/tmp/x", endedAt: 5 } }));
-    applyTranscriptScan(db, scanOf("sub", { parentId: "new", state: { aiTitle: "subagent work", endedAt: 4 }, turns: [turn("字幕 subagent")] }));
+    commit(db, "old", { state: { aiTitle: "Old one", cwd: "/w", endedAt: 1 }, turns: [turn("字幕を動画に焼き込む")] });
+    commit(db, "new", { state: { aiTitle: "Worktree cleanup", cwd: "/v", endedAt: 3 }, turns: [turn("prune 100% of it", "assistant")] });
+    commit(db, "tmp", { isTemporary: true, state: { aiTitle: "fixture", cwd: "/tmp/x", endedAt: 5 } });
+    commit(db, "sub", { parentId: "new", state: { aiTitle: "subagent work", endedAt: 4 }, turns: [turn("字幕 subagent")] });
     return db;
   };
 
@@ -180,7 +208,7 @@ describe("listConversations and searchLibrary", () => {
 
   it("follows a rename in the title index, for long and short queries", () => {
     const db = seeded();
-    applyTranscriptScan(db, scanOf("new", { restart: false, from: 10, to: 20, state: { aiTitle: "Renamed branch work", endedAt: 3 } }));
+    commit(db, "new", { restart: false, to: 20, state: { aiTitle: "Renamed branch work", endedAt: 3 } });
     expect(searchLibrary(db, "Worktree", {}, 10)).toEqual([]);
     expect(searchLibrary(db, "branch work", {}, 10).map((hit) => hit.conversation.id)).toEqual(["new"]);
     expect(searchLibrary(db, "Re", {}, 10).map((hit) => hit.conversation.id)).toEqual(["new"]);
@@ -188,7 +216,7 @@ describe("listConversations and searchLibrary", () => {
 
   it("shows the matching turn, not the title, when both match", () => {
     const db = freshDb();
-    applyTranscriptScan(db, scanOf("a", { state: { aiTitle: "needle title" }, turns: [turn("the needle in text")] }));
+    commit(db, "a", { state: { aiTitle: "needle title" }, turns: [turn("the needle in text")] });
     expect(searchLibrary(db, "needle", {}, 10)).toEqual([expect.objectContaining({ snippet: "the needle in text", role: "user" })]);
   });
 
@@ -200,8 +228,8 @@ describe("listConversations and searchLibrary", () => {
 
   it("answers one hit per conversation, up to the limit", () => {
     const db = freshDb();
-    applyTranscriptScan(db, scanOf("a", { state: { endedAt: 1 }, turns: [turn("needle one"), turn("needle two")] }));
-    applyTranscriptScan(db, scanOf("b", { state: { endedAt: 2 }, turns: [turn("needle three")] }));
+    commit(db, "a", { state: { endedAt: 1 }, turns: [turn("needle one"), turn("needle two")] });
+    commit(db, "b", { state: { endedAt: 2 }, turns: [turn("needle three")] });
     expect(searchLibrary(db, "needle", {}, 10).map((hit) => hit.conversation.id)).toEqual(["b", "a"]);
     expect(searchLibrary(db, "needle", {}, 1).map((hit) => hit.conversation.id)).toEqual(["b"]);
   });

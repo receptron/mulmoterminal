@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import express from "express";
 import { routeCall } from "../../helpers/routeCall";
 import { filterOf, mountLibraryRoutes, queryCount } from "../../../server/routes/library-routes";
-import { applyTranscriptScan, prepareLibraryStore } from "../../../server/backends/library/index-store";
+import { applyTranscriptScan, finishLease, prepareLibraryStore, takeLease } from "../../../server/backends/library/index-store";
 import { createLibraryIndex } from "../../../server/backends/library/library-index";
 import { createLocalLibraryService } from "../../../server/backends/library/library-service";
 import { localLibraryCaller } from "../../../server/backends/library/library-dispatch";
@@ -15,14 +15,16 @@ import { emptyConversationState } from "../../../server/backends/library/convers
 function appWithConversations(count: number) {
   const db = new DatabaseSync(":memory:");
   prepareLibraryStore(db);
+  takeLease(db, "t", 0, Number.MAX_SAFE_INTEGER);
   Array.from({ length: count }, (_, i) => i).forEach((i) =>
     applyTranscriptScan(db, {
       ...{ path: `/p/s${String(i)}.jsonl`, id: `s${String(i)}`, agent: "claude", parentId: null, isTemporary: false },
-      ...{ stamp: { size: 1, mtimeMs: 1 }, from: 0, to: 1, restart: true },
+      ...{ stamp: { size: 1, mtimeMs: 1 }, head: "h", owner: "t", expectedScannedTo: null, to: 1, restart: true },
       state: { ...emptyConversationState(), aiTitle: `title ${String(i)}`, endedAt: i },
       turns: [{ role: "user", text: `needle number ${String(i)}`, at: null }],
     }),
   );
+  finishLease(db, "t", 0);
   // Nothing on disk to walk: a refresh would look at the real home, so this index never runs one.
   const index = {
     ...createLibraryIndex(db, { projectsRoot: "/absent", historyFile: "/absent", temporaryRoots: [], owner: "t", now_ms: () => 0 }),
@@ -59,7 +61,7 @@ describe("/api/library", () => {
   });
 
   it("reports progress", async () => {
-    expect((await appWithConversations(0)("/api/library/status")).body).toEqual({ indexing: false, filesDone: 0, filesTotal: 0, finishedAt: null });
+    expect((await appWithConversations(0)("/api/library/status")).body).toEqual({ indexing: false, filesDone: 0, filesTotal: 0, finishedAt: 0 });
   });
 
   it("answers 503 when the index cannot be opened or does not answer", async () => {

@@ -7,12 +7,13 @@
 //
 // The database handle is passed in, so the specs run the same statements on `:memory:`.
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
+import { readString } from "../../../common/readString.js";
 import type { LibraryConversation, LibraryTurnRole } from "../../../common/library.js";
 import { conversationTitle, isConversationState, type ConversationState, type IndexedTurn } from "./conversation-fold.js";
 import type { HistoryPrompt } from "./history-fold.js";
 
 /** Bump when a column or what a column means changes: the next open drops and rebuilds. */
-export const LIBRARY_SCHEMA_VERSION = 1;
+export const LIBRARY_SCHEMA_VERSION = 2;
 // A write that meets another process's lock waits SYNCHRONOUSLY, with the event loop stopped, for up
 // to this long; a reader in WAL mode never waits. So it stays short: a write that gives up is a pass
 // that runs again later, while a long wait is a frozen server.
@@ -22,7 +23,7 @@ const TABLES = ["files", "conversations", "titles_fts", "turns", "turns_fts", "l
 
 const SCHEMA = `
 create table if not exists meta (key text primary key, value text not null);
-create table if not exists files (path text primary key, kind text not null, size integer not null, mtime_ms real not null, scanned_to integer not null, state text);
+create table if not exists files (path text primary key, kind text not null, size integer not null, mtime_ms real not null, scanned_to integer not null, head text not null, state text);
 create table if not exists conversations (
   key integer primary key, path text not null unique, id text not null, agent text not null, parent_id text, title text, cwd text, git_branch text, prs text not null,
   cost_usd real, lines_added integer, lines_removed integer, started_at integer, ended_at integer, skills text not null,
@@ -82,13 +83,15 @@ export interface FileMark {
   size: number;
   mtimeMs: number;
   scannedTo: number;
+  /** A hash of the file's first bytes, which a file replaced by another one does not share. */
+  head: string;
   state: ConversationState | null;
 }
 
 export function readFileMark(db: DatabaseSync, path: string): FileMark | null {
-  const row = db.prepare("select size, mtime_ms, scanned_to, state from files where path = ?").get(path);
+  const row = db.prepare("select size, mtime_ms, scanned_to, head, state from files where path = ?").get(path);
   if (row === undefined) return null;
-  return { size: Number(row.size), mtimeMs: Number(row.mtime_ms), scannedTo: Number(row.scanned_to), state: parseState(row.state) };
+  return { size: Number(row.size), mtimeMs: Number(row.mtime_ms), scannedTo: Number(row.scanned_to), head: readString(row.head), state: parseState(row.state) };
 }
 
 function parseState(raw: unknown): ConversationState | null {
@@ -101,52 +104,57 @@ function parseState(raw: unknown): ConversationState | null {
   }
 }
 
-/** True when the stored offset is still `from` — the scan read the file where it was left. */
-const stillAt = (db: DatabaseSync, path: string, from: number): boolean => (readFileMark(db, path)?.scannedTo ?? 0) === from;
-
 export interface FileStampRead {
   size: number;
   mtimeMs: number;
 }
 
+/** What every scan must still be true of when it commits: this process holds the lease, and the
+ *  file's offset is the one the scan started from (null: the file had no row). Either one moved means
+ *  another process got there first, and its rows win. */
+export interface ScanClaim {
+  owner: string;
+  expectedScannedTo: number | null;
+}
+
+function claimHolds(db: DatabaseSync, path: string, claim: ScanClaim): boolean {
+  const owner = db.prepare("select owner from lease where id = 1").get()?.owner;
+  return owner === claim.owner && (readFileMark(db, path)?.scannedTo ?? null) === claim.expectedScannedTo;
+}
+
 // ---- conversations ------------------------------------------------------------------------
 
-export interface TranscriptScan {
+export interface TranscriptScan extends ScanClaim {
   path: string;
   id: string;
   agent: LibraryConversation["agent"];
   parentId: string | null;
   isTemporary: boolean;
   stamp: FileStampRead;
-  /** Where this scan started; 0 with `restart` means the old rows go first. */
-  from: number;
+  head: string;
   to: number;
+  /** Read from the start: the conversation's old rows go first. */
   restart: boolean;
   state: ConversationState;
   turns: IndexedTurn[];
 }
 
-/** Commits the scan, or answers false when another process moved the file's offset first. */
+/** Commits the scan, or answers false when its claim no longer holds. */
 export function applyTranscriptScan(db: DatabaseSync, scan: TranscriptScan): boolean {
   return inTransaction(db, () => {
-    if (!scan.restart && !stillAt(db, scan.path, scan.from)) return false;
+    if (!claimHolds(db, scan.path, scan)) return false;
     // A conversation found to be temporary only once its cwd arrived keeps no text from before.
     if (scan.restart || scan.isTemporary) deleteConversationTurns(db, scan.id);
-    writeFileMark(db, scan.path, "transcript", scan.stamp, scan.to, JSON.stringify(scan.state));
+    writeFileMark(db, scan.path, "transcript", { ...scan.stamp, head: scan.head, scannedTo: scan.to }, JSON.stringify(scan.state));
     writeConversation(db, scan);
     insertTurns(db, scan.id, scan.turns);
     return true;
   });
 }
 
-function writeFileMark(db: DatabaseSync, path: string, kind: string, stamp: FileStampRead, scannedTo: number, state: string | null): void {
-  db.prepare("insert or replace into files (path, kind, size, mtime_ms, scanned_to, state) values (?, ?, ?, ?, ?, ?)").run(
-    path,
-    kind,
-    stamp.size,
-    stamp.mtimeMs,
-    scannedTo,
-    state,
+function writeFileMark(db: DatabaseSync, path: string, kind: string, mark: Omit<FileMark, "state">, state: string | null): void {
+  db.prepare("insert or replace into files (path, kind, size, mtime_ms, scanned_to, head, state) values (?, ?, ?, ?, ?, ?, ?)").run(
+    ...[path, kind, mark.size, mark.mtimeMs, mark.scannedTo, mark.head, state],
   );
 }
 
@@ -197,10 +205,10 @@ function removeTranscript(db: DatabaseSync, path: string, id: string | null): vo
 
 // ---- prompt history -----------------------------------------------------------------------
 
-export interface HistoryScan {
+export interface HistoryScan extends ScanClaim {
   path: string;
   stamp: FileStampRead;
-  from: number;
+  head: string;
   to: number;
   restart: boolean;
   prompts: HistoryPrompt[];
@@ -208,9 +216,9 @@ export interface HistoryScan {
 
 export function applyHistoryScan(db: DatabaseSync, scan: HistoryScan): boolean {
   return inTransaction(db, () => {
+    if (!claimHolds(db, scan.path, scan)) return false;
     if (scan.restart) db.prepare("delete from turns where role = 'prompt'").run();
-    else if (!stillAt(db, scan.path, scan.from)) return false;
-    writeFileMark(db, scan.path, "history", scan.stamp, scan.to, null);
+    writeFileMark(db, scan.path, "history", { ...scan.stamp, head: scan.head, scannedTo: scan.to }, null);
     const insert = db.prepare("insert into turns (conv, role, at, text) values (?, 'prompt', ?, ?)");
     scan.prompts.forEach((prompt) => insert.run(prompt.sessionId, prompt.at, prompt.text));
     return true;
