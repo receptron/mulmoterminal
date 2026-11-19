@@ -16,6 +16,7 @@ import {
   finishLease,
   readFileMark,
   recordProgress,
+  recordTail,
   removeMissingTranscripts,
   takeLease,
   type FileMark,
@@ -88,7 +89,8 @@ async function startOf(db: DatabaseSync, path: string, opened: OpenedFile): Prom
   const plan = resumePlan(mark, stamp);
   if (plan.kind === "skip") return null;
   const head = await opened.head();
-  return { mark, plan: unlessReplaced(plan, mark?.head ?? null, head), head, stamp };
+  const tail = plan.kind === "resume" && mark?.tail ? await opened.tailAt(plan.from) : null;
+  return { mark, plan: unlessReplaced(plan, mark, { head, tail }), head, stamp };
 }
 
 export async function scanTranscript(deps: IndexPassDeps, file: TranscriptFile): Promise<void> {
@@ -100,7 +102,7 @@ export async function scanTranscript(deps: IndexPassDeps, file: TranscriptFile):
     const resumable = plan.kind === "resume" && mark?.state ? { from: plan.from, state: mark.state } : null;
     const { from, state } = resumable ?? { from: 0, state: emptyConversationState() };
     const scan = { from, to: stamp.size, restart: resumable === null, expectedScannedTo: mark?.scannedTo ?? null };
-    await scanInBatches<IndexedTurn>(
+    const end = await scanInBatches<IndexedTurn>(
       opened.handle,
       scan,
       (record) => foldConversationRecord(state, record),
@@ -112,6 +114,7 @@ export async function scanTranscript(deps: IndexPassDeps, file: TranscriptFile):
         });
       },
     );
+    recordTail(deps.db, file.path, end, await opened.tailAt(end));
   });
 }
 
@@ -130,8 +133,9 @@ export async function scanHistory(deps: IndexPassDeps): Promise<void> {
     const { mark, plan, head, stamp } = start;
     const from = plan.kind === "resume" ? plan.from : 0;
     const scan = { from, to: stamp.size, restart: plan.kind === "restart", expectedScannedTo: mark?.scannedTo ?? null };
-    await scanInBatches<HistoryPrompt>(opened.handle, scan, historyPromptOf, (batch) =>
+    const end = await scanInBatches<HistoryPrompt>(opened.handle, scan, historyPromptOf, (batch) =>
       applyHistoryScan(deps.db, { path: deps.historyFile, owner: deps.owner, stamp, head, ...batch, prompts: batch.items }),
     );
+    recordTail(deps.db, deps.historyFile, end, await opened.tailAt(end));
   });
 }

@@ -29,14 +29,14 @@ export interface BatchCommit<T> {
   expectedScannedTo: number | null;
 }
 
-/** `take` folds a record and answers what to keep from it. It runs AFTER any commit at that record's
+/** Answers the offset the last batch ended at. `take` folds a record and answers what to keep from it. It runs AFTER any commit at that record's
  *  offset, so the state a commit writes covers exactly the bytes before `to`. */
 export async function scanInBatches<T>(
   handle: FileHandle,
   start: BatchStart,
   take: (record: Record<string, unknown>) => T | null,
   commit: (batch: BatchCommit<T>) => boolean,
-): Promise<void> {
+): Promise<number> {
   let batch: BatchCommit<T> = { items: [], to: start.from, restart: start.restart, expectedScannedTo: start.expectedScannedTo };
   const flush = (to: number): void => {
     if (!commit({ ...batch, to })) throw new ScanOvertaken();
@@ -48,4 +48,5 @@ export async function scanInBatches<T>(
     if (item !== null) batch.items.push(item);
   });
   flush(end);
+  return end;
 }

@@ -13,7 +13,7 @@ import { conversationTitle, isConversationState, type ConversationState, type In
 import type { HistoryPrompt } from "./history-fold.js";
 
 /** Bump when a column or what a column means changes: the next open drops and rebuilds. */
-export const LIBRARY_SCHEMA_VERSION = 2;
+export const LIBRARY_SCHEMA_VERSION = 3;
 // A write that meets another process's lock waits SYNCHRONOUSLY, with the event loop stopped, for up
 // to this long; a reader in WAL mode never waits. So it stays short: a write that gives up is a pass
 // that runs again later, while a long wait is a frozen server.
@@ -23,7 +23,7 @@ const TABLES = ["files", "conversations", "titles_fts", "turns", "turns_fts", "l
 
 const SCHEMA = `
 create table if not exists meta (key text primary key, value text not null);
-create table if not exists files (path text primary key, kind text not null, size integer not null, mtime_ms real not null, scanned_to integer not null, head text not null, state text);
+create table if not exists files (path text primary key, kind text not null, size integer not null, mtime_ms real not null, scanned_to integer not null, head text not null, tail text, state text);
 create table if not exists conversations (
   key integer primary key, path text not null unique, id text not null, agent text not null, parent_id text, title text, cwd text, git_branch text, prs text not null,
   cost_usd real, lines_added integer, lines_removed integer, started_at integer, ended_at integer, skills text not null,
@@ -85,13 +85,23 @@ export interface FileMark {
   scannedTo: number;
   /** A hash of the file's first bytes, which a file replaced by another one does not share. */
   head: string;
+  /** A hash of the bytes just before `scannedTo`, or null when none was recorded (a pass stopped
+   *  between batches). A file rewritten in place does not keep it. */
+  tail: string | null;
   state: ConversationState | null;
 }
 
 export function readFileMark(db: DatabaseSync, path: string): FileMark | null {
-  const row = db.prepare("select size, mtime_ms, scanned_to, head, state from files where path = ?").get(path);
+  const row = db.prepare("select size, mtime_ms, scanned_to, head, tail, state from files where path = ?").get(path);
   if (row === undefined) return null;
-  return { size: Number(row.size), mtimeMs: Number(row.mtime_ms), scannedTo: Number(row.scanned_to), head: readString(row.head), state: parseState(row.state) };
+  return {
+    size: Number(row.size),
+    mtimeMs: Number(row.mtime_ms),
+    scannedTo: Number(row.scanned_to),
+    head: readString(row.head),
+    tail: typeof row.tail === "string" ? row.tail : null,
+    state: parseState(row.state),
+  };
 }
 
 function parseState(raw: unknown): ConversationState | null {
@@ -152,7 +162,7 @@ export function applyTranscriptScan(db: DatabaseSync, scan: TranscriptScan): boo
   });
 }
 
-function writeFileMark(db: DatabaseSync, path: string, kind: string, mark: Omit<FileMark, "state">, state: string | null): void {
+function writeFileMark(db: DatabaseSync, path: string, kind: string, mark: Omit<FileMark, "state" | "tail">, state: string | null): void {
   db.prepare("insert or replace into files (path, kind, size, mtime_ms, scanned_to, head, state) values (?, ?, ?, ?, ?, ?, ?)").run(
     ...[path, kind, mark.size, mark.mtimeMs, mark.scannedTo, mark.head, state],
   );
@@ -231,6 +241,12 @@ export function applyHistoryScan(db: DatabaseSync, scan: HistoryScan): boolean {
 }
 
 // ---- who indexes, and how far it got --------------------------------------------------------
+
+/** Records where a finished scan stopped reading — only if the row still ends there, so a later
+ *  scan by another process is never given this one's tail. */
+export function recordTail(db: DatabaseSync, path: string, scannedTo: number, tail: string): void {
+  db.prepare("update files set tail = ? where path = ? and scanned_to = ?").run(tail, path, scannedTo);
+}
 
 /** Takes the lease when it is free, expired, or already ours; renewing it is the same call. */
 export function takeLease(db: DatabaseSync, owner: string, now_ms: number, ttl_ms: number): boolean {

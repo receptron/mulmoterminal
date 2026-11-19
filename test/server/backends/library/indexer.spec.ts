@@ -60,15 +60,17 @@ describe("runIndexPass", () => {
 
   it("reads only what was appended on the next pass", async () => {
     const { db, deps, transcript } = setup();
-    // The title sits past the bytes that identify the file, so rewriting it is not a replacement.
-    const file = transcript("s1", prompt(`first ${"x".repeat(HEAD_BYTES)}`) + line({ type: "ai-title", aiTitle: "AAAA" }));
+    // The title sits between the bytes that identify the file and the ones where the read stopped,
+    // so rewriting it is not detected as a replacement.
+    const filler = (word: string): string => prompt(`${word} ${"x".repeat(HEAD_BYTES)}`);
+    const file = transcript("s1", filler("first") + line({ type: "ai-title", aiTitle: "AAAA" }) + filler("middle"));
     await runIndexPass(deps);
     // Rewrite the already-read title in place (same length), then append. A pass that re-read the
     // file would pick up "BBBB"; one that resumed never sees it.
     writeFileSync(file, readFileSync(file, "utf8").replace("AAAA", "BBBB"));
     appendFileSync(file, prompt("second") + reply("appended reply"));
     await runIndexPass(deps);
-    expect(conversationOfRow(findConversation(db, "s1") ?? {})).toMatchObject({ title: "AAAA", userTurns: 2 });
+    expect(conversationOfRow(findConversation(db, "s1") ?? {})).toMatchObject({ title: "AAAA", userTurns: 3 });
     expect(hits(db, "appended")).toEqual(["s1"]);
     expect(hits(db, "first")).toEqual(["s1"]);
     expect(readFileMark(db, file)?.scannedTo).toBe(statSync(file).size);
@@ -82,6 +84,16 @@ describe("runIndexPass", () => {
     await runIndexPass(deps);
     expect(hits(db, "original")).toEqual([]);
     expect(hits(db, "replacement")).toEqual(["s1"]);
+  });
+
+  it("reads a file again from the start when the bytes where the last read stopped were rewritten", async () => {
+    const { db, deps, transcript } = setup();
+    const file = transcript("s1", prompt(`opening ${"x".repeat(HEAD_BYTES)}`) + prompt("closing words"));
+    await runIndexPass(deps);
+    writeFileSync(file, readFileSync(file, "utf8").replace("closing", "revised") + prompt("appended"));
+    await runIndexPass(deps);
+    expect(hits(db, "closing")).toEqual([]);
+    expect(hits(db, "revised")).toEqual(["s1"]);
   });
 
   it("does not read a file again when nothing changed", async () => {

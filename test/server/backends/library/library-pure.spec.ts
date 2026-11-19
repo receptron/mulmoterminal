@@ -4,7 +4,7 @@
 import { describe, it, expect } from "vitest";
 import { isTemporaryCwd } from "../../../../server/backends/library/temporary-path";
 import { historyPromptOf } from "../../../../server/backends/library/history-fold";
-import { resumePlan } from "../../../../server/backends/library/resume-plan";
+import { resumePlan, unlessReplaced } from "../../../../server/backends/library/resume-plan";
 import { escapeLike, snippetAround } from "../../../../server/backends/library/library-text";
 import { ftsPhrase } from "../../../../server/backends/library/library-search";
 import { TURN_TEXT_CAP } from "../../../../server/backends/library/conversation-fold";
@@ -83,6 +83,25 @@ describe("resumePlan", () => {
     ["empty, still empty", { size: 0, mtimeMs: 5, scannedTo: 0 }, { size: 0, mtimeMs: 5 }, { kind: "skip" }],
   ] as const)("%s", (_label, before, stamp, expected) => {
     expect(resumePlan(before, stamp)).toEqual(expected);
+  });
+});
+
+describe("unlessReplaced", () => {
+  const resume = { kind: "resume", from: 9 } as const;
+
+  it.each([
+    ["the same ends", { head: "h", tail: "t" }, { head: "h", tail: "t" }, resume],
+    ["no tail recorded: head alone decides", { head: "h", tail: null }, { head: "h", tail: null }, resume],
+    ["a different head", { head: "h", tail: "t" }, { head: "x", tail: "t" }, { kind: "restart" }],
+    ["a different tail", { head: "h", tail: "t" }, { head: "h", tail: "x" }, { kind: "restart" }],
+    ["nothing remembered", null, { head: "h", tail: null }, { kind: "restart" }],
+  ] as const)("%s", (_label, remembered, current, expected) => {
+    expect(unlessReplaced(resume, remembered, current)).toEqual(expected);
+  });
+
+  it("leaves a skip or a restart alone", () => {
+    expect(unlessReplaced({ kind: "skip" }, null, { head: "h", tail: null })).toEqual({ kind: "skip" });
+    expect(unlessReplaced({ kind: "restart" }, { head: "h", tail: "t" }, { head: "x", tail: "y" })).toEqual({ kind: "restart" });
   });
 });
 

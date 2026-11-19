@@ -22,7 +22,18 @@ export function resumePlan(remembered: RememberedOffset | null, stamp: FileStamp
   return { kind: "resume", from: remembered.scannedTo };
 }
 
-/** A resume is only safe on the SAME file. One that grew but no longer starts the way it did was
- *  replaced, and its new bytes do not continue the old ones. */
-export const unlessReplaced = (plan: ResumePlan, rememberedHead: string | null, currentHead: string): ResumePlan =>
-  plan.kind === "resume" && rememberedHead !== currentHead ? { kind: "restart" } : plan;
+/** The two ends of what was read before, and the same two places in the file now. A `tail` of null
+ *  means it was not recorded (or not asked for), and only the head is compared. */
+export interface ReadEnds {
+  head: string;
+  tail: string | null;
+}
+
+/** A resume is only safe on the SAME file. One that grew but no longer starts the way it did, or no
+ *  longer has the bytes it had where the last read stopped, was replaced or rewritten, and its new
+ *  bytes do not continue the old ones. */
+export function unlessReplaced(plan: ResumePlan, remembered: ReadEnds | null, current: ReadEnds): ResumePlan {
+  if (plan.kind !== "resume") return plan;
+  if (remembered === null || remembered.head !== current.head) return { kind: "restart" };
+  return remembered.tail !== null && remembered.tail !== current.tail ? { kind: "restart" } : plan;
+}
