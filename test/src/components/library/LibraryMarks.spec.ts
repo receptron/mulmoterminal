@@ -8,7 +8,11 @@ import type { ResumableList } from "../../../../src/composables/useDirLists";
 
 const libraryOpen = ref(true);
 const closeLibrary = vi.fn();
-vi.mock("../../../../src/composables/useLibraryView", () => ({ useLibraryView: () => ({ isOpen: libraryOpen, close: closeLibrary }) }));
+let requestedSession: string | null = null;
+vi.mock("../../../../src/composables/useLibraryView", () => ({
+  useLibraryView: () => ({ isOpen: libraryOpen, close: closeLibrary }),
+  libraryRequestedSession: () => requestedSession,
+}));
 
 let page: LibraryConversation[] = [];
 let status: LibraryIndexStatus | null = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
@@ -112,6 +116,7 @@ const press = async (key: string) => {
 };
 
 beforeEach(() => {
+  requestedSession = null;
   closeLibrary.mockClear();
   marks = { pinned: [], names: {} };
   saved.length = 0;
@@ -511,6 +516,17 @@ describe("LibraryOverlay pins and names", () => {
     await wrapper.find("[data-testid=library-pin]").trigger("click");
     await flushPromises();
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("The only one");
+    vi.mocked(api.loadLibraryPage).mockRestore();
+  });
+
+  it("opens on the conversation a cell's History menu named, even one not on the first page", async () => {
+    const old = conversation("from-a-cell", "Opened from its cell", { endedAt: NOW - 400 * 24 * 3_600_000 });
+    page = [...page, old]; // readable by id…
+    const api = await import("../../../../src/composables/libraryApi");
+    vi.spyOn(api, "loadLibraryPage").mockResolvedValue({ conversations: page.slice(0, 2), hasMore: true, indexFinishedAt: 1 }); // …not listed
+    requestedSession = "from-a-cell";
+    const wrapper = await mountLibrary();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Opened from its cell");
     vi.mocked(api.loadLibraryPage).mockRestore();
   });
 });

@@ -1867,7 +1867,7 @@ narrow and tall for one record you are discussing — and each position keeps it
 
 ## More features
 
-- **Library** — **More features** → **Library** lists every Claude conversation on this machine,
+- **Library** — **More features** → **Library** (or a Claude cell's **History** menu → **Open in Library**, which opens on that conversation) lists every Claude conversation on this machine,
   newest first, across all projects: its title, then the project, branch, PRs and when. Type to
   search the conversations' text and titles (Japanese included); pick one to read it, and press
   **Resume** (or `Enter`) to open it in a terminal in the directory it ran in. `/` focuses the

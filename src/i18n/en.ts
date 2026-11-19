@@ -528,6 +528,7 @@ export const en = {
       prompts: { label: "Prompts you sent", detail: "Everything you typed in this session" },
       transcript: { label: "Conversation", detail: "Your prompts and the agent's replies, in full" },
       timeline: { label: "Activity timeline", detail: "What the agent ran, in order: files read, commands run" },
+      library: { label: "Open in Library", detail: "This conversation in the Library: search, pin, rename" },
       tools: { label: "Tools used", detail: "The tools the agent called, with their results" },
       canvas: { label: "Canvas", detail: "Charts, documents and cards the agent drew" },
       collections: { label: "Collections", detail: "This folder's collections" },

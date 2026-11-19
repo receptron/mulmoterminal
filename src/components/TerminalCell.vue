@@ -2,6 +2,7 @@
 import { ref, computed, nextTick, watch, onMounted, onUnmounted, useTemplateRef } from "vue";
 import { useI18n } from "vue-i18n";
 import TerminalView from "./Terminal.vue";
+import { libraryViewOpen } from "../composables/useLibraryView";
 import { usePubSub } from "../composables/usePubSub";
 import { useImeAwareEnter } from "../composables/useImeAwareEnter";
 import { useBusyAction } from "../composables/useBusyAction";
@@ -1699,11 +1700,13 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
               :can-park="true"
               :parked="parked"
               :timeline-available="!!sessionId && agent === 'claude'"
+              :library-available="!!sessionId && agent === 'claude'"
               :restart-available="launched && !!sessionId"
               :talk-available="talkAvailable"
               v-on="chromeEvents"
               @toggle-park="togglePark"
               @open-timeline="timelineOpen = true"
+              @open-library="sessionId && libraryViewOpen(sessionId)"
               @open-talk="openAskMenu"
               @tools-opening="refreshAskTargets"
               @restart-agent="restart"

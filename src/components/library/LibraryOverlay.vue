@@ -7,7 +7,9 @@ import { useI18n } from "vue-i18n";
 import FullScreenOverlay from "../FullScreenOverlay.vue";
 import LibraryList from "./LibraryList.vue";
 import LibraryReader from "./LibraryReader.vue";
-import { useLibraryView } from "../../composables/useLibraryView";
+import { libraryRequestedSession, useLibraryView } from "../../composables/useLibraryView";
+import { loadLibraryConversation } from "../../composables/libraryApi";
+import { router } from "../../router";
 import { useEscapeToClose } from "../../composables/useEscapeToClose";
 import { useLibraryData } from "../../composables/useLibraryData";
 import { readResumableList } from "../../composables/useDirLists";
@@ -85,9 +87,31 @@ watch(
     if (!open) return;
     await nextTick();
     searchField.value?.focus();
+    void focusRequested();
   },
   { immediate: true },
 );
+// Opened again on another conversation while already open (a second cell's History menu).
+watch(
+  () => router.currentRoute.value.query.session,
+  () => {
+    if (isOpen.value) void focusRequested();
+  },
+);
+
+/** Opens the reader on the conversation the URL names (a cell's History menu), reading it by id when
+ *  it is not on the pages the list has read. */
+async function focusRequested(): Promise<void> {
+  const id = libraryRequestedSession();
+  if (id === null) return;
+  const opening = openings;
+  const listed = [...pinned.value, ...conversations.value].find((c) => c.id === id);
+  const found = listed ?? (await loadLibraryConversation(id));
+  if (found === null || opening !== openings) return;
+  chosenKey.value = conversationKey(found);
+  chosenSeen.value = found;
+  readerShown.value = true;
+}
 // By key: a reload replaces every object, and must not clear a refusal about the row still selected.
 const selectedKey = computed(() => (selected.value ? conversationKey(selected.value) : null));
 watch(selectedKey, () => (notice.value = null));

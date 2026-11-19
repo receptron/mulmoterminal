@@ -515,6 +515,7 @@ export const ko: Messages = {
       prompts: { label: "보낸 프롬프트", detail: "이 세션에서 직접 입력한 지시" },
       transcript: { label: "대화", detail: "내 지시와 에이전트의 답변 전체" },
       timeline: { label: "작업 기록", detail: "에이전트가 한 일(읽은 파일, 실행한 명령)을 시간순으로" },
+      library: { label: "라이브러리에서 열기", detail: "이 대화를 라이브러리에서 (검색, 고정, 이름 바꾸기)" },
       tools: { label: "사용한 도구", detail: "에이전트가 호출한 도구와 그 결과" },
       canvas: { label: "캔버스", detail: "에이전트가 그린 차트·문서·카드" },
       collections: { label: "컬렉션", detail: "이 폴더의 컬렉션" },

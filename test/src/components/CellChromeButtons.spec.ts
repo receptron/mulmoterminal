@@ -105,6 +105,7 @@ describe("the history and tools menus", () => {
       ["cell-history-btn", "prompts", "toggle-prompts"],
       ["cell-history-btn", "transcript", "toggle-transcript"],
       ["cell-history-btn", "timeline", "open-timeline"],
+      ["cell-history-btn", "library", "open-library"],
       ["cell-tools-btn", "tools", "toggle-tools"],
       ["cell-tools-btn", "canvas", "toggle-canvas"],
       ["cell-tools-btn", "collections", "toggle-collections"],
@@ -112,7 +113,14 @@ describe("the history and tools menus", () => {
       ["cell-tools-btn", "restart", "restart-agent"],
     ];
     for (const [trigger, id, event] of picks) {
-      const w = mountAt({ canvasAvailable: true, collectionsAvailable: true, timelineAvailable: true, restartAvailable: true, talkAvailable: true });
+      const w = mountAt({
+        canvasAvailable: true,
+        collectionsAvailable: true,
+        timelineAvailable: true,
+        libraryAvailable: true,
+        restartAvailable: true,
+        talkAvailable: true,
+      });
       await w.find(`[data-testid="${trigger}"]`).trigger("click");
       itemIn(id)?.click();
       await w.vm.$nextTick();
