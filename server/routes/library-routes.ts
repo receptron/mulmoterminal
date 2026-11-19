@@ -7,7 +7,7 @@ import { MAX_QUERY_CHARS } from "../backends/library/library-search.js";
 import { createLibraryClient } from "../backends/library/library-client.js";
 import type { LibraryCaller, LibraryMethod } from "../backends/library/library-service.js";
 import { changeLibraryMark, readLibraryMarks } from "../backends/library/library-marks.js";
-import type { LibraryMarkChange } from "../../common/library.js";
+import { LIBRARY_NAME_MAX, type LibraryMarkChange } from "../../common/library.js";
 import { requestBody } from "./requestBody.js";
 
 /** A session id as the agents write them: letters, digits and dashes (subagents use `agent-…`). */
@@ -81,12 +81,14 @@ export function mountLibraryRoutes(app: Express, deps: LibraryRouteDeps = {}): v
   });
 }
 
-/** A change from a request body: only the fields it carries, each of the right type. */
+/** A change from a request body, or null when any field it carries is malformed — the whole request is
+ *  refused rather than applied in part. A name past the cap is malformed too: the UI cannot send one. */
 export function markChangeOf(body: Record<string, unknown>): LibraryMarkChange | null {
-  const change: LibraryMarkChange = {};
-  if (typeof body.pinned === "boolean") change.pinned = body.pinned;
-  if (typeof body.name === "string" || body.name === null) change.name = body.name;
-  return Object.keys(change).length === 0 ? null : change;
+  const { pinned, name } = body;
+  if (pinned !== undefined && typeof pinned !== "boolean") return null;
+  if (name !== undefined && name !== null && (typeof name !== "string" || name.length > LIBRARY_NAME_MAX)) return null;
+  if (pinned === undefined && name === undefined) return null;
+  return { ...(pinned === undefined ? {} : { pinned }), ...(name === undefined ? {} : { name }) };
 }
 
 // Pins and names live in MulmoTerminal's own file, not in the index, so they are read and written

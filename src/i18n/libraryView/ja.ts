@@ -27,6 +27,7 @@ export const libraryViewJa = {
     pin: "ピン留め",
     unpin: "ピン留めを外す",
     rename: "名前を変える",
+    marksUnreadable: "ピン留めと名前を読めなかったため、表示していません。",
     saveFailed: "変更を保存できませんでした。少し待ってからもう一度試してください。",
     more: "さらに表示",
   },

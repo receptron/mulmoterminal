@@ -139,5 +139,8 @@ describe("markChangeOf", () => {
   it("keeps only fields of the right type", () => {
     expect(markChangeOf({ pinned: true, name: null, extra: 1 })).toEqual({ pinned: true, name: null });
     expect(markChangeOf({ pinned: 1, name: 3 })).toBeNull();
+    expect(markChangeOf({ pinned: true, name: 42 })).toBeNull(); // one bad field refuses the whole change
+    expect(markChangeOf({ name: "x".repeat(201) })).toBeNull();
+    expect(markChangeOf({})).toBeNull();
   });
 });

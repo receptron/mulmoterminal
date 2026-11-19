@@ -11,6 +11,9 @@ export function useLibraryMarks(isOpen: Ref<boolean>) {
   const marks = shallowRef<LibraryMarks>(emptyLibraryMarks());
   const pinned = shallowRef<LibraryConversation[]>([]);
   const saveFailed = ref(false);
+  /** The marks could not be read (the file is there but unreadable): nothing pinned is shown, and the
+   *  screen says why rather than looking like nothing was ever pinned. */
+  const loadFailed = ref(false);
   let request = 0;
   let saveRequest = 0;
 
@@ -26,7 +29,13 @@ export function useLibraryMarks(isOpen: Ref<boolean>) {
     const savesBefore = saveRequest;
     const read = await loadLibraryMarks();
     // A save answered since this read began holds newer marks than the read does.
-    if (mine !== request || read === null || saveRequest !== savesBefore) return;
+    if (mine !== request || saveRequest !== savesBefore) return;
+    loadFailed.value = read === null;
+    if (read === null) {
+      marks.value = emptyLibraryMarks();
+      pinned.value = [];
+      return;
+    }
     marks.value = read;
     await readPinned(read.pinned);
   }
@@ -62,5 +71,5 @@ export function useLibraryMarks(isOpen: Ref<boolean>) {
     { immediate: true },
   );
 
-  return { marks, pinned, saveFailed, change };
+  return { marks, pinned, saveFailed, loadFailed, change };
 }

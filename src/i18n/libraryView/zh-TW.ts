@@ -27,6 +27,7 @@ export const libraryViewZhTW = {
     pin: "釘選",
     unpin: "取消釘選",
     rename: "重新命名",
+    marksUnreadable: "無法讀取釘選和名稱，因此未顯示。",
     saveFailed: "無法儲存此變更。請稍後再試。",
     more: "顯示更多",
   },

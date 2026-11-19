@@ -27,6 +27,7 @@ export const libraryViewEn = {
     pin: "Pin",
     unpin: "Unpin",
     rename: "Rename",
+    marksUnreadable: "Your pins and names could not be read, so none are shown.",
     saveFailed: "Could not save that change. Try again in a moment.",
     more: "Show more",
   },

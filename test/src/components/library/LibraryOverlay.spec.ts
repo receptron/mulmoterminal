@@ -19,6 +19,7 @@ const saved: { id: string; change: { pinned?: boolean; name?: string | null } }[
 let saveFails = false;
 let saveGate: Promise<void> = Promise.resolve();
 let marksGate: Promise<void> = Promise.resolve();
+let marksUnreadable = false;
 let more: { conversations: LibraryConversation[]; hasMore: boolean; indexFinishedAt: number | null } | null = null;
 /** The finished pass the next first page says it reflects. */
 let pageFinished: number | null = 1;
@@ -40,7 +41,7 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
   },
   searchLibrary: () => Promise.resolve(hits),
   loadLibraryMarks: async () => {
-    const answer = { ...marks };
+    const answer = marksUnreadable ? null : { ...marks };
     await marksGate;
     return answer;
   },
@@ -111,6 +112,7 @@ beforeEach(() => {
   saveFails = false;
   saveGate = Promise.resolve();
   marksGate = Promise.resolve();
+  marksUnreadable = false;
   libraryOpen.value = true;
   page = [conversation("a", "Burn subtitles"), conversation("b", "CI under ten minutes", { endedAt: NOW - 30 * 24 * 3_600_000 })];
   status = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
@@ -588,5 +590,22 @@ describe("LibraryOverlay", () => {
     releaseLoad(); // the older read lands now
     await flushPromises();
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Saved first");
+  });
+
+  it("clears a failed save's notice when another conversation is chosen", async () => {
+    saveFails = true;
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-pin]").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[role=status]").exists()).toBe(true);
+    await press("ArrowDown");
+    expect(wrapper.find("[role=status]").exists()).toBe(false);
+  });
+
+  it("says the pins and names could not be read, rather than showing none", async () => {
+    marksUnreadable = true;
+    const wrapper = await mountLibrary();
+    expect(wrapper.find("[role=status]").text()).toContain("could not be read");
   });
 });

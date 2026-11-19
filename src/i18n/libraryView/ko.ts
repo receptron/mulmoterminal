@@ -27,6 +27,7 @@ export const libraryViewKo = {
     pin: "고정",
     unpin: "고정 해제",
     rename: "이름 바꾸기",
+    marksUnreadable: "고정과 이름을 읽지 못해 표시하지 않았습니다.",
     saveFailed: "변경 내용을 저장하지 못했습니다. 잠시 후 다시 시도하세요.",
     more: "더 보기",
   },
