@@ -1,0 +1,90 @@
+// @vitest-environment node
+// /api/library/* (#3328): the index over HTTP, on an in-memory index — paging, one conversation,
+// search's limits, and the answer when the index cannot be opened.
+import { describe, it, expect } from "vitest";
+import { DatabaseSync } from "node:sqlite";
+import express from "express";
+import { routeCall } from "../../helpers/routeCall";
+import { filterOf, mountLibraryRoutes, queryCount } from "../../../server/routes/library-routes";
+import { applyTranscriptScan, prepareLibraryStore } from "../../../server/backends/library/index-store";
+import { createLibraryIndex } from "../../../server/backends/library/library-index";
+import { createLocalLibraryService } from "../../../server/backends/library/library-service";
+import { localLibraryCaller } from "../../../server/backends/library/library-dispatch";
+import { emptyConversationState } from "../../../server/backends/library/conversation-fold";
+
+function appWithConversations(count: number) {
+  const db = new DatabaseSync(":memory:");
+  prepareLibraryStore(db);
+  Array.from({ length: count }, (_, i) => i).forEach((i) =>
+    applyTranscriptScan(db, {
+      ...{ path: `/p/s${String(i)}.jsonl`, id: `s${String(i)}`, agent: "claude", parentId: null, isTemporary: false },
+      ...{ stamp: { size: 1, mtimeMs: 1 }, from: 0, to: 1, restart: true },
+      state: { ...emptyConversationState(), aiTitle: `title ${String(i)}`, endedAt: i },
+      turns: [{ role: "user", text: `needle number ${String(i)}`, at: null }],
+    }),
+  );
+  // Nothing on disk to walk: a refresh would look at the real home, so this index never runs one.
+  const index = {
+    ...createLibraryIndex(db, { projectsRoot: "/absent", historyFile: "/absent", temporaryRoots: [], owner: "t", now_ms: () => 0 }),
+    refresh: () => {},
+  };
+  const app = express();
+  mountLibraryRoutes(app, { call: localLibraryCaller(createLocalLibraryService(index)) });
+  return routeCall(app);
+}
+
+describe("/api/library", () => {
+  it("pages the list, newest first, and says when there is more", async () => {
+    const call = appWithConversations(3);
+    const first = (await call("/api/library/conversations?limit=2")).body;
+    expect((first.conversations as { id: string }[]).map((c) => c.id)).toEqual(["s2", "s1"]);
+    expect(first.hasMore).toBe(true);
+    const second = (await call("/api/library/conversations?limit=2&offset=2")).body;
+    expect((second.conversations as { id: string }[]).map((c) => c.id)).toEqual(["s0"]);
+    expect(second.hasMore).toBe(false);
+  });
+
+  it("answers one conversation, or 404", async () => {
+    const call = appWithConversations(1);
+    expect((await call("/api/library/conversations/s0")).body).toMatchObject({ id: "s0", title: "title 0" });
+    expect((await call("/api/library/conversations/nope")).status).toBe(404);
+  });
+
+  it("searches, and refuses an empty or overlong query", async () => {
+    const call = appWithConversations(2);
+    const found = (await call(`/api/library/search?q=${encodeURIComponent("number 1")}`)).body;
+    expect((found.hits as { conversation: { id: string } }[]).map((hit) => hit.conversation.id)).toEqual(["s1"]);
+    expect((await call("/api/library/search?q=")).status).toBe(400);
+    expect((await call(`/api/library/search?q=${"x".repeat(201)}`)).status).toBe(400);
+  });
+
+  it("reports progress", async () => {
+    expect((await appWithConversations(0)("/api/library/status")).body).toEqual({ indexing: false, filesDone: 0, filesTotal: 0, finishedAt: null });
+  });
+
+  it("answers 503 when the index cannot be opened or does not answer", async () => {
+    const app = express();
+    mountLibraryRoutes(app, { call: () => Promise.reject(new Error("the library worker exited")) });
+    expect((await routeCall(app)("/api/library/status")).status).toBe(503);
+  });
+});
+
+describe("query parsing", () => {
+  it.each([
+    [undefined, 50],
+    ["10", 10],
+    ["999", 200],
+    ["-1", 50],
+    ["1.5", 50],
+    ["abc", 50],
+    [["1", "2"], 50],
+  ])("limit %j → %d", (value, expected) => {
+    expect(queryCount(value, 50, 200)).toBe(expected);
+  });
+
+  it("reads the filter flags, and ignores an empty cwd", () => {
+    expect(filterOf({})).toEqual({ includeTemporary: false, includeSidechains: false });
+    expect(filterOf({ cwd: "/w", temporary: "1", sidechains: "true" })).toEqual({ cwd: "/w", includeTemporary: true, includeSidechains: true });
+    expect(filterOf({ cwd: "", temporary: "yes" })).toEqual({ includeTemporary: false, includeSidechains: false });
+  });
+});
