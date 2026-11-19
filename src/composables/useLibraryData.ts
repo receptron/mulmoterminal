@@ -26,6 +26,10 @@ export function useLibraryData(isOpen: Ref<boolean>) {
     () => loadFailed.value,
   );
   const search = useDebouncedSearch(query, hits, searching, searchFailed);
+  // A list read can fail after the poll has already gone quiet (the index idle): wake it to retry.
+  watch(loadFailed, (failed) => {
+    if (failed) poll.wake();
+  });
 
   watch(
     isOpen,
@@ -114,15 +118,25 @@ function usePolledStatus(
     // Kept going while the list could not be read, too: otherwise a failed read waits for a reopen.
     timer = next === null || next.indexing || listFailed() ? setTimeout(() => void tick(mine), LIBRARY_STATUS_POLL_MS) : null;
   }
+  let active = false;
   return {
     start: () => {
+      active = true;
       const mine = ++generation;
       timer = setTimeout(() => void tick(mine), 0);
     },
     stop: () => {
+      active = false;
       generation++;
       if (timer !== null) clearTimeout(timer);
       timer = null;
+    },
+    /** Makes sure a tick is coming. A loop that already went quiet is woken; one whose read is still
+     *  in flight sees the failure itself when it answers, and keeps going. */
+    wake: () => {
+      if (!active || timer !== null) return;
+      const mine = generation;
+      timer = setTimeout(() => void tick(mine), LIBRARY_STATUS_POLL_MS);
     },
   };
 }

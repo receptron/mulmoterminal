@@ -361,4 +361,19 @@ describe("LibraryOverlay", () => {
     await flushPromises();
     expect(wrapper.findAll("[data-testid=library-row]")).toHaveLength(2);
   }, 10_000);
+
+  it("reads the list again when its read fails after the poll has gone quiet", async () => {
+    const api = await import("../../../../src/composables/libraryApi");
+    let failPage: () => void = () => {};
+    vi.spyOn(api, "loadLibraryPage").mockImplementationOnce(() => new Promise((resolve) => (failPage = () => resolve(null))));
+    pageFinished = null;
+    status = { indexing: false, filesDone: 0, filesTotal: 0, finishedAt: null }; // idle: the poll stops at once
+    const wrapper = await mountLibrary();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    failPage(); // only now does the opening read fail
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 300));
+    await flushPromises();
+    expect(wrapper.findAll("[data-testid=library-row]")).toHaveLength(2);
+  }, 10_000);
 });
