@@ -1875,8 +1875,8 @@ narrow and tall for one record you are discussing — and each position keeps it
   it; pins and names are MulmoTerminal's own (`~/.mulmoterminal/library/marks.json`) and the
   conversation's file is never written. `claude -p` and SDK runs, and runs from temp directories, are left
   out. The index behind it is built in the background the first time you open it and kept up to
-  date from what is appended; it lives in `~/.mulmoterminal/library/` and can be deleted at any
-  time (it is rebuilt). Design: [`docs/library-design.md`](docs/library-design.md).
+  date from what is appended; it is `~/.mulmoterminal/library/index.db` and can be deleted at any
+  time (it is rebuilt). `marks.json` beside it holds your pins and names and is not rebuilt. Design: [`docs/library-design.md`](docs/library-design.md).
 - **Skills viewer** — **More features** → **Skills** lists every Claude skill on disk in three
   columns — where it lives, its skills, its `SKILL.md`. The places are your `~/.claude/skills`,
   each enabled plugin (skills shown as `plugin:skill`), and the `.claude/skills` of each folder a

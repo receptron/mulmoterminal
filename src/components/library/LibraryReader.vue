@@ -37,6 +37,13 @@ async function startRename(): Promise<void> {
   await nextTick();
   nameField.value?.select();
 }
+/** Enter while an input method is composing confirms the conversion, not the name. */
+function onRenameEnter(event: KeyboardEvent): void {
+  if (event.isComposing) return;
+  event.preventDefault();
+  finishRename();
+}
+
 function finishRename(): void {
   if (draft.value === null || renaming === null) return;
   // The agent's own title back: an empty name, or one identical to it, clears the user's.
@@ -120,7 +127,7 @@ const lines = computed(() => {
         :aria-label="t('libraryView.rename')"
         :maxlength="LIBRARY_NAME_MAX"
         class="w-full rounded border border-accent bg-base px-2 py-1 font-sans text-[20px] font-[650] text-fg outline-none"
-        @keydown.enter.stop.prevent="finishRename"
+        @keydown.enter.stop="onRenameEnter"
         @keydown.esc.stop.prevent="draft = null"
         @blur="finishRename"
       />

@@ -380,4 +380,37 @@ describe("LibraryOverlay pins and names", () => {
     const wrapper = await mountLibrary();
     expect(wrapper.find("[data-testid=library-empty] [role=status]").text()).toContain("could not be read");
   });
+
+  it("does not save the name on the Enter that confirms an input method's conversion", async () => {
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-rename-start]").trigger("click");
+    const field = wrapper.find("[data-testid=library-rename]");
+    await field.setValue("字幕");
+    field.element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true }));
+    await flushPromises();
+    expect(saved).toEqual([]);
+    expect(wrapper.find("[data-testid=library-rename]").exists()).toBe(true);
+  });
+
+  it("ignores a marks read that began before a save the screen has since shown", async () => {
+    const wrapper = await mountLibrary();
+    // A reopen-style read is under way, holding the marks as they were…
+    let releaseRead: () => void = () => {};
+    marksGate = new Promise((resolve) => (releaseRead = resolve));
+    libraryOpen.value = false;
+    await flushPromises();
+    libraryOpen.value = true;
+    await flushPromises();
+    marksGate = Promise.resolve();
+    // …then a rename is saved and shown before that read answers.
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-rename-start]").trigger("click");
+    await wrapper.find("[data-testid=library-rename]").setValue("Newer than the read");
+    await wrapper.find("[data-testid=library-rename]").trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    releaseRead();
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Newer than the read");
+  });
 });

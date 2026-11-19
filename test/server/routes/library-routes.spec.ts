@@ -4,7 +4,7 @@
 import { describe, it, expect } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import express from "express";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach } from "vitest";
@@ -142,5 +142,23 @@ describe("markChangeOf", () => {
     expect(markChangeOf({ pinned: true, name: 42 })).toBeNull(); // one bad field refuses the whole change
     expect(markChangeOf({ name: "x".repeat(201) })).toBeNull();
     expect(markChangeOf({})).toBeNull();
+  });
+});
+
+describe("/api/library/marks failures", () => {
+  it("answers a fixed message, not one naming the file", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "mt-library-marks-bad-"));
+    try {
+      const file = path.join(dir, "marks.json");
+      writeFileSync(file, "{ not json");
+      const app = express();
+      app.use(express.json());
+      mountLibraryRoutes(app, { call: () => Promise.resolve(null), marksFile: file });
+      const answer = await routeCall(app)("/api/library/marks");
+      expect(answer.status).toBe(500);
+      expect(answer.text).not.toContain(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -98,8 +98,8 @@ function mountMarkRoutes(app: Express, marksFile: string | undefined): void {
   app.get("/api/library/marks", async (_req, res) => {
     try {
       res.json(await readLibraryMarks(marksFile));
-    } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : "the marks could not be read" });
+    } catch {
+      res.status(500).json({ error: "the marks could not be read" }); // the error names the file path
     }
   });
   app.put("/api/library/marks/:id", async (req, res) => {
@@ -110,8 +110,8 @@ function mountMarkRoutes(app: Express, marksFile: string | undefined): void {
     }
     try {
       res.json(await changeLibraryMark(req.params.id, change, marksFile));
-    } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : "the marks could not be saved" });
+    } catch {
+      res.status(500).json({ error: "the marks could not be saved" });
     }
   });
 }

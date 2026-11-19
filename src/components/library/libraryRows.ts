@@ -54,7 +54,10 @@ export function groupConversations(
 ): LibraryGroupRows[] {
   const rest = conversations.filter((c) => !pinnedIds.has(c.id));
   const byTime = TIME_GROUPS.map((group) => ({ group, conversations: rest.filter((c) => groupOf(c.endedAt, now) === group) }));
-  return [{ group: "pinned" as const, conversations: [...pinned] }, ...byTime].filter((rows) => rows.conversations.length > 0);
+  // Only what is pinned NOW: the pinned rows are read back after the ids change, and a row unpinned
+  // meanwhile must not show in both the pinned group and its time group.
+  const stillPinned = pinned.filter((c) => pinnedIds.has(c.id));
+  return [{ group: "pinned" as const, conversations: stillPinned }, ...byTime].filter((rows) => rows.conversations.length > 0);
 }
 
 /** The rows in the order the list shows them, for the arrow keys to walk. */

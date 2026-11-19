@@ -164,6 +164,17 @@ describe("pinned conversations", () => {
     expect(groupConversations([a, b], NOW, [], new Set(["b"])).map((g) => [g.group, g.conversations.map((x) => x.id)])).toEqual([["today", ["a"]]]);
   });
 
+  it("show only what is pinned now, while the pinned rows are still being read back", () => {
+    const a = conversation({ id: "a", endedAt: NOW });
+    const b = conversation({ id: "b", endedAt: NOW });
+    // a was unpinned; its row is still in the pinned list until the read-back lands.
+    const groups = groupConversations([a, b], NOW, [a, b], new Set(["b"]));
+    expect(groups.map((g) => [g.group, g.conversations.map((x) => x.id)])).toEqual([
+      ["pinned", ["b"]],
+      ["today", ["a"]],
+    ]);
+  });
+
   it("show the user's name over the agent's title", () => {
     expect(displayTitle(conversation({ id: "a", title: "Agent title" }), { a: "Mine" })).toBe("Mine");
     expect(displayTitle(conversation({ id: "a", title: "Agent title" }), {})).toBe("Agent title");
