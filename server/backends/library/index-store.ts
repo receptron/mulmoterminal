@@ -271,7 +271,14 @@ export function recordTail(db: DatabaseSync, owner: string, path: string, scanne
   db.prepare("update files set tail = ? where path = ? and scanned_to = ? and (select owner from lease where id = 1) = ?").run(tail, path, scannedTo, owner);
 }
 
-/** Takes the lease when it is free, expired, or already ours; renewing it is the same call. */
+/** Extends the lease only while `owner` still holds it. Never takes a free one: a pass that lost the
+ *  lease part-way must stop, because its listing predates whatever the other process did meanwhile,
+ *  and taking the lease again would let it act on that stale listing. */
+export function renewLease(db: DatabaseSync, owner: string, now_ms: number, ttl_ms: number): boolean {
+  return Number(db.prepare("update lease set expires_ms = ? where id = 1 and owner = ?").run(now_ms + ttl_ms, owner).changes) === 1;
+}
+
+/** Takes the lease when it is free, expired, or already ours — at the START of a pass only. */
 export function takeLease(db: DatabaseSync, owner: string, now_ms: number, ttl_ms: number): boolean {
   const taken = db
     .prepare("update lease set owner = ?, expires_ms = ? where id = 1 and (owner is null or owner = ? or expires_ms < ?)")

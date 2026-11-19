@@ -225,6 +225,26 @@ describe("runIndexPass", () => {
     expect(hits(db, "rebuild")).toEqual(["s1"]);
   });
 
+  // Another process takes over part-way, indexes a file this pass never listed, and finishes. This
+  // pass then finds the lease free; it must stop rather than take it again and delete that file.
+  it("stops for good once it has lost the lease part-way, even if the lease is free again", async () => {
+    const { db, deps, transcript } = setup();
+    transcript("s1", prompt("a"));
+    transcript("s2", prompt("b"));
+    let calls = 0;
+    const handOver = () => {
+      db.prepare("update lease set owner = null, expires_ms = null where id = 1").run();
+      db.prepare("insert into files (path, kind, size, mtime_ms, scanned_to, head) values ('/elsewhere/new.jsonl', 'transcript', 1, 1, 1, 'h')").run();
+    };
+    const now_ms = (): number => {
+      calls += 1;
+      if (calls === 2) handOver();
+      return 1000;
+    };
+    expect(await runIndexPass({ ...deps, now_ms })).toBe(false);
+    expect(readFileMark(db, "/elsewhere/new.jsonl")).not.toBeNull();
+  });
+
   it("does nothing while another process holds the lease", async () => {
     const { db, deps, transcript, ids } = setup();
     transcript("s1", prompt("a"));

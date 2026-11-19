@@ -19,6 +19,7 @@ import {
   recordTail,
   removeHistory,
   removeMissingTranscripts,
+  renewLease,
   takeLease,
   type FileMark,
   type FileStampRead,
@@ -49,11 +50,12 @@ export async function runIndexPass(deps: IndexPassDeps): Promise<boolean> {
   const files = listing.files;
   const seen = new Set<string>();
   for (const [done, file] of files.entries()) {
-    if (!takeLease(deps.db, deps.owner, deps.now_ms(), LEASE_TTL_MS)) return false;
+    if (!renewLease(deps.db, deps.owner, deps.now_ms(), LEASE_TTL_MS)) return false;
     if (await scanTranscriptSafely(deps, file)) seen.add(file.path);
     if (done % PROGRESS_EVERY_FILES === 0) recordProgress(deps.db, deps.owner, done, files.length);
     await yieldToLoop();
   }
+  if (!renewLease(deps.db, deps.owner, deps.now_ms(), LEASE_TTL_MS)) return false;
   // A walk that could not read some directory does not know those files are gone.
   if (listing.complete) removeMissingTranscripts(deps.db, deps.owner, seen);
   await scanHistorySafely(deps);

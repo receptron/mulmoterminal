@@ -13,6 +13,7 @@ import {
   readLease,
   recordProgress,
   recordTail,
+  renewLease,
   removeMissingTranscripts,
   takeLease,
   type TranscriptScan,
@@ -171,6 +172,19 @@ describe("two transcripts with the same session id", () => {
     applyTranscriptScan(db, scanOf("dup", { turns: [turn("needle in the first")], state: { endedAt: 1 } }));
     applyTranscriptScan(db, scanOf("dup", { path: "/q/dup.jsonl", turns: [turn("needle in the second")], state: { endedAt: 2 } }));
     expect(searchLibrary(db, "needle", {}, 10).map((hit) => hit.snippet)).toEqual(["needle in the second", "needle in the first"]);
+  });
+});
+
+describe("renewLease", () => {
+  it("extends only a lease this owner still holds, and never takes a free one", () => {
+    const db = new DatabaseSync(":memory:");
+    prepareLibraryStore(db);
+    expect(renewLease(db, "a", 0, 100)).toBe(false); // free: not taken
+    takeLease(db, "a", 0, 100);
+    expect(renewLease(db, "a", 50, 100)).toBe(true);
+    expect(readLease(db).expiresMs).toBe(150);
+    finishLease(db, "a", 60);
+    expect(renewLease(db, "a", 70, 100)).toBe(false);
   });
 });
 
