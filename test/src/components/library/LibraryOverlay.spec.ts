@@ -11,9 +11,11 @@ vi.mock("../../../../src/composables/useLibraryView", () => ({ useLibraryView: (
 let page: LibraryConversation[] = [];
 let status: LibraryIndexStatus | null = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
 let hits: LibrarySearchHit[] = [];
+let more: { conversations: LibraryConversation[]; hasMore: boolean } | null = null;
+let firstHasMore = false;
 vi.mock("../../../../src/composables/libraryApi", () => ({
   LIBRARY_PAGE: 50,
-  loadLibraryPage: () => Promise.resolve({ conversations: page, hasMore: false }),
+  loadLibraryPage: (offset: number) => Promise.resolve(offset === 0 ? { conversations: page, hasMore: firstHasMore } : more),
   loadLibraryStatus: () => Promise.resolve(status),
   searchLibrary: () => Promise.resolve(hits),
 }));
@@ -22,6 +24,7 @@ const opened: unknown[] = [];
 vi.mock("../../../../src/composables/useNewTerminal", () => ({ openCellAt: (cell: unknown) => opened.push(cell) }));
 
 let resumableList: ResumableList = { sessions: [], cwd: null };
+let loadGate: Promise<void> = Promise.resolve();
 vi.mock("../../../../src/composables/useDirLists", () => ({
   useResumableSessions: () => ({
     value: {
@@ -30,7 +33,7 @@ vi.mock("../../../../src/composables/useDirLists", () => ({
       },
     },
     forget: vi.fn(),
-    load: () => Promise.resolve(),
+    load: () => loadGate,
   }),
 }));
 
@@ -38,6 +41,7 @@ const openIds: string[] = [];
 vi.mock("../../../../src/composables/commandPalette", () => ({ paletteTerminals: { value: { openSessionIds: () => openIds } } }));
 
 const LibraryOverlay = (await import("../../../../src/components/library/LibraryOverlay.vue")).default;
+const { LIBRARY_STATUS_POLL_MS } = await import("../../../../src/composables/useLibraryData");
 
 const NOW = Date.now();
 const conversation = (id: string, title: string, over: Partial<LibraryConversation> = {}): LibraryConversation => ({
@@ -72,6 +76,9 @@ beforeEach(() => {
   opened.length = 0;
   openIds.length = 0;
   resumableList = { sessions: [], cwd: null };
+  loadGate = Promise.resolve();
+  more = null;
+  firstHasMore = false;
 });
 
 describe("LibraryOverlay", () => {
@@ -136,4 +143,41 @@ describe("LibraryOverlay", () => {
     await flushPromises();
     expect(later.find("[data-testid=library-progress]").exists()).toBe(false);
   });
+
+  it("starts with the cursor in the search field", async () => {
+    const wrapper = await mountLibrary();
+    expect(document.activeElement).toBe(wrapper.find("[data-testid=library-search]").element);
+  });
+
+  it("resumes once, however often Enter is pressed while it checks", async () => {
+    let release: () => void = () => {};
+    loadGate = new Promise((resolve) => (release = resolve));
+    await mountLibrary();
+    await press("Enter");
+    await press("Enter");
+    release();
+    await flushPromises();
+    expect(opened).toHaveLength(1);
+  });
+
+  it("keeps the way to the next page when reading it failed", async () => {
+    firstHasMore = true;
+    more = null;
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more]").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-more]").exists()).toBe(true);
+  });
+
+  it("fills the list when the first build finishes", async () => {
+    page = [];
+    status = { indexing: true, filesDone: 1, filesTotal: 9, finishedAt: null };
+    const wrapper = await mountLibrary();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    page = [conversation("late", "Indexed at last")];
+    status = { indexing: false, filesDone: 9, filesTotal: 9, finishedAt: 5 };
+    await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 200));
+    await flushPromises();
+    expect(wrapper.findAll("[data-testid=library-row]").map((row) => row.text())).toEqual([expect.stringContaining("Indexed at last")]);
+  }, 10_000);
 });

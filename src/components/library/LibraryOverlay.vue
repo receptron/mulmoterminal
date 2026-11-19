@@ -43,15 +43,20 @@ const progress = computed(() => {
   return s.filesTotal > 0 ? t("libraryView.indexing", { done: s.filesDone, total: s.filesTotal }) : t("libraryView.indexingStart");
 });
 
-watch(isOpen, async (open) => {
-  chosen.value = null;
-  readerShown.value = false;
-  notice.value = null;
-  now.value = Date.now();
-  if (!open) return;
-  await nextTick();
-  searchField.value?.focus();
-});
+// Immediate, so a screen opened by loading /library directly starts in the search field too.
+watch(
+  isOpen,
+  async (open) => {
+    chosen.value = null;
+    readerShown.value = false;
+    notice.value = null;
+    now.value = Date.now();
+    if (!open) return;
+    await nextTick();
+    searchField.value?.focus();
+  },
+  { immediate: true },
+);
 watch(selected, () => (notice.value = null));
 
 function select(conversation: LibraryConversation): void {
@@ -65,9 +70,20 @@ function move(by: number): void {
 }
 
 const resumable = useResumableSessions();
+/** One resume at a time: a second Enter while the first is still checking would open it twice. */
+let resuming = false;
 async function resume(): Promise<void> {
   const conversation = selected.value;
-  if (conversation === null) return;
+  if (conversation === null || resuming) return;
+  resuming = true;
+  try {
+    await resumeConversation(conversation);
+  } finally {
+    resuming = false;
+  }
+}
+
+async function resumeConversation(conversation: LibraryConversation): Promise<void> {
   resumable.forget(); // a list left from another conversation's directory must not answer for this one
   await resumable.load(conversation.cwd, "claude");
   const decision = libraryResume(conversation, resumable.value.value, paletteTerminals.value?.openSessionIds() ?? []);

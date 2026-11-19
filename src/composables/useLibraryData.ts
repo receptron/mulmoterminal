@@ -36,7 +36,11 @@ export function useLibraryData(isOpen: Ref<boolean>) {
     const mine = ++pageRequest;
     hasMore.value = false; // one request at a time; restored by its answer
     const page = await loadLibraryPage(conversations.value.length);
-    if (mine !== pageRequest || page === null) return;
+    if (mine !== pageRequest) return;
+    if (page === null) {
+      hasMore.value = true; // the page is still there; a failed read must not take the way to it
+      return;
+    }
     conversations.value = [...conversations.value, ...page.conversations];
     hasMore.value = page.hasMore;
   }
@@ -65,16 +69,21 @@ export function useLibraryData(isOpen: Ref<boolean>) {
 /** Polls progress while the index is being built, and reloads the list when a pass finishes. */
 function usePolledStatus(status: Ref<LibraryIndexStatus | null>, onFinished: () => void) {
   let timer: ReturnType<typeof setTimeout> | null = null;
+  /** The last pass end this screen saw; undefined until the first answer, which only sets it. */
+  let seenFinish: number | null | undefined;
   async function tick(): Promise<void> {
-    const before = status.value?.finishedAt ?? null;
     const next = await loadLibraryStatus();
     if (timer === null) return; // stopped while asking
     status.value = next;
-    if (next !== null && next.finishedAt !== before && before !== null) onFinished();
+    const finished = next?.finishedAt ?? null;
+    // A pass that ended since the last answer — the first build included, whose list was empty.
+    if (seenFinish !== undefined && finished !== null && finished !== seenFinish) onFinished();
+    if (next !== null) seenFinish = finished;
     timer = next?.indexing ? setTimeout(() => void tick(), LIBRARY_STATUS_POLL_MS) : null;
   }
   return {
     start: () => {
+      seenFinish = undefined;
       timer = setTimeout(() => void tick(), 0);
     },
     stop: () => {
