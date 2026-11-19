@@ -52,7 +52,14 @@ export function useLibraryData(isOpen: Ref<boolean>) {
     isOpen,
     (open) => {
       poll.stop();
-      if (!open) return;
+      if (!open) {
+        // A search typed before closing must not answer into the next opening.
+        search.cancel();
+        query.value = "";
+        hits.value = null;
+        searching.value = false;
+        return;
+      }
       void reload();
       poll.start();
     },

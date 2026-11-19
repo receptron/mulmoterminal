@@ -24,7 +24,7 @@ const lines = computed(() => {
 </script>
 
 <template>
-  <article class="relative flex min-h-0 min-w-0 flex-1 flex-col" data-testid="library-reader">
+  <article class="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="library-reader">
     <header class="px-4 pb-2 pt-5">
       <h2 class="m-0 text-balance font-sans text-[20px] font-[650] text-fg">{{ conversation.title ?? t("libraryView.untitled") }}</h2>
       <p class="m-0 mt-1 flex flex-wrap gap-x-3 font-sans text-[12px] text-dim">
@@ -37,15 +37,14 @@ const lines = computed(() => {
     <div class="flex min-h-0 flex-1">
       <TranscriptPane :key="conversation.id" :session-id="conversation.id" :cwd="conversation.cwd" :agent="conversation.agent" embedded />
     </div>
-    <!-- The notice sits above the button and wraps: at phone width a sentence beside it would push it off the edge. -->
-    <footer class="pointer-events-none absolute bottom-4 left-4 right-4 flex flex-col items-end gap-2">
-      <span v-if="notice" class="pointer-events-auto max-w-[44ch] rounded bg-panel px-3 py-1 font-sans text-[12px] text-secondary" role="status">{{
-        notice
-      }}</span>
+    <!-- A row of its own rather than floating over the conversation, so the last lines are never under
+         it; the notice wraps beside the button and drops above it when the row is narrow. -->
+    <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-border px-4 py-2">
+      <span v-if="notice" class="min-w-0 max-w-[44ch] flex-1 basis-[16rem] font-sans text-[12px] text-secondary" role="status">{{ notice }}</span>
       <button
         type="button"
         data-testid="library-resume"
-        class="pointer-events-auto flex cursor-pointer items-center gap-2 rounded-[6px] border-0 bg-accent px-4 py-2 font-sans text-[13px] font-semibold text-on-accent"
+        class="flex flex-none cursor-pointer items-center gap-2 rounded-[6px] border-0 bg-accent px-4 py-2 font-sans text-[13px] font-semibold text-on-accent"
         @click="emit('resume')"
       >
         <span class="material-symbols-outlined text-[18px]">play_arrow</span>

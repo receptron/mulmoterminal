@@ -212,4 +212,25 @@ describe("LibraryOverlay", () => {
     expect(calls).toHaveBeenCalledTimes(1);
     host.unmount();
   }, 10_000);
+
+  it("drops a search still pending when the screen closes", async () => {
+    const { useLibraryData } = await import("../../../../src/composables/useLibraryData");
+    hits = [{ conversation: conversation("stale", "Stale"), snippet: "stale", role: "user" }];
+    const open = ref(true);
+    let data: ReturnType<typeof useLibraryData> | null = null;
+    const host = mount({ setup: () => (data = useLibraryData(open)), template: "<div />" });
+    await flushPromises();
+    if (data === null) throw new Error("not mounted");
+    const state: ReturnType<typeof useLibraryData> = data;
+    state.query.value = "stale";
+    await flushPromises();
+    open.value = false;
+    await flushPromises();
+    open.value = true;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await flushPromises();
+    expect(state.query.value).toBe("");
+    expect(state.hits.value).toBeNull();
+    host.unmount();
+  });
 });
