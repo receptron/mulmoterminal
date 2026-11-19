@@ -9,11 +9,15 @@ import { NOW_VERSION } from "../../common/libraryFiles.js";
 import { agentHome } from "../agents/agent-homes.js";
 import { trackedFileOf, type FileHistoryEntry } from "../backends/library/file-history.js";
 import { readBoundedText, readFileHistory, readKeptCopy } from "../backends/library/file-history-read.js";
-import type { LibraryCaller } from "../backends/library/library-service.js";
+import type { LibraryCaller, LibraryTranscript } from "../backends/library/library-service.js";
+import { isRecord } from "../../common/isRecord.js";
 import { answer, isMarkableId } from "./library-routes.js";
 
 /** Beside the transcripts the index reads: `<claude home>/file-history/<session>/`. */
 export const claudeFileHistoryRoot = (): string => path.join(agentHome("claude"), "file-history");
+
+const isTranscript = (value: unknown): value is LibraryTranscript =>
+  isRecord(value) && typeof value.path === "string" && (value.cwd === null || typeof value.cwd === "string");
 
 const cwdOf = (req: Request): string => (typeof req.query.cwd === "string" ? req.query.cwd : "");
 
@@ -24,14 +28,14 @@ async function trackedFiles(req: Request, res: Response, call: LibraryCaller): P
     res.status(400).json({ error: "not a conversation id" });
     return undefined;
   }
-  const transcript = await answer(res, call, "transcriptPath", [id, cwdOf(req)]);
+  const transcript = await answer(res, call, "transcript", [id, cwdOf(req)]);
   if (transcript === undefined) return undefined;
-  if (typeof transcript !== "string") {
+  if (!isTranscript(transcript)) {
     res.status(404).json({ error: "conversation not found" });
     return undefined;
   }
   try {
-    return { id, files: await readFileHistory(transcript) };
+    return { id, files: await readFileHistory(transcript.path, transcript.cwd) };
   } catch {
     res.status(500).json({ error: "the conversation's file history could not be read" }); // the error names the file
     return undefined;

@@ -43,7 +43,7 @@ function setup() {
   const asked: unknown[][] = [];
   const app = express();
   mountLibraryRoutes(app, {
-    call: (method, args) => (asked.push([method, ...args]), Promise.resolve(args[0] === "s1" ? transcript : null)),
+    call: (method, args) => (asked.push([method, ...args]), Promise.resolve(args[0] === "s1" ? { path: transcript, cwd: path.join(root, "work") } : null)),
     fileHistoryRoot: history,
   });
   return { call: routeCall(app), asked, root };
@@ -60,7 +60,7 @@ describe("/api/library/conversations/:id/files", () => {
       }),
       expect.objectContaining({ trackingPath: "new.md", versions: [expect.objectContaining({ version: 2, exists: false })] }),
     ]);
-    expect(asked).toEqual([["transcriptPath", "s1", "/w"]]);
+    expect(asked).toEqual([["transcript", "s1", "/w"]]);
   });
 
   it("answers 404 for an unknown conversation and 400 for an id that is not one", async () => {

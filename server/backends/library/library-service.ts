@@ -6,13 +6,19 @@ import type { LibraryIndex } from "./library-index.js";
 import { inReadSnapshot, readLease } from "./index-store.js";
 import { searchLibrary } from "./library-search.js";
 
+export interface LibraryTranscript {
+  path: string;
+  cwd: string | null;
+}
+
 export interface LibraryService {
   status(): Promise<LibraryIndexStatus>;
   list(filter: ConversationFilter, offset: number, limit: number): Promise<LibraryConversationPage>;
   conversation(id: string, cwd?: string | null): Promise<LibraryConversation | null>;
   search(query: string, filter: ConversationFilter, limit: number): Promise<LibrarySearchHit[]>;
-  /** Where a conversation's transcript is, for what the index does not hold (its file history). */
-  transcriptPath(id: string, cwd: string | null): Promise<string | null>;
+  /** Where a conversation's transcript is, and its directory, for what the index does not hold (its
+   *  file history). */
+  transcript(id: string, cwd: string | null): Promise<LibraryTranscript | null>;
   /** The conversation that made each of these PRs in one repository, for those the index knows. */
   prCreators(repository: string, numbers: number[]): Promise<LibraryPrCreator[]>;
 }
@@ -42,10 +48,11 @@ export function createLocalLibraryService(index: LibraryIndex): LibraryService {
         return row === null ? null : conversationOfRow(row);
       }),
     search: (query, filter, limit) => answer(() => searchLibrary(index.db, query, filter, limit)),
-    transcriptPath: (id, cwd) =>
+    transcript: (id, cwd) =>
       answer(() => {
         const row = findConversation(index.db, id, cwd);
-        return row === null || typeof row.path !== "string" ? null : row.path;
+        if (row === null || typeof row.path !== "string") return null;
+        return { path: row.path, cwd: typeof row.cwd === "string" ? row.cwd : null };
       }),
     prCreators: (repository, numbers) =>
       answer(() => prCreators(index.db, repository, numbers).map((row) => ({ number: Number(row.pr_number), conversation: conversationOfRow(row) }))),

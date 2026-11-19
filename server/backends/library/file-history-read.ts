@@ -4,13 +4,15 @@ import { createReadStream, promises as fs } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { LIBRARY_FILE_TEXT_MAX, type LibraryFileText } from "../../../common/libraryFiles.js";
-import { foldFileHistory, isBackupFileName, type FileHistoryEntry } from "./file-history.js";
+import { createFileHistoryFold, isBackupFileName, type FileHistoryEntry } from "./file-history.js";
 
 /** Only these lines are parsed: a transcript is mostly turns, and parsing every one is the cost. */
 const FILE_HISTORY_MARK = '"file-history-';
 const CACHED_TRANSCRIPTS = 8;
 
-const cache = new Map<string, { stamp: string; files: FileHistoryEntry[] }>();
+/** Folded results by transcript (small: files and their versions), and the reads under way, so a
+ *  list and the content requests right after it share one pass over the file. */
+const cache = new Map<string, { stamp: string; files: Promise<FileHistoryEntry[]> }>();
 
 async function* fileHistoryRecords(transcript: string): AsyncGenerator<unknown> {
   const lines = createInterface({ input: createReadStream(transcript, { encoding: "utf8" }), crlfDelay: Infinity });
@@ -24,19 +26,27 @@ async function* fileHistoryRecords(transcript: string): AsyncGenerator<unknown> 
   }
 }
 
+async function foldTranscript(transcript: string, cwd: string | null): Promise<FileHistoryEntry[]> {
+  const fold = createFileHistoryFold(cwd);
+  for await (const record of fileHistoryRecords(transcript)) fold.add(record);
+  return fold.result();
+}
+
 /** The files a transcript records, read once per change of the file: the list and every content
- *  request after it ask for the same transcript. */
-export async function readFileHistory(transcript: string): Promise<FileHistoryEntry[]> {
+ *  request after it ask for the same transcript. A failed read is not kept. */
+export async function readFileHistory(transcript: string, cwd: string | null = null): Promise<FileHistoryEntry[]> {
   const info = await fs.stat(transcript);
+  const key = `${transcript}\u0000${cwd ?? ""}`;
   const stamp = `${String(info.size)}:${String(info.mtimeMs)}`;
-  const cached = cache.get(transcript);
+  const cached = cache.get(key);
   if (cached?.stamp === stamp) return cached.files;
-  const records: unknown[] = [];
-  for await (const record of fileHistoryRecords(transcript)) records.push(record);
-  const files = foldFileHistory(records);
-  cache.delete(transcript);
-  cache.set(transcript, { stamp, files });
+  const files = foldTranscript(transcript, cwd);
+  cache.delete(key);
+  cache.set(key, { stamp, files });
   if (cache.size > CACHED_TRANSCRIPTS) cache.delete(cache.keys().next().value ?? "");
+  files.catch(() => {
+    if (cache.get(key)?.files === files) cache.delete(key);
+  });
   return files;
 }
 
@@ -47,8 +57,13 @@ const codeOf = (err: unknown): string | null => (err instanceof Error && "code" 
 export async function readBoundedText(file: string): Promise<LibraryFileText> {
   let handle: fs.FileHandle | null = null;
   try {
+    // Not through a link: a link placed at a tracked path would show a file the conversation never
+    // tracked. And the opened file must be the one looked at, or a swap in between gets through.
+    const seen = await fs.lstat(file);
+    if (!seen.isFile()) return { text: null, reason: "unreadable" };
     handle = await fs.open(file, "r");
-    if (!(await handle.stat()).isFile()) return { text: null, reason: "unreadable" };
+    const opened = await handle.stat();
+    if (opened.dev !== seen.dev || opened.ino !== seen.ino) return { text: null, reason: "unreadable" };
     const buffer = Buffer.alloc(LIBRARY_FILE_TEXT_MAX + 1);
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
     if (bytesRead > LIBRARY_FILE_TEXT_MAX) return { text: null, reason: "too-large" };

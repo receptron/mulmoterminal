@@ -45,28 +45,46 @@ function backupsIn(record: unknown): [string, Backup][] {
   });
 }
 
-/** Where a tracked file is: its own path when absolute, else its name in the directory the record resolved. */
-function diskPathOf(trackingPath: string, realParentDir: string | null): string | null {
+/** Where a tracked file is: its own path when absolute, else its name in the directory the record
+ *  resolved — or, for a record that names none, the path under the conversation's own directory. */
+function diskPathOf(trackingPath: string, realParentDir: string | null, cwd: string | null): string | null {
   if (path.isAbsolute(trackingPath)) return trackingPath;
-  return realParentDir === null ? null : path.join(realParentDir, path.basename(trackingPath));
+  if (realParentDir !== null) return path.join(realParentDir, path.basename(trackingPath));
+  return cwd !== null && path.isAbsolute(cwd) ? path.resolve(cwd, trackingPath) : null;
+}
+
+interface FoldedFile {
+  realParentDir: string | null;
+  versions: Map<number, Backup>;
+}
+
+const entryOf = (trackingPath: string, file: FoldedFile, cwd: string | null): FileHistoryEntry => ({
+  trackingPath,
+  path: diskPathOf(trackingPath, file.realParentDir, cwd),
+  backups: [...file.versions.values()].sort((a, b) => a.version - b.version).map(({ version, at, backupFileName }) => ({ version, at, backupFileName })),
+});
+
+/** A fold fed one record at a time, so a long transcript is never held whole: only the copies are kept. */
+export function createFileHistoryFold(cwd: string | null = null): { add(record: unknown): void; result(): FileHistoryEntry[] } {
+  const files = new Map<string, FoldedFile>();
+  return {
+    add(record) {
+      for (const [trackingPath, backup] of backupsIn(record)) {
+        const file = files.get(trackingPath) ?? { realParentDir: null, versions: new Map<number, Backup>() };
+        if (!file.versions.has(backup.version)) file.versions.set(backup.version, backup);
+        file.realParentDir = backup.realParentDir ?? file.realParentDir;
+        files.set(trackingPath, file);
+      }
+    },
+    result: () => [...files].map(([trackingPath, file]) => entryOf(trackingPath, file, cwd)),
+  };
 }
 
 /** The files in the order the conversation first touched them, each with its versions once. */
-export function foldFileHistory(records: Iterable<unknown>): FileHistoryEntry[] {
-  const files = new Map<string, { realParentDir: string | null; versions: Map<number, Backup> }>();
-  for (const record of records) {
-    for (const [trackingPath, backup] of backupsIn(record)) {
-      const file = files.get(trackingPath) ?? { realParentDir: null, versions: new Map<number, Backup>() };
-      if (!file.versions.has(backup.version)) file.versions.set(backup.version, backup);
-      file.realParentDir = backup.realParentDir ?? file.realParentDir;
-      files.set(trackingPath, file);
-    }
-  }
-  return [...files].map(([trackingPath, file]) => ({
-    trackingPath,
-    path: diskPathOf(trackingPath, file.realParentDir),
-    backups: [...file.versions.values()].sort((a, b) => a.version - b.version).map(({ version, at, backupFileName }) => ({ version, at, backupFileName })),
-  }));
+export function foldFileHistory(records: Iterable<unknown>, cwd: string | null = null): FileHistoryEntry[] {
+  const fold = createFileHistoryFold(cwd);
+  for (const record of records) fold.add(record);
+  return fold.result();
 }
 
 /** What the browser is told about a file: its versions, without where they are kept. */

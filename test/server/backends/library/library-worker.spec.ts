@@ -113,7 +113,7 @@ describe("dispatchLibraryRequest", () => {
     list: (...args) => (calls.push(["list", ...args]), Promise.resolve({ conversations: [], hasMore: false, indexFinishedAt: null })),
     conversation: (...args) => (calls.push(["conversation", ...args]), Promise.resolve(null)),
     prCreators: (...args) => (calls.push(["prCreators", ...args]), Promise.resolve([])),
-    transcriptPath: (...args) => (calls.push(["transcriptPath", ...args]), Promise.resolve(null)),
+    transcript: (...args) => (calls.push(["transcript", ...args]), Promise.resolve(null)),
     search: (...args) => (calls.push(["search", ...args]), Promise.resolve([])),
   };
 
@@ -127,8 +127,8 @@ describe("dispatchLibraryRequest", () => {
     await dispatchLibraryRequest(service, { id: "6", method: "conversation", args: ["s1", 7] });
     await dispatchLibraryRequest(service, { id: "7", method: "prCreators", args: ["o/r", [3, 0, -1, 2.5, "4", 5]] });
     await dispatchLibraryRequest(service, { id: "8", method: "prCreators", args: [null, "1,2"] });
-    await dispatchLibraryRequest(service, { id: "9", method: "transcriptPath", args: ["s1", "/w"] });
-    await dispatchLibraryRequest(service, { id: "10", method: "transcriptPath", args: ["s1", 3] });
+    await dispatchLibraryRequest(service, { id: "9", method: "transcript", args: ["s1", "/w"] });
+    await dispatchLibraryRequest(service, { id: "10", method: "transcript", args: ["s1", 3] });
     expect(calls).toEqual([
       ["list", { cwd: "/w", includeTemporary: true, includeSidechains: false, includeAutomated: false }, 5, 10],
       ["list", {}, 0, 0],
@@ -138,8 +138,8 @@ describe("dispatchLibraryRequest", () => {
       ["conversation", "s1", null],
       ["prCreators", "o/r", [3, 5]],
       ["prCreators", "", []],
-      ["transcriptPath", "s1", "/w"],
-      ["transcriptPath", "s1", null],
+      ["transcript", "s1", "/w"],
+      ["transcript", "s1", null],
     ]);
   });
 
