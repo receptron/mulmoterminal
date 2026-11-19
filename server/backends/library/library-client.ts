@@ -79,8 +79,9 @@ export function createLibraryClient(options: LibraryClientOptions = {}): { call:
     call,
     close: async () => {
       const closing = current;
-      current = null;
-      await closing?.worker.terminate();
+      if (closing === null) return;
+      failAll(closing, "the library client was closed");
+      await closing.worker.terminate();
     },
   };
 }

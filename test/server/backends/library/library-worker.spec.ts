@@ -85,6 +85,14 @@ describe("the library worker", () => {
     expect(started).toHaveLength(2);
   }, 30_000);
 
+  it("fails a call that is still waiting when the client closes", async () => {
+    const { root, projectsRoot, historyFile } = scratch();
+    const client = createLibraryClient({ file: path.join(root, "index.db"), sources: { projectsRoot, historyFile } });
+    const waiting = client.call("status", []);
+    await client.close();
+    await expect(waiting).rejects.toThrow("closed");
+  }, 30_000);
+
   it("rejects a call when the index cannot be opened", async () => {
     const { root, projectsRoot, historyFile } = scratch();
     // A directory where the database file should be: SQLite cannot open it.
