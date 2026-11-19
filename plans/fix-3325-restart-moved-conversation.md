@@ -82,9 +82,10 @@ spawn がそれを resume する。** その事実はすでに凍結の印（`Cl
 | 2. reap | 印を**消さない** | Restart は reap と spawn の 2 段で、その spawn が印を読む。印のある id は resume されないので、ファイルは凍結されたまま |
 | 3. セル内 `/resume` | `SessionStart source=resume` で、claude が名乗る id が「自分の id」でも「印に記録済みの後継」でもなければ、`/clear` と同じ印を書く（後継 = その id） | 2 つ目の除外が無いと、1 の resume で起きた claude が同じ hook を出すたびに印を書き直し、ヘッダーが毎回消える |
 | 自分の会話に `/resume` で戻った | `source=resume` で claude の id が自分の id なら、**印を消す** | ファイルに追記が再開されるので凍結ではなくなる。残すと次の Restart が古い後継へ行く。boot 時のサイズ検査で消えるのはサーバ再起動のときだけなので、ここで消す必要がある |
-| 4. 印の掃除 | boot 時の hydrate で「自分の transcript も後継の transcript も無い」印を消す | reap が掃除役でなくなるので、溜まらないようにする。後継だけある印は残す（最初の送信の前に `/clear` / `/resume` したセルには自分のファイルが無い） |
+| 4. 印の掃除 | boot 時の hydrate で「自分の transcript も後継の transcript も、無いと**確定した**」印だけを消す（`mark-prune.ts`）。無いと確定するのは `ENOENT` / `ENOTDIR` のときだけ | reap が掃除役でなくなるので、溜まらないようにする。後継だけある印は残す（最初の送信の前に `/clear` / `/resume` したセルには自分のファイルが無い）。権限エラーや I/O エラーはファイルの有無を何も言わないので、それで消すと後継を永久に失う |
 | 5. サイズによる失効（原因 C） | **サイズ検査をやめる**（案 (a)）。印が失効するのは「自分の id へ `/resume` で戻った」（hook の `unmark`）と、4 の掃除だけ。`hydrateClearedTranscripts` は `markStillHolds` を呼ばない | サイズ検査は「誰かがこのファイルを resume し直した」を見るためのものだった。この修正の後は、こちらから自分の id を resume することは無く、セル内で戻る場合は hook で分かる。見えなくなるのは、ユーザーが別の端末で `claude --resume <自分の id>` した場合だけで、そのときは Restart が後継へ行く（受け入れる）。却下した案 (b)（追記された行の種類を読んで、会話の行があるときだけ失効させる）は、他のプログラムのファイルを読む処理が一つ増えるわりに、救うのがこの一件だけ |
-| 印の `size` | 書き続ける。読む側は使わない | 同じ home を古い版のサーバが読むと、`parseClearedMark` が `size` を必須にしているので、無い印は捨てられる。版を戻したときに印を失わないため |
+| 印の `size` | どのファイルも届かない値（`MARK_SIZE_NEVER_REACHED`）を書く。読む側は使わない | 同じ home を古い版のサーバが読むと、`parseClearedMark` は `size` を必須にし、さらにファイルがそれより大きければ印を消す。`cost-state` の追記で必ず大きくなるので、実際のサイズを書くと古い版が消してしまう。古い版の reap が印を消すことだけは、古い側のコードなので防げない |
+| 印の書き込みと削除の順序 | 同じ id の印のディスク操作は、呼ばれた順に一つずつ行う | 印を書く途中で自分の id への `/resume` が届くと、削除の後に書き込みが着地して印が復活し、次の boot で後継へ戻ってしまう |
 
 hook 側の判定は純関数にする（`server/session/transcript/` に置く）:
 
@@ -126,6 +127,7 @@ conversationMove({ source, sessionId, claudeId, recordedSuccessor }): Conversati
 - **起動フォームの resume 一覧で、凍結された id を選んだ場合**。今は新しい id で空の状態から
   始まる。この修正の後は後継の会話に行く。「終えた会話を選んだら最新の会話に行く」で良いか。
 - 印は reap では消えず、boot 時の掃除だけになる。
+- 後継の有無は、印に記録した cwd ではなく、再接続の cwd で調べる。claude は起動した cwd の project ディレクトリから `--resume` 先を探すので、そこに無いものは resume できない（自分の transcript の確認と同じ決まり）。
 - サイズによる失効をやめたので、別の端末で `claude --resume <自分の id>` した後の Restart は後継へ行く。
 
 ## やらないこと
