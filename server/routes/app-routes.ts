@@ -99,6 +99,7 @@ import { mountWhatsNewRoutes } from "../whatsNew/routes.js";
 import { mountHelpRoutes } from "../help/routes.js";
 import { mountRoomRoutes } from "./room-routes.js";
 import { mountSkillCatalogRoutes } from "./skill-catalog-routes.js";
+import { mountLibraryRoutes } from "./library-routes.js";
 import { mountTranslationRoutes } from "../backends/media/translation.js";
 import { mountHtmlDispatchRoute, mountHtmlFileRoute, mountHtmlPreviewRoute } from "../backends/plugins/html.js";
 import { mountShapeScriptDispatchRoute } from "../backends/plugins/shapescript.js";
@@ -464,6 +465,7 @@ function mountSessionFacingRoutes(app: Express, deps: AppRouteDeps): void {
   mountDirSuggestRoute(app);
   mountPlayfulMediaRoutes(app);
   mountSkillCatalogRoutes(app);
+  mountLibraryRoutes(app);
   mountGuiMcpRoutes(app);
 
   // GRID-ONLY (dev_tool): POST /api/open-dir reveals a cell's working directory in the

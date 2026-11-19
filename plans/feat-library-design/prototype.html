@@ -1,0 +1,2104 @@
+<title>MulmoTerminal Library</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..24,300..500,0,0&display=block" />
+<style>
+  /* Layout: the app's own full-screen overlay frame; inside it a search line, a quiet four-way switch,
+   then list | reader. Tokens are MulmoTerminal's Midnight (dark, default) and Daylight (light). */
+  :root {
+    color-scheme: dark;
+    --bg-base: #1a1a2e;
+    --bg-deep: #11162a;
+    --bg-panel: #16213e;
+    --bg-subtle: #1d2b4e;
+    --bg-elevated: #20203a;
+    --bg-input: #11111f;
+    --bg-hover: #2a3b66;
+    --bg-selected: #1b3a6b;
+    --border: #2a2a4e;
+    --accent: #4a8cff;
+    --accent-bg: #2f5bd0;
+    --accent-bg-hover: #3a6be0;
+    --on-accent: #ffffff;
+    --text: #e6e6f0;
+    --text-secondary: #c7cdf0;
+    --text-muted: #9aa5c4;
+    --text-dim: #7c87a8;
+    --warn: #ffcc80;
+    --ok: #a5d6a7;
+    --err: #ef9a9a;
+    --mark: rgba(74, 140, 255, 0.28);
+    --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    --font-sans: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    --font-mono: ui-monospace, "JetBrains Mono", "Noto Sans Mono CJK JP", "Hiragino Sans", monospace;
+    --step--1: 12px;
+    --step-0: 13px;
+    --step-1: 14px;
+    --step-2: 17px;
+    --step-3: 21px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      color-scheme: light;
+      --bg-base: #f4f6fb;
+      --bg-deep: #e8edf6;
+      --bg-panel: #ffffff;
+      --bg-subtle: #eef2fa;
+      --bg-elevated: #eef2fb;
+      --bg-input: #ffffff;
+      --bg-hover: #e2e9f6;
+      --bg-selected: #d6e4fb;
+      --border: #d4dbe8;
+      --accent: #2563eb;
+      --accent-bg: #2563eb;
+      --accent-bg-hover: #1d4ed8;
+      --on-accent: #ffffff;
+      --text: #1b2430;
+      --text-secondary: #38445a;
+      --text-muted: #5d6b82;
+      --text-dim: #8492a8;
+      --warn: #b26a00;
+      --ok: #1b7a2e;
+      --err: #c0392b;
+      --mark: rgba(37, 99, 235, 0.16);
+      --shadow: 0 12px 32px rgba(27, 36, 48, 0.16);
+    }
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg-base: #f4f6fb;
+    --bg-deep: #e8edf6;
+    --bg-panel: #ffffff;
+    --bg-subtle: #eef2fa;
+    --bg-elevated: #eef2fb;
+    --bg-input: #ffffff;
+    --bg-hover: #e2e9f6;
+    --bg-selected: #d6e4fb;
+    --border: #d4dbe8;
+    --accent: #2563eb;
+    --accent-bg: #2563eb;
+    --accent-bg-hover: #1d4ed8;
+    --on-accent: #ffffff;
+    --text: #1b2430;
+    --text-secondary: #38445a;
+    --text-muted: #5d6b82;
+    --text-dim: #8492a8;
+    --warn: #b26a00;
+    --ok: #1b7a2e;
+    --err: #c0392b;
+    --mark: rgba(37, 99, 235, 0.16);
+    --shadow: 0 12px 32px rgba(27, 36, 48, 0.16);
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    background: var(--bg-base);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: var(--step-0);
+  }
+  * {
+    box-sizing: border-box;
+  }
+  button {
+    font: inherit;
+    color: inherit;
+  }
+  .icon {
+    font-family: "Material Symbols Outlined", sans-serif;
+    font-weight: 400;
+    font-style: normal;
+    font-size: inherit;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: nowrap;
+    direction: ltr;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "liga";
+    display: inline-block;
+    vertical-align: -0.15em;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .stage {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 16px 16px;
+  }
+
+  /* Prototype-only controls, deliberately outside the app frame. */
+  .proto {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 14px;
+    color: var(--text-dim);
+    font-size: var(--step--1);
+  }
+  .proto b {
+    color: var(--text-muted);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-size: 11px;
+  }
+  .proto .grp {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+  }
+  .proto button {
+    border: 1px solid var(--border);
+    background: transparent;
+    border-radius: 6px;
+    padding: 2px 8px;
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+  .proto button[aria-pressed="true"] {
+    background: var(--bg-selected);
+    color: var(--text);
+    border-color: transparent;
+  }
+  .proto .hint {
+    margin-left: auto;
+  }
+
+  /* The app window: a 40px top bar, then the overlay. */
+  .app {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--bg-deep);
+    box-shadow: var(--shadow);
+  }
+  .topbar {
+    height: 40px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 12px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: var(--step--1);
+  }
+  .topbar .brand {
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+  }
+  .ov-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .ov-head .name {
+    font-size: var(--step-1);
+    font-weight: 650;
+  }
+  .ov-head .sub {
+    color: var(--text-muted);
+    font-size: var(--step--1);
+  }
+  .ov-head .spacer {
+    flex: 1;
+  }
+  .btn-sq {
+    height: 24px;
+    width: 26px;
+    display: grid;
+    place-items: center;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-base);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .btn-sq:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+  }
+
+  /* Search line + switch: the whole navigation. */
+  .controls {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 20px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 38px;
+    padding: 0 12px;
+    border-radius: 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+  }
+  .search:focus-within {
+    border-color: var(--accent);
+  }
+  .search .icon {
+    color: var(--text-dim);
+    font-size: 18px;
+  }
+  .search input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: var(--step-1);
+  }
+  .search input::placeholder {
+    color: var(--text-dim);
+  }
+  .kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0 5px;
+  }
+  .row2 {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .kinds {
+    display: flex;
+    gap: 2px;
+  }
+  .kind {
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 6px;
+    color: var(--text-muted);
+    font-size: var(--step-0);
+    display: inline-flex;
+    gap: 6px;
+    align-items: baseline;
+  }
+  .kind:hover {
+    color: var(--text);
+  }
+  .kind[aria-pressed="true"] {
+    background: var(--bg-subtle);
+    color: var(--text);
+  }
+  .kind .count {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .scope {
+    margin-left: auto;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: var(--step--1);
+    padding: 4px 6px;
+    border-radius: 6px;
+  }
+  .scope:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+  }
+
+  /* List | reader */
+  .body {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(280px, 380px) 1fr;
+  }
+  .list {
+    min-width: 0;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    padding: 6px 0 24px;
+  }
+  .group {
+    padding: 14px 20px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .group .gauge {
+    font-weight: 400;
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .gauge .track {
+    width: 48px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--border);
+    overflow: hidden;
+  }
+  .gauge .fill {
+    height: 100%;
+    background: var(--text-muted);
+  }
+  .gauge.near .fill {
+    background: var(--warn);
+  }
+  .item {
+    display: grid;
+    grid-template-columns: 10px 1fr;
+    gap: 0 6px;
+    padding: 9px 20px 9px 10px;
+    cursor: pointer;
+    border-left: 2px solid transparent;
+  }
+  .item:hover {
+    background: var(--bg-elevated);
+  }
+  .item[aria-selected="true"] {
+    background: var(--bg-selected);
+    border-left-color: var(--accent);
+  }
+  .item .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-top: 7px;
+    justify-self: center;
+  }
+  .item .dot.warn {
+    background: var(--warn);
+  }
+  .item .dot.pin {
+    background: transparent;
+  }
+  .item .t {
+    font-size: var(--step-1);
+    line-height: 1.4;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .item .m {
+    grid-column: 2;
+    font-size: var(--step--1);
+    color: var(--text-dim);
+    line-height: 1.5;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .item .snip {
+    grid-column: 2;
+    font-size: var(--step--1);
+    color: var(--text-muted);
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  mark {
+    background: var(--mark);
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+  .tidy {
+    margin: 6px 20px 2px;
+    font-size: var(--step--1);
+    color: var(--text-muted);
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .tidy .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--warn);
+  }
+  .link {
+    border: 0;
+    background: none;
+    padding: 0;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: inherit;
+  }
+  .link:hover {
+    text-decoration: underline;
+  }
+  .skel {
+    padding: 10px 20px;
+    display: grid;
+    gap: 6px;
+  }
+  .skel i {
+    display: block;
+    height: 10px;
+    border-radius: 3px;
+    background: var(--bg-elevated);
+  }
+  .skel i:first-child {
+    width: 70%;
+    height: 12px;
+  }
+  .skel i:last-child {
+    width: 45%;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .skel i {
+      animation: breathe 1.6s ease-in-out infinite;
+    }
+  }
+  @keyframes breathe {
+    50% {
+      opacity: 0.5;
+    }
+  }
+  .indexing {
+    margin: 10px 20px;
+    font-size: var(--step--1);
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .indexing .bar {
+    flex: 1;
+    height: 2px;
+    background: var(--border);
+    border-radius: 1px;
+    overflow: hidden;
+  }
+  .indexing .bar span {
+    display: block;
+    height: 100%;
+    width: 38%;
+    background: var(--text-muted);
+  }
+  .empty {
+    padding: 48px 24px;
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.7;
+  }
+  .empty .icon {
+    font-size: 28px;
+    color: var(--text-dim);
+    display: block;
+    margin: 0 auto 8px;
+  }
+
+  .reader {
+    min-width: 0;
+    overflow-y: auto;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .reader-in {
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 28px 40px 120px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .back {
+    display: none;
+  }
+  .r-title {
+    font-size: var(--step-3);
+    font-weight: 650;
+    line-height: 1.3;
+    text-wrap: balance;
+    margin: 0;
+  }
+  .r-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    color: var(--text-dim);
+    font-size: var(--step--1);
+    font-variant-numeric: tabular-nums;
+  }
+  .r-meta a,
+  .r-meta .chip {
+    color: var(--text-muted);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .r-meta a:hover {
+    color: var(--accent);
+  }
+  .add {
+    color: var(--ok);
+  }
+  .del {
+    color: var(--err);
+  }
+  .note {
+    font-size: var(--step-0);
+    color: var(--text-secondary);
+    line-height: 1.6;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+  }
+  .note .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--warn);
+    flex: none;
+    transform: translateY(-1px);
+  }
+  .turn-u {
+    font-size: var(--step-1);
+    line-height: 1.65;
+    color: var(--text);
+    padding: 2px 0 2px 14px;
+    border-left: 2px solid var(--border);
+    white-space: pre-wrap;
+  }
+  .turn-a {
+    font-size: var(--step-1);
+    line-height: 1.75;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    max-width: 65ch;
+  }
+  .turn-a code,
+  .md code,
+  .note code {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    background: var(--bg-elevated);
+    padding: 1px 4px;
+    border-radius: 4px;
+    color: var(--text);
+  }
+  .tool {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    color: var(--text-dim);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    cursor: pointer;
+    border: 0;
+    background: transparent;
+    padding: 2px 0;
+    text-align: left;
+  }
+  .tool:hover {
+    color: var(--text-muted);
+  }
+  .tool .icon {
+    font-size: 14px;
+  }
+  .tool-detail {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    color: var(--text-muted);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    white-space: pre;
+    overflow-x: auto;
+    margin-top: -10px;
+  }
+  .sub {
+    border-left: 1px dashed var(--border);
+    padding-left: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .sub-h {
+    font-size: var(--step--1);
+    color: var(--text-dim);
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    cursor: pointer;
+    border: 0;
+    background: none;
+    padding: 0;
+    text-align: left;
+  }
+  .section-h {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-top: 10px;
+  }
+  .files {
+    display: grid;
+    gap: 2px;
+  }
+  .file {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    color: var(--text-muted);
+    padding: 3px 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .kv {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 16px;
+    font-size: var(--step--1);
+  }
+  .kv dt {
+    color: var(--text-dim);
+  }
+  .kv dd {
+    margin: 0;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+  .md {
+    font-size: var(--step-1);
+    line-height: 1.75;
+    color: var(--text-secondary);
+    max-width: 65ch;
+    white-space: pre-wrap;
+  }
+  textarea.edit {
+    width: 100%;
+    min-height: 260px;
+    resize: vertical;
+    background: var(--bg-input);
+    color: var(--text);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font: inherit;
+    font-family: var(--font-mono);
+    font-size: var(--step-0);
+    line-height: 1.7;
+  }
+  .rows {
+    display: grid;
+  }
+  .rrow {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 16px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: baseline;
+  }
+  .rrow:last-child {
+    border-bottom: 0;
+  }
+  .rrow .k {
+    color: var(--text);
+    font-size: var(--step-0);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .rrow .k code {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+  }
+  .rrow .v {
+    color: var(--text-dim);
+    font-size: var(--step--1);
+    font-family: var(--font-mono);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .rrow .src {
+    grid-column: 1 / -1;
+    color: var(--text-dim);
+    font-size: var(--step--1);
+    font-family: var(--font-mono);
+  }
+  .sizebar {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    overflow: hidden;
+    grid-column: 1 / -1;
+    margin-top: 4px;
+  }
+  .sizebar span {
+    display: block;
+    height: 100%;
+    background: var(--text-muted);
+  }
+  .confirm {
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+    border-radius: 10px;
+    padding: 16px 18px;
+    display: grid;
+    gap: 12px;
+  }
+  .confirm p {
+    margin: 0;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+
+  /* The one action. Always bottom-right of the reader, always Enter. */
+  .actions {
+    position: sticky;
+    bottom: 0;
+    margin-top: auto;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 24px;
+    background: linear-gradient(to top, var(--bg-deep) 60%, transparent);
+  }
+  .primary {
+    border: 0;
+    border-radius: 8px;
+    background: var(--accent-bg);
+    color: var(--on-accent);
+    padding: 8px 18px;
+    font-size: var(--step-1);
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .primary:hover {
+    background: var(--accent-bg-hover);
+  }
+  .primary .kbd {
+    color: var(--on-accent);
+    border-color: rgba(255, 255, 255, 0.35);
+  }
+  .quiet {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-base);
+    color: var(--text-secondary);
+    padding: 8px 12px;
+    cursor: pointer;
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    font-size: var(--step-1);
+  }
+  .quiet:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+  }
+  .menu {
+    position: absolute;
+    right: 24px;
+    bottom: 64px;
+    min-width: 220px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 6px;
+    display: grid;
+    z-index: 5;
+  }
+  .menu button {
+    border: 0;
+    background: transparent;
+    text-align: left;
+    padding: 7px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    color: var(--text-secondary);
+    font-size: var(--step-0);
+  }
+  .menu button:hover,
+  .menu button:focus-visible {
+    background: var(--bg-hover);
+    color: var(--text);
+    outline: 0;
+  }
+  .menu .icon {
+    font-size: 16px;
+    color: var(--text-dim);
+  }
+  .menu hr {
+    border: 0;
+    border-top: 1px solid var(--border);
+    margin: 4px 2px;
+  }
+
+  .toast {
+    position: absolute;
+    left: 50%;
+    bottom: 20px;
+    transform: translateX(-50%);
+    background: var(--text);
+    color: var(--bg-base);
+    border-radius: 8px;
+    padding: 9px 14px;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    font-size: var(--step-0);
+    box-shadow: var(--shadow);
+    z-index: 6;
+    white-space: nowrap;
+  }
+  .toast button {
+    border: 0;
+    background: none;
+    color: inherit;
+    font-weight: 650;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+  }
+  .blank {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    color: var(--text-dim);
+    font-size: var(--step-0);
+    padding: 40px;
+    text-align: center;
+    line-height: 1.7;
+  }
+
+  @media (max-width: 760px) {
+    .stage {
+      padding-inline: 16px;
+    }
+    .body {
+      grid-template-columns: 1fr;
+    }
+    .list {
+      border-right: 0;
+    }
+    .body.reading .list {
+      display: none;
+    }
+    .body:not(.reading) .reader {
+      display: none;
+    }
+    .back {
+      display: inline-flex;
+      align-self: flex-start;
+      border: 0;
+      background: none;
+      color: var(--accent);
+      cursor: pointer;
+      gap: 2px;
+      align-items: center;
+      padding: 0;
+      font-size: var(--step-0);
+    }
+    .reader-in {
+      padding: 18px 16px 110px;
+    }
+    .controls {
+      padding: 12px 16px 10px;
+    }
+    .group,
+    .item {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+    .item {
+      padding-left: 6px;
+    }
+    .proto .hint {
+      display: none;
+    }
+    .topbar .brand ~ span {
+      display: none;
+    }
+  }
+</style>
+
+<div class="stage">
+  <div class="proto" aria-label="Prototype controls">
+    <b id="p-label">Prototype</b>
+    <span class="grp" id="p-lang"></span>
+    <span class="grp" id="p-theme"></span>
+    <span class="grp" id="p-state"></span>
+    <span class="hint" id="p-hint"></span>
+  </div>
+
+  <div class="app">
+    <div class="topbar"><span class="brand">mulmoterminal</span><span id="tb-cells"></span></div>
+    <div class="ov-head">
+      <span class="name" id="ov-name"></span>
+      <span class="sub" id="ov-sub"></span>
+      <span class="spacer"></span>
+      <button class="btn-sq" type="button" id="ov-close"><span class="icon" aria-hidden="true">close</span></button>
+    </div>
+    <div class="controls">
+      <label class="search">
+        <span class="icon" aria-hidden="true">search</span>
+        <input id="q" type="search" autocomplete="off" spellcheck="false" />
+        <span class="kbd">/</span>
+      </label>
+      <div class="row2">
+        <div class="kinds" role="group" id="kinds"></div>
+        <button class="scope" type="button" id="scope"></button>
+      </div>
+    </div>
+    <div class="body" id="body">
+      <div class="list" id="list" role="listbox" tabindex="-1"></div>
+      <div class="reader" id="reader"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (() => {
+    const STR = {
+      ja: {
+        proto: "試作",
+        lang: "言語",
+        theme: "テーマ",
+        state: "状態",
+        dark: "暗",
+        light: "明",
+        sNormal: "通常",
+        sIndexing: "索引作成中",
+        sEmpty: "まだ何もない",
+        hint: "/ で検索 · ↑↓ で移動 · Enter で主操作 · Esc で戻る",
+        cells: "（ここにセルが並んでいる）",
+        name: "ライブラリ",
+        sub: "会話・記憶・道具・容量",
+        close: "閉じる",
+        placeholder: "会話・記憶・設定を探す",
+        kinds: { conv: "会話", mem: "記憶", tools: "道具", disk: "容量" },
+        allProjects: "すべてのプロジェクト",
+        resume: "再開",
+        edit: "編集",
+        open: "開く",
+        clean: "片付ける",
+        more: "その他",
+        fork: "ここから分岐",
+        pin: "ピン留め",
+        unpin: "ピンを外す",
+        rename: "名前を変える",
+        exportMd: "書き出す（秘密は伏せる）",
+        promote: "昇格…",
+        toMemory: "記憶にする",
+        toRule: "規則にする",
+        toPlan: "計画にする",
+        toIssue: "issue の下書きにする",
+        inCell: "セルで開く",
+        trash: "ごみ箱へ",
+        merge: "ほかの作業コピーと統合",
+        save: "保存",
+        cancel: "やめる",
+        undo: "取り消す",
+        trashed: "ごみ箱に移しました",
+        saved: "保存しました",
+        pinned: "ピン留めしました",
+        unpinned: "ピンを外しました",
+        resumed: "新しいセルで再開しています",
+        forked: "この時点から分岐した会話を開いています",
+        promoting: "昇格の案を作るスキルをセルで開きました",
+        exported: "書き出しました（3 か所を伏せました）",
+        merged: "統合の案を開きました",
+        opened: "ファイルを開きました",
+        cleaned: (s) => `${s} をごみ箱に移しました`,
+        files: "変更したファイル",
+        sub1: "サブエージェント",
+        toolsN: (n) => `道具の呼び出し ${n} 件`,
+        pinnedG: "ピン留め",
+        today: "今日",
+        week: "今週",
+        earlier: "それより前",
+        memLimit: "MEMORY.md",
+        lines: "行",
+        tidy: (n) => `${n} 件を整えられます`,
+        tidyBtn: "見る",
+        source: "出所",
+        sourceLink: "この記憶を書いた会話",
+        fType: "種類",
+        fDesc: "説明",
+        fFile: "ファイル",
+        fUpdated: "更新",
+        rules: "規則（CLAUDE.md）",
+        perms: "権限",
+        hooks: "フック",
+        skills: "スキル",
+        effective: "このディレクトリで、いま効いているもの。各行の下は、それを決めているファイル。",
+        uses: (n) => `${n} 回`,
+        unused: "使っていない",
+        failing: (n) => `直近 ${n} 回失敗`,
+        total: "合計",
+        candidates: "片付けられるもの",
+        cleanPeriod: "cleanupPeriodDays",
+        cleanPeriodNote: "Claude Code が自分で消す範囲。会話記録は 30 日で消えるが、一時パス由来のプロジェクトや debug/ は残り続ける。",
+        confirmTitle: "ごみ箱へ移すもの",
+        confirmBody: "動いているセッションが使っているものは除いてあります。ごみ箱からいつでも戻せます。",
+        confirmBtn: (s) => `${s} をごみ箱へ`,
+        indexing: "索引を作っています",
+        indexingNote: "初回だけ。終わるまでも、索引済みの分は探せます。",
+        emptyTitle: "まだ会話がありません",
+        emptyBody: "どこかのセルで Claude と話すと、ここに並びます。",
+        noHit: (q) => `「${q}」に一致するものはありません`,
+        noHitHint: "言葉を短くするか、プロジェクトの絞り込みを外してください。",
+        pick: "左から選んでください",
+        back: "一覧",
+        resultsFor: "検索結果",
+      },
+      en: {
+        proto: "Prototype",
+        lang: "Language",
+        theme: "Theme",
+        state: "State",
+        dark: "Dark",
+        light: "Light",
+        sNormal: "Normal",
+        sIndexing: "Indexing",
+        sEmpty: "Nothing yet",
+        hint: "/ search · ↑↓ move · Enter primary action · Esc back",
+        cells: "(your cells are here)",
+        name: "Library",
+        sub: "conversations, memory, tools, storage",
+        close: "Close",
+        placeholder: "Search conversations, memory, settings",
+        kinds: { conv: "Conversations", mem: "Memory", tools: "Tools", disk: "Storage" },
+        allProjects: "All projects",
+        resume: "Resume",
+        edit: "Edit",
+        open: "Open",
+        clean: "Clean up",
+        more: "More",
+        fork: "Branch from here",
+        pin: "Pin",
+        unpin: "Unpin",
+        rename: "Rename",
+        exportMd: "Export (secrets masked)",
+        promote: "Promote…",
+        toMemory: "Save as memory",
+        toRule: "Save as a rule",
+        toPlan: "Save as a plan",
+        toIssue: "Draft an issue",
+        inCell: "Open in a cell",
+        trash: "Move to trash",
+        merge: "Merge with other checkouts",
+        save: "Save",
+        cancel: "Cancel",
+        undo: "Undo",
+        trashed: "Moved to trash",
+        saved: "Saved",
+        pinned: "Pinned",
+        unpinned: "Unpinned",
+        resumed: "Resuming in a new cell",
+        forked: "Opening a branch of this conversation",
+        promoting: "Opened the promote skill in a cell",
+        exported: "Exported (3 secrets masked)",
+        merged: "Opened a merge proposal",
+        opened: "Opened the file",
+        cleaned: (s) => `Moved ${s} to trash`,
+        files: "Files changed",
+        sub1: "Subagent",
+        toolsN: (n) => `${n} tool calls`,
+        pinnedG: "Pinned",
+        today: "Today",
+        week: "This week",
+        earlier: "Earlier",
+        memLimit: "MEMORY.md",
+        lines: "lines",
+        tidy: (n) => `${n} items can be tidied`,
+        tidyBtn: "Show",
+        source: "Source",
+        sourceLink: "The conversation that wrote this",
+        fType: "Type",
+        fDesc: "Description",
+        fFile: "File",
+        fUpdated: "Updated",
+        rules: "Rules (CLAUDE.md)",
+        perms: "Permissions",
+        hooks: "Hooks",
+        skills: "Skills",
+        effective: "What is in effect in this directory. Under each line, the file that decides it.",
+        uses: (n) => `${n} uses`,
+        unused: "unused",
+        failing: (n) => `failed the last ${n} runs`,
+        total: "Total",
+        candidates: "Can be cleaned up",
+        cleanPeriod: "cleanupPeriodDays",
+        cleanPeriodNote: "What Claude Code deletes on its own. Transcripts go after 30 days; projects from temp paths and debug/ stay forever.",
+        confirmTitle: "Moving to trash",
+        confirmBody: "Anything a running session uses is left out. You can restore it from the trash at any time.",
+        confirmBtn: (s) => `Move ${s} to trash`,
+        indexing: "Building the index",
+        indexingNote: "First run only. What is already indexed is searchable meanwhile.",
+        emptyTitle: "No conversations yet",
+        emptyBody: "Talk to Claude in any cell and it will appear here.",
+        noHit: (q) => `Nothing matches "${q}"`,
+        noHitHint: "Try fewer words, or clear the project filter.",
+        pick: "Pick something on the left",
+        back: "List",
+        resultsFor: "Results",
+      },
+    };
+
+    // Example data only: projects and conversations are invented for the prototype.
+    const CONV = [
+      {
+        id: "c1",
+        group: "today",
+        pinned: true,
+        title: "字幕を動画に焼き込む",
+        project: "clip-studio",
+        branch: "feat/burn-subs",
+        pr: 212,
+        cost: "$0.84",
+        add: 146,
+        del: 12,
+        when: "2時間前",
+        turns: [
+          { u: "SRT の字幕を MP4 に焼き込みたい。フォントは Noto Sans JP で、下から 8% の位置に。" },
+          { a: "ffmpeg の `subtitles` フィルタで焼き込みます。位置は `force_style` の `MarginV` で指定できます。まず今の書き出し処理を読みます。" },
+          {
+            tool: "Read",
+            s: "src/export/render.ts",
+            d: 'export async function renderClip(input: ClipInput) {\n  const args = ["-i", input.path, ...codecArgs(input)];\n  ...',
+          },
+          {
+            tool: "Edit",
+            s: "src/export/render.ts  +38 −4",
+            d: '+  const subtitleFilter = buildSubtitleFilter(input.subtitles, input.height);\n+  if (subtitleFilter) args.push("-vf", subtitleFilter);',
+          },
+          { sub: "字幕フィルタの境界値を調べる", turns: [{ tool: "Bash", s: "yarn test test/test_subtitle_filter.ts", d: "✔ 18 tests passed" }] },
+          { a: "`buildSubtitleFilter` を純関数として切り出し、高さ 720 / 1080 / 2160 で余白が 8% になることを試験で確かめました。PR #212 を作りました。" },
+        ],
+        files: [
+          ["src/export/render.ts", 38, 4],
+          ["src/export/subtitleFilter.ts", 64, 0],
+          ["test/test_subtitle_filter.ts", 44, 8],
+        ],
+      },
+      {
+        id: "c2",
+        group: "today",
+        title: "CI を 10 分以内に収める",
+        project: "invoice-api",
+        branch: "ci/split-jobs",
+        pr: 488,
+        cost: "$1.92",
+        add: 61,
+        del: 87,
+        when: "5時間前",
+        turns: [
+          { u: "PR の CI が遅い。どこが詰まっているか測って、10 分以内にして。" },
+          { a: "直近 20 回の実行時間を集計すると、Windows のテストが全体を引っ張っています。lint と型検査を ubuntu の一回にまとめ、テストを 3 つに分けます。" },
+          { tool: "Edit", s: ".github/workflows/ci.yml  +61 −87", d: "+    strategy:\n+      matrix:\n+        shard: [1, 2, 3]" },
+        ],
+        files: [[".github/workflows/ci.yml", 61, 87]],
+      },
+      {
+        id: "c3",
+        group: "week",
+        title: "請求書 PDF の日本語フォントが化ける",
+        project: "invoice-api",
+        branch: "fix/pdf-font",
+        pr: 471,
+        cost: "$0.51",
+        add: 22,
+        del: 3,
+        when: "3日前",
+        turns: [
+          { u: "PDF にすると日本語が豆腐になる。" },
+          { a: "埋め込みフォントの指定がサブセット化で落ちていました。`embedFont` に `subset: false` を渡して直します。" },
+        ],
+        files: [["src/pdf/fonts.ts", 22, 3]],
+      },
+      {
+        id: "c4",
+        group: "week",
+        title: "写真ギャラリーの遅延読み込み",
+        project: "photo-site",
+        branch: "main",
+        cost: "$0.33",
+        add: 40,
+        del: 18,
+        when: "4日前",
+        turns: [{ u: "ギャラリーのスクロールがカクつく。" }, { a: '画像に `loading="lazy"` と寸法を付け、レイアウトのずれを無くしました。' }],
+        files: [["src/components/Gallery.vue", 40, 18]],
+      },
+      {
+        id: "c5",
+        group: "earlier",
+        title: "依存関係の更新（11 月）",
+        project: "photo-site",
+        branch: "deps/update-2026-11-02",
+        pr: 95,
+        cost: "$0.62",
+        add: 410,
+        del: 388,
+        when: "11月2日",
+        turns: [{ u: "依存を全部最新にして、壊れたら直して。" }, { a: "vite 7 で設定の書き方が変わった箇所を直しました。" }],
+        files: [
+          ["package.json", 18, 18],
+          ["yarn.lock", 392, 370],
+        ],
+      },
+      {
+        id: "c6",
+        group: "earlier",
+        title: "ffmpeg のハードウェアエンコードを試す",
+        project: "clip-studio",
+        branch: "spike/hw-encode",
+        cost: "$0.18",
+        add: 0,
+        del: 0,
+        when: "10月28日",
+        turns: [
+          { u: "VideoToolbox で速くなる？" },
+          { a: "h264_videotoolbox で約 3 倍速くなりますが、ビットレート指定が効きにくいので、書き出し設定は今のままを勧めます。" },
+        ],
+        files: [],
+      },
+    ];
+
+    const MEM = [
+      {
+        project: "invoice-api",
+        lines: 187,
+        limit: 200,
+        items: [
+          {
+            id: "m1",
+            name: "pdf-fonts-embed-full",
+            type: "project",
+            desc: "PDF の日本語フォントはサブセット化しない",
+            updated: "3日前",
+            src: "c3",
+            body: "日本語フォントはサブセット化すると一部の字形が落ちる。`embedFont` には常に `subset: false` を渡す。\n\n**Why:** 請求書で豆腐が出た（#471）。\n**How to apply:** フォントを足すときも同じ。",
+          },
+          {
+            id: "m2",
+            name: "legacy-tax-table",
+            type: "project",
+            desc: "税率表は useLegacyTaxTable で読む",
+            updated: "2か月前",
+            issue: "stale",
+            body: "税率表は `useLegacyTaxTable()` で読む。新しい API はまだ不安定。",
+          },
+          {
+            id: "m3",
+            name: "reply-in-japanese",
+            type: "feedback",
+            desc: "返信は日本語で",
+            updated: "1か月前",
+            issue: "dup",
+            body: "経過報告もまとめも常に日本語で書く。",
+          },
+        ],
+      },
+      {
+        project: "clip-studio",
+        lines: 42,
+        limit: 200,
+        items: [
+          {
+            id: "m4",
+            name: "ffmpeg-subtitle-margin",
+            type: "reference",
+            desc: "字幕の位置は MarginV で、高さの 8%",
+            updated: "2時間前",
+            src: "c1",
+            body: "字幕は `force_style=MarginV=<px>` で位置を決める。px は動画の高さの 8% を四捨五入。",
+          },
+          {
+            id: "m5",
+            name: "user-prefers-small-prs",
+            type: "user",
+            desc: "PR は小さく分けたい",
+            updated: "3週間前",
+            body: "一つの PR に一つの変更。差し戻しが単独でできる単位に分ける。",
+          },
+        ],
+      },
+    ];
+
+    const TOOLS = {
+      dir: "~/src/invoice-api",
+      rules: [
+        ["~/.claude/CLAUDE.md", "312"],
+        ["~/src/CLAUDE.md", "48"],
+        ["~/src/invoice-api/CLAUDE.md", "96"],
+      ],
+      perms: [
+        ["allow  Bash(yarn test:*)", "~/.claude/settings.json"],
+        ["allow  Bash(gh pr view:*)", ".claude/settings.local.json"],
+        ["deny   Bash(git push --force:*)", "~/.claude/settings.json"],
+      ],
+      hooks: [
+        ["PreToolUse  format-on-edit", "~/.claude/settings.json", ""],
+        ["Stop  notify-done", ".claude/settings.json", "fail"],
+      ],
+      skills: [
+        ["issue-draft", 41],
+        ["refactor-safely", 17],
+        ["gh-review-loop", 9],
+        ["pptx", 0],
+      ],
+    };
+
+    const DISK = {
+      total: "74.2 GB",
+      places: [
+        ["projects/", "73.0 GB", 98, "会話記録。うち一時パス由来 11,9xx 件"],
+        ["debug/", "1.4 GB", 2, ""],
+        ["plugins/", "595 MB", 1, ""],
+        ["file-history/", "314 MB", 1, ""],
+        ["skills/", "37 MB", 0, ""],
+        ["session-env/", "61,558 件", 0, "空のディレクトリ"],
+      ],
+      candidates: [
+        ["一時パス由来のプロジェクト", "60.8 GB"],
+        ["もう存在しないディレクトリのプロジェクト", "2.1 GB"],
+        ["30 日より古い debug/", "1.3 GB"],
+        ["空の session-env/", "0 B"],
+      ],
+      cleanTotal: "64.2 GB",
+    };
+
+    const state = {
+      lang: "ja",
+      theme: "dark",
+      mode: "normal",
+      kind: "conv",
+      q: "",
+      sel: "c1",
+      reading: false,
+      menu: false,
+      editing: false,
+      confirming: false,
+      toast: null,
+      openTools: new Set(),
+      openSubs: new Set(),
+    };
+    const $ = (id) => document.getElementById(id);
+    const T = () => STR[state.lang];
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+    const inline = (s) =>
+      esc(s)
+        .replace(/`([^`]+)`/g, "<code>$1</code>")
+        .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+    const hl = (s) => {
+      const q = state.q.trim();
+      if (!q) return esc(s);
+      const i = s.toLowerCase().indexOf(q.toLowerCase());
+      return i < 0 ? esc(s) : esc(s.slice(0, i)) + "<mark>" + esc(s.slice(i, i + q.length)) + "</mark>" + esc(s.slice(i + q.length));
+    };
+    const allMem = () => MEM.flatMap((g) => g.items.map((m) => ({ ...m, project: g.project })));
+    const convText = (c) => [c.title, c.project, c.branch, ...c.turns.map((t) => t.u || t.a || t.s || "")].join(" ").toLowerCase();
+    const memText = (m) => [m.name, m.desc, m.body, m.project].join(" ").toLowerCase();
+    const snippet = (c) => {
+      const q = state.q.trim().toLowerCase();
+      const t = c.turns.find((x) => (x.u || x.a || "").toLowerCase().includes(q));
+      return t ? t.u || t.a : "";
+    };
+
+    function hits() {
+      const q = state.q.trim().toLowerCase();
+      if (!q) return null;
+      return {
+        conv: CONV.filter((c) => convText(c).includes(q)),
+        mem: allMem().filter((m) => memText(m).includes(q)),
+        tools: [...TOOLS.rules, ...TOOLS.perms, ...TOOLS.hooks].filter((r) => r.join(" ").toLowerCase().includes(q)).length ? [{ id: "tools" }] : [],
+        disk: [],
+      };
+    }
+
+    function setupProto() {
+      const t = T();
+      $("p-label").textContent = t.proto;
+      const seg = (el, label, opts, key) => {
+        el.innerHTML =
+          `<span>${label}</span>` + opts.map(([v, l]) => `<button type="button" data-v="${v}" aria-pressed="${state[key] === v}">${l}</button>`).join("");
+        el.querySelectorAll("button").forEach(
+          (b) =>
+            (b.onclick = () => {
+              state[key] = b.dataset.v;
+              if (key === "theme") document.documentElement.dataset.theme = state.theme;
+              render();
+            }),
+        );
+      };
+      seg(
+        $("p-lang"),
+        t.lang,
+        [
+          ["ja", "日本語"],
+          ["en", "English"],
+        ],
+        "lang",
+      );
+      seg(
+        $("p-theme"),
+        t.theme,
+        [
+          ["dark", t.dark],
+          ["light", t.light],
+        ],
+        "theme",
+      );
+      seg(
+        $("p-state"),
+        t.state,
+        [
+          ["normal", t.sNormal],
+          ["indexing", t.sIndexing],
+          ["empty", t.sEmpty],
+        ],
+        "mode",
+      );
+      $("p-hint").textContent = t.hint;
+      $("tb-cells").textContent = t.cells;
+      $("ov-name").textContent = t.name;
+      $("ov-sub").textContent = t.sub;
+      $("ov-close").setAttribute("aria-label", t.close);
+      $("q").placeholder = t.placeholder;
+      document.documentElement.lang = state.lang;
+    }
+
+    function renderKinds() {
+      const t = T(),
+        h = hits();
+      const counts = { conv: CONV.length, mem: allMem().length, tools: null, disk: null };
+      $("kinds").innerHTML = ["conv", "mem", "tools", "disk"]
+        .map((k) => {
+          const n = h ? h[k].length : counts[k];
+          const pressed = h ? state.kind === k && state.narrow : state.kind === k;
+          return `<button class="kind" type="button" data-k="${k}" aria-pressed="${pressed}">${t.kinds[k]}${n !== null && state.mode !== "empty" ? `<span class="count">${n}</span>` : ""}</button>`;
+        })
+        .join("");
+      $("kinds")
+        .querySelectorAll("button")
+        .forEach(
+          (b) =>
+            (b.onclick = () => {
+              const h2 = hits();
+              if (h2) {
+                state.narrow = !(state.narrow && state.kind === b.dataset.k);
+              }
+              state.kind = b.dataset.k;
+              state.editing = false;
+              state.confirming = false;
+              state.menu = false;
+              state.sel = firstOf(state.kind);
+              state.reading = false;
+              render();
+            }),
+        );
+      $("scope").innerHTML = `${state.kind === "tools" ? esc(TOOLS.dir) : t.allProjects}<span class="icon" aria-hidden="true">expand_more</span>`;
+    }
+
+    function firstOf(k) {
+      return k === "conv" ? CONV[0].id : k === "mem" ? allMem()[0].id : k;
+    }
+
+    function convRow(c) {
+      const t = T();
+      const meta = [c.project, c.branch, c.pr ? `#${c.pr}` : "", c.when].filter(Boolean).map(esc).join(" · ");
+      const snip = state.q.trim() ? snippet(c) : "";
+      return `<div class="item" role="option" data-id="${c.id}" aria-selected="${state.sel === c.id}">
+    <span class="dot ${c.health ? "warn" : ""}" ${c.health ? `title="${esc(t.kinds.mem)}"` : ""}></span>
+    <span class="t">${hl(c.title)}</span><span class="m">${meta}</span>${snip ? `<span class="snip">${hl(snip)}</span>` : ""}</div>`;
+    }
+    function memRow(m) {
+      return `<div class="item" role="option" data-id="${m.id}" aria-selected="${state.sel === m.id}">
+    <span class="dot ${m.issue ? "warn" : ""}"></span>
+    <span class="t">${hl(m.desc)}</span><span class="m">${esc(m.project)} · ${esc(m.type)} · ${esc(m.updated)}</span></div>`;
+    }
+
+    function renderList() {
+      const t = T(),
+        el = $("list"),
+        h = hits();
+      if (state.mode === "empty") {
+        el.innerHTML = `<div class="empty"><span class="icon" aria-hidden="true">forum</span><b>${t.emptyTitle}</b><br>${t.emptyBody}</div>`;
+        return;
+      }
+      const parts = [];
+      if (state.mode === "indexing")
+        parts.push(
+          `<div class="indexing" title="${esc(t.indexingNote)}"><span>${t.indexing}</span><span class="bar"><span></span></span><span>38%</span></div>`,
+        );
+      if (h) {
+        const ks = state.narrow ? [state.kind] : ["conv", "mem", "tools"];
+        const any = ks.some((k) => h[k].length);
+        if (!any) {
+          el.innerHTML =
+            parts.join("") +
+            `<div class="empty"><span class="icon" aria-hidden="true">search_off</span><b>${esc(t.noHit(state.q.trim()))}</b><br>${t.noHitHint}</div>`;
+          return;
+        }
+        ks.forEach((k) => {
+          if (!h[k].length) return;
+          parts.push(`<div class="group"><span>${t.kinds[k]}</span></div>`);
+          if (k === "conv") h.conv.forEach((c) => parts.push(convRow(c)));
+          if (k === "mem") h.mem.forEach((m) => parts.push(memRow(m)));
+          if (k === "tools")
+            parts.push(
+              `<div class="item" role="option" data-id="tools" aria-selected="${state.sel === "tools"}"><span class="dot"></span><span class="t">${esc(TOOLS.dir)}</span><span class="m">${t.rules} · ${t.perms} · ${t.hooks}</span></div>`,
+            );
+        });
+      } else if (state.kind === "conv") {
+        const pins = CONV.filter((c) => c.pinned);
+        if (pins.length) {
+          parts.push(`<div class="group"><span>${t.pinnedG}</span></div>`);
+          pins.forEach((c) => parts.push(convRow(c)));
+        }
+        ["today", "week", "earlier"].forEach((g) => {
+          const rows = CONV.filter((c) => c.group === g && !c.pinned);
+          if (!rows.length) return;
+          parts.push(`<div class="group"><span>${t[g]}</span></div>`);
+          rows.forEach((c) => parts.push(convRow(c)));
+        });
+        if (state.mode === "indexing") parts.push(`<div class="skel"><i></i><i></i></div><div class="skel"><i></i><i></i></div>`);
+      } else if (state.kind === "mem") {
+        const issues = allMem().filter((m) => m.issue).length;
+        if (issues)
+          parts.push(`<div class="tidy"><span class="dot"></span>${t.tidy(issues)} <button class="link" type="button" id="tidy">${t.tidyBtn}</button></div>`);
+        MEM.forEach((g) => {
+          const near = g.lines / g.limit > 0.9;
+          parts.push(
+            `<div class="group"><span>${esc(g.project)}</span><span class="gauge ${near ? "near" : ""}" title="${t.memLimit}">${t.memLimit} ${g.lines} / ${g.limit} ${t.lines}<span class="track"><span class="fill" style="width:${Math.min(100, (g.lines / g.limit) * 100)}%"></span></span></span></div>`,
+          );
+          g.items.filter((m) => !state.tidyOnly || m.issue).forEach((m) => parts.push(memRow({ ...m, project: g.project })));
+        });
+      } else if (state.kind === "tools") {
+        parts.push(`<div class="group"><span>${esc(TOOLS.dir)}</span></div>`);
+        [
+          ["rules", t.rules],
+          ["perms", t.perms],
+          ["hooks", t.hooks],
+          ["skills", t.skills],
+        ].forEach(([id, l]) =>
+          parts.push(
+            `<div class="item" role="option" data-id="tools-${id}" aria-selected="${state.sel === "tools-" + id || (state.sel === "tools" && id === "rules")}"><span class="dot ${id === "hooks" ? "warn" : ""}"></span><span class="t">${l}</span><span class="m">${id === "rules" ? TOOLS.rules.length + " files" : id === "perms" ? TOOLS.perms.length : id === "hooks" ? t.failing(4) : t.uses(67)}</span></div>`,
+          ),
+        );
+      } else {
+        parts.push(`<div class="group"><span>~/.claude</span><span class="gauge">${t.total} ${DISK.total}</span></div>`);
+        parts.push(
+          `<div class="item" role="option" data-id="disk" aria-selected="${state.sel === "disk"}"><span class="dot warn"></span><span class="t">${t.candidates}</span><span class="m">${DISK.cleanTotal}</span></div>`,
+        );
+        DISK.places.forEach(([p, s]) =>
+          parts.push(
+            `<div class="item" role="option" data-id="disk-${esc(p)}" aria-selected="${state.sel === "disk-" + p}"><span class="dot"></span><span class="t" style="font-family:var(--font-mono);font-size:var(--step-0)">${esc(p)}</span><span class="m">${esc(s)}</span></div>`,
+          ),
+        );
+      }
+      el.innerHTML = parts.join("");
+      el.querySelectorAll(".item").forEach((it) => (it.onclick = () => select(it.dataset.id)));
+      const tidy = $("tidy");
+      if (tidy)
+        tidy.onclick = () => {
+          state.tidyOnly = !state.tidyOnly;
+          render();
+        };
+    }
+
+    function select(id) {
+      state.sel = id;
+      state.reading = true;
+      state.menu = false;
+      state.editing = false;
+      state.confirming = false;
+      if (id.startsWith("m")) state.kind = state.narrow || !state.q.trim() ? state.kind : state.kind;
+      render();
+    }
+
+    function actionsBar(primaryLabel, primaryIcon, items) {
+      const t = T();
+      const menu = state.menu
+        ? `<div class="menu" role="menu">${items.map((i) => (i === "-" ? "<hr>" : `<button type="button" role="menuitem" data-act="${i[0]}"><span class="icon" aria-hidden="true">${i[1]}</span>${i[2]}</button>`)).join("")}</div>`
+        : "";
+      return `${menu}<div class="actions">
+    <button class="quiet" type="button" id="more" aria-label="${t.more}" aria-expanded="${state.menu}"><span class="icon" aria-hidden="true">more_horiz</span></button>
+    <button class="primary" type="button" id="primary"><span class="icon" aria-hidden="true">${primaryIcon}</span>${primaryLabel}<span class="kbd">Enter</span></button></div>`;
+    }
+
+    function readerConv(c) {
+      const t = T();
+      const tools = c.turns.filter((x) => x.tool).length;
+      const meta = [
+        `<span>${esc(c.project)}</span>`,
+        `<span>${esc(c.branch)}</span>`,
+        c.pr ? `<a href="#" data-pr><span class="icon" aria-hidden="true">merge</span>#${c.pr}</a>` : "",
+        `<span>${esc(c.cost)}</span>`,
+        c.add || c.del ? `<span><span class="add">+${c.add}</span> <span class="del">−${c.del}</span></span>` : "",
+        `<span>${esc(c.when)}</span>`,
+      ]
+        .filter(Boolean)
+        .join("");
+      const turn = (x, i, key) => {
+        if (x.u) return `<div class="turn-u">${hl(x.u)}</div>`;
+        if (x.a) return `<div class="turn-a">${inline(x.a)}</div>`;
+        if (x.tool) {
+          const k = key + i,
+            open = state.openTools.has(k);
+          return `<button class="tool" type="button" data-tool="${k}" aria-expanded="${open}"><span class="icon" aria-hidden="true">${open ? "expand_more" : "chevron_right"}</span>${esc(x.tool)}  ${esc(x.s)}</button>${open ? `<div class="tool-detail">${esc(x.d)}</div>` : ""}`;
+        }
+        if (x.sub) {
+          const k = key + i,
+            open = state.openSubs.has(k);
+          return `<div class="sub"><button class="sub-h" type="button" data-sub="${k}" aria-expanded="${open}"><span class="icon" aria-hidden="true">${open ? "expand_more" : "chevron_right"}</span>${t.sub1} · ${esc(x.sub)}</button>${open ? x.turns.map((y, j) => turn(y, j, k + "-")).join("") : ""}</div>`;
+        }
+        return "";
+      };
+      const files = c.files.length
+        ? `<div class="section-h">${t.files}</div><div class="files">${c.files.map(([p, a, d]) => `<div class="file"><span>${esc(p)}</span><span class="add">+${a}</span><span class="del">−${d}</span></div>`).join("")}</div>`
+        : "";
+      return (
+        `<div class="reader-in"><button class="back" type="button" id="back"><span class="icon" aria-hidden="true">chevron_left</span>${t.back}</button>
+    <h1 class="r-title">${esc(c.title)}</h1><div class="r-meta">${meta}</div>
+    ${c.turns.map((x, i) => turn(x, i, c.id + "-")).join("")}
+    <div class="r-meta"><span>${t.toolsN(tools)}</span></div>${files}</div>` +
+        actionsBar(t.resume, "play_arrow", [
+          ["fork", "call_split", t.fork],
+          ["pin", "keep", c.pinned ? t.unpin : t.pin],
+          ["rename", "edit", t.rename],
+          "-",
+          ["toMemory", "bookmark_add", t.toMemory],
+          ["toRule", "rule", t.toRule],
+          ["toPlan", "checklist", t.toPlan],
+          ["toIssue", "add_task", t.toIssue],
+          "-",
+          ["export", "ios_share", t.exportMd],
+        ])
+      );
+    }
+
+    function readerMem(m) {
+      const t = T();
+      const note =
+        m.issue === "stale"
+          ? state.lang === "ja"
+            ? "この記憶が名前を挙げている <code>useLegacyTaxTable</code> は、今のリポジトリにありません。"
+            : "<code>useLegacyTaxTable</code>, which this memory names, no longer exists in the repository."
+          : m.issue === "dup"
+            ? state.lang === "ja"
+              ? "同じ内容の記憶が invoice-api2 と invoice-api3 にもあります。"
+              : "The same memory also exists in invoice-api2 and invoice-api3."
+            : "";
+      const src = m.src ? `<dt>${t.source}</dt><dd><button class="link" type="button" data-goto="${m.src}">${t.sourceLink}</button></dd>` : "";
+      const body = state.editing ? `<textarea class="edit" id="editor">${esc(m.body)}</textarea>` : `<div class="md">${inline(m.body)}</div>`;
+      const acts = state.editing
+        ? `<div class="actions"><button class="quiet" type="button" id="cancelEdit">${t.cancel}</button><button class="primary" type="button" id="saveEdit"><span class="icon" aria-hidden="true">check</span>${t.save}<span class="kbd">⌘ Enter</span></button></div>`
+        : actionsBar(
+            t.edit,
+            "edit",
+            [["trash", "delete", t.trash], m.issue === "dup" ? ["merge", "merge", t.merge] : null, ["toRule", "rule", t.toRule]].filter(Boolean),
+          );
+      return (
+        `<div class="reader-in"><button class="back" type="button" id="back"><span class="icon" aria-hidden="true">chevron_left</span>${t.back}</button>
+    <h1 class="r-title">${esc(m.desc)}</h1>
+    ${note ? `<div class="note"><span class="dot"></span><span>${note}</span></div>` : ""}
+    <dl class="kv"><dt>${t.fFile}</dt><dd>${esc(m.project)}/memory/${esc(m.name)}.md</dd><dt>${t.fType}</dt><dd>${esc(m.type)}</dd><dt>${t.fUpdated}</dt><dd>${esc(m.updated)}</dd>${src}</dl>
+    ${body}</div>` + acts
+      );
+    }
+
+    function readerTools(section) {
+      const t = T();
+      const s = section || "rules";
+      const rows =
+        s === "rules"
+          ? TOOLS.rules.map(([p, n]) => `<div class="rrow"><span class="k"><code>${esc(p)}</code></span><span class="v">${n} ${t.lines}</span></div>`)
+          : s === "perms"
+            ? TOOLS.perms.map(
+                ([r, src]) =>
+                  `<div class="rrow"><span class="k"><code>${esc(r)}</code></span><span class="v"></span><span class="src">${esc(src)}</span></div>`,
+              )
+            : s === "hooks"
+              ? TOOLS.hooks.map(
+                  ([h, src, f]) =>
+                    `<div class="rrow"><span class="k"><code>${esc(h)}</code></span><span class="v" style="${f ? "color:var(--warn)" : ""}">${f ? t.failing(4) : ""}</span><span class="src">${esc(src)}</span></div>`,
+                )
+              : TOOLS.skills.map(
+                  ([n, u]) => `<div class="rrow"><span class="k"><code>${esc(n)}</code></span><span class="v">${u ? t.uses(u) : t.unused}</span></div>`,
+                );
+      const title = { rules: t.rules, perms: t.perms, hooks: t.hooks, skills: t.skills }[s];
+      return (
+        `<div class="reader-in"><button class="back" type="button" id="back"><span class="icon" aria-hidden="true">chevron_left</span>${t.back}</button>
+    <h1 class="r-title">${title}</h1><div class="r-meta"><span>${esc(TOOLS.dir)}</span></div>
+    <div class="note"><span>${t.effective}</span></div><div class="rows">${rows.join("")}</div></div>` +
+        actionsBar(t.open, "open_in_new", [["inCell", "terminal", t.inCell]])
+      );
+    }
+
+    function readerDisk(id) {
+      const t = T();
+      if (id && id !== "disk") {
+        const p = DISK.places.find(([x]) => "disk-" + x === id);
+        return (
+          `<div class="reader-in"><button class="back" type="button" id="back"><span class="icon" aria-hidden="true">chevron_left</span>${t.back}</button>
+      <h1 class="r-title" style="font-family:var(--font-mono)">~/.claude/${esc(p[0])}</h1><div class="r-meta"><span>${esc(p[1])}</span>${p[3] ? `<span>${esc(p[3])}</span>` : ""}</div>
+      <div class="rows">${DISK.places.map(([x, s, pct]) => `<div class="rrow"><span class="k"><code>${esc(x)}</code></span><span class="v">${esc(s)}</span><span class="sizebar"><span style="width:${Math.max(pct, 1)}%"></span></span></div>`).join("")}</div></div>` +
+          actionsBar(t.clean, "cleaning_services", [["inCell", "terminal", t.inCell]])
+        );
+      }
+      const confirm = state.confirming
+        ? `<div class="confirm"><b>${t.confirmTitle}</b><p>${t.confirmBody}</p><div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button class="quiet" type="button" id="cancelClean">${t.cancel}</button><button class="primary" type="button" id="doClean">${t.confirmBtn(DISK.cleanTotal)}</button></div></div>`
+        : "";
+      return (
+        `<div class="reader-in"><button class="back" type="button" id="back"><span class="icon" aria-hidden="true">chevron_left</span>${t.back}</button>
+    <h1 class="r-title">${t.candidates}</h1><div class="r-meta"><span>${DISK.cleanTotal}</span></div>
+    <div class="rows">${DISK.candidates.map(([k, v]) => `<div class="rrow"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`).join("")}</div>
+    <div class="section-h">${t.cleanPeriod}</div><div class="note"><span>${t.cleanPeriodNote}</span></div>${confirm}</div>` +
+        (state.confirming ? "" : actionsBar(t.clean, "cleaning_services", [["inCell", "terminal", t.inCell]]))
+      );
+    }
+
+    function renderReader() {
+      const t = T(),
+        el = $("reader");
+      $("body").classList.toggle("reading", state.reading);
+      if (state.mode === "empty") {
+        el.innerHTML = `<div class="blank">${t.emptyBody}</div>`;
+        return;
+      }
+      const id = state.sel;
+      const c = CONV.find((x) => x.id === id),
+        m = allMem().find((x) => x.id === id);
+      el.innerHTML = c
+        ? readerConv(c)
+        : m
+          ? readerMem(m)
+          : id && id.startsWith("tools")
+            ? readerTools(id.split("-")[1])
+            : id && id.startsWith("disk")
+              ? readerDisk(id)
+              : `<div class="blank">${t.pick}</div>`;
+      if (state.toast)
+        el.insertAdjacentHTML(
+          "beforeend",
+          `<div class="toast" role="status"><span>${esc(state.toast.msg)}</span>${state.toast.undo ? `<button type="button" id="undo">${t.undo}</button>` : ""}</div>`,
+        );
+      wireReader(c, m);
+    }
+
+    function toast(msg, undo) {
+      state.toast = { msg, undo };
+      clearTimeout(toast.h);
+      toast.h = setTimeout(() => {
+        state.toast = null;
+        renderReader();
+      }, 5000);
+    }
+
+    function wireReader(c, m) {
+      const t = T(),
+        on = (id, f) => {
+          const e = $(id);
+          if (e) e.onclick = f;
+        };
+      on("back", () => {
+        state.reading = false;
+        render();
+      });
+      on("more", () => {
+        state.menu = !state.menu;
+        renderReader();
+        const f = document.querySelector(".menu button");
+        if (f) f.focus();
+      });
+      on("primary", primary);
+      on("saveEdit", () => {
+        const ed = $("editor");
+        if (m)
+          MEM.forEach((g) =>
+            g.items.forEach((x) => {
+              if (x.id === m.id) x.body = ed.value;
+            }),
+          );
+        state.editing = false;
+        toast(t.saved);
+        render();
+      });
+      on("cancelEdit", () => {
+        state.editing = false;
+        renderReader();
+      });
+      on("cancelClean", () => {
+        state.confirming = false;
+        renderReader();
+      });
+      on("doClean", () => {
+        state.confirming = false;
+        toast(t.cleaned(DISK.cleanTotal), true);
+        renderReader();
+      });
+      on("undo", () => {
+        if (state.toast && state.toast.restore) state.toast.restore();
+        state.toast = null;
+        render();
+      });
+      document.querySelectorAll("[data-tool]").forEach(
+        (b) =>
+          (b.onclick = () => {
+            const k = b.dataset.tool;
+            state.openTools.has(k) ? state.openTools.delete(k) : state.openTools.add(k);
+            renderReader();
+          }),
+      );
+      document.querySelectorAll("[data-sub]").forEach(
+        (b) =>
+          (b.onclick = () => {
+            const k = b.dataset.sub;
+            state.openSubs.has(k) ? state.openSubs.delete(k) : state.openSubs.add(k);
+            renderReader();
+          }),
+      );
+      document.querySelectorAll("[data-goto]").forEach(
+        (b) =>
+          (b.onclick = () => {
+            state.kind = "conv";
+            state.q = "";
+            $("q").value = "";
+            select(b.dataset.goto);
+          }),
+      );
+      document.querySelectorAll("[data-pr]").forEach((a) => (a.onclick = (e) => e.preventDefault()));
+      document.querySelectorAll(".menu [data-act]").forEach((b) => (b.onclick = () => menuAct(b.dataset.act, c, m)));
+    }
+
+    function menuAct(act, c, m) {
+      const t = T();
+      state.menu = false;
+      if (act === "pin" && c) {
+        c.pinned = !c.pinned;
+        toast(c.pinned ? t.pinned : t.unpinned);
+        render();
+        return;
+      }
+      if (act === "trash" && m) {
+        const g = MEM.find((x) => x.items.some((y) => y.id === m.id)),
+          i = g.items.findIndex((y) => y.id === m.id),
+          [removed] = g.items.splice(i, 1);
+        state.sel = allMem()[0]?.id || "";
+        toast(t.trashed, true);
+        state.toast.restore = () => {
+          g.items.splice(i, 0, removed);
+          state.sel = removed.id;
+        };
+        render();
+        return;
+      }
+      const msg = {
+        fork: t.forked,
+        rename: t.rename,
+        toMemory: t.promoting,
+        toRule: t.promoting,
+        toPlan: t.promoting,
+        toIssue: t.promoting,
+        export: t.exported,
+        merge: t.merged,
+        inCell: t.opened,
+      }[act];
+      toast(msg);
+      renderReader();
+    }
+
+    function primary() {
+      const t = T(),
+        id = state.sel;
+      if (CONV.some((c) => c.id === id)) {
+        toast(t.resumed);
+        renderReader();
+        return;
+      }
+      if (allMem().some((m) => m.id === id)) {
+        state.editing = true;
+        renderReader();
+        const ed = $("editor");
+        if (ed) ed.focus();
+        return;
+      }
+      if (id === "disk") {
+        state.confirming = true;
+        renderReader();
+        return;
+      }
+      if (id && id.startsWith("disk-")) {
+        state.sel = "disk";
+        state.confirming = true;
+        render();
+        return;
+      }
+      toast(t.opened);
+      renderReader();
+    }
+
+    function render() {
+      setupProto();
+      renderKinds();
+      renderList();
+      renderReader();
+    }
+
+    $("q").addEventListener("input", (e) => {
+      state.q = e.target.value;
+      state.narrow = false;
+      const ids = [...document.querySelectorAll("#list .item")].map((x) => x.dataset.id);
+      renderKinds();
+      renderList();
+      const first = document.querySelector("#list .item");
+      if (first && !ids.includes(state.sel)) state.sel = first.dataset.id;
+      if (first) {
+        state.sel = document.querySelector(`#list .item[data-id="${state.sel}"]`) ? state.sel : first.dataset.id;
+      }
+      renderList();
+      renderReader();
+    });
+    $("ov-close").onclick = () => toast(T().close);
+
+    document.addEventListener("keydown", (e) => {
+      const inField =
+        e.target.tagName === "TEXTAREA" ||
+        (e.target.tagName === "INPUT" && e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Enter" && e.key !== "Escape");
+      if (e.key === "/" && !inField && e.target.tagName !== "INPUT") {
+        e.preventDefault();
+        $("q").focus();
+        $("q").select();
+        return;
+      }
+      if (e.target.tagName === "TEXTAREA") {
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          $("saveEdit")?.click();
+        }
+        if (e.key === "Escape") {
+          state.editing = false;
+          renderReader();
+        }
+        return;
+      }
+      if (inField) return;
+      if (e.key === "Escape") {
+        if (state.menu) {
+          state.menu = false;
+          renderReader();
+          return;
+        }
+        if (state.confirming) {
+          state.confirming = false;
+          renderReader();
+          return;
+        }
+        if (state.reading && window.matchMedia("(max-width: 760px)").matches) {
+          state.reading = false;
+          render();
+          return;
+        }
+        if (state.q) {
+          state.q = "";
+          $("q").value = "";
+          render();
+          return;
+        }
+        return;
+      }
+      if (state.menu && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+        const items = [...document.querySelectorAll(".menu button")],
+          i = items.indexOf(document.activeElement);
+        e.preventDefault();
+        items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus();
+        return;
+      }
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        const ids = [...document.querySelectorAll("#list .item")].map((x) => x.dataset.id);
+        if (!ids.length) return;
+        e.preventDefault();
+        const i = ids.indexOf(state.sel),
+          n = ids[Math.max(0, Math.min(ids.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)))];
+        state.sel = n;
+        state.editing = false;
+        state.confirming = false;
+        state.menu = false;
+        renderList();
+        renderReader();
+        document.querySelector(`#list .item[data-id="${n}"]`)?.scrollIntoView({ block: "nearest" });
+        return;
+      }
+      if (e.key === "Enter" && !state.menu) {
+        if (e.target.tagName === "BUTTON" && e.target.id !== "q") return;
+        e.preventDefault();
+        if (state.confirming) $("doClean")?.click();
+        else primary();
+      }
+    });
+
+    try {
+      const s = localStorage.getItem("library-proto");
+      if (s) Object.assign(state, JSON.parse(s));
+    } catch (_) {}
+    const save = () => {
+      try {
+        localStorage.setItem("library-proto", JSON.stringify({ lang: state.lang, theme: state.theme }));
+      } catch (_) {}
+    };
+    const r0 = render;
+    render = function () {
+      r0();
+      save();
+    };
+    if (state.theme) document.documentElement.dataset.theme = state.theme;
+    render();
+    setTimeout(() => $("q").focus(), 0);
+  })();
+</script>
