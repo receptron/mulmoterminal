@@ -17,12 +17,12 @@ export interface PaletteResume {
 
 // Held by another client, or already open in this grid: resuming it again would take it away from
 // whoever has it, which the launch panel refuses too.
-const busy = (session: ResumableSession, openSessionIds: readonly string[]): boolean =>
+export const isBusyResume = (session: ResumableSession, openSessionIds: readonly string[]): boolean =>
   session.attached === true || openSessionIds.includes(session.id) || (typeof session.runningKey === "string" && openSessionIds.includes(session.runningKey));
 
 export function paletteResumes(list: ResumableList, openSessionIds: readonly string[]): PaletteResume[] {
   return list.sessions
-    .filter((session) => !busy(session, openSessionIds))
+    .filter((session) => !isBusyResume(session, openSessionIds))
     .map((session) => ({ id: session.runningKey ?? session.id, title: session.title, mtime: session.mtime, cwd: list.cwd, account: session.account ?? null }));
 }
 

@@ -40,6 +40,11 @@ follows is a refusal to add one of those, and the reason sits next to it.
 - **Agents**: Claude first. The index shape is agent-neutral, so another agent's reader can be
   added later without a new view.
 - **Writes**: memory and temporary data only. Transcripts are read-only.
+- **What is listed**: conversations someone typed into. A transcript records how claude was started
+  (`entrypoint`): `cli` and `claude-desktop` are interactive, `sdk-cli` is `claude -p` and the SDK —
+  hooks and tools on a working machine start so many of those that they would bury everything else.
+  They are left out of the list and search by default, as are runs from temp directories; the index
+  keeps both, for the storage view.
 - **Containment**: the index (#3328) reads only the agent's own data root, which the server
   resolves; no route takes a path, and a conversation is asked for by its id, which is looked up
   in the index rather than joined onto a directory. So the index opens no surface in the sense of

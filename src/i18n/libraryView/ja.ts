@@ -1,0 +1,26 @@
+// The Library (#3329), out of the locale file, which is at its line cap.
+export const libraryViewJa = {
+  libraryView: {
+    title: "ライブラリ",
+    region: "ライブラリ",
+    close: "ライブラリを閉じる",
+    search: "会話を探す",
+    shortcuts: "/ 検索 · ↑↓ 移動 · Enter 再開 · Esc 閉じる",
+    kinds: { conversations: "会話" },
+    groups: { today: "今日", week: "今週", older: "それより前" },
+    indexing: "履歴の索引を作っています… {done} / {total} ファイル",
+    indexingStart: "履歴の索引を作っています…",
+    loading: "会話を読んでいます…",
+    loadFailed: "ライブラリの索引を読めませんでした。",
+    empty: "まだ会話がありません。Claude と話した会話がここに並びます。",
+    noMatch: "「{query}」に一致する会話はありません。言葉を短くするか、別の言葉で探してください。",
+    searching: "探しています…",
+    back: "一覧",
+    resume: "再開",
+    resumeBusy: "この会話はもう開いているか、別の画面が使っています。",
+    resumeNoCwd: "この会話には再開する作業ディレクトリがありません。",
+    untitled: "無題",
+    pick: "会話を選ぶと、ここで読めます。",
+    more: "さらに表示",
+  },
+};

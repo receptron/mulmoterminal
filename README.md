@@ -1867,6 +1867,14 @@ narrow and tall for one record you are discussing — and each position keeps it
 
 ## More features
 
+- **Library** — **More features** → **Library** lists every Claude conversation on this machine,
+  newest first, across all projects: its title, then the project, branch, PRs and when. Type to
+  search the conversations' text and titles (Japanese included); pick one to read it, and press
+  **Resume** (or `Enter`) to open it in a terminal in the directory it ran in. `/` focuses the
+  search, the arrow keys move. `claude -p` and SDK runs, and runs from temp directories, are left
+  out. The index behind it is built in the background the first time you open it and kept up to
+  date from what is appended; it lives in `~/.mulmoterminal/library/` and can be deleted at any
+  time (it is rebuilt). Design: [`docs/library-design.md`](docs/library-design.md).
 - **Skills viewer** — **More features** → **Skills** lists every Claude skill on disk in three
   columns — where it lives, its skills, its `SKILL.md`. The places are your `~/.claude/skills`,
   each enabled plugin (skills shown as `plugin:skill`), and the `.claude/skills` of each folder a

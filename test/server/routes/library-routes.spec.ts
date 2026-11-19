@@ -85,8 +85,13 @@ describe("query parsing", () => {
   });
 
   it("reads the filter flags, and ignores an empty cwd", () => {
-    expect(filterOf({})).toEqual({ includeTemporary: false, includeSidechains: false });
-    expect(filterOf({ cwd: "/w", temporary: "1", sidechains: "true" })).toEqual({ cwd: "/w", includeTemporary: true, includeSidechains: true });
-    expect(filterOf({ cwd: "", temporary: "yes" })).toEqual({ includeTemporary: false, includeSidechains: false });
+    expect(filterOf({})).toEqual({ includeTemporary: false, includeSidechains: false, includeAutomated: false });
+    expect(filterOf({ cwd: "/w", temporary: "1", sidechains: "true", automated: "1" })).toEqual({
+      cwd: "/w",
+      includeTemporary: true,
+      includeSidechains: true,
+      includeAutomated: true,
+    });
+    expect(filterOf({ cwd: "", temporary: "yes" })).toEqual({ includeTemporary: false, includeSidechains: false, includeAutomated: false });
   });
 });

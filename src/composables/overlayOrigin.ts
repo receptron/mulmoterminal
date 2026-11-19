@@ -40,6 +40,7 @@ const OVERLAY_ROUTES = new Set([
   "blueprintRun",
   "blueprintMarket",
   "skills",
+  "library",
   "processes",
 ]);
 

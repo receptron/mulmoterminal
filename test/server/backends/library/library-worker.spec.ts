@@ -122,7 +122,7 @@ describe("dispatchLibraryRequest", () => {
     await dispatchLibraryRequest(service, { id: "3", method: "search", args: [42, null] });
     await dispatchLibraryRequest(service, { id: "4", method: "conversation", args: [] });
     expect(calls).toEqual([
-      ["list", { cwd: "/w", includeTemporary: true, includeSidechains: false }, 5, 10],
+      ["list", { cwd: "/w", includeTemporary: true, includeSidechains: false, includeAutomated: false }, 5, 10],
       ["list", {}, 0, 0],
       ["search", "", {}, 0],
       ["conversation", ""],
@@ -138,6 +138,10 @@ describe("dispatchLibraryRequest", () => {
   });
 
   it("reads a filter only from the fields it knows", () => {
-    expect(filterArg({ cwd: 3, includeTemporary: "yes", includeSidechains: true, extra: 1 })).toEqual({ includeTemporary: false, includeSidechains: true });
+    expect(filterArg({ cwd: 3, includeTemporary: "yes", includeSidechains: true, extra: 1 })).toEqual({
+      includeTemporary: false,
+      includeSidechains: true,
+      includeAutomated: false,
+    });
   });
 });

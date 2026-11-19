@@ -17,6 +17,7 @@ export function filterArg(value: unknown): ConversationFilter {
   return {
     ...(typeof value.cwd === "string" ? { cwd: value.cwd } : {}),
     includeTemporary: value.includeTemporary === true,
+    includeAutomated: value.includeAutomated === true,
     includeSidechains: value.includeSidechains === true,
   };
 }

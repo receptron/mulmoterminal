@@ -23,6 +23,7 @@ import { filesTreeKo } from "./filesTree/ko";
 import { previewCodeCopyKo } from "./previewCodeCopy/ko";
 import { fileLinksKo } from "./fileLinks/ko";
 import { skillsViewKo } from "./skillsView/ko";
+import { libraryViewKo } from "./libraryView/ko";
 import { processesViewKo } from "./processesView/ko";
 import { githubBoardKo } from "./githubBoard/ko";
 
@@ -604,6 +605,7 @@ export const ko: Messages = {
     items: {
       rooms: { label: "Rooms", detail: "터미널끼리 나눈 원탁 대화" },
       blueprints: { label: "설계도", detail: "템플릿으로 앱이나 문서를 단계별로 만들기" },
+      library: { label: "라이브러리", detail: "모든 Claude 대화를 검색하고 바로 재개" },
       skills: { label: "Skills", detail: "~/.claude/skills 와 각 폴더의 스킬을 목록·검색" },
       processes: { label: "프로세스", detail: "각 세션에서 실행 중인 프로세스와 지울 수 있는 worktree" },
       worklog: { label: "Worklog", detail: "wiki에 있는 개발 작업 로그 (#worklog)" },
@@ -641,6 +643,7 @@ export const ko: Messages = {
   ...previewCodeCopyKo,
   ...fileLinksKo,
   ...skillsViewKo,
+  ...libraryViewKo,
   ...processesViewKo,
   ...githubBoardKo,
   tips: tipsKo,

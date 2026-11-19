@@ -1,0 +1,26 @@
+// The Library (#3329), out of the locale file, which is at its line cap.
+export const libraryViewZhTW = {
+  libraryView: {
+    title: "資料庫",
+    region: "資料庫",
+    close: "關閉資料庫",
+    search: "搜尋對話",
+    shortcuts: "/ 搜尋 · ↑↓ 移動 · Enter 繼續 · Esc 關閉",
+    kinds: { conversations: "對話" },
+    groups: { today: "今天", week: "本週", older: "更早" },
+    indexing: "正在為歷史建立索引… {done} / {total} 個檔案",
+    indexingStart: "正在為歷史建立索引…",
+    loading: "正在讀取對話…",
+    loadFailed: "無法讀取資料庫索引。",
+    empty: "還沒有對話。與 Claude 的對話會顯示在這裡。",
+    noMatch: "沒有與「{query}」相符的對話。請縮短或換個詞再試。",
+    searching: "正在搜尋…",
+    back: "列表",
+    resume: "繼續",
+    resumeBusy: "此對話已開啟，或正被其他視窗使用。",
+    resumeNoCwd: "此對話沒有可用於繼續的工作目錄。",
+    untitled: "無標題",
+    pick: "選擇一個對話即可在此閱讀。",
+    more: "顯示更多",
+  },
+};
