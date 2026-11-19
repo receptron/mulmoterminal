@@ -4,12 +4,14 @@ import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import { isRecord } from "../../../common/isRecord.js";
 import { readString } from "../../../common/readString.js";
 import { TERMINAL_AGENTS, type TerminalAgent } from "../../../common/sessionAgent.js";
-import type { LibraryConversation } from "../../../common/library.js";
+import { AUTOMATED_ENTRYPOINT, type LibraryConversation } from "../../../common/library.js";
 import { nullableNumber } from "./index-store.js";
 
 export interface ConversationFilter {
   cwd?: string;
   includeTemporary?: boolean;
+  /** `claude -p` and SDK runs (`AUTOMATED_ENTRYPOINT`), left out unless asked for. */
+  includeAutomated?: boolean;
   includeSidechains?: boolean;
 }
 
@@ -21,6 +23,10 @@ function filterClause(filter: ConversationFilter): { sql: string; params: SQLInp
     params.push(filter.cwd);
   }
   if (filter.includeTemporary !== true) parts.push("c.is_temporary = 0");
+  if (filter.includeAutomated !== true) {
+    parts.push("(c.entrypoint is null or c.entrypoint != ?)");
+    params.push(AUTOMATED_ENTRYPOINT);
+  }
   if (filter.includeSidechains !== true) parts.push("c.is_sidechain = 0");
   return { sql: parts.length ? parts.join(" and ") : "1 = 1", params };
 }
@@ -102,6 +108,7 @@ export function conversationOfRow(row: Record<string, unknown>): LibraryConversa
     isSidechain: Number(row.is_sidechain) === 1,
     parentId: stringOrNull(row.parent_id),
     isTemporary: Number(row.is_temporary) === 1,
+    entrypoint: stringOrNull(row.entrypoint),
   };
 }
 

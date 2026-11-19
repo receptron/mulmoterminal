@@ -1,0 +1,28 @@
+// The Library (#3329), out of the locale file, which is at its line cap.
+export const libraryViewEn = {
+  libraryView: {
+    title: "Library",
+    region: "Library",
+    close: "Close Library",
+    search: "Search conversations",
+    shortcuts: "/ search · ↑↓ move · Enter resume · Esc close",
+    kinds: { conversations: "Conversations" },
+    groups: { today: "Today", week: "This week", older: "Earlier" },
+    indexing: "Indexing your history… {done} of {total} files",
+    indexingStart: "Indexing your history…",
+    loading: "Reading your conversations…",
+    loadFailed: "Could not read the library index.",
+    empty: "No conversations yet. Conversations you have with Claude appear here.",
+    noMatch: "No conversation matches “{query}”. Try fewer or different words.",
+    searchFailed: "Could not search right now. Try again in a moment.",
+    searching: "Searching…",
+    back: "List",
+    resume: "Resume",
+    resumeBusy: "This conversation is already open, or another window has it.",
+    resumeUnchecked: "Could not check whether this conversation is open elsewhere, so it was not resumed. Try again in a moment.",
+    resumeNoCwd: "This conversation has no working directory to resume in.",
+    untitled: "Untitled",
+    pick: "Pick a conversation to read it here.",
+    more: "Show more",
+  },
+};

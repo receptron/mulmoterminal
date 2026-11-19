@@ -23,6 +23,7 @@ import { filesTreeZhCN } from "./filesTree/zh-CN";
 import { previewCodeCopyZhCN } from "./previewCodeCopy/zh-CN";
 import { fileLinksZhCN } from "./fileLinks/zh-CN";
 import { skillsViewZhCN } from "./skillsView/zh-CN";
+import { libraryViewZhCN } from "./libraryView/zh-CN";
 import { processesViewZhCN } from "./processesView/zh-CN";
 import { githubBoardZhCN } from "./githubBoard/zh-CN";
 
@@ -590,6 +591,7 @@ export const zhCN: Messages = {
     items: {
       rooms: { label: "Rooms", detail: "终端之间的圆桌对话" },
       blueprints: { label: "蓝图", detail: "按模板逐步构建应用或文档" },
+      library: { label: "资料库", detail: "搜索所有 Claude 对话，并可直接继续" },
       skills: { label: "Skills", detail: "列出并搜索 ~/.claude/skills 和各文件夹中的技能" },
       processes: { label: "进程", detail: "各会话中运行的进程，以及可删除的 worktree" },
       worklog: { label: "Worklog", detail: "wiki 中的开发工作日志（#worklog）" },
@@ -627,6 +629,7 @@ export const zhCN: Messages = {
   ...previewCodeCopyZhCN,
   ...fileLinksZhCN,
   ...skillsViewZhCN,
+  ...libraryViewZhCN,
   ...processesViewZhCN,
   ...githubBoardZhCN,
   tips: tipsZhCN,

@@ -1,0 +1,28 @@
+// The Library (#3329), out of the locale file, which is at its line cap.
+export const libraryViewKo = {
+  libraryView: {
+    title: "라이브러리",
+    region: "라이브러리",
+    close: "라이브러리 닫기",
+    search: "대화 검색",
+    shortcuts: "/ 검색 · ↑↓ 이동 · Enter 재개 · Esc 닫기",
+    kinds: { conversations: "대화" },
+    groups: { today: "오늘", week: "이번 주", older: "그 이전" },
+    indexing: "기록을 색인하는 중… {done} / {total} 파일",
+    indexingStart: "기록을 색인하는 중…",
+    loading: "대화를 읽는 중…",
+    loadFailed: "라이브러리 색인을 읽지 못했습니다.",
+    empty: "아직 대화가 없습니다. Claude와 나눈 대화가 여기에 표시됩니다.",
+    noMatch: "“{query}”와 일치하는 대화가 없습니다. 더 짧거나 다른 단어로 검색해 보세요.",
+    searchFailed: "지금은 검색할 수 없습니다. 잠시 후 다시 시도하세요.",
+    searching: "검색 중…",
+    back: "목록",
+    resume: "재개",
+    resumeBusy: "이 대화는 이미 열려 있거나 다른 창에서 사용 중입니다.",
+    resumeUnchecked: "이 대화가 다른 곳에서 열려 있는지 확인하지 못해 재개하지 않았습니다. 잠시 후 다시 시도하세요.",
+    resumeNoCwd: "이 대화에는 재개할 작업 디렉터리가 없습니다.",
+    untitled: "제목 없음",
+    pick: "대화를 선택하면 여기서 읽을 수 있습니다.",
+    more: "더 보기",
+  },
+};

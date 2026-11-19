@@ -228,3 +228,17 @@ export const useDirWorktrees = () =>
     (body) => ({ isGit: !!body.isGit, worktrees: rowsOf(body.worktrees, isWorktree) }),
     () => ({ isGit: false, worktrees: [] }),
   );
+
+/** One directory's resumable list read once, or null when it could not be read — which the reactive
+ *  lists above fold into "no sessions". A caller deciding whether a session is FREE needs the
+ *  difference: an unread list proves nothing about who holds a session. */
+export async function readResumableList(dir: string, agent: TerminalAgent): Promise<ResumableList | null> {
+  try {
+    const res = await fetchWithTimeout(agentSessionListUrl(agent, dir));
+    if (!res.ok) return null;
+    const body = await jsonBody(res);
+    return isUnknownArray(body.sessions) ? { sessions: rowsOf(body.sessions, isResumableSession), cwd: dirOf(body.cwd, dir) } : null;
+  } catch {
+    return null;
+  }
+}

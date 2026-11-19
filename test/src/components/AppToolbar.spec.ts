@@ -97,7 +97,12 @@ describe("AppToolbar entries for optional features", () => {
   });
 
   it("leaves Rooms and Worklog out of the feature menu while they are not set up, and keeps Blueprints, Skills and Processes", async () => {
-    expect(await featureMenuItems(await mountAt("/terminals"))).toEqual(["feature-menu-blueprints", "feature-menu-skills", "feature-menu-processes"]);
+    expect(await featureMenuItems(await mountAt("/terminals"))).toEqual([
+      "feature-menu-library",
+      "feature-menu-blueprints",
+      "feature-menu-skills",
+      "feature-menu-processes",
+    ]);
   });
 
   it.each(["Rooms", "Worklog", "Blueprints"])("offers no %s button on the toolbar itself", async (label) => {
@@ -120,6 +125,7 @@ describe("AppToolbar entries for optional features", () => {
   it("offers Worklog in the feature menu once it is turned on", async () => {
     setWorklogEnabled(true);
     expect(await featureMenuItems(await mountAt("/terminals"))).toEqual([
+      "feature-menu-library",
       "feature-menu-blueprints",
       "feature-menu-skills",
       "feature-menu-processes",
@@ -131,6 +137,7 @@ describe("AppToolbar entries for optional features", () => {
     roomsOnServer = ["standup"];
     expect(await featureMenuItems(await mountAt("/terminals"))).toEqual([
       "feature-menu-rooms",
+      "feature-menu-library",
       "feature-menu-blueprints",
       "feature-menu-skills",
       "feature-menu-processes",
@@ -139,6 +146,7 @@ describe("AppToolbar entries for optional features", () => {
 
   it.each([
     ["rooms", "/rooms", undefined],
+    ["library", "/library", undefined],
     ["blueprints", "/blueprints", undefined],
     ["skills", "/skills", undefined],
     ["processes", "/processes", undefined],

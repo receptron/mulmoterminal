@@ -56,6 +56,7 @@ export const emptyConversationState = (): ConversationState => ({
   hookErrors: 0,
   userTurns: 0,
   isSidechain: false,
+  entrypoint: null,
 });
 
 export const conversationTitle = (state: ConversationState): string | null => state.customTitle ?? state.aiTitle ?? state.firstPrompt;
@@ -89,6 +90,7 @@ function foldTime(state: ConversationState, record: Record<string, unknown>): vo
 // The first cwd is where the conversation began; the newest branch is where it ended up.
 function foldPlace(state: ConversationState, record: Record<string, unknown>): void {
   state.cwd ??= nonEmpty(record.cwd);
+  state.entrypoint ??= nonEmpty(record.entrypoint);
   state.gitBranch = nonEmpty(record.gitBranch) ?? state.gitBranch;
   if (record.isSidechain === true) state.isSidechain = true;
 }
@@ -150,7 +152,7 @@ const isPrLink = (value: unknown): value is LibraryPrLink =>
  *  written it, so anything off-shape means "fold the transcript again". */
 export function isConversationState(value: unknown): value is ConversationState {
   if (!isRecord(value)) return false;
-  const nullableStrings = ["aiTitle", "customTitle", "firstPrompt", "cwd", "gitBranch"];
+  const nullableStrings = ["aiTitle", "customTitle", "firstPrompt", "cwd", "gitBranch", "entrypoint"];
   const nullableNumbers = ["costUsd", "linesAdded", "linesRemoved", "startedAt", "endedAt"];
   return (
     nullableStrings.every((key) => value[key] === null || typeof value[key] === "string") &&
