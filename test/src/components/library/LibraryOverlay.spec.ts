@@ -6,7 +6,8 @@ import { mount, flushPromises } from "@vue/test-utils";
 import type { LibraryConversation, LibraryIndexStatus, LibrarySearchHit } from "../../../../common/library";
 import type { ResumableList } from "../../../../src/composables/useDirLists";
 
-vi.mock("../../../../src/composables/useLibraryView", () => ({ useLibraryView: () => ({ isOpen: ref(true), close: vi.fn() }) }));
+const libraryOpen = ref(true);
+vi.mock("../../../../src/composables/useLibraryView", () => ({ useLibraryView: () => ({ isOpen: libraryOpen, close: vi.fn() }) }));
 
 let page: LibraryConversation[] = [];
 let status: LibraryIndexStatus | null = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
@@ -70,6 +71,7 @@ const press = async (key: string) => {
 };
 
 beforeEach(() => {
+  libraryOpen.value = true;
   page = [conversation("a", "Burn subtitles"), conversation("b", "CI under ten minutes", { endedAt: NOW - 30 * 24 * 3_600_000 })];
   status = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
   hits = [];
@@ -268,4 +270,18 @@ describe("LibraryOverlay", () => {
     await flushPromises();
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toBe("CI under ten minutes");
   }, 10_000);
+
+  it("drops a resume still checking when the screen closes", async () => {
+    let release: () => void = () => {};
+    loadGate = new Promise((resolve) => (release = resolve));
+    await mountLibrary();
+    await press("Enter");
+    libraryOpen.value = false;
+    await flushPromises();
+    libraryOpen.value = true;
+    await flushPromises();
+    release();
+    await flushPromises();
+    expect(opened).toEqual([]);
+  });
 });

@@ -45,10 +45,13 @@ const progress = computed(() => {
   return s.filesTotal > 0 ? t("libraryView.indexing", { done: s.filesDone, total: s.filesTotal }) : t("libraryView.indexingStart");
 });
 
+/** Bumped on every open and close: a resume that began before either must not land after it. */
+let openings = 0;
 // Immediate, so a screen opened by loading /library directly starts in the search field too.
 watch(
   isOpen,
   async (open) => {
+    openings++;
     chosenKey.value = null;
     readerShown.value = false;
     notice.value = null;
@@ -92,7 +95,9 @@ async function resume(): Promise<void> {
 }
 
 async function resumeConversation(conversation: LibraryConversation): Promise<void> {
+  const opening = openings;
   const list = conversation.cwd === null ? null : await readResumableList(conversation.cwd, "claude");
+  if (opening !== openings) return; // the screen was closed (and maybe reopened) while this checked
   const decision = libraryResume(conversation, list, paletteTerminals.value?.openSessionIds() ?? []);
   if (decision.kind !== "open") {
     notice.value = t(RESUME_REFUSALS[decision.kind]);
