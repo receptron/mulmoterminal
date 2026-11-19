@@ -11,7 +11,7 @@ import {
   changeUnlocked,
   MARKS_LOCK_STALE_MS,
   readLibraryMarks,
-  takeOverIfStill,
+  removeIfOwnedBy,
   tryAcquire,
   withMarksLock,
 } from "../../../../server/backends/library/library-marks";
@@ -120,7 +120,7 @@ describe("the cross-process lock", () => {
     const lock = `${file}.lock`;
     mkdirSync(lock, { recursive: true });
     writeFileSync(`${lock}/owner`, "fresh-holder"); // judged stale under another owner, now someone else's
-    await takeOverIfStill(lock, "the-stale-one");
+    await removeIfOwnedBy(lock, "the-stale-one");
     expect(readFileSync(`${lock}/owner`, "utf8")).toBe("fresh-holder");
   });
 
@@ -132,5 +132,14 @@ describe("the cross-process lock", () => {
     expect(readFileSync(`${lock}/owner`, "utf8")).toBe("first");
     expect(await tryAcquire(lock, "second")).toBe(false);
     expect(readFileSync(`${lock}/owner`, "utf8")).toBe("first"); // the holder's token is untouched
+  });
+
+  it("removes its own lock on release, by the same owner check", async () => {
+    const file = scratchFile();
+    const lock = `${file}.lock`;
+    mkdirSync(path.dirname(lock), { recursive: true });
+    expect(await tryAcquire(lock, "me")).toBe(true);
+    await removeIfOwnedBy(lock, "me");
+    expect(await tryAcquire(lock, "next")).toBe(true); // it was really released
   });
 });

@@ -79,18 +79,16 @@ export async function withMarksLock<T>(file: string, work: (stillHeld: () => Pro
 
 const ownerFile = (lock: string): string => path.join(lock, "owner");
 
-/** Removes the lock only if it is still this holder's. A holder paused past the stale time may find
- *  its lock taken over; removing it then would let a third process in beside the new holder. */
-async function release(lock: string, owner: string): Promise<void> {
-  const holder = await fs.readFile(ownerFile(lock), "utf8").catch(() => null);
-  if (holder === owner) await fs.rm(lock, { recursive: true, force: true });
-}
+/** Removes the lock only if it is still this holder's — by the same move-aside-and-check as a
+ *  takeover, so no other holder's lock can be removed between a check and a delete. A holder paused
+ *  past the stale time may find its lock taken over; removing it then would let a third process in. */
+const release = (lock: string, owner: string): Promise<void> => removeIfOwnedBy(lock, owner);
 
 async function acquire(lock: string, owner: string): Promise<void> {
   for (let attempt = 0; attempt < MARKS_LOCK_ATTEMPTS; attempt += 1) {
     if (await tryAcquire(lock, owner)) return;
     const staleOwner = await staleOwnerOf(lock);
-    if (staleOwner !== null) await takeOverIfStill(lock, staleOwner);
+    if (staleOwner !== null) await removeIfOwnedBy(lock, staleOwner);
     else await new Promise((resolve) => setTimeout(resolve, MARKS_LOCK_RETRY_MS));
   }
   throw new Error(`${lock} is held by another process`);
@@ -126,11 +124,11 @@ async function staleOwnerOf(lock: string): Promise<string | null> {
   }
 }
 
-/** Takes the abandoned lock out of the way only if it is STILL that one. Two processes can find the
- *  same stale lock; removing it by path would let the slower one delete the lock the faster one has
- *  just made. So it is moved aside first (atomic), checked, and put back if it turned out to be new.
- *  Should even that lose a race, the holder whose lock moved is refused at its write (`stillHeld`). */
-export async function takeOverIfStill(lock: string, staleOwner: string): Promise<void> {
+/** Removes the lock only if `owner` still holds it: moved aside first (atomic), checked, and put back
+ *  if it turned out to be someone else's. Used to release one's own lock and to take an abandoned one
+ *  out of the way — in both, removing by path could delete a lock another holder has just made. Should
+ *  even the put-back lose a race, the holder whose lock moved is refused at its write (`stillHeld`). */
+export async function removeIfOwnedBy(lock: string, owner: string): Promise<void> {
   const aside = `${lock}.${randomUUID()}.aside`;
   try {
     await fs.rename(lock, aside);
@@ -138,7 +136,7 @@ export async function takeOverIfStill(lock: string, staleOwner: string): Promise
     return; // already gone or replaced: the next attempt sees what is there now
   }
   const moved = await fs.readFile(ownerFile(aside), "utf8").catch(() => "");
-  if (moved === staleOwner) {
+  if (moved === owner) {
     await fs.rm(aside, { recursive: true, force: true });
     return;
   }
