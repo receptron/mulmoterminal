@@ -108,7 +108,8 @@ async function focusRequested(): Promise<void> {
   if (request === null) return;
   const opening = openings;
   const loaded = [...pinned.value, ...conversations.value];
-  const listed = loaded.find((c) => c.id === request.session && c.cwd === request.cwd);
+  // Only an exact copy is taken from the list; anything else is the server's choice (the newest).
+  const listed = request.cwd === null ? undefined : loaded.find((c) => c.id === request.session && c.cwd === request.cwd);
   const found = listed ?? (await loadLibraryConversation(request.session, request.cwd));
   // A newer request, or a newer open, decides instead.
   if (found === null || mine !== focusRequests || opening !== openings) return;

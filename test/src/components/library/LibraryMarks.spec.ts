@@ -54,7 +54,8 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
   loadLibraryConversation: async (id: string, cwd: string | null = null) => {
     const gate = conversationGates.get(id) ?? conversationGate;
     await gate;
-    return page.find((c) => c.id === id && c.cwd === cwd) ?? page.find((c) => c.id === id) ?? null;
+    // As the server answers: the copy in `cwd` when named and present, else the newest (the page is newest first).
+    return (cwd === null ? undefined : page.find((c) => c.id === id && c.cwd === cwd)) ?? page.find((c) => c.id === id) ?? null;
   },
   saveLibraryMark: async (id: string, change: { pinned?: boolean; name?: string | null }) => {
     saved.push({ id, change });
@@ -581,5 +582,15 @@ describe("LibraryOverlay pins and names", () => {
     await flushPromises();
     expect(wrapper.find("[data-testid=library-reader] h2").text()).not.toContain("withdrawn");
     vi.mocked(api.loadLibraryPage).mockRestore();
+  });
+
+  it("opens the newest copy, as the server picks it, when no project is named", async () => {
+    page = [conversation("twin", "Newer copy"), conversation("twin", "Older copy without a project", { cwd: null, endedAt: NOW - 3_600_000 }), ...page];
+    const wrapper = await mountLibrary();
+    requested = { session: "twin", cwd: null };
+    const { router } = await import("../../../../src/router");
+    await router.push({ name: "library", query: { session: "twin" } });
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Newer copy");
   });
 });
