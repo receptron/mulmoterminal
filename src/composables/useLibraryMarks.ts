@@ -4,9 +4,6 @@ import { ref, shallowRef, watch, type Ref } from "vue";
 import { emptyLibraryMarks, type LibraryConversation, type LibraryMarkChange, type LibraryMarks } from "../../common/library";
 import { loadLibraryConversation, loadLibraryMarks, saveLibraryMark } from "./libraryApi";
 
-/** Pins shown at the top of the list; past this they stay pinned but are not read up front. */
-export const PINNED_SHOWN = 20;
-
 export function useLibraryMarks(isOpen: Ref<boolean>) {
   const marks = shallowRef<LibraryMarks>(emptyLibraryMarks());
   const pinned = shallowRef<LibraryConversation[]>([]);
@@ -21,7 +18,7 @@ export function useLibraryMarks(isOpen: Ref<boolean>) {
 
   async function readPinned(ids: readonly string[]): Promise<void> {
     const mine = ++request;
-    const found = await Promise.all(ids.slice(0, PINNED_SHOWN).map((id) => loadLibraryConversation(id)));
+    const found = await Promise.all(ids.map((id) => loadLibraryConversation(id)));
     if (mine !== request) return;
     pinned.value = found.filter((conversation): conversation is LibraryConversation => conversation !== null);
   }
@@ -61,6 +58,7 @@ export function useLibraryMarks(isOpen: Ref<boolean>) {
     }
     const pinsChanged = saved.pinned.join("\n") !== marks.value.pinned.join("\n");
     marks.value = saved;
+    loadFailed.value = false; // the answer is the file as it now is, so it can be read again
     // By what the answer says, not by what this change asked: a pin whose own answer was superseded
     // reaches the screen through the next answer, which holds it.
     if (pinsChanged) await readPinned(saved.pinned);

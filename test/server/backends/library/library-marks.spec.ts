@@ -5,7 +5,15 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { applyMarkChange, changeLibraryMark, readLibraryMarks } from "../../../../server/backends/library/library-marks";
+import {
+  applyMarkChange,
+  changeLibraryMark,
+  changeUnlocked,
+  MARKS_LOCK_STALE_MS,
+  readLibraryMarks,
+  withMarksLock,
+} from "../../../../server/backends/library/library-marks";
+import { mkdirSync, utimesSync } from "node:fs";
 import { emptyLibraryMarks, LIBRARY_NAME_MAX } from "../../../../common/library";
 
 const dirs: string[] = [];
@@ -61,5 +69,25 @@ describe("the marks file", () => {
     const file = scratchFile();
     await Promise.all([changeLibraryMark("a", { pinned: true }, file), changeLibraryMark("b", { name: "Bee" }, file)]);
     expect(await readLibraryMarks(file)).toEqual({ pinned: ["a"], names: { b: "Bee" } });
+  });
+});
+
+describe("the cross-process lock", () => {
+  // Two servers have no in-process serializer in common; only the lock keeps their changes apart.
+  it("keeps both changes when two holders that share no serializer change marks at once", async () => {
+    const file = scratchFile();
+    await Promise.all([
+      withMarksLock(file, () => changeUnlocked("a", { pinned: true }, file)),
+      withMarksLock(file, () => changeUnlocked("b", { name: "Bee" }, file)),
+    ]);
+    expect(await readLibraryMarks(file)).toEqual({ pinned: ["a"], names: { b: "Bee" } });
+  });
+
+  it("takes over a lock left by a process that died holding it", async () => {
+    const file = scratchFile();
+    mkdirSync(`${file}.lock`, { recursive: true });
+    const old = (Date.now() - MARKS_LOCK_STALE_MS * 2) / 1000;
+    utimesSync(`${file}.lock`, old, old);
+    expect(await changeLibraryMark("a", { pinned: true }, file)).toEqual({ pinned: ["a"], names: {} });
   });
 });

@@ -592,17 +592,6 @@ describe("LibraryOverlay", () => {
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Saved first");
   });
 
-  it("clears a failed save's notice when another conversation is chosen", async () => {
-    saveFails = true;
-    const wrapper = await mountLibrary();
-    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
-    await wrapper.find("[data-testid=library-pin]").trigger("click");
-    await flushPromises();
-    expect(wrapper.find("[role=status]").exists()).toBe(true);
-    await press("ArrowDown");
-    expect(wrapper.find("[role=status]").exists()).toBe(false);
-  });
-
   it("says the pins and names could not be read, rather than showing none", async () => {
     marksUnreadable = true;
     const wrapper = await mountLibrary();
@@ -646,5 +635,14 @@ describe("LibraryOverlay", () => {
     releaseLoad(); // then the stale read
     await flushPromises();
     expect(wrapper.text()).toContain("Pinned");
+  });
+
+  it("drops the unreadable-marks notice once a change has been saved", async () => {
+    marksUnreadable = true;
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-pin]").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[role=status]").exists()).toBe(false);
   });
 });

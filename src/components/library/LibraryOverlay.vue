@@ -37,7 +37,9 @@ const now = ref(Date.now());
 
 /** What the list shows right now, in order — what the arrow keys walk. */
 const shown = computed((): LibraryConversation[] =>
-  hits.value ? hits.value.map((hit) => hit.conversation) : listedInOrder(groupConversations(conversations.value, now.value, pinned.value)),
+  hits.value
+    ? hits.value.map((hit) => hit.conversation)
+    : listedInOrder(groupConversations(conversations.value, now.value, pinned.value, new Set(marks.value.pinned))),
 );
 // The chosen row while it is still shown, else the first one: Enter always has something to act on.
 const selected = computed(() => shown.value.find((c) => conversationKey(c) === chosenKey.value) ?? shown.value[0] ?? null);
@@ -219,6 +221,7 @@ onBeforeUnmount(() => {
             :now="now"
             :has-more="hasMore"
             :pinned="pinned"
+            :pinned-ids="marks.pinned"
             :names="marks.names"
             @select="select"
             @more="loadMore"

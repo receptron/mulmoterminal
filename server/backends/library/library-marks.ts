@@ -36,11 +36,54 @@ export async function readLibraryMarks(file: string = LIBRARY_MARKS_FILE): Promi
 
 const serialize = createKeySerializer();
 
-/** Read, change, write — one at a time per file, so two quick clicks cannot lose one of them. */
+/** How long a lock may be held before it is taken as left by a process that died holding it. */
+export const MARKS_LOCK_STALE_MS = 10_000;
+const MARKS_LOCK_RETRY_MS = 25;
+const MARKS_LOCK_ATTEMPTS = 200;
+
+/** Read, change, write — one at a time per file within this process, and across processes by a lock
+ *  directory beside the file: several servers share one HOME, and each would otherwise read the same
+ *  marks and replace the other's change. `mkdir` is the lock because it is atomic everywhere. */
 export function changeLibraryMark(id: string, change: LibraryMarkChange, file: string = LIBRARY_MARKS_FILE): Promise<LibraryMarks> {
-  return serialize(file, async () => {
-    const next = applyMarkChange(await readLibraryMarks(file), id, change);
-    await writeFileAtomic(file, `${JSON.stringify(next, null, 2)}\n`);
-    return next;
-  });
+  return serialize(file, () => withMarksLock(file, () => changeUnlocked(id, change, file)));
+}
+
+/** The change itself, holding no lock — exported only for the specs that race two of them. */
+export async function changeUnlocked(id: string, change: LibraryMarkChange, file: string): Promise<LibraryMarks> {
+  const next = applyMarkChange(await readLibraryMarks(file), id, change);
+  await writeFileAtomic(file, `${JSON.stringify(next, null, 2)}\n`);
+  return next;
+}
+
+export async function withMarksLock<T>(file: string, work: () => Promise<T>): Promise<T> {
+  const lock = `${file}.lock`;
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await acquire(lock);
+  try {
+    return await work();
+  } finally {
+    await fs.rm(lock, { recursive: true, force: true });
+  }
+}
+
+async function acquire(lock: string): Promise<void> {
+  for (let attempt = 0; attempt < MARKS_LOCK_ATTEMPTS; attempt += 1) {
+    try {
+      await fs.mkdir(lock);
+      return;
+    } catch (err) {
+      if (!(err instanceof Error && "code" in err && err.code === "EEXIST")) throw err;
+      if (await isStale(lock)) await fs.rm(lock, { recursive: true, force: true });
+      else await new Promise((resolve) => setTimeout(resolve, MARKS_LOCK_RETRY_MS));
+    }
+  }
+  throw new Error(`${lock} is held by another process`);
+}
+
+async function isStale(lock: string): Promise<boolean> {
+  try {
+    return Date.now() - (await fs.stat(lock)).mtimeMs > MARKS_LOCK_STALE_MS;
+  } catch {
+    return false; // released between the two calls: try again
+  }
 }

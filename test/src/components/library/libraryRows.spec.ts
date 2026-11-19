@@ -158,6 +158,12 @@ describe("pinned conversations", () => {
     expect(listedInOrder(groups).map((x) => x.id)).toEqual(["b", "a", "c"]);
   });
 
+  it("keep a pinned conversation out of the time groups even when it could not be read", () => {
+    const a = conversation({ id: "a", endedAt: NOW });
+    const b = conversation({ id: "b", endedAt: NOW });
+    expect(groupConversations([a, b], NOW, [], new Set(["b"])).map((g) => [g.group, g.conversations.map((x) => x.id)])).toEqual([["today", ["a"]]]);
+  });
+
   it("show the user's name over the agent's title", () => {
     expect(displayTitle(conversation({ id: "a", title: "Agent title" }), { a: "Mine" })).toBe("Mine");
     expect(displayTitle(conversation({ id: "a", title: "Agent title" }), {})).toBe("Agent title");

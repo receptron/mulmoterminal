@@ -13,12 +13,13 @@ const props = defineProps<{
   now: number;
   hasMore: boolean;
   pinned: readonly LibraryConversation[];
+  pinnedIds: readonly string[];
   names: Readonly<Record<string, string>>;
 }>();
 const emit = defineEmits<{ select: [conversation: LibraryConversation]; more: [] }>();
 const { t, locale } = useI18n();
 
-const groups = computed(() => groupConversations(props.conversations, props.now, props.pinned));
+const groups = computed(() => groupConversations(props.conversations, props.now, props.pinned, new Set(props.pinnedIds)));
 const meta = (conversation: LibraryConversation): string => metaParts(conversation, props.now, locale.value).join(" · ");
 const title = (conversation: LibraryConversation): string => displayTitle(conversation, props.names) ?? t("libraryView.untitled");
 </script>

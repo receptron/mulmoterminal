@@ -48,8 +48,10 @@ export function groupConversations(
   conversations: readonly LibraryConversation[],
   now: number,
   pinned: readonly LibraryConversation[] = [],
+  /** Every pinned id — also the ones whose conversation could not be read — so none falls back into a
+   *  time group. */
+  pinnedIds: ReadonlySet<string> = new Set(pinned.map((c) => c.id)),
 ): LibraryGroupRows[] {
-  const pinnedIds = new Set(pinned.map((c) => c.id));
   const rest = conversations.filter((c) => !pinnedIds.has(c.id));
   const byTime = TIME_GROUPS.map((group) => ({ group, conversations: rest.filter((c) => groupOf(c.endedAt, now) === group) }));
   return [{ group: "pinned" as const, conversations: [...pinned] }, ...byTime].filter((rows) => rows.conversations.length > 0);
