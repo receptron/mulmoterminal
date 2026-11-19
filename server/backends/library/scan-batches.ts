@@ -3,6 +3,7 @@
 // every SCAN_BATCH_ITEMS items are committed as their own scan, ending at the byte where the next
 // record starts, and the next batch continues from there.
 import type { FileHandle } from "node:fs/promises";
+import { isRecord } from "../../../common/isRecord.js";
 import { forEachJsonlRecordIn } from "../../infra/fs/jsonl-file.js";
 
 export const SCAN_BATCH_ITEMS = 1000;
@@ -42,11 +43,30 @@ export async function scanInBatches<T>(
     if (!commit({ ...batch, to })) throw new ScanOvertaken();
     batch = { items: [], to, restart: false, expectedScannedTo: to };
   };
-  const end = await forEachJsonlRecordIn(handle, { from: start.from, to: start.to, atLineStart: true }, (record, at) => {
-    if (batch.items.length >= SCAN_BATCH_ITEMS) flush(at);
+  const fold = (record: Record<string, unknown>): void => {
     const item = take(record);
     if (item !== null) batch.items.push(item);
+  };
+  const end = await forEachJsonlRecordIn(handle, { from: start.from, to: start.to, atLineStart: true }, (record, at) => {
+    if (batch.items.length >= SCAN_BATCH_ITEMS) flush(at);
+    fold(record);
   });
-  flush(end);
-  return end;
+  // The measured end is not an arbitrary cut: what is left before it is the file's last line. A
+  // complete record there is folded as it would be at EOF; half of one waits for the rest.
+  const last = end < start.to ? await finalRecord(handle, end, start.to) : null;
+  if (last !== null) fold(last);
+  const scannedTo = last === null ? end : start.to;
+  flush(scannedTo);
+  return scannedTo;
+}
+
+async function finalRecord(handle: FileHandle, from: number, to: number): Promise<Record<string, unknown> | null> {
+  const buffer = Buffer.alloc(to - from);
+  const { bytesRead } = await handle.read(buffer, 0, to - from, from);
+  try {
+    const parsed: unknown = JSON.parse(buffer.subarray(0, bytesRead).toString("utf8"));
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null; // still being written
+  }
 }

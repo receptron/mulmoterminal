@@ -290,6 +290,16 @@ describe("listConversations and searchLibrary", () => {
     expect(searchLibrary(db, "   ", {}, 10)).toEqual([]);
   });
 
+  it("never matches a temporary conversation by its prompt history, even when temporary ones are asked for", () => {
+    const db = freshDb();
+    applyHistoryScan(db, {
+      ...{ path: "/h", stamp: { size: 5, mtimeMs: 1 }, head: "h", owner: OWNER, expectedScannedTo: null, to: 5, restart: true },
+      prompts: [{ sessionId: "tmp", text: "typed into a fixture", at: 1 }],
+    });
+    commit(db, "tmp", { isTemporary: true, state: { aiTitle: "fixture run" } });
+    expect(searchLibrary(db, "into a fixture", { includeTemporary: true }, 10)).toEqual([]);
+  });
+
   it("answers one hit per conversation, up to the limit", () => {
     const db = freshDb();
     commit(db, "a", { state: { endedAt: 1 }, turns: [turn("needle one"), turn("needle two")] });

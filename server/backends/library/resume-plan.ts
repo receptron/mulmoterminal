@@ -23,7 +23,7 @@ export function resumePlan(remembered: RememberedOffset | null, stamp: FileStamp
 }
 
 /** The two ends of what was read before, and the same two places in the file now. A `tail` of null
- *  means it was not recorded (or not asked for), and only the head is compared. */
+ *  means it was not recorded (or not asked for). */
 export interface ReadEnds {
   head: string;
   tail: string | null;
@@ -35,5 +35,7 @@ export interface ReadEnds {
 export function unlessReplaced(plan: ResumePlan, remembered: ReadEnds | null, current: ReadEnds): ResumePlan {
   if (plan.kind !== "resume") return plan;
   if (remembered === null || remembered.head !== current.head) return { kind: "restart" };
-  return remembered.tail !== null && remembered.tail !== current.tail ? { kind: "restart" } : plan;
+  // No tail means the last pass stopped between batches; with only the head to go on, a rewrite
+  // could not be told from an append, so the file is read again.
+  return remembered.tail !== null && remembered.tail === current.tail ? plan : { kind: "restart" };
 }

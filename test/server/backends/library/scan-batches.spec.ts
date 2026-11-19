@@ -78,6 +78,32 @@ describe("scanInBatches", () => {
     expect(commits).toEqual([{ items: [0, 1], to: measured, restart: true, expectedScannedTo: null }]);
   });
 
+  it("folds a complete last record that has no newline, and leaves half of one", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "mt-scan-batches-"));
+    dirs.push(dir);
+    const commitsFor = async (body: string): Promise<BatchCommit<number>[]> => {
+      const file = path.join(dir, "f.jsonl");
+      writeFileSync(file, body);
+      const handle = await open(file, "r");
+      const commits: BatchCommit<number>[] = [];
+      try {
+        await scanInBatches(
+          handle,
+          { from: 0, to: Buffer.byteLength(body), restart: true, expectedScannedTo: null },
+          take,
+          (batch) => (commits.push(batch), true),
+        );
+      } finally {
+        await handle.close();
+      }
+      return commits;
+    };
+    const whole = `${JSON.stringify({ n: 0 })}\n${JSON.stringify({ n: 1 })}`;
+    expect(await commitsFor(whole)).toEqual([{ items: [0, 1], to: Buffer.byteLength(whole), restart: true, expectedScannedTo: null }]);
+    const half = `${JSON.stringify({ n: 0 })}\n{"n": 1`;
+    expect(await commitsFor(half)).toEqual([{ items: [0], to: Buffer.byteLength(`${JSON.stringify({ n: 0 })}\n`), restart: true, expectedScannedTo: null }]);
+  });
+
   it("commits once, with nothing, for an empty range", async () => {
     const { handle } = await fileOf([]);
     const commits: BatchCommit<number>[] = [];

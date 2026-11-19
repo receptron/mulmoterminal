@@ -91,7 +91,7 @@ describe("unlessReplaced", () => {
 
   it.each([
     ["the same ends", { head: "h", tail: "t" }, { head: "h", tail: "t" }, resume],
-    ["no tail recorded: head alone decides", { head: "h", tail: null }, { head: "h", tail: null }, resume],
+    ["no tail recorded (a pass stopped between batches)", { head: "h", tail: null }, { head: "h", tail: "t" }, { kind: "restart" }],
     ["a different head", { head: "h", tail: "t" }, { head: "x", tail: "t" }, { kind: "restart" }],
     ["a different tail", { head: "h", tail: "t" }, { head: "h", tail: "x" }, { kind: "restart" }],
     ["nothing remembered", null, { head: "h", tail: null }, { kind: "restart" }],

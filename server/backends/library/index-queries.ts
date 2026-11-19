@@ -50,14 +50,16 @@ const OWNS_TURN = "c.id = t.conv and (t.path is null or t.path = c.path)";
 const turnHit = (pattern: SearchPattern): string =>
   pattern.match === null ? "t.text like ? escape '\\'" : "t.id in (select rowid from turns_fts where turns_fts match ?)";
 
-/** Conversations with a matching turn, newest first. The matching conversations are found BEFORE
+/** Conversations with a matching turn, newest first. A temporary conversation never matches by its
+ *  text — not by a prompt-history row either, which may have arrived before it was known to be one. The matching conversations are found BEFORE
  *  joining anything: grouping the joined turns instead carried every match's text through the sort,
  *  which was most of the time a common word took. */
 export function searchTurns(db: DatabaseSync, pattern: SearchPattern, filter: ConversationFilter, limit: number): Record<string, unknown>[] {
   const where = filterClause(filter);
   const sql = `with hits as (select distinct t.conv, t.path from turns t where ${turnHit(pattern)})
     select c.* from conversations c where c.key in (
-      select owner.key from hits h join conversations owner on owner.id = h.conv and (h.path is null or h.path = owner.path))
+      select owner.key from hits h join conversations owner on owner.id = h.conv and (h.path is null or h.path = owner.path)
+      where owner.is_temporary = 0)
     and ${where.sql} order by c.ended_at desc nulls last limit ?`;
   return db.prepare(sql).all(pattern.match ?? pattern.like, ...where.params, limit);
 }

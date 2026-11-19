@@ -92,7 +92,7 @@ async function startOf(db: DatabaseSync, path: string, opened: OpenedFile): Prom
   const plan = resumePlan(mark, stamp);
   if (plan.kind === "skip") return null;
   const head = await opened.head();
-  const tail = plan.kind === "resume" && mark?.tail ? await opened.tailAt(plan.from) : null;
+  const tail = plan.kind === "resume" ? await opened.tailAt(plan.from) : null;
   return { mark, plan: unlessReplaced(plan, mark, { head, tail }), head, stamp };
 }
 
