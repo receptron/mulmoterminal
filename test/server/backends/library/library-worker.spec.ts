@@ -41,6 +41,30 @@ describe("the library worker", () => {
     expect(await client.call("conversation", ["absent"])).toBeNull();
   }, 30_000);
 
+  // Two servers opening the Library at the same moment on one new index file. A smoke test: threads in
+  // one process rarely collide the way two server processes did, so the open retry itself was checked
+  // by racing two processes, not here.
+  it("lets two workers open and share the same new index", async () => {
+    const { root, projectsRoot, historyFile } = scratch();
+    const file = path.join(root, "index.db");
+    const clients = [1, 2].map(() => createLibraryClient({ file, sources: { projectsRoot, historyFile } }));
+    clients.forEach((client) => cleanups.push(() => client.close()));
+    const statuses = await Promise.all(clients.map((client) => client.call("status", [])));
+    expect(statuses.every(isRecord)).toBe(true);
+  }, 30_000);
+
+  it("answers on a new worker even while the old one is still exiting", async () => {
+    const { root, projectsRoot, historyFile } = scratch();
+    const client = createLibraryClient({ file: path.join(root, "index.db"), sources: { projectsRoot, historyFile } });
+    cleanups.push(() => client.close());
+    await client.call("status", []);
+    const closing = client.close();
+    // Starts a second worker before the first one's `exit` has arrived; that event must not reach it.
+    const answer = client.call("status", []);
+    await closing;
+    await expect(answer).resolves.toSatisfy(isRecord);
+  }, 30_000);
+
   it("rejects a call when the index cannot be opened", async () => {
     const { root, projectsRoot, historyFile } = scratch();
     // A directory where the database file should be: SQLite cannot open it.

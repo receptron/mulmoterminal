@@ -2,6 +2,7 @@
 // background whenever it is asked for and has not been for a while.
 import { mkdirSync, realpathSync } from "node:fs";
 import os from "node:os";
+import { setTimeout } from "node:timers/promises";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import type { LibraryIndexStatus } from "../../../common/library.js";
@@ -63,11 +64,25 @@ export interface LibrarySources {
 
 export const defaultLibrarySources = (): LibrarySources => ({ projectsRoot: claudeProjectsRoot(), historyFile: claudeHistoryFile() });
 
+/** Attempts at opening, and the wait between them. Switching a NEW file to WAL is refused outright —
+ *  without waiting on the busy timeout — while another server is doing the same, so two servers
+ *  opening the Library at once need a retry, not a longer timeout. */
+const OPEN_ATTEMPTS = 5;
+const OPEN_RETRY_MS = 200;
+
 /** Opens (creating if needed) the index file and brings its schema up to date. Throws when it cannot. */
 export async function openLibraryIndex(file: string, owner: string, sources: LibrarySources): Promise<LibraryIndex> {
   const { DatabaseSync } = await import("node:sqlite");
   mkdirSync(path.dirname(file), { recursive: true });
-  const db = new DatabaseSync(file);
-  prepareLibraryStore(db);
-  return createLibraryIndex(db, { ...sources, temporaryRoots: temporaryRoots(), owner, now_ms: Date.now });
+  for (let attempt = 1; ; attempt += 1) {
+    const db = new DatabaseSync(file);
+    try {
+      prepareLibraryStore(db);
+      return createLibraryIndex(db, { ...sources, temporaryRoots: temporaryRoots(), owner, now_ms: Date.now });
+    } catch (err) {
+      db.close(); // this handle would only hold the file
+      if (attempt >= OPEN_ATTEMPTS) throw err;
+      await setTimeout(OPEN_RETRY_MS);
+    }
+  }
 }

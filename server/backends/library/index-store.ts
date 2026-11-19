@@ -18,6 +18,9 @@ export const LIBRARY_SCHEMA_VERSION = 3;
 // to this long; a reader in WAL mode never waits. So it stays short: a write that gives up is a pass
 // that runs again later, while a long wait is a frozen server.
 const BUSY_TIMEOUT_MS = 100;
+// Opening is the exception: two servers opening a new index at once both need the write lock to set
+// it up, and that happens once, on the worker, before anything is waiting on an answer.
+const OPEN_BUSY_TIMEOUT_MS = 5000;
 
 const TABLES = ["files", "conversations", "titles_fts", "turns", "turns_fts", "lease"];
 
@@ -51,12 +54,17 @@ insert or ignore into lease (id) values (1);
 export function prepareLibraryStore(db: DatabaseSync): void {
   // `synchronous = normal`: a commit lost to a power cut costs one file's re-read, and a full sync
   // per file is what made the first pass crawl.
-  db.exec(`pragma journal_mode = wal; pragma synchronous = normal; pragma busy_timeout = ${String(BUSY_TIMEOUT_MS)};`);
-  db.exec("create table if not exists meta (key text primary key, value text not null)");
-  const row = db.prepare("select value from meta where key = 'schema'").get();
-  if (row?.value !== String(LIBRARY_SCHEMA_VERSION)) dropAll(db);
-  db.exec(SCHEMA);
-  db.prepare("insert or replace into meta (key, value) values ('schema', ?)").run(String(LIBRARY_SCHEMA_VERSION));
+  // The busy timeout first: every statement after it, the switch to WAL included, may meet the lock.
+  db.exec(`pragma busy_timeout = ${String(OPEN_BUSY_TIMEOUT_MS)}; pragma journal_mode = wal; pragma synchronous = normal;`);
+  // One transaction, so a second process setting up at the same moment waits and then finds it done.
+  inTransaction(db, () => {
+    db.exec("create table if not exists meta (key text primary key, value text not null)");
+    const row = db.prepare("select value from meta where key = 'schema'").get();
+    if (row?.value !== String(LIBRARY_SCHEMA_VERSION)) dropAll(db);
+    db.exec(SCHEMA);
+    db.prepare("insert or replace into meta (key, value) values ('schema', ?)").run(String(LIBRARY_SCHEMA_VERSION));
+  });
+  db.exec(`pragma busy_timeout = ${String(BUSY_TIMEOUT_MS)}`);
 }
 
 function dropAll(db: DatabaseSync): void {

@@ -30,39 +30,50 @@ export interface LibraryClientOptions {
   timeout_ms?: number;
 }
 
+/** One worker and the calls waiting on IT. Kept together so that a worker's last events — an `exit`
+ *  that arrives after a replacement has started — can only fail its own calls. */
+interface Running {
+  worker: Worker;
+  pending: Map<string, Pending>;
+}
+
 export function createLibraryClient(options: LibraryClientOptions = {}): { call: LibraryCaller; close(): Promise<void> } {
-  let worker: Worker | null = null;
-  const pending = new Map<string, Pending>();
-  const failAll = (reason: string) => {
-    pending.forEach((call) => (clearTimeout(call.timer), call.reject(new Error(reason))));
-    pending.clear();
-    worker = null;
+  let current: Running | null = null;
+  const failAll = (running: Running, reason: string) => {
+    running.pending.forEach((call) => (clearTimeout(call.timer), call.reject(new Error(reason))));
+    running.pending.clear();
+    if (current === running) current = null;
   };
-  const start = (): Worker => {
+  const start = (): Running => {
     const owner = `${String(process.pid)}-${randomUUID()}`;
-    const started = new Worker(new URL("./library-worker.ts", import.meta.url), {
+    const worker = new Worker(new URL("./library-worker.ts", import.meta.url), {
       workerData: { file: options.file ?? LIBRARY_INDEX_FILE, owner, ...(options.sources ?? defaultLibrarySources()) },
       execArgv: workerExecArgv(),
     });
-    started.unref(); // the index must never be what keeps the server from exiting
-    started.on("message", (message: unknown) => settle(pending, message));
-    started.on("error", (err: unknown) => failAll(`the library worker failed: ${err instanceof Error ? err.message : "unknown error"}`));
-    started.on("exit", () => failAll("the library worker exited"));
-    return started;
+    const running: Running = { worker, pending: new Map() };
+    worker.unref(); // the index must never be what keeps the server from exiting
+    worker.on("message", (message: unknown) => settle(running.pending, message));
+    worker.on("error", (err: unknown) => failAll(running, `the library worker failed: ${err instanceof Error ? err.message : "unknown error"}`));
+    worker.on("exit", () => failAll(running, "the library worker exited"));
+    return running;
   };
   const call = (method: LibraryMethod, args: unknown[]): Promise<unknown> =>
     new Promise((resolve, reject) => {
-      worker ??= start();
+      const running = (current ??= start());
       const id = randomUUID();
-      const timer = setTimeout(() => (pending.delete(id), reject(new Error(`library ${method} timed out`))), options.timeout_ms ?? LIBRARY_REQUEST_TIMEOUT_MS);
-      pending.set(id, { resolve, reject, timer });
-      worker.postMessage({ id, method, args });
+      const timer = setTimeout(
+        () => (running.pending.delete(id), reject(new Error(`library ${method} timed out`))),
+        options.timeout_ms ?? LIBRARY_REQUEST_TIMEOUT_MS,
+      );
+      running.pending.set(id, { resolve, reject, timer });
+      running.worker.postMessage({ id, method, args });
     });
   return {
     call,
     close: async () => {
-      await worker?.terminate();
-      worker = null;
+      const closing = current;
+      current = null;
+      await closing?.worker.terminate();
     },
   };
 }

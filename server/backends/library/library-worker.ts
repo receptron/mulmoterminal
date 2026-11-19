@@ -10,16 +10,21 @@ import { createLocalLibraryService, type LibraryReply, type LibraryRequest, type
 import { dispatchLibraryRequest, isLibraryRequest } from "./library-dispatch.js";
 
 const config = isRecord(workerData) ? workerData : {};
-const service: Promise<LibraryService> = openLibraryIndex(readString(config.file), readString(config.owner), {
-  projectsRoot: readString(config.projectsRoot),
-  historyFile: readString(config.historyFile),
-}).then(createLocalLibraryService);
-// A failure to open is answered per request, so the client sees it as 503 rather than as a hang.
-service.catch(() => {});
+// Opened on the first request, and again on the next one if that failed: a failure here is usually
+// another server holding the lock while it sets up the same new index, which passes.
+let service: Promise<LibraryService> | null = null;
+function openService(): Promise<LibraryService> {
+  service ??= openLibraryIndex(readString(config.file), readString(config.owner), {
+    projectsRoot: readString(config.projectsRoot),
+    historyFile: readString(config.historyFile),
+  }).then(createLocalLibraryService);
+  service.catch(() => (service = null));
+  return service;
+}
 
 async function reply(request: LibraryRequest): Promise<LibraryReply> {
   try {
-    return { id: request.id, ok: true, value: await dispatchLibraryRequest(await service, request) };
+    return { id: request.id, ok: true, value: await dispatchLibraryRequest(await openService(), request) };
   } catch (err) {
     return { id: request.id, ok: false, error: err instanceof Error ? err.message : "the library index failed" };
   }
