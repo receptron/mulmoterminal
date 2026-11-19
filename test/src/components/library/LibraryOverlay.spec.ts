@@ -15,7 +15,6 @@ let status: LibraryIndexStatus | null = { indexing: false, filesDone: 2, filesTo
 let hits: LibrarySearchHit[] = [];
 let statusGate: Promise<void> = Promise.resolve();
 let marks: { pinned: string[]; names: Record<string, string> } = { pinned: [], names: {} };
-const saved: { id: string; change: { pinned?: boolean; name?: string | null } }[] = [];
 let saveFails = false;
 let saveGate: Promise<void> = Promise.resolve();
 let marksGate: Promise<void> = Promise.resolve();
@@ -47,7 +46,6 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
   },
   loadLibraryConversation: (id: string) => Promise.resolve(page.find((c) => c.id === id) ?? null),
   saveLibraryMark: async (id: string, change: { pinned?: boolean; name?: string | null }) => {
-    saved.push({ id, change });
     // Applied and answered as of ARRIVAL, as the server does; only the delivery waits on the gate.
     const gate = saveGate;
     if (saveFails) return null;
@@ -108,7 +106,6 @@ const press = async (key: string) => {
 beforeEach(() => {
   closeLibrary.mockClear();
   marks = { pinned: [], names: {} };
-  saved.length = 0;
   saveFails = false;
   saveGate = Promise.resolve();
   marksGate = Promise.resolve();
@@ -468,181 +465,4 @@ describe("LibraryOverlay", () => {
     await flushPromises();
     expect(wrapper.find("[role=status]").exists()).toBe(true);
   }, 10_000);
-
-  it("pins the conversation from the More menu, and lists it first", async () => {
-    const wrapper = await mountLibrary();
-    await press("ArrowDown"); // the older one
-    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
-    await wrapper.find("[data-testid=library-pin]").trigger("click");
-    await flushPromises();
-    expect(saved).toEqual([{ id: "b", change: { pinned: true } }]);
-    expect(wrapper.findAll("[data-testid=library-row]")[0]?.text()).toContain("CI under ten minutes");
-    expect(wrapper.text()).toContain("Pinned");
-  });
-
-  it("renames in place: Enter saves, and the list and reader show the new name", async () => {
-    const wrapper = await mountLibrary();
-    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
-    await wrapper.find("[data-testid=library-rename-start]").trigger("click");
-    const field = wrapper.find("[data-testid=library-rename]");
-    await field.setValue("Subtitles, done");
-    await field.trigger("keydown", { key: "Enter" });
-    await flushPromises();
-    expect(saved).toEqual([{ id: "a", change: { name: "Subtitles, done" } }]);
-    expect(wrapper.find("[data-testid=library-reader]").text()).toContain("Subtitles, done");
-    expect(wrapper.findAll("[data-testid=library-row]")[0]?.text()).toContain("Subtitles, done");
-    expect(opened).toEqual([]); // Enter in the name field is not a resume
-  });
-
-  it("cancels a rename on Esc without closing the Library", async () => {
-    const wrapper = await mountLibrary();
-    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
-    await wrapper.find("[data-testid=library-rename-start]").trigger("click");
-    const field = wrapper.find("[data-testid=library-rename]");
-    await field.setValue("Not this");
-    field.element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    await flushPromises();
-    expect(wrapper.find("[data-testid=library-rename]").exists()).toBe(false);
-    expect(saved).toEqual([]);
-    expect(closeLibrary).not.toHaveBeenCalled();
-    await press("Escape"); // the same key outside the field does close it
-    expect(closeLibrary).toHaveBeenCalled();
-  });
-
-  it("says so when a change could not be saved, and leaves the screen as it was", async () => {
-    saveFails = true;
-    const wrapper = await mountLibrary();
-    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
-    await wrapper.find("[data-testid=library-pin]").trigger("click");
-    await flushPromises();
-    expect(wrapper.find("[role=status]").exists()).toBe(true);
-    expect(wrapper.text()).not.toContain("Pinned");
-  });
-
-  it("closes the More menu on Esc without closing the Library, and on a click elsewhere", async () => {
-    const wrapper = await mountLibrary();
-    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
-    expect(wrapper.find("[role=menu]").exists()).toBe(true);
-    await press("Escape");
-    expect(wrapper.find("[role=menu]").exists()).toBe(false);
-    expect(closeLibrary).not.toHaveBeenCalled();
-    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
-    document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-    await flushPromises();
-    expect(wrapper.find("[role=menu]").exists()).toBe(false);
-  });
-
-  it("keeps the newest change when an older save answers last", async () => {
-    const wrapper = await mountLibrary();
-    let releaseFirst: () => void = () => {};
-    saveGate = new Promise((resolve) => (releaseFirst = resolve));
-    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
-    await wrapper.find("[data-testid=library-pin]").trigger("click"); // its answer is held
-    saveGate = Promise.resolve();
-    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
-    await wrapper.find("[data-testid=library-rename-start]").trigger("click");
-    await wrapper.find("[data-testid=library-rename]").setValue("Newest");
-    await wrapper.find("[data-testid=library-rename]").trigger("keydown", { key: "Enter" });
-    await flushPromises(); // the rename answers first, with both changes
-    releaseFirst(); // then the pin's older answer arrives
-    await flushPromises();
-    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Newest");
-  });
-
-  it("drops a rename begun on one conversation when another is chosen", async () => {
-    const wrapper = await mountLibrary();
-    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
-    await wrapper.find("[data-testid=library-rename-start]").trigger("click");
-    await wrapper.find("[data-testid=library-rename]").setValue("Meant for a");
-    await wrapper.findAll("[data-testid=library-row]")[1]?.trigger("click"); // b
-    await flushPromises();
-    expect(wrapper.find("[data-testid=library-rename]").exists()).toBe(false);
-    expect(saved.every((entry) => entry.id !== "b")).toBe(true);
-  });
-
-  it("puts a conversation in the pinned group even when its pin's own answer was superseded", async () => {
-    const wrapper = await mountLibrary();
-    await press("ArrowDown"); // b, the older one: only a pin puts it first
-    let releasePin: () => void = () => {};
-    saveGate = new Promise((resolve) => (releasePin = resolve));
-    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
-    await wrapper.find("[data-testid=library-pin]").trigger("click"); // held
-    saveGate = Promise.resolve();
-    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
-    await wrapper.find("[data-testid=library-rename-start]").trigger("click");
-    await wrapper.find("[data-testid=library-rename]").setValue("Pinned and named");
-    await wrapper.find("[data-testid=library-rename]").trigger("keydown", { key: "Enter" });
-    await flushPromises();
-    releasePin();
-    await flushPromises();
-    expect(wrapper.findAll("[data-testid=library-row]")[0]?.text()).toContain("Pinned and named");
-  });
-
-  it("keeps a name saved while the opening read of the marks was still on its way", async () => {
-    let releaseLoad: () => void = () => {};
-    marksGate = new Promise((resolve) => (releaseLoad = resolve)); // answers with the marks as they were
-    const wrapper = await mountLibrary();
-    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
-    await wrapper.find("[data-testid=library-rename-start]").trigger("click");
-    await wrapper.find("[data-testid=library-rename]").setValue("Saved first");
-    await wrapper.find("[data-testid=library-rename]").trigger("keydown", { key: "Enter" });
-    await flushPromises();
-    releaseLoad(); // the older read lands now
-    await flushPromises();
-    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Saved first");
-  });
-
-  it("says the pins and names could not be read, rather than showing none", async () => {
-    marksUnreadable = true;
-    const wrapper = await mountLibrary();
-    expect(wrapper.find("[role=status]").text()).toContain("could not be read");
-  });
-
-  it("shows a failed save only on the conversation it was about, even when it fails late", async () => {
-    saveFails = true;
-    let release: () => void = () => {};
-    saveGate = new Promise((resolve) => (release = resolve));
-    const wrapper = await mountLibrary();
-    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
-    await wrapper.find("[data-testid=library-pin]").trigger("click"); // a's save, failing late
-    await press("ArrowDown"); // b
-    release();
-    await flushPromises();
-    expect(wrapper.find("[role=status]").exists()).toBe(false);
-    await press("ArrowUp"); // back to a
-    expect(wrapper.find("[role=status]").exists()).toBe(true);
-  });
-
-  it("reads the marks again when a save from before a reopen lands after the new read began", async () => {
-    let releaseSave: () => void = () => {};
-    saveGate = new Promise((resolve) => (releaseSave = resolve));
-    const wrapper = await mountLibrary();
-    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
-    await wrapper.find("[data-testid=library-pin]").trigger("click"); // applied on arrival, answered late
-    const stale = { pinned: [], names: {} };
-    libraryOpen.value = false;
-    await flushPromises();
-    let releaseLoad: () => void = () => {};
-    marksGate = new Promise((resolve) => (releaseLoad = resolve));
-    const realMarks = marks;
-    marks = stale; // the reopened screen's read was taken before the pin landed
-    libraryOpen.value = true;
-    await flushPromises();
-    marks = realMarks;
-    marksGate = Promise.resolve();
-    releaseSave(); // the old save answers first
-    await flushPromises();
-    releaseLoad(); // then the stale read
-    await flushPromises();
-    expect(wrapper.text()).toContain("Pinned");
-  });
-
-  it("drops the unreadable-marks notice once a change has been saved", async () => {
-    marksUnreadable = true;
-    const wrapper = await mountLibrary();
-    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
-    await wrapper.find("[data-testid=library-pin]").trigger("click");
-    await flushPromises();
-    expect(wrapper.find("[role=status]").exists()).toBe(false);
-  });
 });

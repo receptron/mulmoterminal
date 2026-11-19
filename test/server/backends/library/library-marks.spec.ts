@@ -90,4 +90,13 @@ describe("the cross-process lock", () => {
     utimesSync(`${file}.lock`, old, old);
     expect(await changeLibraryMark("a", { pinned: true }, file)).toEqual({ pinned: ["a"], names: {} });
   });
+
+  it("leaves a lock alone that was taken over from it while it worked", async () => {
+    const file = scratchFile();
+    await withMarksLock(file, async () => {
+      // A second holder took over (as after a stale timeout) and now owns the lock.
+      writeFileSync(`${file}.lock/owner`, "someone-else");
+    });
+    expect(readFileSync(`${file}.lock/owner`, "utf8")).toBe("someone-else");
+  });
 });

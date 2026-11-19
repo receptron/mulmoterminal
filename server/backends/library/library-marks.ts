@@ -1,6 +1,7 @@
 // Pins and names the user gives conversations in the Library (#3329). Kept in MulmoTerminal's own
 // file, never in the agent's transcript, and NOT in the index: the index is a copy that may be deleted
 // and rebuilt at any time, and what the user decided must survive that.
+import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { emptyLibraryMarks, isLibraryMarks, LIBRARY_NAME_MAX, type LibraryMarkChange, type LibraryMarks } from "../../../common/library.js";
@@ -58,18 +59,29 @@ export async function changeUnlocked(id: string, change: LibraryMarkChange, file
 export async function withMarksLock<T>(file: string, work: () => Promise<T>): Promise<T> {
   const lock = `${file}.lock`;
   await fs.mkdir(path.dirname(file), { recursive: true });
-  await acquire(lock);
+  const owner = randomUUID();
+  await acquire(lock, owner);
   try {
     return await work();
   } finally {
-    await fs.rm(lock, { recursive: true, force: true });
+    await release(lock, owner);
   }
 }
 
-async function acquire(lock: string): Promise<void> {
+const ownerFile = (lock: string): string => path.join(lock, "owner");
+
+/** Removes the lock only if it is still this holder's. A holder paused past the stale time may find
+ *  its lock taken over; removing it then would let a third process in beside the new holder. */
+async function release(lock: string, owner: string): Promise<void> {
+  const holder = await fs.readFile(ownerFile(lock), "utf8").catch(() => null);
+  if (holder === owner) await fs.rm(lock, { recursive: true, force: true });
+}
+
+async function acquire(lock: string, owner: string): Promise<void> {
   for (let attempt = 0; attempt < MARKS_LOCK_ATTEMPTS; attempt += 1) {
     try {
       await fs.mkdir(lock);
+      await fs.writeFile(ownerFile(lock), owner);
       return;
     } catch (err) {
       if (!(err instanceof Error && "code" in err && err.code === "EEXIST")) throw err;

@@ -48,11 +48,13 @@ function finishRename(): void {
 const menu = ref<HTMLElement | null>(null);
 // While the menu is open, Esc and a click elsewhere close IT. Esc is caught on the way down
 // (capture), before the Library's own window-level Esc would close the whole screen.
+const menuButton = ref<HTMLButtonElement | null>(null);
 function onMenuKey(event: KeyboardEvent): void {
   if (event.key !== "Escape") return;
   event.stopPropagation();
   event.preventDefault();
   menuOpen.value = false;
+  menuButton.value?.focus(); // back where the keyboard came from, not to the page
 }
 function onOutsidePointer(event: PointerEvent): void {
   if (event.target instanceof Node && menu.value?.contains(event.target)) return;
@@ -123,6 +125,7 @@ const lines = computed(() => {
     <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-border px-4 py-2">
       <div ref="menu" class="relative mr-auto">
         <button
+          ref="menuButton"
           type="button"
           data-testid="library-more-actions"
           class="flex cursor-pointer items-center rounded border-0 bg-transparent p-1 text-secondary hover:bg-hover hover:text-fg"
