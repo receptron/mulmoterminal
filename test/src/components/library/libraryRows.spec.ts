@@ -1,7 +1,17 @@
 // How the Library lists a conversation (#3329): its group by day, its grey meta line, and the
 // labels in the reader's language — every boundary asserted with a fixed `now`.
 import { describe, it, expect, vi } from "vitest";
-import { costLabel, groupConversations, groupOf, metaParts, prsLabel, projectName, whenLabel } from "../../../../src/components/library/libraryRows";
+import {
+  costLabel,
+  displayTitle,
+  groupConversations,
+  groupOf,
+  listedInOrder,
+  metaParts,
+  prsLabel,
+  projectName,
+  whenLabel,
+} from "../../../../src/components/library/libraryRows";
 import type { LibraryConversation } from "../../../../common/library";
 
 const NOW = new Date(2026, 10, 19, 15, 0, 0).getTime(); // a Thursday afternoon, local time
@@ -132,5 +142,42 @@ describe("groupOf across a daylight-saving change", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+});
+
+describe("pinned conversations", () => {
+  it("come first in pin order, and leave the time groups", () => {
+    const a = conversation({ id: "a", endedAt: NOW });
+    const b = conversation({ id: "b", endedAt: NOW - 30 * DAY });
+    const c = conversation({ id: "c", endedAt: NOW - HOUR });
+    const groups = groupConversations([a, b, c], NOW, [b, a]);
+    expect(groups.map((g) => [g.group, g.conversations.map((x) => x.id)])).toEqual([
+      ["pinned", ["b", "a"]],
+      ["today", ["c"]],
+    ]);
+    expect(listedInOrder(groups).map((x) => x.id)).toEqual(["b", "a", "c"]);
+  });
+
+  it("keep a pinned conversation out of the time groups even when it could not be read", () => {
+    const a = conversation({ id: "a", endedAt: NOW });
+    const b = conversation({ id: "b", endedAt: NOW });
+    expect(groupConversations([a, b], NOW, [], new Set(["b"])).map((g) => [g.group, g.conversations.map((x) => x.id)])).toEqual([["today", ["a"]]]);
+  });
+
+  it("show only what is pinned now, while the pinned rows are still being read back", () => {
+    const a = conversation({ id: "a", endedAt: NOW });
+    const b = conversation({ id: "b", endedAt: NOW });
+    // a was unpinned; its row is still in the pinned list until the read-back lands.
+    const groups = groupConversations([a, b], NOW, [a, b], new Set(["b"]));
+    expect(groups.map((g) => [g.group, g.conversations.map((x) => x.id)])).toEqual([
+      ["pinned", ["b"]],
+      ["today", ["a"]],
+    ]);
+  });
+
+  it("show the user's name over the agent's title", () => {
+    expect(displayTitle(conversation({ id: "a", title: "Agent title" }), { a: "Mine" })).toBe("Mine");
+    expect(displayTitle(conversation({ id: "a", title: "Agent title" }), {})).toBe("Agent title");
+    expect(displayTitle(conversation({ id: "a", title: null }), {})).toBeNull();
   });
 });

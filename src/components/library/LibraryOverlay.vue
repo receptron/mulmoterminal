@@ -2,7 +2,7 @@
 // The Library (#3329; design in docs/library-design.md): every Claude conversation on this machine,
 // searchable, readable, and resumable where it ran. A search field, the kinds (conversations only,
 // for now), and list | reader — one column at phone width, where choosing a row opens the reader.
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import FullScreenOverlay from "../FullScreenOverlay.vue";
 import LibraryList from "./LibraryList.vue";
@@ -15,15 +15,17 @@ import { openCellAt } from "../../composables/useNewTerminal";
 import { paletteTerminals } from "../../composables/commandPalette";
 import { cellForPanelResume } from "../launchCell";
 import { isEditableTarget } from "../../composables/gridShortcut";
-import { libraryKeyAction, movedIndex } from "./libraryKeys";
+import { libraryKeyAction, movedFromGap, movedIndex } from "./libraryKeys";
 import { libraryResume, type LibraryResume } from "./libraryResume";
-import { conversationKey } from "./libraryRows";
+import { conversationKey, groupConversations, listedInOrder } from "./libraryRows";
+import { useLibraryMarks } from "../../composables/useLibraryMarks";
 import type { LibraryConversation } from "../../../common/library";
 
 const { t } = useI18n();
 const { isOpen, close } = useLibraryView();
 useEscapeToClose(isOpen, close);
 const { conversations, hasMore, loaded, loadFailed, status, query, hits, searching, searchFailed, loadMore } = useLibraryData(isOpen);
+const { marks, pinned, saveFailedFor, loadFailed: marksFailed, change: changeMark } = useLibraryMarks(isOpen);
 
 const searchField = ref<HTMLInputElement | null>(null);
 /** The chosen row by key, not by object: a reload replaces every object, and must not move the reader. */
@@ -34,9 +36,23 @@ const notice = ref<string | null>(null);
 const now = ref(Date.now());
 
 /** What the list shows right now, in order — what the arrow keys walk. */
-const shown = computed((): LibraryConversation[] => (hits.value ? hits.value.map((hit) => hit.conversation) : conversations.value));
+const shown = computed((): LibraryConversation[] =>
+  hits.value
+    ? hits.value.map((hit) => hit.conversation)
+    : listedInOrder(groupConversations(conversations.value, now.value, pinned.value, new Set(marks.value.pinned))),
+);
 // The chosen row while it is still shown, else the first one: Enter always has something to act on.
-const selected = computed(() => shown.value.find((c) => conversationKey(c) === chosenKey.value) ?? shown.value[0] ?? null);
+/** The chosen conversation as last seen, kept so the reader stays on it if it leaves the list — an
+ *  unpinned one that is not on the pages read so far, say — until another is chosen. */
+const chosenSeen = shallowRef<LibraryConversation | null>(null);
+const selected = computed(
+  () =>
+    shown.value.find((c) => conversationKey(c) === chosenKey.value) ??
+    // Held only while browsing: in search results, the row Enter acts on must be one of the results.
+    (!hits.value && chosenSeen.value !== null && conversationKey(chosenSeen.value) === chosenKey.value ? chosenSeen.value : null) ??
+    shown.value[0] ??
+    null,
+);
 // Only the FIRST build is worth a line: later passes catch up in seconds on what was appended, and a
 // progress line every time the screen opens would read as the Library being slow.
 const progress = computed(() => {
@@ -76,21 +92,53 @@ watch(
 const selectedKey = computed(() => (selected.value ? conversationKey(selected.value) : null));
 watch(selectedKey, () => (notice.value = null));
 
+/** One line under the reader: a failed save first, then a refused resume, then unreadable marks. */
+const readerNotice = computed((): string | null => {
+  if (selected.value !== null && saveFailedFor.value === selected.value.id) return t("libraryView.saveFailed");
+  return notice.value ?? (marksFailed.value ? t("libraryView.marksUnreadable") : null);
+});
+
 const RESUME_REFUSALS: Record<Exclude<LibraryResume["kind"], "open">, string> = {
   busy: "libraryView.resumeBusy",
   "no-cwd": "libraryView.resumeNoCwd",
   unchecked: "libraryView.resumeUnchecked",
 };
 
+function pinSelected(pin: boolean): void {
+  const conversation = selected.value;
+  if (conversation === null) return;
+  // Acting on the row shown by default makes it the chosen one, so the reader stays on it after it
+  // moves in or out of the list.
+  chosenKey.value = conversationKey(conversation);
+  chosenSeen.value = conversation;
+  void changeMark(conversation.id, { pinned: pin }, conversation);
+}
+function renameConversation(id: string, name: string | null): void {
+  void changeMark(id, { name });
+}
+
 function select(conversation: LibraryConversation): void {
   chosenKey.value = conversationKey(conversation);
+  chosenSeen.value = conversation;
   readerShown.value = true;
 }
 
+/** Where the selected row last stood in the list, so the arrows go on from there if it leaves it. */
+let lastIndex: number | null = null;
+watch(
+  () => (selected.value ? shown.value.indexOf(selected.value) : -1),
+  (index) => {
+    if (index >= 0) lastIndex = index;
+  },
+  { immediate: true },
+);
+
 async function move(by: number): Promise<void> {
   const index = selected.value ? shown.value.indexOf(selected.value) : -1;
-  const next = shown.value[movedIndex(index, by, shown.value.length)];
+  const target = index < 0 && lastIndex !== null ? movedFromGap(lastIndex, by, shown.value.length) : movedIndex(index, by, shown.value.length);
+  const next = shown.value[target];
   chosenKey.value = next === undefined ? null : conversationKey(next);
+  chosenSeen.value = next ?? null;
   // The keys move the highlight, not the scroll: bring the row Enter will act on into view.
   await nextTick();
   document.querySelector("[data-library-row][aria-current=true]")?.scrollIntoView?.({ block: "nearest" });
@@ -188,7 +236,15 @@ onBeforeUnmount(() => {
       <p v-else-if="hits && !hits.length && !searching" class="m-0 px-4 py-6 font-sans text-[13px] text-dim" data-testid="library-no-match">
         {{ t("libraryView.noMatch", { query: query.trim() }) }}
       </p>
-      <p v-else-if="!hits && !conversations.length" class="m-0 px-4 py-6 font-sans text-[13px] text-dim">{{ t("libraryView.empty") }}</p>
+      <div
+        v-else-if="!hits && !conversations.length && !pinned.length && selected === null"
+        class="px-4 py-6 font-sans text-[13px] text-dim"
+        data-testid="library-empty"
+      >
+        <p class="m-0">{{ t("libraryView.empty") }}</p>
+        <!-- The reader carries this notice otherwise; with nothing listed there is no reader. -->
+        <p v-if="marksFailed" class="m-0 mt-2 text-err-text" role="status">{{ t("libraryView.marksUnreadable") }}</p>
+      </div>
 
       <div v-else class="flex min-h-0 flex-1 border-t border-border">
         <div
@@ -201,6 +257,9 @@ onBeforeUnmount(() => {
             :selected-key="selected ? conversationKey(selected) : null"
             :now="now"
             :has-more="hasMore"
+            :pinned="pinned"
+            :pinned-ids="marks.pinned"
+            :names="marks.names"
             @select="select"
             @more="loadMore"
           />
@@ -214,7 +273,17 @@ onBeforeUnmount(() => {
           >
             <span class="material-symbols-outlined text-[18px]">arrow_back</span>{{ t("libraryView.back") }}
           </button>
-          <LibraryReader v-if="selected" :conversation="selected" :now="now" :notice="notice" @resume="resume" />
+          <LibraryReader
+            v-if="selected"
+            :conversation="selected"
+            :now="now"
+            :notice="readerNotice"
+            :name="marks.names[selected.id] ?? null"
+            :pinned="marks.pinned.includes(selected.id)"
+            @resume="resume"
+            @pin="pinSelected"
+            @rename="renameConversation"
+          />
           <p v-else class="m-0 p-6 font-sans text-[13px] text-dim">{{ t("libraryView.pick") }}</p>
         </div>
       </div>

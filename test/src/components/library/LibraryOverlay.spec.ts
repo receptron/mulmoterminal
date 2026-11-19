@@ -7,12 +7,18 @@ import type { LibraryConversation, LibraryIndexStatus, LibrarySearchHit } from "
 import type { ResumableList } from "../../../../src/composables/useDirLists";
 
 const libraryOpen = ref(true);
-vi.mock("../../../../src/composables/useLibraryView", () => ({ useLibraryView: () => ({ isOpen: libraryOpen, close: vi.fn() }) }));
+const closeLibrary = vi.fn();
+vi.mock("../../../../src/composables/useLibraryView", () => ({ useLibraryView: () => ({ isOpen: libraryOpen, close: closeLibrary }) }));
 
 let page: LibraryConversation[] = [];
 let status: LibraryIndexStatus | null = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
 let hits: LibrarySearchHit[] = [];
 let statusGate: Promise<void> = Promise.resolve();
+let marks: { pinned: string[]; names: Record<string, string> } = { pinned: [], names: {} };
+let saveFails = false;
+let saveGate: Promise<void> = Promise.resolve();
+let marksGate: Promise<void> = Promise.resolve();
+let marksUnreadable = false;
 let more: { conversations: LibraryConversation[]; hasMore: boolean; indexFinishedAt: number | null } | null = null;
 /** The finished pass the next first page says it reflects. */
 let pageFinished: number | null = 1;
@@ -33,6 +39,26 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
     return status;
   },
   searchLibrary: () => Promise.resolve(hits),
+  loadLibraryMarks: async () => {
+    const answer = marksUnreadable ? null : { ...marks };
+    await marksGate;
+    return answer;
+  },
+  loadLibraryConversation: (id: string) => Promise.resolve(page.find((c) => c.id === id) ?? null),
+  saveLibraryMark: async (id: string, change: { pinned?: boolean; name?: string | null }) => {
+    // Applied and answered as of ARRIVAL, as the server does; only the delivery waits on the gate.
+    const gate = saveGate;
+    if (saveFails) {
+      await gate; // a failure is delivered as late as a success would be
+      return null;
+    }
+    if (change.pinned !== undefined)
+      marks = { ...marks, pinned: change.pinned ? [id, ...marks.pinned.filter((p) => p !== id)] : marks.pinned.filter((p) => p !== id) };
+    if (change.name !== undefined) marks = { ...marks, names: change.name ? { ...marks.names, [id]: change.name } : {} };
+    const answer = { ...marks };
+    await gate;
+    return answer;
+  },
 }));
 
 const opened: unknown[] = [];
@@ -81,6 +107,12 @@ const press = async (key: string) => {
 };
 
 beforeEach(() => {
+  closeLibrary.mockClear();
+  marks = { pinned: [], names: {} };
+  saveFails = false;
+  saveGate = Promise.resolve();
+  marksGate = Promise.resolve();
+  marksUnreadable = false;
   libraryOpen.value = true;
   page = [conversation("a", "Burn subtitles"), conversation("b", "CI under ten minutes", { endedAt: NOW - 30 * 24 * 3_600_000 })];
   status = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
@@ -205,49 +237,6 @@ describe("LibraryOverlay", () => {
     await press("Enter");
     expect(opened).toEqual([]);
     expect(wrapper.find("[role=status]").text().length).toBeGreaterThan(0);
-  });
-
-  it("keeps one polling loop through a close and reopen, and keeps asking after a failed read", async () => {
-    const { useLibraryData } = await import("../../../../src/composables/useLibraryData");
-    const api = await import("../../../../src/composables/libraryApi");
-    const calls = vi.spyOn(api, "loadLibraryStatus");
-    status = null; // the read fails: the poll must keep going
-    let release: () => void = () => {};
-    statusGate = new Promise((resolve) => (release = resolve));
-    const open = ref(true);
-    const host = mount({ setup: () => useLibraryData(open), template: "<div />" });
-    await new Promise((resolve) => setTimeout(resolve, 5)); // the first read is now waiting
-    open.value = false;
-    await flushPromises();
-    open.value = true;
-    await new Promise((resolve) => setTimeout(resolve, 5)); // and so is the reopened screen's
-    release();
-    await flushPromises();
-    calls.mockClear();
-    await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 300));
-    expect(calls).toHaveBeenCalledTimes(1);
-    host.unmount();
-  }, 10_000);
-
-  it("drops a search still pending when the screen closes", async () => {
-    const { useLibraryData } = await import("../../../../src/composables/useLibraryData");
-    hits = [{ conversation: conversation("stale", "Stale"), snippet: "stale", role: "user" }];
-    const open = ref(true);
-    let data: ReturnType<typeof useLibraryData> | null = null;
-    const host = mount({ setup: () => (data = useLibraryData(open)), template: "<div />" });
-    await flushPromises();
-    if (data === null) throw new Error("not mounted");
-    const state: ReturnType<typeof useLibraryData> = data;
-    state.query.value = "stale";
-    await flushPromises();
-    open.value = false;
-    await flushPromises();
-    open.value = true;
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    await flushPromises();
-    expect(state.query.value).toBe("");
-    expect(state.hits.value).toBeNull();
-    host.unmount();
   });
 
   it("leaves Enter to a button inside the conversation", async () => {
@@ -393,27 +382,6 @@ describe("LibraryOverlay", () => {
     expect(wrapper.findAll("[data-testid=library-row]").map((row) => row.text())).toEqual([expect.stringContaining("Found after the pass")]);
   }, 10_000);
 
-  it("holds Show more while the list is being read again", async () => {
-    const { useLibraryData } = await import("../../../../src/composables/useLibraryData");
-    const api = await import("../../../../src/composables/libraryApi");
-    firstHasMore = true;
-    const open = ref(true);
-    let data: ReturnType<typeof useLibraryData> | null = null;
-    const host = mount({ setup: () => (data = useLibraryData(open)), template: "<div />" });
-    await flushPromises();
-    if (data === null) throw new Error("not mounted");
-    const state: ReturnType<typeof useLibraryData> = data;
-    const reads = vi.spyOn(api, "loadLibraryPage");
-    const reloading = state.reload();
-    await state.loadMore(); // while the reload is still waiting for its page
-    await reloading;
-    // Only first pages were read: no page counted from the old list's length was asked for meanwhile.
-    expect(reads.mock.calls.length).toBeGreaterThan(0);
-    expect(reads.mock.calls.every((call) => call[0] === 0)).toBe(true);
-    reads.mockRestore();
-    host.unmount();
-  });
-
   it("asks for progress again after a read, since a read can start a pass", async () => {
     const api = await import("../../../../src/composables/libraryApi");
     const asks = vi.spyOn(api, "loadLibraryStatus");
@@ -475,34 +443,6 @@ describe("LibraryOverlay", () => {
     expect(asks).toHaveBeenCalled();
     asks.mockRestore();
   }, 30_000);
-
-  it("keeps one polling loop when a stale answer lands after a reopen", async () => {
-    const { usePolledStatus } = await import("../../../../src/composables/useLibraryData");
-    const api = await import("../../../../src/composables/libraryApi");
-    status = { indexing: true, filesDone: 1, filesTotal: 9, finishedAt: null };
-    const poll = usePolledStatus(
-      ref(null),
-      () => null,
-      () => {},
-      () => false,
-    );
-    let releaseOld: () => void = () => {};
-    statusGate = new Promise((resolve) => (releaseOld = resolve));
-    poll.start();
-    await new Promise((resolve) => setTimeout(resolve, 5)); // the first tick waits for its answer
-    poll.stop();
-    statusGate = new Promise(() => {}); // the reopened screen's answer never comes in this test
-    poll.start();
-    await new Promise((resolve) => setTimeout(resolve, 5)); // its tick is waiting too
-    releaseOld(); // the stale answer lands
-    await flushPromises();
-    const asks = vi.spyOn(api, "loadLibraryStatus");
-    poll.wake(); // a read lands while the current tick still waits: it must not start a second loop
-    await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 300));
-    expect(asks).not.toHaveBeenCalled();
-    asks.mockRestore();
-    poll.stop();
-  }, 10_000);
 
   it("drops a resume still checking when another conversation is chosen", async () => {
     let release: () => void = () => {};

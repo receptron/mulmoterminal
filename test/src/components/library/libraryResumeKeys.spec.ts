@@ -2,7 +2,7 @@
 // and which keys the screen takes at all.
 import { describe, it, expect } from "vitest";
 import { libraryResume } from "../../../../src/components/library/libraryResume";
-import { libraryKeyAction, movedIndex, type LibraryKeyEvent } from "../../../../src/components/library/libraryKeys";
+import { libraryKeyAction, movedFromGap, movedIndex, type LibraryKeyEvent } from "../../../../src/components/library/libraryKeys";
 import type { LibraryConversation } from "../../../../common/library";
 import type { ResumableList } from "../../../../src/composables/useDirLists";
 
@@ -80,5 +80,17 @@ describe("movedIndex", () => {
     [0, 1, 0, -1],
   ])("from %i by %i in %i → %i", (current, by, length, expected) => {
     expect(movedIndex(current, by, length)).toBe(expected);
+  });
+});
+
+describe("movedFromGap", () => {
+  // B stood at index 1 of [A, B, C] and left: the list is now [A, C].
+  it.each([
+    [1, 1, 2, 1], // down → C, which took its place
+    [1, -1, 2, 0], // up → A
+    [0, -1, 2, 0], // up from the top stays at the top
+    [2, 1, 2, 1], // down from past the end stays at the end
+  ])("gap %i, by %i, length %i → %i", (gap, by, length, expected) => {
+    expect(movedFromGap(gap, by, length)).toBe(expected);
   });
 });
