@@ -94,17 +94,39 @@ async function acquire(lock: string, owner: string): Promise<void> {
       return;
     } catch (err) {
       if (!(err instanceof Error && "code" in err && err.code === "EEXIST")) throw err;
-      if (await isStale(lock)) await fs.rm(lock, { recursive: true, force: true });
+      const staleOwner = await staleOwnerOf(lock);
+      if (staleOwner !== null) await takeOverIfStill(lock, staleOwner);
       else await new Promise((resolve) => setTimeout(resolve, MARKS_LOCK_RETRY_MS));
     }
   }
   throw new Error(`${lock} is held by another process`);
 }
 
-async function isStale(lock: string): Promise<boolean> {
+/** The owner token of a lock old enough to be taken as abandoned, or null for a live lock. */
+async function staleOwnerOf(lock: string): Promise<string | null> {
   try {
-    return Date.now() - (await fs.stat(lock)).mtimeMs > MARKS_LOCK_STALE_MS;
+    if (Date.now() - (await fs.stat(lock)).mtimeMs <= MARKS_LOCK_STALE_MS) return null;
+    return await fs.readFile(ownerFile(lock), "utf8").catch(() => "");
   } catch {
-    return false; // released between the two calls: try again
+    return null; // released between the two calls: try again
   }
+}
+
+/** Takes the abandoned lock out of the way only if it is STILL that one. Two processes can find the
+ *  same stale lock; removing it by path would let the slower one delete the lock the faster one has
+ *  just made. So it is moved aside first (atomic), checked, and put back if it turned out to be new.
+ *  Should even that lose a race, the holder whose lock moved is refused at its write (`stillHeld`). */
+export async function takeOverIfStill(lock: string, staleOwner: string): Promise<void> {
+  const aside = `${lock}.${randomUUID()}.aside`;
+  try {
+    await fs.rename(lock, aside);
+  } catch {
+    return; // already gone or replaced: the next attempt sees what is there now
+  }
+  const moved = await fs.readFile(ownerFile(aside), "utf8").catch(() => "");
+  if (moved === staleOwner) {
+    await fs.rm(aside, { recursive: true, force: true });
+    return;
+  }
+  await fs.rename(aside, lock).catch(() => fs.rm(aside, { recursive: true, force: true }));
 }

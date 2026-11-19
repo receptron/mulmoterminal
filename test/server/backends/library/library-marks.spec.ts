@@ -11,6 +11,7 @@ import {
   changeUnlocked,
   MARKS_LOCK_STALE_MS,
   readLibraryMarks,
+  takeOverIfStill,
   withMarksLock,
 } from "../../../../server/backends/library/library-marks";
 import { mkdirSync, utimesSync } from "node:fs";
@@ -111,5 +112,14 @@ describe("the cross-process lock", () => {
     );
     await expect(write).rejects.toThrow("taken over");
     expect(await readLibraryMarks(file)).toEqual({ pinned: ["kept"], names: {} });
+  });
+
+  it("puts back a lock that was renewed between finding it stale and taking it", async () => {
+    const file = scratchFile();
+    const lock = `${file}.lock`;
+    mkdirSync(lock, { recursive: true });
+    writeFileSync(`${lock}/owner`, "fresh-holder"); // judged stale under another owner, now someone else's
+    await takeOverIfStill(lock, "the-stale-one");
+    expect(readFileSync(`${lock}/owner`, "utf8")).toBe("fresh-holder");
   });
 });
