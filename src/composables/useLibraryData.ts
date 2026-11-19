@@ -47,7 +47,11 @@ export function useLibraryData(isOpen: Ref<boolean>) {
     hasMore.value = page.hasMore;
   }
 
-  const poll = usePolledStatus(status, () => void reload());
+  const poll = usePolledStatus(
+    status,
+    () => void reload(),
+    () => conversations.value.length === 0,
+  );
   const search = useDebouncedSearch(query, hits, searching, searchFailed);
 
   watch(
@@ -77,7 +81,7 @@ export function useLibraryData(isOpen: Ref<boolean>) {
 }
 
 /** Polls progress while the index is being built, and reloads the list when a pass finishes. */
-function usePolledStatus(status: Ref<LibraryIndexStatus | null>, onFinished: () => void) {
+function usePolledStatus(status: Ref<LibraryIndexStatus | null>, onFinished: () => void, listEmpty: () => boolean) {
   let timer: ReturnType<typeof setTimeout> | null = null;
   /** The last pass end this screen saw; undefined until the first answer, which only sets it. */
   let seenFinish: number | null | undefined;
@@ -89,8 +93,11 @@ function usePolledStatus(status: Ref<LibraryIndexStatus | null>, onFinished: () 
     if (mine !== generation) return; // stopped, or restarted, while asking
     status.value = next;
     const finished = next?.finishedAt ?? null;
-    // A pass that ended since the last answer — the first build included, whose list was empty.
-    if (seenFinish !== undefined && finished !== null && finished !== seenFinish) onFinished();
+    // A pass that ended since the last answer — the first build included, whose list was empty. On the
+    // FIRST answer an empty list is read again if a pass has finished: the build may have ended
+    // between the page read and this answer, and nothing later would say so.
+    const endedSince = seenFinish !== undefined ? finished !== seenFinish : listEmpty();
+    if (finished !== null && endedSince) onFinished();
     if (next !== null) seenFinish = finished;
     // A failed read is asked again: during the first build it is the only way the list fills.
     timer = next === null || next.indexing ? setTimeout(() => void tick(mine), LIBRARY_STATUS_POLL_MS) : null;

@@ -284,4 +284,17 @@ describe("LibraryOverlay", () => {
     await flushPromises();
     expect(opened).toEqual([]);
   });
+
+  it("reads the list again when the build had already finished by the first progress answer", async () => {
+    page = [];
+    let release: () => void = () => {};
+    statusGate = new Promise((resolve) => (release = resolve));
+    status = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 5 };
+    const wrapper = await mountLibrary(); // the page read answers empty; the status read is held
+    page = [conversation("built", "Built meanwhile")];
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await flushPromises();
+    expect(wrapper.findAll("[data-testid=library-row]").map((row) => row.text())).toEqual([expect.stringContaining("Built meanwhile")]);
+  });
 });
