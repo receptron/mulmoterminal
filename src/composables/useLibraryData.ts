@@ -71,22 +71,28 @@ function usePolledStatus(status: Ref<LibraryIndexStatus | null>, onFinished: () 
   let timer: ReturnType<typeof setTimeout> | null = null;
   /** The last pass end this screen saw; undefined until the first answer, which only sets it. */
   let seenFinish: number | null | undefined;
-  async function tick(): Promise<void> {
+  // Each start is a new generation: a request from before a close and reopen must not schedule a
+  // second loop beside the new one.
+  let generation = 0;
+  async function tick(mine: number): Promise<void> {
     const next = await loadLibraryStatus();
-    if (timer === null) return; // stopped while asking
+    if (mine !== generation) return; // stopped, or restarted, while asking
     status.value = next;
     const finished = next?.finishedAt ?? null;
     // A pass that ended since the last answer — the first build included, whose list was empty.
     if (seenFinish !== undefined && finished !== null && finished !== seenFinish) onFinished();
     if (next !== null) seenFinish = finished;
-    timer = next?.indexing ? setTimeout(() => void tick(), LIBRARY_STATUS_POLL_MS) : null;
+    // A failed read is asked again: during the first build it is the only way the list fills.
+    timer = next === null || next.indexing ? setTimeout(() => void tick(mine), LIBRARY_STATUS_POLL_MS) : null;
   }
   return {
     start: () => {
       seenFinish = undefined;
-      timer = setTimeout(() => void tick(), 0);
+      const mine = ++generation;
+      timer = setTimeout(() => void tick(mine), 0);
     },
     stop: () => {
+      generation++;
       if (timer !== null) clearTimeout(timer);
       timer = null;
     },

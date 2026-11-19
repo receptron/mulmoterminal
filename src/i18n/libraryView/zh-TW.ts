@@ -18,6 +18,7 @@ export const libraryViewZhTW = {
     back: "列表",
     resume: "繼續",
     resumeBusy: "此對話已開啟，或正被其他視窗使用。",
+    resumeUnchecked: "無法確認此對話是否已在別處開啟，因此沒有繼續。請稍後再試。",
     resumeNoCwd: "此對話沒有可用於繼續的工作目錄。",
     untitled: "無標題",
     pick: "選擇一個對話即可在此閱讀。",

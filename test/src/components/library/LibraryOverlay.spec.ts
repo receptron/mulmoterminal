@@ -11,12 +11,16 @@ vi.mock("../../../../src/composables/useLibraryView", () => ({ useLibraryView: (
 let page: LibraryConversation[] = [];
 let status: LibraryIndexStatus | null = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
 let hits: LibrarySearchHit[] = [];
+let statusGate: Promise<void> = Promise.resolve();
 let more: { conversations: LibraryConversation[]; hasMore: boolean } | null = null;
 let firstHasMore = false;
 vi.mock("../../../../src/composables/libraryApi", () => ({
   LIBRARY_PAGE: 50,
   loadLibraryPage: (offset: number) => Promise.resolve(offset === 0 ? { conversations: page, hasMore: firstHasMore } : more),
-  loadLibraryStatus: () => Promise.resolve(status),
+  loadLibraryStatus: async () => {
+    await statusGate;
+    return status;
+  },
   searchLibrary: () => Promise.resolve(hits),
 }));
 
@@ -25,16 +29,12 @@ vi.mock("../../../../src/composables/useNewTerminal", () => ({ openCellAt: (cell
 
 let resumableList: ResumableList = { sessions: [], cwd: null };
 let loadGate: Promise<void> = Promise.resolve();
+let listUnreadable = false;
 vi.mock("../../../../src/composables/useDirLists", () => ({
-  useResumableSessions: () => ({
-    value: {
-      get value() {
-        return resumableList;
-      },
-    },
-    forget: vi.fn(),
-    load: () => loadGate,
-  }),
+  readResumableList: async () => {
+    await loadGate;
+    return listUnreadable ? null : resumableList;
+  },
 }));
 
 const openIds: string[] = [];
@@ -77,6 +77,8 @@ beforeEach(() => {
   openIds.length = 0;
   resumableList = { sessions: [], cwd: null };
   loadGate = Promise.resolve();
+  statusGate = Promise.resolve();
+  listUnreadable = false;
   more = null;
   firstHasMore = false;
 });
@@ -179,5 +181,35 @@ describe("LibraryOverlay", () => {
     await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 200));
     await flushPromises();
     expect(wrapper.findAll("[data-testid=library-row]").map((row) => row.text())).toEqual([expect.stringContaining("Indexed at last")]);
+  }, 10_000);
+
+  it("does not resume when it cannot check who holds the conversation", async () => {
+    listUnreadable = true;
+    const wrapper = await mountLibrary();
+    await press("Enter");
+    expect(opened).toEqual([]);
+    expect(wrapper.find("[role=status]").text().length).toBeGreaterThan(0);
+  });
+
+  it("keeps one polling loop through a close and reopen, and keeps asking after a failed read", async () => {
+    const { useLibraryData } = await import("../../../../src/composables/useLibraryData");
+    const api = await import("../../../../src/composables/libraryApi");
+    const calls = vi.spyOn(api, "loadLibraryStatus");
+    status = null; // the read fails: the poll must keep going
+    let release: () => void = () => {};
+    statusGate = new Promise((resolve) => (release = resolve));
+    const open = ref(true);
+    const host = mount({ setup: () => useLibraryData(open), template: "<div />" });
+    await new Promise((resolve) => setTimeout(resolve, 5)); // the first read is now waiting
+    open.value = false;
+    await flushPromises();
+    open.value = true;
+    await new Promise((resolve) => setTimeout(resolve, 5)); // and so is the reopened screen's
+    release();
+    await flushPromises();
+    calls.mockClear();
+    await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 300));
+    expect(calls).toHaveBeenCalledTimes(1);
+    host.unmount();
   }, 10_000);
 });

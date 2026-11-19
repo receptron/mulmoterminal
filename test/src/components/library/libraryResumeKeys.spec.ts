@@ -19,9 +19,12 @@ describe("libraryResume", () => {
     expect(libraryResume(conversation(), listed, [])).toEqual({ kind: "open", id: "tmux-1", cwd: "/real/w", account: "work" });
   });
 
-  it("resumes by its own id when the list does not have it, or could not be read", () => {
-    expect(libraryResume(conversation(), list([]), [])).toEqual({ kind: "open", id: "abc", cwd: "/w", account: null });
-    expect(libraryResume(conversation(), null, [])).toEqual({ kind: "open", id: "abc", cwd: "/w", account: null });
+  it("resumes by its own id when the list was read and does not have it", () => {
+    expect(libraryResume(conversation(), list([], "/real/w"), [])).toEqual({ kind: "open", id: "abc", cwd: "/w", account: null });
+  });
+
+  it("resumes nothing on a list that could not be read: it proves nothing about who holds the session", () => {
+    expect(libraryResume(conversation(), null, [])).toEqual({ kind: "unchecked" });
   });
 
   it.each([

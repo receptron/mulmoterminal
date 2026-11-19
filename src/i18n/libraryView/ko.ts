@@ -18,6 +18,7 @@ export const libraryViewKo = {
     back: "목록",
     resume: "재개",
     resumeBusy: "이 대화는 이미 열려 있거나 다른 창에서 사용 중입니다.",
+    resumeUnchecked: "이 대화가 다른 곳에서 열려 있는지 확인하지 못해 재개하지 않았습니다. 잠시 후 다시 시도하세요.",
     resumeNoCwd: "이 대화에는 재개할 작업 디렉터리가 없습니다.",
     untitled: "제목 없음",
     pick: "대화를 선택하면 여기서 읽을 수 있습니다.",

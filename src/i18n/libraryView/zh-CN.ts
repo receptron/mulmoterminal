@@ -18,6 +18,7 @@ export const libraryViewZhCN = {
     back: "列表",
     resume: "继续",
     resumeBusy: "此对话已打开，或正被其他窗口使用。",
+    resumeUnchecked: "无法确认此对话是否已在别处打开，因此没有继续。请稍后再试。",
     resumeNoCwd: "此对话没有可用于继续的工作目录。",
     untitled: "无标题",
     pick: "选择一个对话即可在此阅读。",

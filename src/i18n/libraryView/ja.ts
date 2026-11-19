@@ -18,6 +18,7 @@ export const libraryViewJa = {
     back: "一覧",
     resume: "再開",
     resumeBusy: "この会話はもう開いているか、別の画面が使っています。",
+    resumeUnchecked: "この会話が別の画面で開いていないか確かめられなかったため、再開しませんでした。少し待ってからもう一度試してください。",
     resumeNoCwd: "この会話には再開する作業ディレクトリがありません。",
     untitled: "無題",
     pick: "会話を選ぶと、ここで読めます。",

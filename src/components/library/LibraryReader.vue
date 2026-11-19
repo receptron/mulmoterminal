@@ -37,8 +37,11 @@ const lines = computed(() => {
     <div class="flex min-h-0 flex-1">
       <TranscriptPane :key="conversation.id" :session-id="conversation.id" :cwd="conversation.cwd" :agent="conversation.agent" embedded />
     </div>
-    <footer class="pointer-events-none absolute bottom-4 right-6 flex items-center gap-3">
-      <span v-if="notice" class="pointer-events-auto rounded bg-panel px-3 py-1 font-sans text-[12px] text-secondary" role="status">{{ notice }}</span>
+    <!-- The notice sits above the button and wraps: at phone width a sentence beside it would push it off the edge. -->
+    <footer class="pointer-events-none absolute bottom-4 left-4 right-4 flex flex-col items-end gap-2">
+      <span v-if="notice" class="pointer-events-auto max-w-[44ch] rounded bg-panel px-3 py-1 font-sans text-[12px] text-secondary" role="status">{{
+        notice
+      }}</span>
       <button
         type="button"
         data-testid="library-resume"

@@ -10,13 +10,13 @@ import LibraryReader from "./LibraryReader.vue";
 import { useLibraryView } from "../../composables/useLibraryView";
 import { useEscapeToClose } from "../../composables/useEscapeToClose";
 import { useLibraryData } from "../../composables/useLibraryData";
-import { useResumableSessions } from "../../composables/useDirLists";
+import { readResumableList } from "../../composables/useDirLists";
 import { openCellAt } from "../../composables/useNewTerminal";
 import { paletteTerminals } from "../../composables/commandPalette";
 import { cellForPanelResume } from "../launchCell";
 import { isEditableTarget } from "../../composables/gridShortcut";
 import { libraryKeyAction, movedIndex } from "./libraryKeys";
-import { libraryResume } from "./libraryResume";
+import { libraryResume, type LibraryResume } from "./libraryResume";
 import type { LibraryConversation } from "../../../common/library";
 
 const { t } = useI18n();
@@ -59,6 +59,12 @@ watch(
 );
 watch(selected, () => (notice.value = null));
 
+const RESUME_REFUSALS: Record<Exclude<LibraryResume["kind"], "open">, string> = {
+  busy: "libraryView.resumeBusy",
+  "no-cwd": "libraryView.resumeNoCwd",
+  unchecked: "libraryView.resumeUnchecked",
+};
+
 function select(conversation: LibraryConversation): void {
   chosen.value = conversation;
   readerShown.value = true;
@@ -69,7 +75,6 @@ function move(by: number): void {
   chosen.value = shown.value[movedIndex(index, by, shown.value.length)] ?? null;
 }
 
-const resumable = useResumableSessions();
 /** One resume at a time: a second Enter while the first is still checking would open it twice. */
 let resuming = false;
 async function resume(): Promise<void> {
@@ -84,11 +89,10 @@ async function resume(): Promise<void> {
 }
 
 async function resumeConversation(conversation: LibraryConversation): Promise<void> {
-  resumable.forget(); // a list left from another conversation's directory must not answer for this one
-  await resumable.load(conversation.cwd, "claude");
-  const decision = libraryResume(conversation, resumable.value.value, paletteTerminals.value?.openSessionIds() ?? []);
+  const list = conversation.cwd === null ? null : await readResumableList(conversation.cwd, "claude");
+  const decision = libraryResume(conversation, list, paletteTerminals.value?.openSessionIds() ?? []);
   if (decision.kind !== "open") {
-    notice.value = t(decision.kind === "busy" ? "libraryView.resumeBusy" : "libraryView.resumeNoCwd");
+    notice.value = t(RESUME_REFUSALS[decision.kind]);
     return;
   }
   openCellAt(cellForPanelResume({ id: decision.id, cwd: decision.cwd, agent: "claude", account: decision.account }), null);

@@ -18,6 +18,7 @@ export const libraryViewEn = {
     back: "List",
     resume: "Resume",
     resumeBusy: "This conversation is already open, or another window has it.",
+    resumeUnchecked: "Could not check whether this conversation is open elsewhere, so it was not resumed. Try again in a moment.",
     resumeNoCwd: "This conversation has no working directory to resume in.",
     untitled: "Untitled",
     pick: "Pick a conversation to read it here.",
