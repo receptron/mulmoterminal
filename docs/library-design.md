@@ -39,10 +39,18 @@ follows is a refusal to add one of those, and the reason sits next to it.
   permanent header button waits until usage shows it is wanted.
 - **Agents**: Claude first. The index shape is agent-neutral, so another agent's reader can be
   added later without a new view.
-- **Writes**: memory and temporary data only. Transcripts are read-only. How far the Library may
-  read and write under `~/.claude` is a containment decision; it is argued against
-  [`file-surfaces.md`](file-surfaces.md) when the index lands (#3328), and that page is updated
-  then.
+- **Writes**: memory and temporary data only. Transcripts are read-only.
+- **Containment**: the index (#3328) reads only the agent's own data root, which the server
+  resolves; no route takes a path, and a conversation is asked for by its id, which is looked up
+  in the index rather than joined onto a directory. So the index opens no surface in the sense of
+  [`file-surfaces.md`](file-surfaces.md). The first route that writes (memory, #3331) is where a
+  path arrives from a client, and that is argued against that page when it lands.
+- **The index**: `~/.mulmoterminal/library/index.db`, shared by every server under the same HOME
+  and built by one of them at a time. It is a copy of the agent's files and is rebuilt if deleted.
+  It is opened only on a worker thread, which both builds and queries it: SQLite in Node is
+  synchronous, and a first pass over a long history stalled the main thread — which carries every
+  terminal — for seconds at a time when it ran there.
+  The plan behind it is `plans/feat-library-index.md`.
 
 ## Skeleton
 
