@@ -224,7 +224,11 @@ onBeforeUnmount(() => {
       <p v-else-if="hits && !hits.length && !searching" class="m-0 px-4 py-6 font-sans text-[13px] text-dim" data-testid="library-no-match">
         {{ t("libraryView.noMatch", { query: query.trim() }) }}
       </p>
-      <p v-else-if="!hits && !conversations.length" class="m-0 px-4 py-6 font-sans text-[13px] text-dim">{{ t("libraryView.empty") }}</p>
+      <div v-else-if="!hits && !conversations.length && !pinned.length" class="px-4 py-6 font-sans text-[13px] text-dim" data-testid="library-empty">
+        <p class="m-0">{{ t("libraryView.empty") }}</p>
+        <!-- The reader carries this notice otherwise; with nothing listed there is no reader. -->
+        <p v-if="marksFailed" class="m-0 mt-2 text-err-text" role="status">{{ t("libraryView.marksUnreadable") }}</p>
+      </div>
 
       <div v-else class="flex min-h-0 flex-1 border-t border-border">
         <div

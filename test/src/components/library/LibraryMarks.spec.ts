@@ -373,4 +373,11 @@ describe("LibraryOverlay pins and names", () => {
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Pinned long ago");
     vi.mocked(api.loadLibraryPage).mockRestore();
   });
+
+  it("says the pins and names could not be read even when nothing is listed", async () => {
+    page = [];
+    marksUnreadable = true;
+    const wrapper = await mountLibrary();
+    expect(wrapper.find("[data-testid=library-empty] [role=status]").text()).toContain("could not be read");
+  });
 });
