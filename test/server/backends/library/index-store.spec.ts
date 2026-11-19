@@ -12,6 +12,7 @@ import {
   readFileMark,
   readLease,
   recordProgress,
+  recordTail,
   removeMissingTranscripts,
   takeLease,
   type TranscriptScan,
@@ -170,6 +171,21 @@ describe("two transcripts with the same session id", () => {
     applyTranscriptScan(db, scanOf("dup", { turns: [turn("needle in the first")], state: { endedAt: 1 } }));
     applyTranscriptScan(db, scanOf("dup", { path: "/q/dup.jsonl", turns: [turn("needle in the second")], state: { endedAt: 2 } }));
     expect(searchLibrary(db, "needle", {}, 10).map((hit) => hit.snippet)).toEqual(["needle in the second", "needle in the first"]);
+  });
+});
+
+describe("recordTail", () => {
+  it("records the tail only for the lease holder, and only where the row still ends", () => {
+    const db = freshDb();
+    commit(db, "a", { to: 10 });
+    recordTail(db, OWNER, "/p/a.jsonl", 9, "wrong offset");
+    expect(readFileMark(db, "/p/a.jsonl")?.tail).toBeNull();
+    recordTail(db, OWNER, "/p/a.jsonl", 10, "mine");
+    expect(readFileMark(db, "/p/a.jsonl")?.tail).toBe("mine");
+    finishLease(db, OWNER, 0);
+    takeLease(db, "someone-else", 0, 100);
+    recordTail(db, OWNER, "/p/a.jsonl", 10, "stale");
+    expect(readFileMark(db, "/p/a.jsonl")?.tail).toBe("mine");
   });
 });
 

@@ -115,7 +115,7 @@ export async function scanTranscript(deps: IndexPassDeps, file: TranscriptFile):
         });
       },
     );
-    recordTail(deps.db, file.path, end, await opened.tailAt(end));
+    recordTail(deps.db, deps.owner, file.path, end, await opened.tailAt(end));
   });
 }
 
@@ -138,6 +138,6 @@ export async function scanHistory(deps: IndexPassDeps): Promise<void> {
     const end = await scanInBatches<HistoryPrompt>(opened.handle, scan, historyPromptOf, (batch) =>
       applyHistoryScan(deps.db, { path: deps.historyFile, owner: deps.owner, stamp, head, ...batch, prompts: batch.items }),
     );
-    recordTail(deps.db, deps.historyFile, end, await opened.tailAt(end));
+    recordTail(deps.db, deps.owner, deps.historyFile, end, await opened.tailAt(end));
   });
 }

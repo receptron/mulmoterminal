@@ -88,9 +88,11 @@ describe("the library worker", () => {
   it("fails a call that is still waiting when the client closes", async () => {
     const { root, projectsRoot, historyFile } = scratch();
     const client = createLibraryClient({ file: path.join(root, "index.db"), sources: { projectsRoot, historyFile } });
-    const waiting = client.call("status", []);
+    // The expectation is attached before closing: `close()` rejects the call at once, and a rejection
+    // with no handler yet is reported as unhandled even though the test goes on to check it.
+    const outcome = expect(client.call("status", [])).rejects.toThrow("closed");
     await client.close();
-    await expect(waiting).rejects.toThrow("closed");
+    await outcome;
   }, 30_000);
 
   it("rejects a call when the index cannot be opened", async () => {

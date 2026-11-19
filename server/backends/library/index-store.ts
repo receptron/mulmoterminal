@@ -265,10 +265,10 @@ export function removeHistory(db: DatabaseSync, owner: string, path: string): bo
   });
 }
 
-/** Records where a finished scan stopped reading — only if the row still ends there, so a later
- *  scan by another process is never given this one's tail. */
-export function recordTail(db: DatabaseSync, path: string, scannedTo: number, tail: string): void {
-  db.prepare("update files set tail = ? where path = ? and scanned_to = ?").run(tail, path, scannedTo);
+/** Records where a finished scan stopped reading — only while `owner` holds the lease and the row
+ *  still ends there, so a scan by another process is never given this one's tail. */
+export function recordTail(db: DatabaseSync, owner: string, path: string, scannedTo: number, tail: string): void {
+  db.prepare("update files set tail = ? where path = ? and scanned_to = ? and (select owner from lease where id = 1) = ?").run(tail, path, scannedTo, owner);
 }
 
 /** Takes the lease when it is free, expired, or already ours; renewing it is the same call. */
