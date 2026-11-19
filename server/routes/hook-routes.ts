@@ -225,7 +225,7 @@ async function applyConversationMove(deps: HookDeps, sessionId: string, body: Re
     marked: clearedTranscripts.has(sessionId),
   });
   if (move === "mark") return clearHeaderPrompt(deps, sessionId, claudeId, cwd);
-  if (move === "unmark") forgetClearedTranscript(sessionId);
+  if (move === "unmark") await forgetClearedTranscript(sessionId);
 }
 
 // The scalar fields the handler reads straight off a hook body, checked once here so the flow

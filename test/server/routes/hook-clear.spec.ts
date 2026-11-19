@@ -31,9 +31,10 @@ vi.mock("../../../server/session/transcript/cleared-transcripts", async (importO
       if (claudeId) successors.set(id, claudeId);
     },
     clearedClaudeIdOf: (id: string) => successors.get(id),
-    forgetClearedTranscript: (id: string) => {
+    forgetClearedTranscript: async (id: string) => {
       actual.clearedTranscripts.delete(id);
       successors.delete(id);
+      return true;
     },
   };
 });

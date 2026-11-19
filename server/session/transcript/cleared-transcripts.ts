@@ -136,12 +136,21 @@ export async function markTranscriptCleared(id: string, cwd: string | undefined,
 const removeMarker = (dir: string, id: string): Promise<void> =>
   fs.rm(markerFile(dir, id), { force: true }).catch((e) => console.error(`[cleared-transcripts] failed to drop ${id}: ${messageOf(e)}`));
 
-/** Drop the mark, on disk too. The removal is fire-and-forget because the caller (a hook) does not
- *  wait on it; a file that outlives the process is caught by hydration either way. */
-export function forgetClearedTranscript(id: string, dir: string = CLEARED_DIR): void {
+/** Drop the mark, on disk first. Boot keeps a marker whose transcripts exist, so one left behind
+ *  would send the next restart to the conversation the session came back from. A failed removal
+ *  therefore keeps the mark in memory too: both still agree, and the next unmark retries.
+ *  Returns whether the mark is gone. */
+export async function forgetClearedTranscript(id: string, dir: string = CLEARED_DIR): Promise<boolean> {
+  const file = markerFile(dir, id);
+  try {
+    await fs.rm(file, { force: true });
+  } catch (e) {
+    console.error(`[cleared-transcripts] failed to drop ${file}, keeping the mark: ${messageOf(e)}`);
+    return false;
+  }
   clearedTranscripts.delete(id);
   clearedState.delete(id);
-  void removeMarker(dir, id);
+  return true;
 }
 
 // `.catch` AFTER the parse, not a second argument to `.then`: an onRejected handler passed
@@ -156,8 +165,7 @@ const readMark = (dir: string, id: string): Promise<unknown> =>
 async function restoreMark(dir: string, file: string): Promise<void> {
   const id = file.endsWith(".json") ? file.slice(0, -".json".length) : "";
   if (!SESSION_ID_RE.test(id)) return; // not ours / not a session id — leave it alone
-  // Awaited, unlike forgetClearedTranscript's fire-and-forget drop: nothing else is waiting on boot,
-  // and a marker left behind would be re-examined on every restart from here on.
+  // Awaited: a marker left behind would be re-examined on every restart from here on.
   const mark = parseClearedMark(await readMark(dir, id));
   if (!mark || !(await markHasTranscript(mark, id))) return removeMarker(dir, id);
   clearedTranscripts.add(id);

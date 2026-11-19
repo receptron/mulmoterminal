@@ -160,9 +160,29 @@ describe("forgetClearedTranscript", () => {
     await writeTranscript("a".repeat(10));
     await markTranscriptCleared(SESSION, cwd, undefined, marksDir);
 
-    forgetClearedTranscript(SESSION, marksDir);
+    expect(await forgetClearedTranscript(SESSION, marksDir)).toBe(true);
     expect(clearedTranscripts.has(SESSION)).toBe(false);
-    await vi.waitFor(async () => expect(await exists(markerFile())).toBe(false));
+    expect(await exists(markerFile())).toBe(false);
+  });
+
+  it("succeeds for a mark that was never written to disk", async () => {
+    await markTranscriptCleared(SESSION, undefined, CLAUDE_ID, marksDir);
+    expect(await forgetClearedTranscript(SESSION, marksDir)).toBe(true);
+    expect(clearedTranscripts.has(SESSION)).toBe(false);
+  });
+
+  // Boot would restore a marker left on disk, so memory must not claim it is gone.
+  it("keeps the mark in memory and on disk when the removal fails", async () => {
+    await writeTranscript("a".repeat(10));
+    await markTranscriptCleared(SESSION, cwd, CLAUDE_ID, marksDir);
+    await fs.rm(markerFile());
+    await fs.mkdir(path.join(markerFile(), "blocker"), { recursive: true }); // rm without recursive refuses a directory
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(await forgetClearedTranscript(SESSION, marksDir)).toBe(false);
+    expect(clearedTranscripts.has(SESSION)).toBe(true);
+    expect(clearedClaudeIdOf(SESSION)).toBe(CLAUDE_ID);
+    expect(await exists(markerFile())).toBe(true);
   });
 });
 
@@ -248,7 +268,7 @@ describe("when the clear happened", () => {
 
   it("is dropped with the mark", async () => {
     await markTranscriptCleared(SESSION, cwd, undefined, marksDir);
-    forgetClearedTranscript(SESSION, marksDir);
+    await forgetClearedTranscript(SESSION, marksDir);
     expect(clearedAtOf(SESSION)).toBeUndefined();
   });
 
