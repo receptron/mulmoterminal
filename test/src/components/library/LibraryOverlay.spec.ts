@@ -16,10 +16,18 @@ let statusGate: Promise<void> = Promise.resolve();
 let more: { conversations: LibraryConversation[]; hasMore: boolean; indexFinishedAt: number | null } | null = null;
 /** The finished pass the next first page says it reflects. */
 let pageFinished: number | null = 1;
+/** First pages that fail before one succeeds. */
+let pageFailures = 0;
 let firstHasMore = false;
 vi.mock("../../../../src/composables/libraryApi", () => ({
   LIBRARY_PAGE: 50,
-  loadLibraryPage: (offset: number) => Promise.resolve(offset === 0 ? { conversations: page, hasMore: firstHasMore, indexFinishedAt: pageFinished } : more),
+  loadLibraryPage: (offset: number) => {
+    if (offset === 0 && pageFailures > 0) {
+      pageFailures--;
+      return Promise.resolve(null);
+    }
+    return Promise.resolve(offset === 0 ? { conversations: page, hasMore: firstHasMore, indexFinishedAt: pageFinished } : more);
+  },
   loadLibraryStatus: async () => {
     await statusGate;
     return status;
@@ -86,6 +94,7 @@ beforeEach(() => {
   more = null;
   firstHasMore = false;
   pageFinished = 1;
+  pageFailures = 0;
 });
 
 describe("LibraryOverlay", () => {
@@ -341,4 +350,15 @@ describe("LibraryOverlay", () => {
     expect(reads).toHaveBeenCalledTimes(1);
     reads.mockRestore();
   });
+
+  it("reads the list again after a failed read, even with the index idle", async () => {
+    pageFailures = 2; // the opening read, and the retry on the first progress answer
+    const wrapper = await mountLibrary();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await flushPromises();
+    expect(wrapper.findAll("[data-testid=library-row]")).toHaveLength(0);
+    await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 300));
+    await flushPromises();
+    expect(wrapper.findAll("[data-testid=library-row]")).toHaveLength(2);
+  }, 10_000);
 });

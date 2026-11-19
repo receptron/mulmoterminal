@@ -23,6 +23,7 @@ export function useLibraryData(isOpen: Ref<boolean>) {
     status,
     () => reflects.value,
     () => void reload(),
+    () => loadFailed.value,
   );
   const search = useDebouncedSearch(query, hits, searching, searchFailed);
 
@@ -68,7 +69,8 @@ function usePagedConversations() {
     if (mine !== pageRequest) return;
     loaded.value = true;
     loadFailed.value = page === null;
-    if (page !== null) reflects.value = page.indexFinishedAt;
+    // A failed read reflects no pass, so the next status answer reads the list again.
+    reflects.value = page === null ? undefined : page.indexFinishedAt;
     conversations.value = page?.conversations ?? [];
     hasMore.value = page?.hasMore ?? false;
   }
@@ -92,7 +94,12 @@ function usePagedConversations() {
 
 /** Polls progress while the index is being built, and reloads the list whenever a pass has finished
  *  that the list does not reflect — the first build, a list read part-way through it, a catch-up. */
-function usePolledStatus(status: Ref<LibraryIndexStatus | null>, listReflects: () => number | null | undefined, reloadList: () => void) {
+function usePolledStatus(
+  status: Ref<LibraryIndexStatus | null>,
+  listReflects: () => number | null | undefined,
+  reloadList: () => void,
+  listFailed: () => boolean,
+) {
   let timer: ReturnType<typeof setTimeout> | null = null;
   // Each start is a new generation: a request from before a close and reopen must not schedule a
   // second loop beside the new one.
@@ -102,9 +109,10 @@ function usePolledStatus(status: Ref<LibraryIndexStatus | null>, listReflects: (
     if (mine !== generation) return; // stopped, or restarted, while asking
     status.value = next;
     const finished = next?.finishedAt ?? null;
-    if (finished !== null && finished !== listReflects()) reloadList();
+    if ((finished !== null && finished !== listReflects()) || listFailed()) reloadList();
     // A failed read is asked again: during the first build it is the only way the list fills.
-    timer = next === null || next.indexing ? setTimeout(() => void tick(mine), LIBRARY_STATUS_POLL_MS) : null;
+    // Kept going while the list could not be read, too: otherwise a failed read waits for a reopen.
+    timer = next === null || next.indexing || listFailed() ? setTimeout(() => void tick(mine), LIBRARY_STATUS_POLL_MS) : null;
   }
   return {
     start: () => {
