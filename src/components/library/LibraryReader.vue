@@ -139,7 +139,8 @@ const lines = computed(() => {
         <template v-for="(fact, index) in facts" :key="index">
           <span v-if="fact.kind === 'text'">{{ fact.text }}</span>
           <span v-else class="inline-flex gap-1" data-testid="library-reader-prs">
-            <template v-for="pr in fact.prs" :key="pr.text">
+            <!-- By position: two repositories can each have a #1. -->
+            <template v-for="(pr, place) in fact.prs" :key="place">
               <a v-if="pr.url" :href="pr.url" target="_blank" rel="noopener noreferrer" class="text-dim underline-offset-2 hover:text-fg hover:underline">{{
                 pr.text
               }}</a>
