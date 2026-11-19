@@ -13,11 +13,13 @@ let page: LibraryConversation[] = [];
 let status: LibraryIndexStatus | null = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
 let hits: LibrarySearchHit[] = [];
 let statusGate: Promise<void> = Promise.resolve();
-let more: { conversations: LibraryConversation[]; hasMore: boolean } | null = null;
+let more: { conversations: LibraryConversation[]; hasMore: boolean; indexFinishedAt: number | null } | null = null;
+/** The finished pass the next first page says it reflects. */
+let pageFinished: number | null = 1;
 let firstHasMore = false;
 vi.mock("../../../../src/composables/libraryApi", () => ({
   LIBRARY_PAGE: 50,
-  loadLibraryPage: (offset: number) => Promise.resolve(offset === 0 ? { conversations: page, hasMore: firstHasMore } : more),
+  loadLibraryPage: (offset: number) => Promise.resolve(offset === 0 ? { conversations: page, hasMore: firstHasMore, indexFinishedAt: pageFinished } : more),
   loadLibraryStatus: async () => {
     await statusGate;
     return status;
@@ -83,6 +85,7 @@ beforeEach(() => {
   listUnreadable = false;
   more = null;
   firstHasMore = false;
+  pageFinished = 1;
 });
 
 describe("LibraryOverlay", () => {
@@ -175,10 +178,12 @@ describe("LibraryOverlay", () => {
 
   it("fills the list when the first build finishes", async () => {
     page = [];
+    pageFinished = null;
     status = { indexing: true, filesDone: 1, filesTotal: 9, finishedAt: null };
     const wrapper = await mountLibrary();
     await new Promise((resolve) => setTimeout(resolve, 10));
     page = [conversation("late", "Indexed at last")];
+    pageFinished = 5;
     status = { indexing: false, filesDone: 9, filesTotal: 9, finishedAt: 5 };
     await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 200));
     await flushPromises();
@@ -265,6 +270,7 @@ describe("LibraryOverlay", () => {
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toBe("CI under ten minutes");
     // The pass ends: the list is read again, and every conversation arrives as a new object.
     page = page.map((c) => ({ ...c }));
+    pageFinished = 2;
     status = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 2 };
     await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 200));
     await flushPromises();
@@ -287,11 +293,13 @@ describe("LibraryOverlay", () => {
 
   it("reads the list again when the build had already finished by the first progress answer", async () => {
     page = [];
+    pageFinished = null;
     let release: () => void = () => {};
     statusGate = new Promise((resolve) => (release = resolve));
     status = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 5 };
     const wrapper = await mountLibrary(); // the page read answers empty; the status read is held
     page = [conversation("built", "Built meanwhile")];
+    pageFinished = 5;
     release();
     await new Promise((resolve) => setTimeout(resolve, 10));
     await flushPromises();
@@ -307,5 +315,30 @@ describe("LibraryOverlay", () => {
     await wrapper.find("[data-testid=library-search]").setValue("beta"); // its answer has not come yet
     await press("Enter");
     expect(opened).toEqual([]);
+  });
+
+  it("reads a list taken part-way through the first build again once it is done", async () => {
+    page = [conversation("early", "Indexed early")];
+    pageFinished = null; // read while the first build was still going
+    let release: () => void = () => {};
+    statusGate = new Promise((resolve) => (release = resolve));
+    status = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 5 };
+    const wrapper = await mountLibrary();
+    page = [conversation("early", "Indexed early"), conversation("rest", "Indexed with the rest")];
+    pageFinished = 5;
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await flushPromises();
+    expect(wrapper.findAll("[data-testid=library-row]")).toHaveLength(2);
+  });
+
+  it("does not read the list again when it already reflects the finished pass", async () => {
+    const api = await import("../../../../src/composables/libraryApi");
+    const reads = vi.spyOn(api, "loadLibraryPage");
+    await mountLibrary();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await flushPromises();
+    expect(reads).toHaveBeenCalledTimes(1);
+    reads.mockRestore();
   });
 });

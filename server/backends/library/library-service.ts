@@ -3,6 +3,7 @@
 import type { LibraryConversation, LibraryConversationPage, LibraryIndexStatus, LibrarySearchHit } from "../../../common/library.js";
 import { conversationOfRow, findConversation, listConversations, type ConversationFilter } from "./index-queries.js";
 import type { LibraryIndex } from "./library-index.js";
+import { readLease } from "./index-store.js";
 import { searchLibrary } from "./library-search.js";
 
 export interface LibraryService {
@@ -24,7 +25,8 @@ export function createLocalLibraryService(index: LibraryIndex): LibraryService {
     list: (filter, offset, limit) =>
       answer(() => {
         const rows = listConversations(index.db, filter, offset, limit + 1);
-        return { conversations: rows.slice(0, limit).map(conversationOfRow), hasMore: rows.length > limit };
+        const indexFinishedAt = readLease(index.db).finishedMs;
+        return { conversations: rows.slice(0, limit).map(conversationOfRow), hasMore: rows.length > limit, indexFinishedAt };
       }),
     conversation: (id) =>
       answer(() => {

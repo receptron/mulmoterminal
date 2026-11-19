@@ -65,6 +65,9 @@ export interface LibraryConversationPage {
   conversations: LibraryConversation[];
   /** One was found past the page — a fact, not an inference from a full page. */
   hasMore: boolean;
+  /** When the index pass this page reflects finished, or null when none had yet. A client compares it
+   *  with the status's `finishedAt` to know its list is behind, without trusting its own clock. */
+  indexFinishedAt: number | null;
 }
 
 // ---- reading the wire back --------------------------------------------------------------------

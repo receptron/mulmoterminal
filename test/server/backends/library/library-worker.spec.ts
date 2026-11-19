@@ -110,7 +110,7 @@ describe("dispatchLibraryRequest", () => {
   const calls: unknown[][] = [];
   const service: LibraryService = {
     status: () => (calls.push(["status"]), Promise.resolve({ indexing: false, filesDone: 0, filesTotal: 0, finishedAt: null })),
-    list: (...args) => (calls.push(["list", ...args]), Promise.resolve({ conversations: [], hasMore: false })),
+    list: (...args) => (calls.push(["list", ...args]), Promise.resolve({ conversations: [], hasMore: false, indexFinishedAt: null })),
     conversation: (...args) => (calls.push(["conversation", ...args]), Promise.resolve(null)),
     search: (...args) => (calls.push(["search", ...args]), Promise.resolve([])),
   };

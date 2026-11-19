@@ -33,12 +33,14 @@ export async function loadLibraryStatus(): Promise<LibraryIndexStatus | null> {
 export interface LibraryPage {
   conversations: LibraryConversation[];
   hasMore: boolean;
+  indexFinishedAt: number | null;
 }
 
 export async function loadLibraryPage(offset: number): Promise<LibraryPage | null> {
   const body = await readJson(`/api/library/conversations?offset=${String(offset)}&limit=${String(LIBRARY_PAGE)}`);
   if (body === null || !isUnknownArray(body.conversations)) return null;
-  return { conversations: body.conversations.filter(isLibraryConversation), hasMore: body.hasMore === true };
+  const indexFinishedAt = typeof body.indexFinishedAt === "number" ? body.indexFinishedAt : null;
+  return { conversations: body.conversations.filter(isLibraryConversation), hasMore: body.hasMore === true, indexFinishedAt };
 }
 
 export async function searchLibrary(query: string, signal: AbortSignal): Promise<LibrarySearchHit[] | null> {

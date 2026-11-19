@@ -10,7 +10,7 @@ export const LIBRARY_SEARCH_DEBOUNCE_MS = 200;
 export const LIBRARY_STATUS_POLL_MS = 2_000;
 
 export function useLibraryData(isOpen: Ref<boolean>) {
-  const { conversations, hasMore, loaded, loadFailed, reload, loadMore } = usePagedConversations();
+  const { conversations, hasMore, loaded, loadFailed, reflects, reload, loadMore } = usePagedConversations();
   const status = shallowRef<LibraryIndexStatus | null>(null);
   const query = ref("");
   /** Null while nothing is typed; the list shows instead. */
@@ -21,8 +21,8 @@ export function useLibraryData(isOpen: Ref<boolean>) {
 
   const poll = usePolledStatus(
     status,
+    () => reflects.value,
     () => void reload(),
-    () => conversations.value.length === 0,
   );
   const search = useDebouncedSearch(query, hits, searching, searchFailed);
 
@@ -58,6 +58,8 @@ function usePagedConversations() {
   const hasMore = ref(false);
   const loaded = ref(false);
   const loadFailed = ref(false);
+  /** The finished index pass the list shows; undefined before the first page arrives. */
+  const reflects = ref<number | null | undefined>(undefined);
   let pageRequest = 0;
 
   async function reload(): Promise<void> {
@@ -66,6 +68,7 @@ function usePagedConversations() {
     if (mine !== pageRequest) return;
     loaded.value = true;
     loadFailed.value = page === null;
+    if (page !== null) reflects.value = page.indexFinishedAt;
     conversations.value = page?.conversations ?? [];
     hasMore.value = page?.hasMore ?? false;
   }
@@ -84,14 +87,13 @@ function usePagedConversations() {
     hasMore.value = page.hasMore;
   }
 
-  return { conversations, hasMore, loaded, loadFailed, reload, loadMore };
+  return { conversations, hasMore, loaded, loadFailed, reflects, reload, loadMore };
 }
 
-/** Polls progress while the index is being built, and reloads the list when a pass finishes. */
-function usePolledStatus(status: Ref<LibraryIndexStatus | null>, onFinished: () => void, listEmpty: () => boolean) {
+/** Polls progress while the index is being built, and reloads the list whenever a pass has finished
+ *  that the list does not reflect — the first build, a list read part-way through it, a catch-up. */
+function usePolledStatus(status: Ref<LibraryIndexStatus | null>, listReflects: () => number | null | undefined, reloadList: () => void) {
   let timer: ReturnType<typeof setTimeout> | null = null;
-  /** The last pass end this screen saw; undefined until the first answer, which only sets it. */
-  let seenFinish: number | null | undefined;
   // Each start is a new generation: a request from before a close and reopen must not schedule a
   // second loop beside the new one.
   let generation = 0;
@@ -100,18 +102,12 @@ function usePolledStatus(status: Ref<LibraryIndexStatus | null>, onFinished: () 
     if (mine !== generation) return; // stopped, or restarted, while asking
     status.value = next;
     const finished = next?.finishedAt ?? null;
-    // A pass that ended since the last answer — the first build included, whose list was empty. On the
-    // FIRST answer an empty list is read again if a pass has finished: the build may have ended
-    // between the page read and this answer, and nothing later would say so.
-    const endedSince = seenFinish !== undefined ? finished !== seenFinish : listEmpty();
-    if (finished !== null && endedSince) onFinished();
-    if (next !== null) seenFinish = finished;
+    if (finished !== null && finished !== listReflects()) reloadList();
     // A failed read is asked again: during the first build it is the only way the list fills.
     timer = next === null || next.indexing ? setTimeout(() => void tick(mine), LIBRARY_STATUS_POLL_MS) : null;
   }
   return {
     start: () => {
-      seenFinish = undefined;
       const mine = ++generation;
       timer = setTimeout(() => void tick(mine), 0);
     },
