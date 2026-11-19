@@ -4,6 +4,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import type { Worker } from "node:worker_threads";
 import path from "node:path";
 import { createLibraryClient } from "../../../../server/backends/library/library-client";
 import { dispatchLibraryRequest, filterArg, isLibraryRequest } from "../../../../server/backends/library/library-dispatch";
@@ -63,6 +64,25 @@ describe("the library worker", () => {
     const answer = client.call("status", []);
     await closing;
     await expect(answer).resolves.toSatisfy(isRecord);
+  }, 30_000);
+
+  it("retires a worker that does not answer in time, and starts a fresh one for the next call", async () => {
+    const { root, projectsRoot, historyFile } = scratch();
+    const started: Worker[] = [];
+    // Too short for any answer: every call times out, which is the case under test.
+    const client = createLibraryClient({
+      file: path.join(root, "index.db"),
+      sources: { projectsRoot, historyFile },
+      timeout_ms: 1,
+      onStart: (w) => started.push(w),
+    });
+    cleanups.push(() => client.close());
+    const call = client.call("status", []);
+    const exited = new Promise((resolve) => started[0]?.once("exit", resolve));
+    await expect(call).rejects.toThrow("timed out");
+    await exited;
+    await expect(client.call("status", [])).rejects.toThrow("timed out");
+    expect(started).toHaveLength(2);
   }, 30_000);
 
   it("rejects a call when the index cannot be opened", async () => {

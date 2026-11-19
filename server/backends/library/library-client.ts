@@ -28,6 +28,8 @@ export interface LibraryClientOptions {
   file?: string;
   sources?: LibrarySources;
   timeout_ms?: number;
+  /** Told about every worker started, for tests. */
+  onStart?: (worker: Worker) => void;
 }
 
 /** One worker and the calls waiting on IT. Kept together so that a worker's last events — an `exit`
@@ -55,16 +57,21 @@ export function createLibraryClient(options: LibraryClientOptions = {}): { call:
     worker.on("message", (message: unknown) => settle(running.pending, message));
     worker.on("error", (err: unknown) => failAll(running, `the library worker failed: ${err instanceof Error ? err.message : "unknown error"}`));
     worker.on("exit", () => failAll(running, "the library worker exited"));
+    options.onStart?.(worker);
     return running;
+  };
+  // A call that never answers means a worker stuck in synchronous work, and every later call would
+  // queue behind it. So the worker is retired — its other calls fail now, and the next call starts a
+  // fresh one. An interrupted write is rolled back by SQLite; the lease it held simply expires.
+  const retire = (running: Running, reason: string): void => {
+    failAll(running, reason);
+    void running.worker.terminate();
   };
   const call = (method: LibraryMethod, args: unknown[]): Promise<unknown> =>
     new Promise((resolve, reject) => {
       const running = (current ??= start());
       const id = randomUUID();
-      const timer = setTimeout(
-        () => (running.pending.delete(id), reject(new Error(`library ${method} timed out`))),
-        options.timeout_ms ?? LIBRARY_REQUEST_TIMEOUT_MS,
-      );
+      const timer = setTimeout(() => retire(running, `library ${method} timed out`), options.timeout_ms ?? LIBRARY_REQUEST_TIMEOUT_MS);
       running.pending.set(id, { resolve, reject, timer });
       running.worker.postMessage({ id, method, args });
     });
