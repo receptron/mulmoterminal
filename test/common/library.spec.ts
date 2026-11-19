@@ -72,6 +72,7 @@ describe("isLibraryMarks", () => {
     ["a non-string name", { pinned: [], names: { a: 3 } }],
     ["no names", { pinned: [] }],
     ["a field this code never writes", { pinned: [], names: {}, pinnd: ["a"] }],
+    ["a name on two lines", { pinned: [], names: { a: "A\nB" } }],
   ])("refuses %s", (_label, value) => {
     expect(isLibraryMarks(value)).toBe(false);
   });

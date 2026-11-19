@@ -26,5 +26,9 @@ export function libraryKeyAction(event: LibraryKeyEvent): LibraryKeyAction | nul
   return event.key === "Enter" ? "primary" : null;
 }
 
+/** The next index from a row that has LEFT the list (an unpinned one, say), where it last stood at
+ *  `gap`: down lands on the row that took its place, up on the one before it. */
+export const movedFromGap = (gap: number, by: number, length: number): number => movedIndex(by > 0 ? gap - 1 : gap, by, length);
+
 /** The next index after moving `by`, held inside the list rather than wrapping. */
 export const movedIndex = (current: number, by: number, length: number): number => (length === 0 ? -1 : Math.min(Math.max(current + by, 0), length - 1));

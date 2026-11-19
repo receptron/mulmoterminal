@@ -124,7 +124,8 @@ export interface LibraryMarks {
 
 export const emptyLibraryMarks = (): LibraryMarks => ({ pinned: [], names: {} });
 
-const isMarkName = (name: unknown): boolean => typeof name === "string" && name.trim() !== "" && name.length <= LIBRARY_NAME_MAX;
+// One line, as every write leaves it: a name with a line break was not written by this code.
+const isMarkName = (name: unknown): boolean => typeof name === "string" && name.trim() !== "" && name.length <= LIBRARY_NAME_MAX && !/[\r\n]/.test(name);
 
 /** The shape this code writes and nothing looser: a file edited by hand into something else is
  *  refused, not read and then written back. */

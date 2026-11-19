@@ -15,7 +15,7 @@ import { openCellAt } from "../../composables/useNewTerminal";
 import { paletteTerminals } from "../../composables/commandPalette";
 import { cellForPanelResume } from "../launchCell";
 import { isEditableTarget } from "../../composables/gridShortcut";
-import { libraryKeyAction, movedIndex } from "./libraryKeys";
+import { libraryKeyAction, movedFromGap, movedIndex } from "./libraryKeys";
 import { libraryResume, type LibraryResume } from "./libraryResume";
 import { conversationKey, groupConversations, listedInOrder } from "./libraryRows";
 import { useLibraryMarks } from "../../composables/useLibraryMarks";
@@ -122,9 +122,20 @@ function select(conversation: LibraryConversation): void {
   readerShown.value = true;
 }
 
+/** Where the selected row last stood in the list, so the arrows go on from there if it leaves it. */
+let lastIndex: number | null = null;
+watch(
+  () => (selected.value ? shown.value.indexOf(selected.value) : -1),
+  (index) => {
+    if (index >= 0) lastIndex = index;
+  },
+  { immediate: true },
+);
+
 async function move(by: number): Promise<void> {
   const index = selected.value ? shown.value.indexOf(selected.value) : -1;
-  const next = shown.value[movedIndex(index, by, shown.value.length)];
+  const target = index < 0 && lastIndex !== null ? movedFromGap(lastIndex, by, shown.value.length) : movedIndex(index, by, shown.value.length);
+  const next = shown.value[target];
   chosenKey.value = next === undefined ? null : conversationKey(next);
   chosenSeen.value = next ?? null;
   // The keys move the highlight, not the scroll: bring the row Enter will act on into view.
