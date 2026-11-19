@@ -297,4 +297,15 @@ describe("LibraryOverlay", () => {
     await flushPromises();
     expect(wrapper.findAll("[data-testid=library-row]").map((row) => row.text())).toEqual([expect.stringContaining("Built meanwhile")]);
   });
+
+  it("does not resume while a newer search is still pending", async () => {
+    const wrapper = await mountLibrary();
+    hits = [{ conversation: page[1] ?? conversation("x", "x"), snippet: "alpha", role: "user" }];
+    await wrapper.find("[data-testid=library-search]").setValue("alpha");
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    await flushPromises();
+    await wrapper.find("[data-testid=library-search]").setValue("beta"); // its answer has not come yet
+    await press("Enter");
+    expect(opened).toEqual([]);
+  });
 });

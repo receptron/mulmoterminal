@@ -10,10 +10,7 @@ export const LIBRARY_SEARCH_DEBOUNCE_MS = 200;
 export const LIBRARY_STATUS_POLL_MS = 2_000;
 
 export function useLibraryData(isOpen: Ref<boolean>) {
-  const conversations = shallowRef<LibraryConversation[]>([]);
-  const hasMore = ref(false);
-  const loaded = ref(false);
-  const loadFailed = ref(false);
+  const { conversations, hasMore, loaded, loadFailed, reload, loadMore } = usePagedConversations();
   const status = shallowRef<LibraryIndexStatus | null>(null);
   const query = ref("");
   /** Null while nothing is typed; the list shows instead. */
@@ -21,31 +18,6 @@ export function useLibraryData(isOpen: Ref<boolean>) {
   const searching = ref(false);
   /** The last search could not be answered — not the same as "nothing matches". */
   const searchFailed = ref(false);
-  let pageRequest = 0;
-
-  async function reload(): Promise<void> {
-    const mine = ++pageRequest;
-    const page = await loadLibraryPage(0);
-    if (mine !== pageRequest) return;
-    loaded.value = true;
-    loadFailed.value = page === null;
-    conversations.value = page?.conversations ?? [];
-    hasMore.value = page?.hasMore ?? false;
-  }
-
-  async function loadMore(): Promise<void> {
-    if (!hasMore.value) return;
-    const mine = ++pageRequest;
-    hasMore.value = false; // one request at a time; restored by its answer
-    const page = await loadLibraryPage(conversations.value.length);
-    if (mine !== pageRequest) return;
-    if (page === null) {
-      hasMore.value = true; // the page is still there; a failed read must not take the way to it
-      return;
-    }
-    conversations.value = [...conversations.value, ...page.conversations];
-    hasMore.value = page.hasMore;
-  }
 
   const poll = usePolledStatus(
     status,
@@ -78,6 +50,41 @@ export function useLibraryData(isOpen: Ref<boolean>) {
   });
 
   return { conversations, hasMore, loaded, loadFailed, status, query, hits, searching, searchFailed, loadMore, reload };
+}
+
+/** The newest conversations, a page at a time; a newer read always wins over an older one. */
+function usePagedConversations() {
+  const conversations = shallowRef<LibraryConversation[]>([]);
+  const hasMore = ref(false);
+  const loaded = ref(false);
+  const loadFailed = ref(false);
+  let pageRequest = 0;
+
+  async function reload(): Promise<void> {
+    const mine = ++pageRequest;
+    const page = await loadLibraryPage(0);
+    if (mine !== pageRequest) return;
+    loaded.value = true;
+    loadFailed.value = page === null;
+    conversations.value = page?.conversations ?? [];
+    hasMore.value = page?.hasMore ?? false;
+  }
+
+  async function loadMore(): Promise<void> {
+    if (!hasMore.value) return;
+    const mine = ++pageRequest;
+    hasMore.value = false; // one request at a time; restored by its answer
+    const page = await loadLibraryPage(conversations.value.length);
+    if (mine !== pageRequest) return;
+    if (page === null) {
+      hasMore.value = true; // the page is still there; a failed read must not take the way to it
+      return;
+    }
+    conversations.value = [...conversations.value, ...page.conversations];
+    hasMore.value = page.hasMore;
+  }
+
+  return { conversations, hasMore, loaded, loadFailed, reload, loadMore };
 }
 
 /** Polls progress while the index is being built, and reloads the list when a pass finishes. */

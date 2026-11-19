@@ -85,7 +85,9 @@ function move(by: number): void {
 let resuming = false;
 async function resume(): Promise<void> {
   const conversation = selected.value;
-  if (conversation === null || resuming) return;
+  // While a search is pending the list still shows the last query's results, and the row Enter would
+  // act on is not one the reader has seen match what they typed.
+  if (conversation === null || resuming || searching.value) return;
   resuming = true;
   try {
     await resumeConversation(conversation);
