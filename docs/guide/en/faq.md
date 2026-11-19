@@ -237,6 +237,17 @@ two transcripts is requested in
 [anthropics/claude-code#85004](https://github.com/anthropics/claude-code/issues/85004).
 
 
+### Can I run two versions of MulmoTerminal at once? {#two-versions}
+
+**Not on the same home.** Every server started with the same `HOME` shares `~/.mulmoterminal`,
+including the record of which cells a `/clear` or an in-session `/resume` moved to another
+conversation. A release from before that record was kept for good (#3340) deletes it whenever it
+ends a session, and a newer server on the same home then reopens the conversation the cell had left.
+
+To try another version next to the one you use, start it with its own `HOME` (it then gets its own
+tmux server and settings too). Going back to an older release on its own is fine: you get that
+release's behaviour back, and nothing on disk is damaged.
+
 ### The scrollbar is gone, and I cannot select more than one screen in a Claude cell. Why? {#claude-fullscreen}
 
 **Claude Code is running in its fullscreen renderer.** It draws on the alternate screen, which has
