@@ -9,7 +9,7 @@ import { searchLibrary } from "./library-search.js";
 export interface LibraryService {
   status(): Promise<LibraryIndexStatus>;
   list(filter: ConversationFilter, offset: number, limit: number): Promise<LibraryConversationPage>;
-  conversation(id: string): Promise<LibraryConversation | null>;
+  conversation(id: string, cwd?: string | null): Promise<LibraryConversation | null>;
   search(query: string, filter: ConversationFilter, limit: number): Promise<LibrarySearchHit[]>;
 }
 
@@ -32,9 +32,9 @@ export function createLocalLibraryService(index: LibraryIndex): LibraryService {
           return { conversations: rows.slice(0, limit).map(conversationOfRow), hasMore: rows.length > limit, indexFinishedAt };
         }),
       ),
-    conversation: (id) =>
+    conversation: (id, cwd = null) =>
       answer(() => {
-        const row = findConversation(index.db, id);
+        const row = findConversation(index.db, id, cwd);
         return row === null ? null : conversationOfRow(row);
       }),
     search: (query, filter, limit) => answer(() => searchLibrary(index.db, query, filter, limit)),

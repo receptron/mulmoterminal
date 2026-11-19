@@ -55,6 +55,9 @@ const props = defineProps<{
   // Whether this cell has an Activity timeline to open — a Claude session only. Like `canPark`, only
   // the cell that has one passes it, and it binds `open-timeline` itself.
   timelineAvailable?: boolean;
+  // Whether this session can be opened in the Library — a Claude session. Only TerminalCell passes
+  // it, and it binds `open-library` itself.
+  libraryAvailable?: boolean;
   // Whether this cell has an agent session to restart. Only TerminalCell passes it, and it binds
   // `restart-agent` itself.
   restartAvailable?: boolean;
@@ -74,6 +77,7 @@ const emit = defineEmits<{
       | "toggle-transcript"
       | "toggle-park"
       | "open-timeline"
+      | "open-library"
       | "open-talk"
       | "tools-opening"
       | "restart-agent",
@@ -88,6 +92,7 @@ const menuState = computed<CellPaneMenuState>(() => ({
   canvasAvailable: !!props.canvasAvailable,
   collectionsAvailable: !!props.collectionsAvailable,
   timelineAvailable: !!props.timelineAvailable,
+  libraryAvailable: !!props.libraryAvailable,
   restartAvailable: !!props.restartAvailable,
   talkAvailable: !!props.talkAvailable,
 }));
@@ -98,6 +103,7 @@ const PICK_EVENT = {
   prompts: "toggle-prompts",
   transcript: "toggle-transcript",
   timeline: "open-timeline",
+  library: "open-library",
   tools: "toggle-tools",
   canvas: "toggle-canvas",
   collections: "toggle-collections",

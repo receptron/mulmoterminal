@@ -508,6 +508,7 @@ export const zhTW: Messages = {
       prompts: { label: "送出的提示", detail: "本工作階段中你輸入的指令" },
       transcript: { label: "對話", detail: "你的指令與代理回覆的全文" },
       timeline: { label: "活動時間軸", detail: "代理做過的事（讀取的檔案、執行的指令），依時間排序" },
+      library: { label: "在資料庫中開啟", detail: "在資料庫中查看此對話（搜尋、釘選、重新命名）" },
       tools: { label: "使用的工具", detail: "代理呼叫的工具及其結果" },
       canvas: { label: "畫布", detail: "代理繪製的圖表、文件與卡片" },
       collections: { label: "集合", detail: "此資料夾的集合" },

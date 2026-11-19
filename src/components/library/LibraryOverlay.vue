@@ -7,7 +7,9 @@ import { useI18n } from "vue-i18n";
 import FullScreenOverlay from "../FullScreenOverlay.vue";
 import LibraryList from "./LibraryList.vue";
 import LibraryReader from "./LibraryReader.vue";
-import { useLibraryView } from "../../composables/useLibraryView";
+import { libraryRequested, useLibraryView } from "../../composables/useLibraryView";
+import { loadLibraryConversation } from "../../composables/libraryApi";
+import { router } from "../../router";
 import { useEscapeToClose } from "../../composables/useEscapeToClose";
 import { useLibraryData } from "../../composables/useLibraryData";
 import { readResumableList } from "../../composables/useDirLists";
@@ -85,9 +87,38 @@ watch(
     if (!open) return;
     await nextTick();
     searchField.value?.focus();
+    void focusRequested();
   },
   { immediate: true },
 );
+// Opened again on another conversation while already open (a second cell's History menu).
+watch(
+  () => [router.currentRoute.value.query.session, router.currentRoute.value.query.cwd],
+  () => {
+    if (isOpen.value) void focusRequested();
+  },
+);
+
+/** Opens the reader on the conversation the URL names (a cell's History menu), reading it by id when
+ *  it is not on the pages the list has read. */
+let focusRequests = 0;
+async function focusRequested(): Promise<void> {
+  const mine = ++focusRequests; // even with nothing asked: a plain open withdraws an earlier request
+  const request = libraryRequested();
+  if (request === null) return;
+  const opening = openings;
+  const loaded = [...pinned.value, ...conversations.value];
+  // Only an exact copy is taken from the list; anything else is the server's choice (the newest).
+  const listed = request.cwd === null ? undefined : loaded.find((c) => c.id === request.session && c.cwd === request.cwd);
+  const found = listed ?? (await loadLibraryConversation(request.session, request.cwd));
+  // A newer request, or a newer open, decides instead.
+  if (found === null || mine !== focusRequests || opening !== openings) return;
+  // Search results would hide a conversation outside them: the request is for this one, so leave the search.
+  query.value = "";
+  chosenKey.value = conversationKey(found);
+  chosenSeen.value = found;
+  readerShown.value = true;
+}
 // By key: a reload replaces every object, and must not clear a refusal about the row still selected.
 const selectedKey = computed(() => (selected.value ? conversationKey(selected.value) : null));
 watch(selectedKey, () => (notice.value = null));
@@ -118,6 +149,7 @@ function renameConversation(id: string, name: string | null): void {
 }
 
 function select(conversation: LibraryConversation): void {
+  focusRequests += 1; // the user's own pick outranks a request still loading
   chosenKey.value = conversationKey(conversation);
   chosenSeen.value = conversation;
   readerShown.value = true;
@@ -134,6 +166,7 @@ watch(
 );
 
 async function move(by: number): Promise<void> {
+  focusRequests += 1;
   const index = selected.value ? shown.value.indexOf(selected.value) : -1;
   const target = index < 0 && lastIndex !== null ? movedFromGap(lastIndex, by, shown.value.length) : movedIndex(index, by, shown.value.length);
   const next = shown.value[target];

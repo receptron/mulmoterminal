@@ -8,7 +8,11 @@ import type { ResumableList } from "../../../../src/composables/useDirLists";
 
 const libraryOpen = ref(true);
 const closeLibrary = vi.fn();
-vi.mock("../../../../src/composables/useLibraryView", () => ({ useLibraryView: () => ({ isOpen: libraryOpen, close: closeLibrary }) }));
+let requested: { session: string; cwd: string | null } | null = null;
+vi.mock("../../../../src/composables/useLibraryView", () => ({
+  useLibraryView: () => ({ isOpen: libraryOpen, close: closeLibrary }),
+  libraryRequested: () => requested,
+}));
 
 let page: LibraryConversation[] = [];
 let status: LibraryIndexStatus | null = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
@@ -21,6 +25,7 @@ let saveGate: Promise<void> = Promise.resolve();
 let marksGate: Promise<void> = Promise.resolve();
 let marksUnreadable = false;
 let conversationGate: Promise<void> = Promise.resolve();
+const conversationGates = new Map<string, Promise<void>>();
 let more: { conversations: LibraryConversation[]; hasMore: boolean; indexFinishedAt: number | null } | null = null;
 /** The finished pass the next first page says it reflects. */
 let pageFinished: number | null = 1;
@@ -46,9 +51,11 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
     await marksGate;
     return answer;
   },
-  loadLibraryConversation: async (id: string) => {
-    await conversationGate;
-    return page.find((c) => c.id === id) ?? null;
+  loadLibraryConversation: async (id: string, cwd: string | null = null) => {
+    const gate = conversationGates.get(id) ?? conversationGate;
+    await gate;
+    // As the server answers: the copy in `cwd` when named and present, else the newest (the page is newest first).
+    return (cwd === null ? undefined : page.find((c) => c.id === id && c.cwd === cwd)) ?? page.find((c) => c.id === id) ?? null;
   },
   saveLibraryMark: async (id: string, change: { pinned?: boolean; name?: string | null }) => {
     saved.push({ id, change });
@@ -111,7 +118,15 @@ const press = async (key: string) => {
   await flushPromises();
 };
 
+// The router outlives a test, and pushing the URL it already shows does not navigate: start each
+// test from a plain Library so a request is always a change.
+beforeEach(async () => {
+  const { router } = await import("../../../../src/router");
+  await router.replace({ name: "library", query: {} });
+});
+
 beforeEach(() => {
+  requested = null;
   closeLibrary.mockClear();
   marks = { pinned: [], names: {} };
   saved.length = 0;
@@ -120,6 +135,7 @@ beforeEach(() => {
   marksGate = Promise.resolve();
   marksUnreadable = false;
   conversationGate = Promise.resolve();
+  conversationGates.clear();
   libraryOpen.value = true;
   page = [conversation("a", "Burn subtitles"), conversation("b", "CI under ten minutes", { endedAt: NOW - 30 * 24 * 3_600_000 })];
   status = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
@@ -512,5 +528,112 @@ describe("LibraryOverlay pins and names", () => {
     await flushPromises();
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("The only one");
     vi.mocked(api.loadLibraryPage).mockRestore();
+  });
+
+  it("opens on the conversation a cell's History menu named, even one not on the first page", async () => {
+    const old = conversation("from-a-cell", "Opened from its cell", { endedAt: NOW - 400 * 24 * 3_600_000 });
+    page = [...page, old]; // readable by id…
+    const api = await import("../../../../src/composables/libraryApi");
+    vi.spyOn(api, "loadLibraryPage").mockResolvedValue({ conversations: page.slice(0, 2), hasMore: true, indexFinishedAt: 1 }); // …not listed
+    requested = { session: "from-a-cell", cwd: null };
+    const wrapper = await mountLibrary();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Opened from its cell");
+    vi.mocked(api.loadLibraryPage).mockRestore();
+  });
+
+  it("opens on the copy of a session in the cell's own project when one id sits in two", async () => {
+    page = [conversation("twin", "In the clip studio"), conversation("twin", "In the other project", { cwd: "/Users/me/work/other" }), ...page];
+    const wrapper = await mountLibrary(); // both copies listed before the request arrives
+    requested = { session: "twin", cwd: "/Users/me/work/other" };
+    const { router } = await import("../../../../src/router");
+    await router.push({ name: "library", query: { session: "twin", cwd: "/Users/me/work/other" } });
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("In the other project");
+  });
+
+  it("lets the newer of two requests decide, whichever answers first", async () => {
+    const older = conversation("older", "Asked for first", { endedAt: NOW - 400 * 24 * 3_600_000 });
+    const newer = conversation("newer", "Asked for second", { endedAt: NOW - 400 * 24 * 3_600_000 });
+    page = [...page, older, newer];
+    const api = await import("../../../../src/composables/libraryApi");
+    vi.spyOn(api, "loadLibraryPage").mockResolvedValue({ conversations: page.slice(0, 2), hasMore: true, indexFinishedAt: 1 });
+    let releaseOlder: () => void = () => {};
+    conversationGates.set("older", new Promise((resolve) => (releaseOlder = resolve)));
+    requested = { session: "older", cwd: null };
+    const { router } = await import("../../../../src/router");
+    const wrapper = await mountLibrary();
+    requested = { session: "newer", cwd: null };
+    await router.push({ name: "library", query: { session: "newer" } });
+    await flushPromises();
+    releaseOlder();
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Asked for second");
+    vi.mocked(api.loadLibraryPage).mockRestore();
+  });
+
+  it("drops a request still loading when the Library is then opened plainly", async () => {
+    const asked = conversation("asked", "Asked for, then withdrawn", { endedAt: NOW - 400 * 24 * 3_600_000 });
+    page = [...page, asked];
+    const api = await import("../../../../src/composables/libraryApi");
+    vi.spyOn(api, "loadLibraryPage").mockResolvedValue({ conversations: page.slice(0, 2), hasMore: true, indexFinishedAt: 1 });
+    let release: () => void = () => {};
+    conversationGates.set("asked", new Promise((resolve) => (release = resolve)));
+    const { router } = await import("../../../../src/router");
+    const wrapper = await mountLibrary();
+    requested = { session: "asked", cwd: null };
+    await router.push({ name: "library", query: { session: "asked" } });
+    requested = null;
+    await router.push({ name: "library", query: {} });
+    await flushPromises();
+    release();
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).not.toContain("withdrawn");
+    vi.mocked(api.loadLibraryPage).mockRestore();
+  });
+
+  it("opens the newest copy, as the server picks it, when no project is named", async () => {
+    page = [conversation("twin", "Newer copy"), conversation("twin", "Older copy without a project", { cwd: null, endedAt: NOW - 3_600_000 }), ...page];
+    const wrapper = await mountLibrary();
+    requested = { session: "twin", cwd: null };
+    const { router } = await import("../../../../src/router");
+    await router.push({ name: "library", query: { session: "twin" } });
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Newer copy");
+  });
+
+  it.each(["click", "arrow"])("keeps the row the user picked (by %s) over a request that answers later", async (how) => {
+    const id = `asked-by-${how}`;
+    const asked = conversation(id, "Asked for, then passed over", { endedAt: NOW - 400 * 24 * 3_600_000 });
+    page = [...page, asked];
+    const api = await import("../../../../src/composables/libraryApi");
+    vi.spyOn(api, "loadLibraryPage").mockResolvedValue({ conversations: page.slice(0, 2), hasMore: true, indexFinishedAt: 1 });
+    let release: () => void = () => {};
+    conversationGates.set(id, new Promise((resolve) => (release = resolve)));
+    const { router } = await import("../../../../src/router");
+    const wrapper = await mountLibrary();
+    requested = { session: id, cwd: null };
+    await router.push({ name: "library", query: { session: id } });
+    if (how === "click") await wrapper.findAll("[data-testid=library-row]")[1]?.trigger("click");
+    else await press("ArrowDown");
+    release();
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).not.toContain("passed over");
+    vi.mocked(api.loadLibraryPage).mockRestore();
+  });
+
+  it("leaves a search to show the conversation a cell asked for", async () => {
+    const asked = conversation("asked-while-searching", "Asked for during a search", { endedAt: NOW - 400 * 24 * 3_600_000 });
+    page = [...page, asked];
+    hits = [{ conversation: page[0] ?? asked, snippet: "ten", role: "user" }];
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-search]").setValue("ten");
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    await flushPromises();
+    requested = { session: "asked-while-searching", cwd: null };
+    const { router } = await import("../../../../src/router");
+    await router.push({ name: "library", query: { session: "asked-while-searching" } });
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Asked for during a search");
+    expect((wrapper.find("[data-testid=library-search]").element as HTMLInputElement).value).toBe("");
   });
 });

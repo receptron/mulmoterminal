@@ -20,7 +20,7 @@ const declaredEmits = (CellChromeButtons as unknown as { emits?: string[] }).emi
 // Events a CELL binds itself rather than through the shared object, with the reason. These exist
 // only on a session terminal (the command and launcher cells never offer them), so TerminalCell
 // wires them explicitly beside `v-on="chromeEvents"`; terminalCellTalkMenu.spec drives the talk pair.
-const SELF_BOUND = new Set(["toggle-park", "open-timeline", "restart-agent", "open-talk", "tools-opening"]);
+const SELF_BOUND = new Set(["toggle-park", "open-timeline", "open-library", "restart-agent", "open-talk", "tools-opening"]);
 
 const forwarded = (keys: string[]): Set<string> => new Set([...keys, ...SELF_BOUND]);
 

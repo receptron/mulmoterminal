@@ -3,8 +3,23 @@ import { computed, type ComputedRef } from "vue";
 import { router } from "../router";
 import { overlayOriginState, overlayReturnPath } from "./overlayOrigin";
 
-export function libraryViewOpen(): void {
-  void router.push({ name: "library", state: overlayOriginState() });
+/** A conversation the Library is asked to open on: its session id, and the project it ran in. */
+export interface LibraryRequest {
+  session: string;
+  cwd: string | null;
+}
+
+/** Opens the Library, on one conversation when `request` names it (a cell's History menu). */
+export function libraryViewOpen(request?: LibraryRequest): void {
+  const query = request ? { session: request.session, ...(request.cwd ? { cwd: request.cwd } : {}) } : {};
+  void router.push({ name: "library", query, state: overlayOriginState() });
+}
+
+/** The conversation the Library was opened on, from its URL. */
+export function libraryRequested(): LibraryRequest | null {
+  const { session, cwd } = router.currentRoute.value.query;
+  if (typeof session !== "string" || session === "") return null;
+  return { session, cwd: typeof cwd === "string" && cwd !== "" ? cwd : null };
 }
 
 export function libraryViewClose(): void {

@@ -57,6 +57,19 @@ describe("/api/library", () => {
     expect((await call("/api/library/conversations/nope")).status).toBe(404);
   });
 
+  it("passes the project a conversation is asked for in, so a session copied into two picks its own", async () => {
+    const asked: unknown[][] = [];
+    const app = express();
+    mountLibraryRoutes(app, { call: (method, args) => (asked.push([method, ...args]), Promise.resolve(null)) });
+    const call = routeCall(app);
+    await call("/api/library/conversations/s1?cwd=%2Fw%2Fapp");
+    await call("/api/library/conversations/s1");
+    expect(asked).toEqual([
+      ["conversation", "s1", "/w/app"],
+      ["conversation", "s1", ""],
+    ]);
+  });
+
   it("searches, and refuses an empty or overlong query", async () => {
     const call = appWithConversations(2);
     const found = (await call(`/api/library/search?q=${encodeURIComponent("number 1")}`)).body;

@@ -503,6 +503,7 @@ export const zhCN: Messages = {
       prompts: { label: "发送的提示", detail: "本会话中你输入的指令" },
       transcript: { label: "对话", detail: "你的指令与代理回复的全文" },
       timeline: { label: "活动时间线", detail: "代理做过的事（读取的文件、运行的命令），按时间排序" },
+      library: { label: "在资料库中打开", detail: "在资料库中查看此对话（搜索、置顶、重命名）" },
       tools: { label: "使用的工具", detail: "代理调用的工具及其结果" },
       canvas: { label: "画布", detail: "代理绘制的图表、文档和卡片" },
       collections: { label: "集合", detail: "此文件夹的集合" },

@@ -66,7 +66,8 @@ export function mountLibraryRoutes(app: Express, deps: LibraryRouteDeps = {}): v
     if (page !== undefined) res.json(page);
   });
   app.get("/api/library/conversations/:id", async (req, res) => {
-    const conversation = await answer(res, call, "conversation", [req.params.id]);
+    const cwd = typeof req.query.cwd === "string" ? req.query.cwd : "";
+    const conversation = await answer(res, call, "conversation", [req.params.id, cwd]);
     if (conversation === null) res.status(404).json({ error: "conversation not found" });
     else if (conversation !== undefined) res.json(conversation);
   });

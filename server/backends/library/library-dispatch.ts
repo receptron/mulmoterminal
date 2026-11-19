@@ -30,7 +30,7 @@ export function dispatchLibraryRequest(service: LibraryService, request: Library
     case "list":
       return service.list(filterArg(first), count(second), count(third));
     case "conversation":
-      return service.conversation(text(first));
+      return service.conversation(text(first), typeof second === "string" && second !== "" ? second : null);
     case "search":
       return service.search(text(first), filterArg(second), count(third));
   }

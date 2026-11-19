@@ -518,6 +518,7 @@ export const ja: Messages = {
       prompts: { label: "送ったプロンプト", detail: "このセッションで自分が打ち込んだ指示" },
       transcript: { label: "会話", detail: "自分の指示とエージェントの返事の全文" },
       timeline: { label: "作業の履歴", detail: "エージェントがしたこと（読んだファイル、実行したコマンド）を時刻順に" },
+      library: { label: "ライブラリで開く", detail: "この会話をライブラリで（探す・ピン留め・名前を変える）" },
       tools: { label: "使ったツール", detail: "エージェントが呼んだツールと、その結果" },
       canvas: { label: "キャンバス", detail: "エージェントが描いたグラフ・文書・カード" },
       collections: { label: "コレクション", detail: "このフォルダのコレクション" },

@@ -7,6 +7,7 @@ const state = (over: Partial<CellPaneMenuState> = {}): CellPaneMenuState => ({
   canvasAvailable: true,
   collectionsAvailable: false,
   timelineAvailable: false,
+  libraryAvailable: false,
   restartAvailable: false,
   talkAvailable: false,
   ...over,
@@ -34,6 +35,19 @@ describe("historyEntries", () => {
   it("checks the pane that is open, and never the timeline", () => {
     const entries = historyEntries(state({ rightPane: "transcript", timelineAvailable: true }), t);
     expect(entries.map((entry) => entry.checked)).toEqual([false, true, undefined]);
+  });
+});
+
+describe("the library entry", () => {
+  it("closes the History menu, set apart, for a session the Library lists", () => {
+    const entries = historyEntries(state({ timelineAvailable: true, libraryAvailable: true }), t);
+    expect(ids(entries)).toEqual(["prompts", "transcript", "timeline", "library"]);
+    expect(entries.at(-1)?.separated).toBe(true);
+    expect(entries.at(-1)?.checked).toBeUndefined();
+  });
+
+  it("is absent for a session the Library does not list", () => {
+    expect(ids(historyEntries(state({ timelineAvailable: true }), t))).not.toContain("library");
   });
 });
 

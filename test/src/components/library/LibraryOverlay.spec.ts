@@ -8,7 +8,11 @@ import type { ResumableList } from "../../../../src/composables/useDirLists";
 
 const libraryOpen = ref(true);
 const closeLibrary = vi.fn();
-vi.mock("../../../../src/composables/useLibraryView", () => ({ useLibraryView: () => ({ isOpen: libraryOpen, close: closeLibrary }) }));
+let requested: { session: string; cwd: string | null } | null = null;
+vi.mock("../../../../src/composables/useLibraryView", () => ({
+  useLibraryView: () => ({ isOpen: libraryOpen, close: closeLibrary }),
+  libraryRequested: () => requested,
+}));
 
 let page: LibraryConversation[] = [];
 let status: LibraryIndexStatus | null = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
@@ -107,6 +111,7 @@ const press = async (key: string) => {
 };
 
 beforeEach(() => {
+  requested = null;
   closeLibrary.mockClear();
   marks = { pinned: [], names: {} };
   saveFails = false;

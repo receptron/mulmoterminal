@@ -9,7 +9,7 @@
 // A menu with nothing to choose is not shown.
 import type { RightPane } from "./gridCell";
 
-export type CellPaneMenuId = "prompts" | "transcript" | "timeline" | "tools" | "canvas" | "collections" | "talk" | "restart";
+export type CellPaneMenuId = "prompts" | "transcript" | "timeline" | "library" | "tools" | "canvas" | "collections" | "talk" | "restart";
 
 export interface CellPaneMenuEntry {
   id: CellPaneMenuId;
@@ -28,6 +28,8 @@ export interface CellPaneMenuState {
   canvasAvailable: boolean;
   collectionsAvailable: boolean;
   timelineAvailable: boolean;
+  // Whether this session is one the Library lists (a Claude session), to open there.
+  libraryAvailable: boolean;
   restartAvailable: boolean;
   // Whether another terminal is there to talk to, read when the menu opens.
   talkAvailable: boolean;
@@ -39,6 +41,7 @@ const ICONS: Record<CellPaneMenuId, string> = {
   prompts: "outbox",
   transcript: "chat",
   timeline: "timeline",
+  library: "local_library",
   tools: "build",
   canvas: "draw",
   collections: "database",
@@ -66,6 +69,17 @@ export function historyEntries(state: CellPaneMenuState, t: Translate): CellPane
       label: t("cellMenu.items.timeline.label"),
       detail: t("cellMenu.items.timeline.detail"),
       disabled: false,
+    });
+  }
+  // A view elsewhere, so set apart from the panes beside the cell.
+  if (state.libraryAvailable) {
+    entries.push({
+      id: "library",
+      icon: ICONS.library,
+      label: t("cellMenu.items.library.label"),
+      detail: t("cellMenu.items.library.detail"),
+      disabled: false,
+      separated: true,
     });
   }
   return entries;
