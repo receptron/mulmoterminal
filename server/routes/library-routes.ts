@@ -25,7 +25,8 @@ export function queryCount(value: unknown, fallback: number, max: number): numbe
 
 export function filterOf(query: Record<string, unknown>): ConversationFilter {
   const cwd = typeof query.cwd === "string" && query.cwd !== "" ? query.cwd : undefined;
-  return { ...(cwd === undefined ? {} : { cwd }), includeTemporary: flag(query.temporary), includeSidechains: flag(query.sidechains) };
+  const flags = { includeTemporary: flag(query.temporary), includeSidechains: flag(query.sidechains), includeAutomated: flag(query.automated) };
+  return { ...(cwd === undefined ? {} : { cwd }), ...flags };
 }
 
 let shared: LibraryCaller | null = null;

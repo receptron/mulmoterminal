@@ -33,6 +33,9 @@ const props = defineProps<{
   // Whether this pane currently covers the terminal area. Owned by the grid, shown here because the
   // button that flips it lives in this header — the same contract Tools and Prompts have.
   expanded?: boolean;
+  /** Shown as the body of another view (the Library's reader), which has its own title and room:
+   *  no header row, no fixed width, no edge. */
+  embedded?: boolean;
 }>();
 const emit = defineEmits<{ close: []; toggleExpand: [] }>();
 
@@ -340,8 +343,8 @@ const label = toolBlockLabel;
 </script>
 
 <template>
-  <section class="flex h-full w-[340px] shrink-0 flex-col border-l border-border bg-deep">
-    <div class="flex items-center justify-between bg-panel px-4 py-2 font-sans text-[14px] text-fg">
+  <section class="flex h-full flex-col bg-deep" :class="embedded ? 'min-w-0 flex-1' : 'w-[340px] shrink-0 border-l border-border'">
+    <div v-if="!embedded" class="flex items-center justify-between bg-panel px-4 py-2 font-sans text-[14px] text-fg">
       <div class="flex items-baseline gap-2">
         <span class="font-semibold">Conversation</span>
         <span v-if="loadingOlder" class="text-[11px] text-dim">loading older…</span>

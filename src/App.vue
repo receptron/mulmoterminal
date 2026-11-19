@@ -18,6 +18,7 @@ import GithubBoardOverlay from "./components/GithubBoardOverlay.vue";
 import RoomsOverlay from "./components/RoomsOverlay.vue";
 import BlueprintsOverlay from "./components/blueprints/BlueprintsOverlay.vue";
 import SkillsOverlay from "./components/SkillsOverlay.vue";
+import LibraryOverlay from "./components/library/LibraryOverlay.vue";
 import ProcessesOverlay from "./components/processes/ProcessesOverlay.vue";
 import UsageOverlay from "./components/usage/UsageOverlay.vue";
 import FilesOverlay from "./components/FilesOverlay.vue";
@@ -112,6 +113,7 @@ const { whatsNew, dismiss: dismissWhatsNew } = useWhatsNew(useI18n().locale.valu
   <BlueprintsOverlay />
   <!-- Every skill on disk across the folders terminals ran in; opened from the feature menu. -->
   <SkillsOverlay />
+  <LibraryOverlay />
   <!-- What each session is running, and worktrees that can go; opened from the feature menu. -->
   <ProcessesOverlay />
   <UsageOverlay />

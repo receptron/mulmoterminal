@@ -44,6 +44,7 @@ describe("/api/library", () => {
     const second = (await call("/api/library/conversations?limit=2&offset=2")).body;
     expect((second.conversations as { id: string }[]).map((c) => c.id)).toEqual(["s0"]);
     expect(second.hasMore).toBe(false);
+    expect(second.indexFinishedAt).toBe(0); // the pass this page reflects, which the screen compares with the status
   });
 
   it("answers one conversation, or 404", async () => {
@@ -85,8 +86,13 @@ describe("query parsing", () => {
   });
 
   it("reads the filter flags, and ignores an empty cwd", () => {
-    expect(filterOf({})).toEqual({ includeTemporary: false, includeSidechains: false });
-    expect(filterOf({ cwd: "/w", temporary: "1", sidechains: "true" })).toEqual({ cwd: "/w", includeTemporary: true, includeSidechains: true });
-    expect(filterOf({ cwd: "", temporary: "yes" })).toEqual({ includeTemporary: false, includeSidechains: false });
+    expect(filterOf({})).toEqual({ includeTemporary: false, includeSidechains: false, includeAutomated: false });
+    expect(filterOf({ cwd: "/w", temporary: "1", sidechains: "true", automated: "1" })).toEqual({
+      cwd: "/w",
+      includeTemporary: true,
+      includeSidechains: true,
+      includeAutomated: true,
+    });
+    expect(filterOf({ cwd: "", temporary: "yes" })).toEqual({ includeTemporary: false, includeSidechains: false, includeAutomated: false });
   });
 });

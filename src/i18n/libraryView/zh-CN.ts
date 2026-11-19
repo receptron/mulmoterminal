@@ -1,0 +1,28 @@
+// The Library (#3329), out of the locale file, which is at its line cap.
+export const libraryViewZhCN = {
+  libraryView: {
+    title: "资料库",
+    region: "资料库",
+    close: "关闭资料库",
+    search: "搜索对话",
+    shortcuts: "/ 搜索 · ↑↓ 移动 · Enter 继续 · Esc 关闭",
+    kinds: { conversations: "对话" },
+    groups: { today: "今天", week: "本周", older: "更早" },
+    indexing: "正在为历史建立索引… {done} / {total} 个文件",
+    indexingStart: "正在为历史建立索引…",
+    loading: "正在读取对话…",
+    loadFailed: "无法读取资料库索引。",
+    empty: "还没有对话。与 Claude 的对话会显示在这里。",
+    noMatch: "没有与“{query}”匹配的对话。请缩短或换个词再试。",
+    searchFailed: "暂时无法搜索。请稍后再试。",
+    searching: "正在搜索…",
+    back: "列表",
+    resume: "继续",
+    resumeBusy: "此对话已打开，或正被其他窗口使用。",
+    resumeUnchecked: "无法确认此对话是否已在别处打开，因此没有继续。请稍后再试。",
+    resumeNoCwd: "此对话没有可用于继续的工作目录。",
+    untitled: "无标题",
+    pick: "选择一个对话即可在此阅读。",
+    more: "显示更多",
+  },
+};

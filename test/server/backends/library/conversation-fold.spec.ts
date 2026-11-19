@@ -31,7 +31,7 @@ const assistant = (text: string, extra: Record<string, unknown> = {}) => ({
 describe("foldConversationRecord: the records claude writes", () => {
   it("collects the summary fields from a realistic conversation", () => {
     const { state } = fold([
-      user("字幕を焼き込みたい", { cwd: "/w/clip", gitBranch: "main", timestamp: "2026-11-18T08:00:00.000Z" }),
+      user("字幕を焼き込みたい", { cwd: "/w/clip", gitBranch: "main", timestamp: "2026-11-18T08:00:00.000Z", entrypoint: "cli" }),
       { type: "ai-title", aiTitle: "Burn subtitles" },
       assistant("ffmpeg で焼き込みます", { gitBranch: "feat/burn", timestamp: "2026-11-18T08:05:00.000Z", attributionSkill: "gh-review-loop" }),
       { type: "pr-link", prNumber: 212, prUrl: "https://github.com/o/r/pull/212", prRepository: "o/r" },
@@ -53,6 +53,7 @@ describe("foldConversationRecord: the records claude writes", () => {
       hookErrors: 1,
       userTurns: 1,
       isSidechain: false,
+      entrypoint: "cli",
     });
   });
 

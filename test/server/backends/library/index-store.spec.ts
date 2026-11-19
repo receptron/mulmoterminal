@@ -7,6 +7,7 @@ import {
   applyHistoryScan,
   applyTranscriptScan,
   finishLease,
+  inReadSnapshot,
   LIBRARY_SCHEMA_VERSION,
   prepareLibraryStore,
   readFileMark,
@@ -135,7 +136,7 @@ describe("applyTranscriptScan", () => {
       agent: "claude",
       title: "Title",
       ...{ cwd: "/w", gitBranch: "main", prs: state.prs, costUsd: 1.5, linesAdded: 3, linesRemoved: 1, startedAt: 100, endedAt: 200 },
-      ...{ skills: ["s"], hookErrors: 2, userTurns: 4, isSidechain: true, parentId: "parent", isTemporary: false },
+      ...{ skills: ["s"], hookErrors: 2, userTurns: 4, isSidechain: true, parentId: "parent", isTemporary: false, entrypoint: null },
     });
   });
 });
@@ -203,6 +204,19 @@ describe("recordTail", () => {
   });
 });
 
+describe("inReadSnapshot", () => {
+  it("answers what the read returns, and leaves no transaction open, even when the read throws", () => {
+    const db = freshDb();
+    expect(inReadSnapshot(db, () => 7)).toBe(7);
+    expect(() =>
+      inReadSnapshot(db, () => {
+        throw new Error("boom");
+      }),
+    ).toThrow("boom");
+    expect(commit(db, "after", { turns: [turn("written after")] })).toBe(true); // a write still begins
+  });
+});
+
 describe("removeMissingTranscripts without the lease", () => {
   it("deletes nothing for a process that no longer holds it", () => {
     const db = freshDb();
@@ -246,6 +260,17 @@ describe("listConversations and searchLibrary", () => {
     expect(listConversations(db, { includeTemporary: true, includeSidechains: true }, 0, 10).map((row) => row.id)).toEqual(["tmp", "sub", "new", "old"]);
     expect(listConversations(db, { cwd: "/w" }, 0, 10).map((row) => row.id)).toEqual(["old"]);
     expect(listConversations(db, {}, 1, 1).map((row) => row.id)).toEqual(["old"]);
+  });
+
+  it("leaves out claude -p and SDK runs unless asked, and keeps a run that recorded no entrypoint", () => {
+    const db = freshDb();
+    commit(db, "typed", { state: { entrypoint: "cli", endedAt: 3 }, turns: [turn("shared words")] });
+    commit(db, "desktop", { state: { entrypoint: "claude-desktop", endedAt: 2 }, turns: [turn("shared words")] });
+    commit(db, "scripted", { state: { entrypoint: "sdk-cli", endedAt: 4 }, turns: [turn("shared words")] });
+    commit(db, "unknown", { state: { entrypoint: null, endedAt: 1 }, turns: [turn("shared words")] });
+    expect(listConversations(db, {}, 0, 10).map((row) => row.id)).toEqual(["typed", "desktop", "unknown"]);
+    expect(searchLibrary(db, "shared words", {}, 10).map((hit) => hit.conversation.id)).toEqual(["typed", "desktop", "unknown"]);
+    expect(listConversations(db, { includeAutomated: true }, 0, 10).map((row) => row.id)).toEqual(["scripted", "typed", "desktop", "unknown"]);
   });
 
   it("finds Japanese text inside a word, and short queries by scanning", () => {
