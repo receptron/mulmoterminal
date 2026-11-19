@@ -118,6 +118,13 @@ const press = async (key: string) => {
   await flushPromises();
 };
 
+// The router outlives a test, and pushing the URL it already shows does not navigate: start each
+// test from a plain Library so a request is always a change.
+beforeEach(async () => {
+  const { router } = await import("../../../../src/router");
+  await router.replace({ name: "library", query: {} });
+});
+
 beforeEach(() => {
   requested = null;
   closeLibrary.mockClear();
@@ -592,5 +599,25 @@ describe("LibraryOverlay pins and names", () => {
     await router.push({ name: "library", query: { session: "twin" } });
     await flushPromises();
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Newer copy");
+  });
+
+  it.each(["click", "arrow"])("keeps the row the user picked (by %s) over a request that answers later", async (how) => {
+    const id = `asked-by-${how}`;
+    const asked = conversation(id, "Asked for, then passed over", { endedAt: NOW - 400 * 24 * 3_600_000 });
+    page = [...page, asked];
+    const api = await import("../../../../src/composables/libraryApi");
+    vi.spyOn(api, "loadLibraryPage").mockResolvedValue({ conversations: page.slice(0, 2), hasMore: true, indexFinishedAt: 1 });
+    let release: () => void = () => {};
+    conversationGates.set(id, new Promise((resolve) => (release = resolve)));
+    const { router } = await import("../../../../src/router");
+    const wrapper = await mountLibrary();
+    requested = { session: id, cwd: null };
+    await router.push({ name: "library", query: { session: id } });
+    if (how === "click") await wrapper.findAll("[data-testid=library-row]")[1]?.trigger("click");
+    else await press("ArrowDown");
+    release();
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).not.toContain("passed over");
+    vi.mocked(api.loadLibraryPage).mockRestore();
   });
 });

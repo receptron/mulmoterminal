@@ -147,6 +147,7 @@ function renameConversation(id: string, name: string | null): void {
 }
 
 function select(conversation: LibraryConversation): void {
+  focusRequests += 1; // the user's own pick outranks a request still loading
   chosenKey.value = conversationKey(conversation);
   chosenSeen.value = conversation;
   readerShown.value = true;
@@ -163,6 +164,7 @@ watch(
 );
 
 async function move(by: number): Promise<void> {
+  focusRequests += 1;
   const index = selected.value ? shown.value.indexOf(selected.value) : -1;
   const target = index < 0 && lastIndex !== null ? movedFromGap(lastIndex, by, shown.value.length) : movedIndex(index, by, shown.value.length);
   const next = shown.value[target];
