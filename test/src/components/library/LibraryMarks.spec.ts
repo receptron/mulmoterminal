@@ -357,4 +357,20 @@ describe("LibraryOverlay pins and names", () => {
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("CI under ten minutes");
     expect(wrapper.findAll("[data-testid=library-row]")[0]?.text()).toContain("CI under ten minutes");
   });
+
+  it("stays on a pinned conversation from outside the list when it is unpinned", async () => {
+    const old = conversation("old", "Pinned long ago", { endedAt: NOW - 400 * 24 * 3_600_000 });
+    marks = { pinned: ["old"], names: {} };
+    page = [...page, old]; // readable by id for the pinned group…
+    const listed = page.slice(0, 2);
+    const api = await import("../../../../src/composables/libraryApi");
+    vi.spyOn(api, "loadLibraryPage").mockResolvedValue({ conversations: listed, hasMore: true, indexFinishedAt: 1 }); // …but not on the first page
+    const wrapper = await mountLibrary();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Pinned long ago");
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-pin]").trigger("click"); // unpin
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Pinned long ago");
+    vi.mocked(api.loadLibraryPage).mockRestore();
+  });
 });

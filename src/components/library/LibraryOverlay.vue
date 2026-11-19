@@ -2,7 +2,7 @@
 // The Library (#3329; design in docs/library-design.md): every Claude conversation on this machine,
 // searchable, readable, and resumable where it ran. A search field, the kinds (conversations only,
 // for now), and list | reader — one column at phone width, where choosing a row opens the reader.
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import FullScreenOverlay from "../FullScreenOverlay.vue";
 import LibraryList from "./LibraryList.vue";
@@ -42,7 +42,16 @@ const shown = computed((): LibraryConversation[] =>
     : listedInOrder(groupConversations(conversations.value, now.value, pinned.value, new Set(marks.value.pinned))),
 );
 // The chosen row while it is still shown, else the first one: Enter always has something to act on.
-const selected = computed(() => shown.value.find((c) => conversationKey(c) === chosenKey.value) ?? shown.value[0] ?? null);
+/** The chosen conversation as last seen, kept so the reader stays on it if it leaves the list — an
+ *  unpinned one that is not on the pages read so far, say — until another is chosen. */
+const chosenSeen = shallowRef<LibraryConversation | null>(null);
+const selected = computed(
+  () =>
+    shown.value.find((c) => conversationKey(c) === chosenKey.value) ??
+    (chosenSeen.value !== null && conversationKey(chosenSeen.value) === chosenKey.value ? chosenSeen.value : null) ??
+    shown.value[0] ??
+    null,
+);
 // Only the FIRST build is worth a line: later passes catch up in seconds on what was appended, and a
 // progress line every time the screen opens would read as the Library being slow.
 const progress = computed(() => {
@@ -95,7 +104,13 @@ const RESUME_REFUSALS: Record<Exclude<LibraryResume["kind"], "open">, string> = 
 };
 
 function pinSelected(pin: boolean): void {
-  if (selected.value) void changeMark(selected.value.id, { pinned: pin }, selected.value);
+  const conversation = selected.value;
+  if (conversation === null) return;
+  // Acting on the row shown by default makes it the chosen one, so the reader stays on it after it
+  // moves in or out of the list.
+  chosenKey.value = conversationKey(conversation);
+  chosenSeen.value = conversation;
+  void changeMark(conversation.id, { pinned: pin }, conversation);
 }
 function renameConversation(id: string, name: string | null): void {
   void changeMark(id, { name });
@@ -103,6 +118,7 @@ function renameConversation(id: string, name: string | null): void {
 
 function select(conversation: LibraryConversation): void {
   chosenKey.value = conversationKey(conversation);
+  chosenSeen.value = conversation;
   readerShown.value = true;
 }
 
@@ -110,6 +126,7 @@ async function move(by: number): Promise<void> {
   const index = selected.value ? shown.value.indexOf(selected.value) : -1;
   const next = shown.value[movedIndex(index, by, shown.value.length)];
   chosenKey.value = next === undefined ? null : conversationKey(next);
+  chosenSeen.value = next ?? null;
   // The keys move the highlight, not the scroll: bring the row Enter will act on into view.
   await nextTick();
   document.querySelector("[data-library-row][aria-current=true]")?.scrollIntoView?.({ block: "nearest" });
