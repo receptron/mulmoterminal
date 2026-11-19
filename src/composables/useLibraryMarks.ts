@@ -4,6 +4,12 @@ import { ref, shallowRef, watch, type Ref } from "vue";
 import { emptyLibraryMarks, type LibraryConversation, type LibraryMarkChange, type LibraryMarks } from "../../common/library";
 import { loadLibraryConversation, loadLibraryMarks, saveLibraryMark } from "./libraryApi";
 
+/** The pinned list with one conversation pinned to the front, or taken out. Pure. */
+export function pinnedAfter(pinned: readonly LibraryConversation[], conversation: LibraryConversation, pin: boolean): LibraryConversation[] {
+  const others = pinned.filter((known) => known.id !== conversation.id);
+  return pin ? [conversation, ...others] : others;
+}
+
 export function useLibraryMarks(isOpen: Ref<boolean>) {
   const marks = shallowRef<LibraryMarks>(emptyLibraryMarks());
   const pinned = shallowRef<LibraryConversation[]>([]);
@@ -42,7 +48,7 @@ export function useLibraryMarks(isOpen: Ref<boolean>) {
   /** Saves one change; on failure nothing on screen changes and `saveFailed` says so. Only the newest
    *  request's answer is applied: the server applies changes in order, so its last answer already
    *  holds the earlier ones, while an earlier answer arriving late would undo the later change. */
-  async function change(id: string, update: LibraryMarkChange): Promise<boolean> {
+  async function change(id: string, update: LibraryMarkChange, conversation?: LibraryConversation): Promise<boolean> {
     saveFailedFor.value = null;
     const mine = ++saveRequest;
     const saved = await saveLibraryMark(id, update);
@@ -57,6 +63,9 @@ export function useLibraryMarks(isOpen: Ref<boolean>) {
       return false;
     }
     const pinsChanged = saved.pinned.join("\n") !== marks.value.pinned.join("\n");
+    // The pinned group follows the answer at once for the conversation in hand — reading the others
+    // back takes a round trip, and until then the list (and the selection on it) must not jump.
+    if (conversation !== undefined && update.pinned !== undefined) pinned.value = pinnedAfter(pinned.value, conversation, update.pinned);
     marks.value = saved;
     loadFailed.value = false; // the answer is the file as it now is, so it can be read again
     // By what the answer says, not by what this change asked: a pin whose own answer was superseded

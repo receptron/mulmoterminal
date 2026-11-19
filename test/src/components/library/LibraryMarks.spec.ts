@@ -20,6 +20,7 @@ let saveFails = false;
 let saveGate: Promise<void> = Promise.resolve();
 let marksGate: Promise<void> = Promise.resolve();
 let marksUnreadable = false;
+let conversationGate: Promise<void> = Promise.resolve();
 let more: { conversations: LibraryConversation[]; hasMore: boolean; indexFinishedAt: number | null } | null = null;
 /** The finished pass the next first page says it reflects. */
 let pageFinished: number | null = 1;
@@ -45,7 +46,10 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
     await marksGate;
     return answer;
   },
-  loadLibraryConversation: (id: string) => Promise.resolve(page.find((c) => c.id === id) ?? null),
+  loadLibraryConversation: async (id: string) => {
+    await conversationGate;
+    return page.find((c) => c.id === id) ?? null;
+  },
   saveLibraryMark: async (id: string, change: { pinned?: boolean; name?: string | null }) => {
     saved.push({ id, change });
     // Applied and answered as of ARRIVAL, as the server does; only the delivery waits on the gate.
@@ -112,6 +116,7 @@ beforeEach(() => {
   saveGate = Promise.resolve();
   marksGate = Promise.resolve();
   marksUnreadable = false;
+  conversationGate = Promise.resolve();
   libraryOpen.value = true;
   page = [conversation("a", "Burn subtitles"), conversation("b", "CI under ten minutes", { endedAt: NOW - 30 * 24 * 3_600_000 })];
   status = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
@@ -340,5 +345,16 @@ describe("LibraryOverlay pins and names", () => {
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Burn subtitles"); // the list did not move
     await wrapper.find("[role=menu]").trigger("keydown", { key: "Tab" });
     expect(wrapper.find("[role=menu]").exists()).toBe(false);
+  });
+
+  it("keeps the reader on a conversation while its pin is read back", async () => {
+    const wrapper = await mountLibrary();
+    await press("ArrowDown"); // b
+    conversationGate = new Promise(() => {}); // reading the pinned conversations back never finishes here
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-pin]").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("CI under ten minutes");
+    expect(wrapper.findAll("[data-testid=library-row]")[0]?.text()).toContain("CI under ten minutes");
   });
 });

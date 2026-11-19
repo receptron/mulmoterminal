@@ -95,7 +95,7 @@ const RESUME_REFUSALS: Record<Exclude<LibraryResume["kind"], "open">, string> = 
 };
 
 function pinSelected(pin: boolean): void {
-  if (selected.value) void changeMark(selected.value.id, { pinned: pin });
+  if (selected.value) void changeMark(selected.value.id, { pinned: pin }, selected.value);
 }
 function renameConversation(id: string, name: string | null): void {
   void changeMark(id, { name });
