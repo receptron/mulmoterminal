@@ -254,4 +254,18 @@ describe("LibraryOverlay", () => {
     expect(wrapper.find("[data-testid=library-search-failed]").exists()).toBe(true);
     expect(wrapper.find("[data-testid=library-no-match]").exists()).toBe(false);
   });
+
+  it("keeps reading the chosen conversation when the list is reloaded", async () => {
+    status = { indexing: true, filesDone: 1, filesTotal: 2, finishedAt: 1 }; // a catch-up pass under way
+    const wrapper = await mountLibrary();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await press("ArrowDown");
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toBe("CI under ten minutes");
+    // The pass ends: the list is read again, and every conversation arrives as a new object.
+    page = page.map((c) => ({ ...c }));
+    status = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 2 };
+    await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 200));
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toBe("CI under ten minutes");
+  }, 10_000);
 });

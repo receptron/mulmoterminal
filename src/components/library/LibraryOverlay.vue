@@ -2,7 +2,7 @@
 // The Library (#3329; design in docs/library-design.md): every Claude conversation on this machine,
 // searchable, readable, and resumable where it ran. A search field, the kinds (conversations only,
 // for now), and list | reader — one column at phone width, where choosing a row opens the reader.
-import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import FullScreenOverlay from "../FullScreenOverlay.vue";
 import LibraryList from "./LibraryList.vue";
@@ -17,6 +17,7 @@ import { cellForPanelResume } from "../launchCell";
 import { isEditableTarget } from "../../composables/gridShortcut";
 import { libraryKeyAction, movedIndex } from "./libraryKeys";
 import { libraryResume, type LibraryResume } from "./libraryResume";
+import { conversationKey } from "./libraryRows";
 import type { LibraryConversation } from "../../../common/library";
 
 const { t } = useI18n();
@@ -25,7 +26,8 @@ useEscapeToClose(isOpen, close);
 const { conversations, hasMore, loaded, loadFailed, status, query, hits, searching, searchFailed, loadMore } = useLibraryData(isOpen);
 
 const searchField = ref<HTMLInputElement | null>(null);
-const chosen = shallowRef<LibraryConversation | null>(null);
+/** The chosen row by key, not by object: a reload replaces every object, and must not move the reader. */
+const chosenKey = ref<string | null>(null);
 /** At phone width the reader replaces the list; this says which one is showing there. */
 const readerShown = ref(false);
 const notice = ref<string | null>(null);
@@ -34,7 +36,7 @@ const now = ref(Date.now());
 /** What the list shows right now, in order — what the arrow keys walk. */
 const shown = computed((): LibraryConversation[] => (hits.value ? hits.value.map((hit) => hit.conversation) : conversations.value));
 // The chosen row while it is still shown, else the first one: Enter always has something to act on.
-const selected = computed(() => shown.value.find((c) => c === chosen.value) ?? shown.value[0] ?? null);
+const selected = computed(() => shown.value.find((c) => conversationKey(c) === chosenKey.value) ?? shown.value[0] ?? null);
 // Only the FIRST build is worth a line: later passes catch up in seconds on what was appended, and a
 // progress line every time the screen opens would read as the Library being slow.
 const progress = computed(() => {
@@ -47,7 +49,7 @@ const progress = computed(() => {
 watch(
   isOpen,
   async (open) => {
-    chosen.value = null;
+    chosenKey.value = null;
     readerShown.value = false;
     notice.value = null;
     now.value = Date.now();
@@ -66,13 +68,14 @@ const RESUME_REFUSALS: Record<Exclude<LibraryResume["kind"], "open">, string> = 
 };
 
 function select(conversation: LibraryConversation): void {
-  chosen.value = conversation;
+  chosenKey.value = conversationKey(conversation);
   readerShown.value = true;
 }
 
 function move(by: number): void {
   const index = selected.value ? shown.value.indexOf(selected.value) : -1;
-  chosen.value = shown.value[movedIndex(index, by, shown.value.length)] ?? null;
+  const next = shown.value[movedIndex(index, by, shown.value.length)];
+  chosenKey.value = next === undefined ? null : conversationKey(next);
 }
 
 /** One resume at a time: a second Enter while the first is still checking would open it twice. */
@@ -168,7 +171,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
           <LibraryList
             :conversations="conversations"
             :hits="hits"
-            :selected-id="selected?.id ?? null"
+            :selected-key="selected ? conversationKey(selected) : null"
             :now="now"
             :has-more="hasMore"
             @select="select"

@@ -4,12 +4,12 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import type { LibraryConversation, LibrarySearchHit } from "../../../common/library";
-import { groupConversations, metaParts } from "./libraryRows";
+import { conversationKey, groupConversations, metaParts } from "./libraryRows";
 
 const props = defineProps<{
   conversations: readonly LibraryConversation[];
   hits: readonly LibrarySearchHit[] | null;
-  selectedId: string | null;
+  selectedKey: string | null;
   now: number;
   hasMore: boolean;
 }>();
@@ -26,13 +26,13 @@ const title = (conversation: LibraryConversation): string => conversation.title 
     <template v-if="hits">
       <button
         v-for="hit in hits"
-        :key="hit.conversation.id + (hit.conversation.cwd ?? '')"
+        :key="conversationKey(hit.conversation)"
         type="button"
         data-testid="library-row"
         data-library-row
         class="block w-full cursor-pointer border-0 border-l-2 px-4 py-2 text-left font-sans"
-        :class="hit.conversation.id === selectedId ? 'border-accent bg-hover' : 'border-transparent bg-transparent hover:bg-hover'"
-        :aria-current="hit.conversation.id === selectedId"
+        :class="conversationKey(hit.conversation) === selectedKey ? 'border-accent bg-hover' : 'border-transparent bg-transparent hover:bg-hover'"
+        :aria-current="conversationKey(hit.conversation) === selectedKey"
         @click="emit('select', hit.conversation)"
       >
         <span class="block truncate text-[14px] text-fg">{{ title(hit.conversation) }}</span>
@@ -45,13 +45,13 @@ const title = (conversation: LibraryConversation): string => conversation.title 
         <h3 class="m-0 px-4 pb-1 pt-3 font-sans text-[11px] font-semibold text-dim">{{ t(`libraryView.groups.${rows.group}`) }}</h3>
         <button
           v-for="conversation in rows.conversations"
-          :key="conversation.id + (conversation.cwd ?? '')"
+          :key="conversationKey(conversation)"
           type="button"
           data-testid="library-row"
           data-library-row
           class="block w-full cursor-pointer border-0 border-l-2 px-4 py-2 text-left font-sans"
-          :class="conversation.id === selectedId ? 'border-accent bg-hover' : 'border-transparent bg-transparent hover:bg-hover'"
-          :aria-current="conversation.id === selectedId"
+          :class="conversationKey(conversation) === selectedKey ? 'border-accent bg-hover' : 'border-transparent bg-transparent hover:bg-hover'"
+          :aria-current="conversationKey(conversation) === selectedKey"
           @click="emit('select', conversation)"
         >
           <span class="block truncate text-[14px] text-fg">{{ title(conversation) }}</span>

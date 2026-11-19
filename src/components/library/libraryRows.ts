@@ -16,6 +16,9 @@ const startOfDay = (ms: number): number => {
   return day.getTime();
 };
 
+/** What identifies a row across reloads: the same session id can sit in two project directories. */
+export const conversationKey = (conversation: LibraryConversation): string => `${conversation.id}\u0000${conversation.cwd ?? ""}`;
+
 /** Today is the local calendar day; the week is the six days before it. No time at all is "older". */
 export function groupOf(endedAt: number | null, now: number): LibraryGroup {
   if (endedAt === null) return "older";
