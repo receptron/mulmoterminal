@@ -423,4 +423,15 @@ describe("LibraryOverlay pins and names", () => {
     expect(wrapper.find("[data-testid=library-rename]").exists()).toBe(false);
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Copy two");
   });
+
+  it("closes the More menu when its own button is pressed again", async () => {
+    const wrapper = await mountLibrary();
+    const button = wrapper.find("[data-testid=library-more-actions]");
+    await button.trigger("click");
+    expect(wrapper.find("[role=menu]").exists()).toBe(true);
+    // As a browser does it: pointerdown first (the outside-press listener), then the click.
+    button.element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    await button.trigger("click");
+    expect(wrapper.find("[role=menu]").exists()).toBe(false);
+  });
 });
