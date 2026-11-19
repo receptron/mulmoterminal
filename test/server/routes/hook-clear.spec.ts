@@ -153,9 +153,13 @@ describe("SessionStart source=resume", () => {
   it("unmarks when claude comes back to our own transcript", async () => {
     await postHook({ hook_event_name: "SessionStart", source: "resume", session_id: PICKED });
 
-    await postHook({ hook_event_name: "SessionStart", source: "resume", session_id: ID });
+    await postHook({ hook_event_name: "SessionStart", source: "resume", session_id: ID, cwd: "/work" });
 
     expect(clearedTranscripts.has(ID)).toBe(false);
+    // The header was the picked conversation's; it is read again from ours (#3347).
+    expect(lastPrompts.get(ID)).toBe("continue GitHub issue 1048");
+    expect(lastResponses.get(ID)).toBe("");
+    expect(deps.forgetTitle).toHaveBeenCalledTimes(2);
   });
 
   it("does nothing when the hook names no usable id", async () => {

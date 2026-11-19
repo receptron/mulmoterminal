@@ -190,7 +190,8 @@ async function sessionDetail(req: Request<{ id: string }>, res: Response, freshe
   // wrote and, on the `headless` source, summarizes claude's TURNS. Handed another agent's session
   // it would re-title it from a file that is not that conversation — and the turn count it rations
   // that work by would be claude's too.
-  if (agent === "claude") freshenRosterTitle(id, cwd, claudeSummary.userTurns, claudeSummary.aiTitle);
+  // Not if the session moved while the summary was read: that title is the conversation's it left.
+  if (agent === "claude" && transcriptIdOf(id) === transcriptId) freshenRosterTitle(id, cwd, claudeSummary.userTurns, claudeSummary.aiTitle);
   await sessionMemosHydrated; // a cell seeding on boot must not be told its memo is gone
   await sessionCollectionsHydrated; // and a chat opened from a collection must not lose its mark to a restart
   const view = sessionDetailView(

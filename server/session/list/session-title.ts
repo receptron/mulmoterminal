@@ -125,6 +125,8 @@ export function createTitleManager(deps: TitleDeps) {
     aiTitles.delete(sessionId);
     titleTurnCounts.delete(sessionId);
     titlePending.delete(sessionId);
+    // The baseline counted the turns of the conversation that was titled; the next one starts again.
+    lastTitledUserTurns.delete(sessionId);
     titleEpoch.set(sessionId, (titleEpoch.get(sessionId) ?? 0) + 1);
   }
 
@@ -154,8 +156,10 @@ export function createTitleManager(deps: TitleDeps) {
     // rather than the file. Before this branch existed, an untitled session streamed its whole
     // transcript once per turn to find a string that was already in memory.
     if (!titleNeedsTurns()) {
+      const epoch = titleEpoch.get(sessionId) ?? 0;
       const { aiTitle } = await readSessionSummary(cwd, transcriptId);
-      storeKnownTitle(sessionId, aiTitle, deps);
+      // A move during the read bumped the epoch (forgetTitle): this title is the conversation's it left.
+      if ((titleEpoch.get(sessionId) ?? 0) === epoch) storeKnownTitle(sessionId, aiTitle, deps);
       return;
     }
     await summarizeAndStoreTitle(sessionId, transcriptId, cwd, deps);

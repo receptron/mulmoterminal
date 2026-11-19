@@ -64,10 +64,8 @@ export function shouldRegenerateTitle(p: { hasTitle: boolean; promptIsTrivial: b
 // Decide whether the roster should (re)summarize a viewed session on our side. Regenerate on
 // first view (never titled this server lifetime — `lastTitledUserTurns` still null), or once
 // the transcript has advanced `regenEveryTurns` user turns past the last titling. A transcript
-// with no user turn is skipped. /clear safety rides on this: `lastTitledUserTurns` is kept
-// across a clear (see the server), so a just-cleared session sits at delta 0 and isn't
-// re-titled from its still-frozen pre-clear transcript; a clear before the session was ever
-// titled leaves 0 user turns (the /clear line isn't a turn), also skipped.
+// with no user turn is skipped, which is what a just-cleared session reads as: its turns are the
+// successor's (the server reads the transcript the cell is in), and the /clear line is not a turn.
 export function shouldFreshenViewedTitle(p: { lastTitledUserTurns: number | null; currentUserTurns: number; regenEveryTurns: number }): boolean {
   if (p.currentUserTurns === 0) return false;
   if (p.lastTitledUserTurns === null) return true;

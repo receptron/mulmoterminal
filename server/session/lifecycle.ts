@@ -192,7 +192,7 @@ function reap(deps: SessionLifecycleDeps, id: string) {
   deps.forgetTerminalSize(id);
   deps.forgetPaneMode(id);
   titleInFlight.delete(id);
-  lastTitledUserTurns.delete(id); // teardown only — kept across /clear as the re-title baseline
+  lastTitledUserTurns.delete(id);
   lastTitleAttemptMs.delete(id);
   if (shouldForgetActivity(activity.get(id))) {
     activity.delete(id);

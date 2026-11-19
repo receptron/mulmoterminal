@@ -114,9 +114,8 @@ export const titlePending = new Set<string>(); // ids whose next Stop should (re
 export const titleInFlight = new Set<string>(); // ids currently generating, to avoid overlap
 export const titleEpoch = new Map<string, number>(); // bumped on /clear or teardown to void an in-flight generation
 // The transcript's user-turn count when we last titled a session, so the roster's view-triggered
-// re-titling knows when a session has advanced enough to be worth re-summarizing. Kept across
-// /clear (dropped only on teardown) so a just-cleared session isn't re-titled from its frozen
-// pre-clear transcript.
+// re-titling knows when a session has advanced enough to be worth re-summarizing. Dropped when the
+// cell moves to another conversation (forgetTitle) and on teardown.
 export const lastTitledUserTurns = new Map<string, number>();
 // Wall-clock of the last view-triggered title attempt per session, so a session whose generation
 // keeps failing backs off instead of re-spawning the summarizer on every 4s roster poll.

@@ -84,8 +84,10 @@ export async function notifyTaskFinished(sessionId: string, kind: PushKind, hook
   if (shouldSuppressPush(background, translationWorkerIds.has(sessionId), userScheduled)) return;
   const cwd = ptys.get(sessionId)?.cwd ?? null;
   const where = pushWhere(cwd);
+  const readFrom = transcriptIdOf(sessionId);
   const reply = kind === "finished" ? await finishedReply(sessionId, cwd, hookText.reply) : null;
-  if (reply) lastResponses.set(sessionId, reply); // keep the roster in step; we just read it
+  // Keep the roster in step, unless the session moved while that ran and the reply is from before.
+  if (reply && transcriptIdOf(sessionId) === readFrom) lastResponses.set(sessionId, reply);
   const detail = buildPushDetail({ reply, aiTitle: aiTitles.get(sessionId) });
   const { title, body } = buildPushText(kind, where, detail, hookText.message, { title: PUSH_TITLE_MAX, body: PUSH_BODY_MAX });
   // The session id is what lets the phone open this session from the notification;

@@ -161,7 +161,8 @@ async function trackPromptForHeader(sessionId: string, prompt: string, cwd: stri
   const transcriptId = transcriptIdOf(sessionId);
   if (!lastPrompts.has(sessionId) && transcriptId !== null) {
     const seeded = cwd ? await latestUserPrompt(cwd, transcriptId) : null;
-    if (seeded) lastPrompts.set(sessionId, seeded);
+    // Not if the session moved while that read ran: the prompt is from the conversation it left.
+    if (seeded && transcriptIdOf(sessionId) === transcriptId) lastPrompts.set(sessionId, seeded);
   }
   lastPrompts.set(sessionId, preferredHeaderPrompt(lastPrompts.get(sessionId) ?? null, prompt));
 }
@@ -187,9 +188,7 @@ function rememberClaudeSessionId(sessionId: string, bodyValue: unknown): void {
 // Publish LAST, and after the mark is durable: the publish itself re-reads the reply for a session
 // that is `waiting`, which must read the successor and not ours.
 async function clearHeaderPrompt(deps: HookDeps, sessionId: string, claudeId: string | null, cwd: string | undefined): Promise<void> {
-  const successorPrompt = claudeId && cwd ? await latestUserPrompt(cwd, claudeId) : null;
-  lastPrompts.set(sessionId, successorPrompt ?? "");
-  lastResponses.set(sessionId, (claudeId && cwd ? readLatestResponse(claudeId, cwd) : null) ?? "");
+  await showConversationIn(sessionId, claudeId, cwd);
   // The mark carries claude's NEW id as well as the moment, because the prompts pane needs both to
   // find the new conversation in claude's seamless prompt history — and a restart that remembers
   // only the boundary leaves that pane empty until the next hook (#1749). This hook is where the id
@@ -222,7 +221,7 @@ async function applyHeaderHooks(deps: HookDeps, sessionId: string, event: string
 }
 
 // A `/clear` or an in-session `/resume` moved claude to another transcript, or a `/resume` brought
-// it back to ours (conversation-move.ts). Both moves away blank the header the same way.
+// it back to ours (conversation-move.ts). Either way the header shows the conversation it is now in.
 async function applyConversationMove(deps: HookDeps, sessionId: string, body: Record<string, unknown>, cwd: string | undefined): Promise<void> {
   const claudeId = claudeOwnSessionId(body.session_id, (id) => SESSION_ID_RE.test(id));
   const move = conversationMove({
@@ -233,7 +232,24 @@ async function applyConversationMove(deps: HookDeps, sessionId: string, body: Re
     marked: clearedTranscripts.has(sessionId),
   });
   if (move === "mark") return clearHeaderPrompt(deps, sessionId, claudeId, cwd);
-  if (move === "unmark") await forgetClearedTranscript(sessionId);
+  if (move === "unmark") return returnToOwnConversation(deps, sessionId, cwd);
+}
+
+// The header's prompt and reply, from the transcript the cell is now in; "" when there is nothing to
+// read, which beats the `?? transcriptPrompt` fallback in /api/session.
+async function showConversationIn(sessionId: string, transcriptId: string | null, cwd: string | undefined): Promise<void> {
+  const prompt = transcriptId && cwd ? await latestUserPrompt(cwd, transcriptId) : null;
+  lastPrompts.set(sessionId, prompt ?? "");
+  lastResponses.set(sessionId, (transcriptId && cwd ? readLatestResponse(transcriptId, cwd) : null) ?? "");
+}
+
+// A `/resume` back to our own id: the header and title were read from the conversation the cell
+// left, so they are re-read from ours, the same way a move away sets them.
+async function returnToOwnConversation(deps: HookDeps, sessionId: string, cwd: string | undefined): Promise<void> {
+  await forgetClearedTranscript(sessionId);
+  await showConversationIn(sessionId, sessionId, cwd);
+  deps.forgetTitle(sessionId);
+  deps.publishActivity(sessionId);
 }
 
 // The scalar fields the handler reads straight off a hook body, checked once here so the flow

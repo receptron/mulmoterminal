@@ -132,10 +132,13 @@ describe("forgetTitle", () => {
     aiTitles.set(SESSION, "T");
     titleTurnCounts.set(SESSION, 5);
     titlePending.add(SESSION);
+    lastTitledUserTurns.set(SESSION, 7);
     forgetTitle(SESSION);
     expect(aiTitles.has(SESSION)).toBe(false);
     expect(titleTurnCounts.has(SESSION)).toBe(false);
     expect(titlePending.has(SESSION)).toBe(false);
+    // The next conversation counts its own turns: the old baseline would hold its title back (#3347).
+    expect(lastTitledUserTurns.has(SESSION)).toBe(false);
   });
 
   it("bumps the epoch, which is what voids a generation already in flight", () => {
@@ -151,6 +154,18 @@ describe("forgetTitle", () => {
 // and since #1772 it never streams the transcript either — session-reads folds `ai-title` out of
 // the file incrementally and caches it, so the manager stores what the route already read.
 describe("the ai-title the transcript carries (default source)", () => {
+  // A move during the read bumps the epoch; the title read is the conversation's the cell left.
+  it("does not store a title read before the session moved", async () => {
+    const { maybeGenerateTitle, forgetTitle, published } = setup();
+    await writeTranscript([userTurn("add a retry to the uploader"), aiTitleRecord("Uploader retry handling")]);
+    titlePending.add(SESSION);
+    const generating = maybeGenerateTitle(SESSION, cwd);
+    forgetTitle(SESSION); // a /clear lands while the summary is being read
+    await generating;
+    expect(aiTitles.has(SESSION)).toBe(false);
+    expect(published).toEqual([]);
+  });
+
   it("stores and publishes the title from disk, without summarizing", async () => {
     const { maybeGenerateTitle, published, summarized } = setup();
     await writeTranscript([aiTitleRecord("An earlier title"), userTurn("add a retry to the uploader"), aiTitleRecord("Uploader retry handling")]);
