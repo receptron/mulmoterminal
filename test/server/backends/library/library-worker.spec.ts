@@ -112,6 +112,7 @@ describe("dispatchLibraryRequest", () => {
     status: () => (calls.push(["status"]), Promise.resolve({ indexing: false, filesDone: 0, filesTotal: 0, finishedAt: null })),
     list: (...args) => (calls.push(["list", ...args]), Promise.resolve({ conversations: [], hasMore: false, indexFinishedAt: null })),
     conversation: (...args) => (calls.push(["conversation", ...args]), Promise.resolve(null)),
+    prCreators: (...args) => (calls.push(["prCreators", ...args]), Promise.resolve([])),
     search: (...args) => (calls.push(["search", ...args]), Promise.resolve([])),
   };
 
@@ -123,6 +124,8 @@ describe("dispatchLibraryRequest", () => {
     await dispatchLibraryRequest(service, { id: "4", method: "conversation", args: [] });
     await dispatchLibraryRequest(service, { id: "5", method: "conversation", args: ["s1", "/w/app"] });
     await dispatchLibraryRequest(service, { id: "6", method: "conversation", args: ["s1", 7] });
+    await dispatchLibraryRequest(service, { id: "7", method: "prCreators", args: ["o/r", [3, 0, -1, 2.5, "4", 5]] });
+    await dispatchLibraryRequest(service, { id: "8", method: "prCreators", args: [null, "1,2"] });
     expect(calls).toEqual([
       ["list", { cwd: "/w", includeTemporary: true, includeSidechains: false, includeAutomated: false }, 5, 10],
       ["list", {}, 0, 0],
@@ -130,6 +133,8 @@ describe("dispatchLibraryRequest", () => {
       ["conversation", "", null],
       ["conversation", "s1", "/w/app"],
       ["conversation", "s1", null],
+      ["prCreators", "o/r", [3, 5]],
+      ["prCreators", "", []],
     ]);
   });
 

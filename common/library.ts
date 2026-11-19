@@ -145,3 +145,22 @@ export interface LibraryMarkChange {
   /** Null or blank clears the name. */
   name?: string | null;
 }
+
+/** A pull request and the conversation that made it: the one that recorded it and began first. */
+export interface LibraryPrCreator {
+  number: number;
+  conversation: LibraryConversation;
+}
+
+export const isLibraryPrCreator = (value: unknown): value is LibraryPrCreator =>
+  isRecord(value) && typeof value.number === "number" && Number.isInteger(value.number) && isLibraryConversation(value.conversation);
+
+/** How many PR numbers one lookup may ask about: more than the GitHub view lists for a repository. */
+export const PR_CREATORS_MAX = 200;
+
+/** `owner/repo` as GitHub spells one. Neither half is all dots, which GitHub does not allow either; a
+ *  host-qualified name (`gitlab.com/group/project`) is not one, and pr-link records are GitHub's. */
+export const isRepositoryName = (value: string): boolean => {
+  const halves = value.split("/");
+  return halves.length === 2 && halves.every((half) => /^[A-Za-z0-9_.-]{1,100}$/.test(half) && !/^\.+$/.test(half));
+};

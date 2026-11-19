@@ -2,7 +2,7 @@
 // (why a control is off), so the two cannot disagree — writing the rule twice is what this file
 // exists to prevent (#981).
 import { describe, it, expect } from "vitest";
-import { canonicalRepo, parseRepoEntry, repoIdentity, GITHUB_HOST } from "../../common/repoEntry";
+import { canonicalRepo, parseRepoEntry, repoIdentity, GITHUB_HOST, githubRepoName } from "../../common/repoEntry";
 
 describe("parseRepoEntry", () => {
   it("implies github.com for a bare owner/repo", () => {
@@ -65,5 +65,22 @@ describe("repoIdentity vs canonicalRepo", () => {
   it("strips the host for the CLI while matching keeps it", () => {
     expect(canonicalRepo("gitlab.com/group/project")).toBe("group/project");
     expect(repoIdentity("gitlab.com/group/project")).toBe("gitlab.com/group/project");
+  });
+});
+
+describe("githubRepoName", () => {
+  it.each([
+    ["receptron/mulmoterminal", "receptron/mulmoterminal"],
+    ["github.com/Receptron/MulmoTerminal", "Receptron/MulmoTerminal"],
+    ["GitHub.com/o/r", "o/r"],
+    ["gitlab.com/group/project", null],
+    ["gitlab.com/group/sub/project", null],
+    ["github.example.com/o/r", null],
+    ["github.com/o/r/extra", null],
+    ["o", null],
+    ["o//r", null],
+    ["", null],
+  ])("%s → %s", (entry, name) => {
+    expect(githubRepoName(entry)).toBe(name);
   });
 });

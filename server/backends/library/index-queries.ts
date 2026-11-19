@@ -38,6 +38,29 @@ export function listConversations(db: DatabaseSync, filter: ConversationFilter, 
     .all(...where.params, limit, offset);
 }
 
+/** For each of `numbers` in `repository` (`owner/repo`, any case), the conversation that recorded the
+ *  PR and began first — the one that opened it started before those that came back to it. Rows come
+ *  back with the PR's number in `pr_number`. `prs != '[]'` lets the partial index skip the many
+ *  conversations that recorded none. */
+export function prCreators(db: DatabaseSync, repository: string, numbers: readonly number[]): Record<string, unknown>[] {
+  if (numbers.length === 0) return [];
+  const query = prCreatorsQuery(repository, numbers);
+  return db.prepare(query.sql).all(...query.params);
+}
+
+/** The statement `prCreators` runs, apart so its plan can be checked against the partial index. */
+export function prCreatorsQuery(repository: string, numbers: readonly number[]): { sql: string; params: SQLInputValue[] } {
+  // The Library's own default filter, on purpose: the button opens a conversation the Library lists, so
+  // a `claude -p` / SDK run, a temp-directory run or a sidechain that recorded the PR is passed over.
+  const where = filterClause({});
+  const linked = `select c.*, json_extract(j.value, '$.number') as pr_number,
+      row_number() over (partition by json_extract(j.value, '$.number') order by c.started_at asc nulls last, c.path) as rank
+    from conversations c, json_each(c.prs) j
+    where c.prs != '[]' and lower(json_extract(j.value, '$.repository')) = lower(?)
+      and json_extract(j.value, '$.number') in (select value from json_each(?)) and ${where.sql}`;
+  return { sql: `select * from (${linked}) where rank = 1 order by pr_number`, params: [repository, JSON.stringify(numbers), ...where.params] };
+}
+
 /** A conversation by session id. The same id can sit in two project directories (a copied or moved
  *  transcript): the one in `cwd` is preferred when given, else — or when none is there — the newest. `=` rather than
  *  `is`, so that no cwd given never prefers a copy that has none recorded. */
