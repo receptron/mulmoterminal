@@ -16,6 +16,16 @@ import { conversationTurnsFromParsed, customTitleOfRecord } from "../../session/
 export const TURN_TEXT_CAP = 1000;
 /** The first prompt stands in for a title, and a title is one line. */
 export const FIRST_PROMPT_TITLE_CAP = 200;
+/** PRs and skills a row keeps, newest last. The state is stored with every batch, so it may not grow
+ *  with the transcript; a real conversation names far fewer of either. */
+export const LIST_FIELD_CAP = 50;
+
+/** Appends unless already there, dropping the oldest past the cap. */
+function pushCapped<T>(list: T[], item: T, same: (a: T, b: T) => boolean): void {
+  if (list.some((known) => same(known, item))) return;
+  list.push(item);
+  if (list.length > LIST_FIELD_CAP) list.splice(0, list.length - LIST_FIELD_CAP);
+}
 
 /** The summary fields as the row will carry them, plus the three a title is chosen from. */
 export type ConversationState = Omit<LibraryConversation, "id" | "agent" | "title" | "parentId" | "isTemporary"> & {
@@ -92,8 +102,7 @@ function foldTitles(state: ConversationState, record: Record<string, unknown>): 
 function foldPr(state: ConversationState, record: Record<string, unknown>): void {
   if (record.type !== "pr-link") return;
   const pr = prLinkOf(record);
-  if (pr === null || state.prs.some((known) => known.url === pr.url)) return;
-  state.prs.push(pr);
+  if (pr !== null) pushCapped(state.prs, pr, (a, b) => a.url === b.url);
 }
 
 export function prLinkOf(record: Record<string, unknown>): LibraryPrLink | null {
@@ -113,7 +122,7 @@ function foldCost(state: ConversationState, record: Record<string, unknown>): vo
 
 function foldActivity(state: ConversationState, record: Record<string, unknown>): void {
   const skill = nonEmpty(record.attributionSkill);
-  if (skill !== null && !state.skills.includes(skill)) state.skills.push(skill);
+  if (skill !== null) pushCapped(state.skills, skill, (a, b) => a === b);
   if (Array.isArray(record.hookErrors)) state.hookErrors += record.hookErrors.length;
 }
 

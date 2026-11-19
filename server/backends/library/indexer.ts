@@ -17,6 +17,7 @@ import {
   readFileMark,
   recordProgress,
   recordTail,
+  removeHistory,
   removeMissingTranscripts,
   takeLease,
   type FileMark,
@@ -118,11 +119,12 @@ export async function scanTranscript(deps: IndexPassDeps, file: TranscriptFile):
   });
 }
 
+// A history file that is gone takes its prompts with it; one that cannot be read this time keeps them.
 async function scanHistorySafely(deps: IndexPassDeps): Promise<void> {
   try {
     await scanHistory(deps);
-  } catch {
-    // No history file yet, or one we cannot read: search goes on without its prompts.
+  } catch (err) {
+    if (isMissingFile(err)) removeHistory(deps.db, deps.owner, deps.historyFile);
   }
 }
 

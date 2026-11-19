@@ -8,6 +8,7 @@ import {
   FIRST_PROMPT_TITLE_CAP,
   foldConversationRecord,
   isConversationState,
+  LIST_FIELD_CAP,
   prLinkOf,
   recordTime,
   TURN_TEXT_CAP,
@@ -101,6 +102,18 @@ describe("foldConversationRecord: the records claude writes", () => {
   it("keeps each PR once, however often it is linked", () => {
     const link = { type: "pr-link", prNumber: 1, prUrl: "https://github.com/o/r/pull/1", prRepository: "o/r" };
     expect(fold([link, link, { ...link, prNumber: 2, prUrl: "https://github.com/o/r/pull/2" }]).state.prs.map((pr) => pr.number)).toEqual([1, 2]);
+  });
+
+  it("keeps only the newest PRs and skills past the cap, so the stored state stays bounded", () => {
+    const many = Array.from({ length: LIST_FIELD_CAP + 7 }, (_, i) => i);
+    const { state } = fold(
+      many.flatMap((i) => [
+        { type: "pr-link", prNumber: i, prUrl: `https://github.com/o/r/pull/${String(i)}`, prRepository: "o/r" },
+        { type: "user", attributionSkill: `skill-${String(i)}` },
+      ]),
+    );
+    expect(state.prs.map((pr) => pr.number)).toEqual(many.slice(-LIST_FIELD_CAP));
+    expect(state.skills).toEqual(many.slice(-LIST_FIELD_CAP).map((i) => `skill-${String(i)}`));
   });
 
   it("marks a conversation that has any sidechain record", () => {

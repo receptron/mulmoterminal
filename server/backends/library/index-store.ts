@@ -242,6 +242,17 @@ export function applyHistoryScan(db: DatabaseSync, scan: HistoryScan): boolean {
 
 // ---- who indexes, and how far it got --------------------------------------------------------
 
+/** Forgets the prompt history once its file is gone — the index holds nothing its source does not.
+ *  Only for the lease holder, like every other write a pass makes. */
+export function removeHistory(db: DatabaseSync, owner: string, path: string): boolean {
+  return inTransaction(db, () => {
+    if (db.prepare("select owner from lease where id = 1").get()?.owner !== owner) return false;
+    db.prepare("delete from turns where role = 'prompt'").run();
+    db.prepare("delete from files where path = ?").run(path);
+    return true;
+  });
+}
+
 /** Records where a finished scan stopped reading — only if the row still ends there, so a later
  *  scan by another process is never given this one's tail. */
 export function recordTail(db: DatabaseSync, path: string, scannedTo: number, tail: string): void {

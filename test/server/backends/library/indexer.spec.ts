@@ -202,6 +202,18 @@ describe("runIndexPass", () => {
     expect(Number(db.prepare("select count(*) as n from turns where role = 'prompt'").get()?.n)).toBe(2);
   });
 
+  it("forgets the prompt history once its file is deleted", async () => {
+    const { db, deps, transcript } = setup();
+    transcript("s1", prompt("kept transcript"));
+    writeFileSync(deps.historyFile, line({ display: "typed then deleted", sessionId: "s1", timestamp: 5 }));
+    await runIndexPass(deps);
+    expect(hits(db, "then deleted")).toEqual(["s1"]);
+    rmSync(deps.historyFile);
+    await runIndexPass({ ...deps, now_ms: () => 100_000 });
+    expect(hits(db, "then deleted")).toEqual([]);
+    expect(hits(db, "kept transcript")).toEqual(["s1"]);
+  });
+
   it("builds the same index again from nothing", async () => {
     const first = setup();
     first.transcript("s1", prompt("rebuild me") + reply("again"));
