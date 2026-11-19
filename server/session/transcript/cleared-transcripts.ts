@@ -16,10 +16,15 @@
 // belongs to one server, so per-id files never race.
 //
 // A mark ends only when claude `/resume`s back to our own id (conversation-move.ts), or at boot when
-// both our transcript and the successor's are confirmed missing (mark-prune.ts). NOT by the file growing: claude appends a
-// cost-state line to the transcript it leaves AFTER the hook that announces the move, so any size
-// taken here is already too small and expired every mark on the next boot. The `size` is still
-// written because an older server rejects a mark without one.
+// both our transcript and the successor's are confirmed missing (mark-prune.ts). NOT by the file
+// growing: claude appends a cost-state line to the transcript it leaves AFTER the hook that
+// announces the move, so any size taken here is already too small and expired every mark on the
+// next boot. `size` is still written,
+// as MARK_SIZE_NEVER_REACHED: an older server requires the field and still expires on it, and no
+// file reaches that size.
+//
+// Writes and removals of one id's marker run in call order (persistInOrder): a mark whose write
+// lands after a later unmark's removal would bring the successor back at the next boot.
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { MULMOTERMINAL_HOME, SESSION_ID_RE } from "../../config/env.js";
@@ -64,7 +69,8 @@ export const clearedClaudeIdOf = (id: string): string | undefined => clearedStat
 export interface ClearedMark {
   /** Where the frozen transcript lives, so hydration can stat it without the session's pty. */
   cwd: string;
-  /** Written for an older server's parser, which requires it. Nothing here reads it. */
+  /** For an older server, which requires it and expires a mark once the file outgrows it. Always
+   *  MARK_SIZE_NEVER_REACHED when written here; nothing here reads it. */
   size: number;
   /** Epoch ms of the clear. Optional: marks written before #1749 have none. */
   at?: number;
@@ -90,12 +96,22 @@ export function parseClearedMark(raw: unknown): ClearedMark | null {
 
 const markerFile = (dir: string, id: string) => path.join(dir, `${id}.json`);
 
-async function transcriptSize(cwd: string, id: string): Promise<number> {
-  try {
-    return (await fs.stat(claudeTranscriptFile(cwd, id))).size;
-  } catch {
-    return 0; // no transcript on disk (a session cleared before its first turn was written)
-  }
+export const MARK_SIZE_NEVER_REACHED = Number.MAX_SAFE_INTEGER;
+
+// The tail of each id's marker writes and removals, so the disk ends in the state of the LAST call.
+const persistTails = new Map<string, Promise<unknown>>();
+
+function persistInOrder<T>(id: string, op: () => Promise<T>): Promise<T> {
+  const run = (persistTails.get(id) ?? Promise.resolve()).then(op, op);
+  const tail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  persistTails.set(id, tail);
+  void tail.then(() => {
+    if (persistTails.get(id) === tail) persistTails.delete(id);
+  });
+  return run;
 }
 
 const transcriptPresence = (cwd: string, id: string): Promise<TranscriptPresence> =>
@@ -123,13 +139,15 @@ export async function markTranscriptCleared(id: string, cwd: string | undefined,
   // No cwd (a hook that reported none, for a session with no live pty) means no transcript the boot
   // prune could look for, so that mark could never be cleaned up — it stays in memory only.
   if (!cwd || !SESSION_ID_RE.test(id)) return;
-  const mark: ClearedMark = { cwd, size: await transcriptSize(cwd, id), at, ...(claudeId ? { claudeId } : {}) };
-  try {
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(markerFile(dir, id), JSON.stringify(mark));
-  } catch (e) {
-    console.error(`[cleared-transcripts] failed to persist ${id}: ${messageOf(e)}`);
-  }
+  const mark: ClearedMark = { cwd, size: MARK_SIZE_NEVER_REACHED, at, ...(claudeId ? { claudeId } : {}) };
+  await persistInOrder(id, async () => {
+    try {
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(markerFile(dir, id), JSON.stringify(mark));
+    } catch (e) {
+      console.error(`[cleared-transcripts] failed to persist ${id}: ${messageOf(e)}`);
+    }
+  });
 }
 
 const removeMarker = (dir: string, id: string): Promise<void> =>
@@ -143,13 +161,15 @@ export async function forgetClearedTranscript(id: string, dir: string = CLEARED_
   clearedTranscripts.delete(id);
   clearedState.delete(id);
   const file = markerFile(dir, id);
-  try {
-    await fs.rm(file, { force: true });
-    return true;
-  } catch (e) {
-    console.error(`[cleared-transcripts] failed to drop ${file}; a restart of this server would restore it: ${messageOf(e)}`);
-    return false;
-  }
+  return persistInOrder(id, async () => {
+    try {
+      await fs.rm(file, { force: true });
+      return true;
+    } catch (e) {
+      console.error(`[cleared-transcripts] failed to drop ${file}; a restart of this server would restore it: ${messageOf(e)}`);
+      return false;
+    }
+  });
 }
 
 // `.catch` AFTER the parse, not a second argument to `.then`: an onRejected handler passed

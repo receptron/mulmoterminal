@@ -14,6 +14,7 @@ import {
   clearedTranscripts,
   forgetClearedTranscript,
   hydrateClearedTranscripts,
+  MARK_SIZE_NEVER_REACHED,
   markTranscriptCleared,
   parseClearedMark,
 } from "../../../../server/session/transcript/cleared-transcripts.js";
@@ -63,18 +64,41 @@ afterEach(async () => {
 });
 
 describe("markTranscriptCleared", () => {
-  // The size is read by nothing here; it is written because an older server's parser requires it,
-  // and a downgrade must not lose the mark.
-  it("marks the session and records the transcript's size at the clear", async () => {
+  // An older server sharing this home parses the mark only with a size, and expires it once the
+  // file outgrows that size — which claude's post-hook cost-state append always does.
+  it("writes a size no transcript reaches, so an older server keeps the mark", async () => {
     await writeTranscript("a".repeat(120));
     await markTranscriptCleared(SESSION, cwd, undefined, marksDir);
     expect(clearedTranscripts.has(SESSION)).toBe(true);
-    expect(JSON.parse(await fs.readFile(markerFile(), "utf8"))).toEqual(expect.objectContaining({ cwd, size: 120 }));
+    const written: unknown = JSON.parse(await fs.readFile(markerFile(), "utf8"));
+    expect(written).toEqual(expect.objectContaining({ cwd, size: MARK_SIZE_NEVER_REACHED }));
+    const parsed = parseClearedMark(written);
+    expect(parsed).not.toBeNull();
+    // The rule an older server applies at boot (`currentSize <= mark.size`), after the append.
+    await writeTranscript("a".repeat(120) + '{"type":"cost-state"}\n');
+    const grown = (await fs.stat(path.join(projectSessionsDir(cwd), `${SESSION}.jsonl`))).size;
+    expect(grown <= (parsed?.size ?? -1)).toBe(true);
   });
 
-  it("records size 0 when there is no transcript yet", async () => {
-    await markTranscriptCleared(SESSION, cwd, undefined, marksDir);
-    expect(JSON.parse(await fs.readFile(markerFile(), "utf8")).size).toBe(0);
+  // A mark's write landing after a later unmark's removal would restore the successor at boot.
+  it("leaves no marker when an unmark is called while the mark is still being written", async () => {
+    const realWrite = fs.writeFile.bind(fs);
+    const released: { release: () => void } = { release: () => {} };
+    const gate = new Promise<void>((resolve) => {
+      released.release = resolve;
+    });
+    vi.spyOn(fs, "writeFile").mockImplementation(async (...args: Parameters<typeof fs.writeFile>) => {
+      await gate;
+      return realWrite(...args);
+    });
+
+    const marking = markTranscriptCleared(SESSION, cwd, CLAUDE_ID, marksDir);
+    const unmarking = forgetClearedTranscript(SESSION, marksDir);
+    released.release();
+    await marking;
+    expect(await unmarking).toBe(true);
+    expect(await exists(markerFile())).toBe(false);
+    expect(clearedTranscripts.has(SESSION)).toBe(false);
   });
 
   it("stays in memory only when the hook reported no cwd", async () => {
