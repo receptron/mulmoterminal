@@ -121,11 +121,12 @@ describe("hydrateClearedTranscripts", () => {
   // Claude appends a cost-state line to the transcript it leaves AFTER the hook that announced the
   // clear, so the file is always bigger than the recorded size by the next boot. Expiring on growth
   // dropped every mark and resumed the conversation the user ended (#3325).
+  // Written on disk only, with the size measured at the clear as an earlier server recorded it, so
+  // both assertions come from hydration rather than from state the mark left in memory.
   it("keeps a mark whose transcript has grown since the clear", async () => {
-    await writeTranscript("a".repeat(120));
-    await markTranscriptCleared(SESSION, cwd, CLAUDE_ID, marksDir);
-    clearedTranscripts.clear();
     await writeTranscript("a".repeat(200));
+    await fs.mkdir(marksDir, { recursive: true });
+    await fs.writeFile(markerFile(), JSON.stringify({ cwd, size: 120, at: 5, claudeId: CLAUDE_ID }));
 
     await hydrateClearedTranscripts(marksDir);
     expect(clearedTranscripts.has(SESSION)).toBe(true);
