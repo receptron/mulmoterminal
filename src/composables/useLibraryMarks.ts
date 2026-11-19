@@ -10,7 +10,9 @@ export const PINNED_SHOWN = 20;
 export function useLibraryMarks(isOpen: Ref<boolean>) {
   const marks = shallowRef<LibraryMarks>(emptyLibraryMarks());
   const pinned = shallowRef<LibraryConversation[]>([]);
-  const saveFailed = ref(false);
+  /** The conversation whose last change could not be saved, or null. Per conversation: a failure that
+   *  answers after the reader moved on belongs to the one it was about, not the one now shown. */
+  const saveFailedFor = ref<string | null>(null);
   /** The marks could not be read (the file is there but unreadable): nothing pinned is shown, and the
    *  screen says why rather than looking like nothing was ever pinned. */
   const loadFailed = ref(false);
@@ -44,12 +46,17 @@ export function useLibraryMarks(isOpen: Ref<boolean>) {
    *  request's answer is applied: the server applies changes in order, so its last answer already
    *  holds the earlier ones, while an earlier answer arriving late would undo the later change. */
   async function change(id: string, update: LibraryMarkChange): Promise<boolean> {
-    saveFailed.value = false;
+    saveFailedFor.value = null;
     const mine = ++saveRequest;
     const saved = await saveLibraryMark(id, update);
-    if (mine !== saveRequest) return saved !== null;
+    if (mine !== saveRequest) {
+      // Too old to apply, but it did change the file — after a reopen, a read begun before it landed
+      // may now be older still. Reading again makes the newest state win whatever the order.
+      if (saved !== null && isOpen.value) void load();
+      return saved !== null;
+    }
     if (saved === null) {
-      saveFailed.value = true;
+      saveFailedFor.value = id;
       return false;
     }
     const pinsChanged = saved.pinned.join("\n") !== marks.value.pinned.join("\n");
@@ -65,11 +72,11 @@ export function useLibraryMarks(isOpen: Ref<boolean>) {
     (open) => {
       request++;
       saveRequest++; // an answer for the screen as it was must not land on the next opening
-      saveFailed.value = false;
+      saveFailedFor.value = null;
       if (open) void load();
     },
     { immediate: true },
   );
 
-  return { marks, pinned, saveFailed, loadFailed, change };
+  return { marks, pinned, saveFailedFor, loadFailed, change };
 }

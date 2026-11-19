@@ -25,7 +25,7 @@ const { t } = useI18n();
 const { isOpen, close } = useLibraryView();
 useEscapeToClose(isOpen, close);
 const { conversations, hasMore, loaded, loadFailed, status, query, hits, searching, searchFailed, loadMore } = useLibraryData(isOpen);
-const { marks, pinned, saveFailed, loadFailed: marksFailed, change: changeMark } = useLibraryMarks(isOpen);
+const { marks, pinned, saveFailedFor, loadFailed: marksFailed, change: changeMark } = useLibraryMarks(isOpen);
 
 const searchField = ref<HTMLInputElement | null>(null);
 /** The chosen row by key, not by object: a reload replaces every object, and must not move the reader. */
@@ -78,14 +78,11 @@ watch(
 );
 // By key: a reload replaces every object, and must not clear a refusal about the row still selected.
 const selectedKey = computed(() => (selected.value ? conversationKey(selected.value) : null));
-watch(selectedKey, () => {
-  notice.value = null;
-  saveFailed.value = false; // about the conversation left behind, not this one
-});
+watch(selectedKey, () => (notice.value = null));
 
 /** One line under the reader: a failed save first, then a refused resume, then unreadable marks. */
 const readerNotice = computed((): string | null => {
-  if (saveFailed.value) return t("libraryView.saveFailed");
+  if (selected.value !== null && saveFailedFor.value === selected.value.id) return t("libraryView.saveFailed");
   return notice.value ?? (marksFailed.value ? t("libraryView.marksUnreadable") : null);
 });
 

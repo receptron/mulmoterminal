@@ -608,4 +608,43 @@ describe("LibraryOverlay", () => {
     const wrapper = await mountLibrary();
     expect(wrapper.find("[role=status]").text()).toContain("could not be read");
   });
+
+  it("shows a failed save only on the conversation it was about, even when it fails late", async () => {
+    saveFails = true;
+    let release: () => void = () => {};
+    saveGate = new Promise((resolve) => (release = resolve));
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-pin]").trigger("click"); // a's save, failing late
+    await press("ArrowDown"); // b
+    release();
+    await flushPromises();
+    expect(wrapper.find("[role=status]").exists()).toBe(false);
+    await press("ArrowUp"); // back to a
+    expect(wrapper.find("[role=status]").exists()).toBe(true);
+  });
+
+  it("reads the marks again when a save from before a reopen lands after the new read began", async () => {
+    let releaseSave: () => void = () => {};
+    saveGate = new Promise((resolve) => (releaseSave = resolve));
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-pin]").trigger("click"); // applied on arrival, answered late
+    const stale = { pinned: [], names: {} };
+    libraryOpen.value = false;
+    await flushPromises();
+    let releaseLoad: () => void = () => {};
+    marksGate = new Promise((resolve) => (releaseLoad = resolve));
+    const realMarks = marks;
+    marks = stale; // the reopened screen's read was taken before the pin landed
+    libraryOpen.value = true;
+    await flushPromises();
+    marks = realMarks;
+    marksGate = Promise.resolve();
+    releaseSave(); // the old save answers first
+    await flushPromises();
+    releaseLoad(); // then the stale read
+    await flushPromises();
+    expect(wrapper.text()).toContain("Pinned");
+  });
 });
