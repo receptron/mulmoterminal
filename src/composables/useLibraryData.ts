@@ -22,7 +22,10 @@ export function useLibraryData(isOpen: Ref<boolean>) {
   const poll = usePolledStatus(
     status,
     () => reflects.value,
-    () => void reload(),
+    () => {
+      void reload();
+      search.refresh(); // a search that found nothing mid-build may find it now
+    },
     () => loadFailed.value,
   );
   const search = useDebouncedSearch(query, hits, searching, searchFailed);
@@ -67,9 +70,13 @@ function usePagedConversations() {
   const reflects = ref<number | null | undefined>(undefined);
   let pageRequest = 0;
 
+  /** Reloads in flight. "Show more" waits for them: a page counted from the old list's length would
+   *  repeat or skip rows once the reload replaces it. */
+  let reloading = 0;
   async function reload(): Promise<void> {
     const mine = ++pageRequest;
-    const page = await loadLibraryPage(0);
+    reloading++;
+    const page = await loadLibraryPage(0).finally(() => reloading--);
     if (mine !== pageRequest) return;
     loaded.value = true;
     loadFailed.value = page === null;
@@ -80,7 +87,7 @@ function usePagedConversations() {
   }
 
   async function loadMore(): Promise<void> {
-    if (!hasMore.value) return;
+    if (!hasMore.value || reloading > 0) return;
     const mine = ++pageRequest;
     hasMore.value = false; // one request at a time; restored by its answer
     const page = await loadLibraryPage(conversations.value.length);
@@ -161,8 +168,18 @@ function useDebouncedSearch(query: Ref<string>, hits: Ref<LibrarySearchHit[] | n
       return;
     }
     searching.value = true;
-    timer = setTimeout(() => void run(text), LIBRARY_SEARCH_DEBOUNCE_MS);
+    timer = setTimeout(() => {
+      timer = null; // fired: no longer pending
+      void run(text);
+    }, LIBRARY_SEARCH_DEBOUNCE_MS);
   });
+  /** Runs the current query again, for when the index under it has changed; nothing typed, nothing run. */
+  function refresh(): void {
+    const text = query.value.trim();
+    if (text === "" || timer !== null) return; // a pending debounce will run it anyway
+    inFlight?.abort();
+    void run(text);
+  }
   async function run(text: string): Promise<void> {
     const controller = new AbortController();
     inFlight = controller;
@@ -172,5 +189,5 @@ function useDebouncedSearch(query: Ref<string>, hits: Ref<LibrarySearchHit[] | n
     failed.value = found === null;
     searching.value = false;
   }
-  return { cancel };
+  return { cancel, refresh };
 }

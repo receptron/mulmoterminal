@@ -45,6 +45,15 @@ const progress = computed(() => {
   return s.filesTotal > 0 ? t("libraryView.indexing", { done: s.filesDone, total: s.filesTotal }) : t("libraryView.indexingStart");
 });
 
+/** The clock the "when" labels and the day groups are read against, kept current while open — a
+ *  screen left open past midnight would otherwise go on calling yesterday "today". */
+const CLOCK_TICK_MS = 60_000;
+let clock: ReturnType<typeof setInterval> | null = null;
+function runClock(open: boolean): void {
+  if (clock !== null) clearInterval(clock);
+  clock = open ? setInterval(() => (now.value = Date.now()), CLOCK_TICK_MS) : null;
+}
+
 /** Bumped on every open and close: a resume that began before either must not land after it. */
 let openings = 0;
 // Immediate, so a screen opened by loading /library directly starts in the search field too.
@@ -56,6 +65,7 @@ watch(
     readerShown.value = false;
     notice.value = null;
     now.value = Date.now();
+    runClock(open);
     if (!open) return;
     await nextTick();
     searchField.value?.focus();
@@ -75,10 +85,13 @@ function select(conversation: LibraryConversation): void {
   readerShown.value = true;
 }
 
-function move(by: number): void {
+async function move(by: number): Promise<void> {
   const index = selected.value ? shown.value.indexOf(selected.value) : -1;
   const next = shown.value[movedIndex(index, by, shown.value.length)];
   chosenKey.value = next === undefined ? null : conversationKey(next);
+  // The keys move the highlight, not the scroll: bring the row Enter will act on into view.
+  await nextTick();
+  document.querySelector("[data-library-row][aria-current=true]")?.scrollIntoView?.({ block: "nearest" });
 }
 
 /** One resume at a time: a second Enter while the first is still checking would open it twice. */
@@ -122,10 +135,13 @@ function onKey(event: KeyboardEvent): void {
   event.preventDefault();
   if (action === "focus-search") searchField.value?.focus();
   else if (action === "primary") void resume();
-  else move(action === "up" ? -1 : 1);
+  else void move(action === "up" ? -1 : 1);
 }
 window.addEventListener("keydown", onKey);
-onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onKey);
+  runClock(false);
+});
 </script>
 
 <template>

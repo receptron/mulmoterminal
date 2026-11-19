@@ -19,12 +19,20 @@ const startOfDay = (ms: number): number => {
 /** What identifies a row across reloads: the same session id can sit in two project directories. */
 export const conversationKey = (conversation: LibraryConversation): string => `${conversation.id}\u0000${conversation.cwd ?? ""}`;
 
+/** The local midnight `days` calendar days before `dayStart` — by the calendar, not by 24-hour steps,
+ *  which land at 01:00 or 23:00 across a daylight-saving change. */
+function daysBefore(dayStart: number, days: number): number {
+  const day = new Date(dayStart);
+  day.setDate(day.getDate() - days);
+  return day.getTime();
+}
+
 /** Today is the local calendar day; the week is the six days before it. No time at all is "older". */
 export function groupOf(endedAt: number | null, now: number): LibraryGroup {
   if (endedAt === null) return "older";
   const today = startOfDay(now);
   if (endedAt >= today) return "today";
-  return endedAt >= today - (WEEK_DAYS - 1) * DAY_MS ? "week" : "older";
+  return endedAt >= daysBefore(today, WEEK_DAYS - 1) ? "week" : "older";
 }
 
 export interface LibraryGroupRows {

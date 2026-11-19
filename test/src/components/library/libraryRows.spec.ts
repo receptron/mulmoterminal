@@ -1,6 +1,6 @@
 // How the Library lists a conversation (#3329): its group by day, its grey meta line, and the
 // labels in the reader's language — every boundary asserted with a fixed `now`.
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { costLabel, groupConversations, groupOf, metaParts, prsLabel, projectName, whenLabel } from "../../../../src/components/library/libraryRows";
 import type { LibraryConversation } from "../../../../common/library";
 
@@ -117,5 +117,20 @@ describe("prsLabel", () => {
     [45, "#144 #143 #142 +42"],
   ])("%i PRs → %s", (count, expected) => {
     expect(prsLabel(prs(count))).toBe(expected);
+  });
+});
+
+describe("groupOf across a daylight-saving change", () => {
+  // Clocks go back an hour in New York on 1 Nov 2026. Six days before 4 Nov began is local midnight
+  // on 29 Oct; six 24-hour steps back would land at 01:00 instead and call 00:30 "older".
+  it("draws the week boundary at local midnight", () => {
+    vi.stubEnv("TZ", "America/New_York");
+    try {
+      const now = new Date(2026, 10, 4, 12, 0).getTime();
+      expect(groupOf(new Date(2026, 9, 29, 0, 30).getTime(), now)).toBe("week");
+      expect(groupOf(new Date(2026, 9, 28, 23, 30).getTime(), now)).toBe("older");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

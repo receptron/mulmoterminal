@@ -376,4 +376,41 @@ describe("LibraryOverlay", () => {
     await flushPromises();
     expect(wrapper.findAll("[data-testid=library-row]")).toHaveLength(2);
   }, 10_000);
+
+  it("runs the search again when a pass finishes, so a match indexed meanwhile appears", async () => {
+    status = { indexing: true, filesDone: 1, filesTotal: 2, finishedAt: 1 };
+    const wrapper = await mountLibrary();
+    hits = [];
+    await wrapper.find("[data-testid=library-search]").setValue("later");
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-no-match]").exists()).toBe(true);
+    hits = [{ conversation: conversation("found", "Found after the pass"), snippet: "later", role: "user" }];
+    status = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 2 };
+    pageFinished = 2;
+    await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 300));
+    await flushPromises();
+    expect(wrapper.findAll("[data-testid=library-row]").map((row) => row.text())).toEqual([expect.stringContaining("Found after the pass")]);
+  }, 10_000);
+
+  it("holds Show more while the list is being read again", async () => {
+    const { useLibraryData } = await import("../../../../src/composables/useLibraryData");
+    const api = await import("../../../../src/composables/libraryApi");
+    firstHasMore = true;
+    const open = ref(true);
+    let data: ReturnType<typeof useLibraryData> | null = null;
+    const host = mount({ setup: () => (data = useLibraryData(open)), template: "<div />" });
+    await flushPromises();
+    if (data === null) throw new Error("not mounted");
+    const state: ReturnType<typeof useLibraryData> = data;
+    const reads = vi.spyOn(api, "loadLibraryPage");
+    const reloading = state.reload();
+    await state.loadMore(); // while the reload is still waiting for its page
+    await reloading;
+    // Only first pages were read: no page counted from the old list's length was asked for meanwhile.
+    expect(reads.mock.calls.length).toBeGreaterThan(0);
+    expect(reads.mock.calls.every((call) => call[0] === 0)).toBe(true);
+    reads.mockRestore();
+    host.unmount();
+  });
 });
