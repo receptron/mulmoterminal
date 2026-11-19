@@ -7,7 +7,7 @@ import { useI18n } from "vue-i18n";
 import FullScreenOverlay from "../FullScreenOverlay.vue";
 import LibraryList from "./LibraryList.vue";
 import LibraryReader from "./LibraryReader.vue";
-import { libraryRequestedSession, useLibraryView } from "../../composables/useLibraryView";
+import { libraryRequested, useLibraryView } from "../../composables/useLibraryView";
 import { loadLibraryConversation } from "../../composables/libraryApi";
 import { router } from "../../router";
 import { useEscapeToClose } from "../../composables/useEscapeToClose";
@@ -93,7 +93,7 @@ watch(
 );
 // Opened again on another conversation while already open (a second cell's History menu).
 watch(
-  () => router.currentRoute.value.query.session,
+  () => [router.currentRoute.value.query.session, router.currentRoute.value.query.cwd],
   () => {
     if (isOpen.value) void focusRequested();
   },
@@ -101,13 +101,17 @@ watch(
 
 /** Opens the reader on the conversation the URL names (a cell's History menu), reading it by id when
  *  it is not on the pages the list has read. */
+let focusRequests = 0;
 async function focusRequested(): Promise<void> {
-  const id = libraryRequestedSession();
-  if (id === null) return;
+  const request = libraryRequested();
+  if (request === null) return;
+  const mine = ++focusRequests;
   const opening = openings;
-  const listed = [...pinned.value, ...conversations.value].find((c) => c.id === id);
-  const found = listed ?? (await loadLibraryConversation(id));
-  if (found === null || opening !== openings) return;
+  const loaded = [...pinned.value, ...conversations.value];
+  const listed = loaded.find((c) => c.id === request.session && c.cwd === request.cwd);
+  const found = listed ?? (await loadLibraryConversation(request.session, request.cwd));
+  // A newer request, or a newer open, decides instead.
+  if (found === null || mine !== focusRequests || opening !== openings) return;
   chosenKey.value = conversationKey(found);
   chosenSeen.value = found;
   readerShown.value = true;

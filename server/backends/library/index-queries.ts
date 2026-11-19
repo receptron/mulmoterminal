@@ -38,8 +38,10 @@ export function listConversations(db: DatabaseSync, filter: ConversationFilter, 
     .all(...where.params, limit, offset);
 }
 
-export function findConversation(db: DatabaseSync, id: string): Record<string, unknown> | null {
-  return db.prepare("select * from conversations where id = ? order by ended_at desc nulls last limit 1").get(id) ?? null;
+/** A conversation by session id. The same id can sit in two project directories (a copied or moved
+ *  transcript): the one in `cwd` is preferred when given, else — or when none is there — the newest. */
+export function findConversation(db: DatabaseSync, id: string, cwd: string | null = null): Record<string, unknown> | null {
+  return db.prepare("select * from conversations where id = ? order by (cwd is ?) desc, ended_at desc nulls last limit 1").get(id, cwd) ?? null;
 }
 
 /** What a search matches with: an FTS5 phrase, or null to fall back to `like` (an escaped pattern),

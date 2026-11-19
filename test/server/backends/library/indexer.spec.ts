@@ -58,6 +58,17 @@ describe("runIndexPass", () => {
     expect(hits(db, "burning")).toEqual(["s1"]);
   });
 
+  it("finds the copy of a session in the project asked for, else the newest", async () => {
+    const { db, deps, transcript } = setup();
+    const later = line({ type: "user", cwd: "/w/other", timestamp: "2026-11-19T08:00:00.000Z", message: { content: "moved" } });
+    transcript("s1", prompt("first here"));
+    transcript("s1", later, "-w-other"); // the same session id, copied into another project and run on
+    await runIndexPass(deps);
+    expect(conversationOfRow(findConversation(db, "s1") ?? {}).cwd).toBe("/w/other");
+    expect(conversationOfRow(findConversation(db, "s1", "/w/app") ?? {}).cwd).toBe("/w/app");
+    expect(conversationOfRow(findConversation(db, "s1", "/w/nowhere") ?? {}).cwd).toBe("/w/other");
+  });
+
   it("reads only what was appended on the next pass", async () => {
     const { db, deps, transcript } = setup();
     // The title sits between the bytes that identify the file and the ones where the read stopped,

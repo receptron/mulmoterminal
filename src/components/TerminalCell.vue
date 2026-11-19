@@ -1706,7 +1706,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
               v-on="chromeEvents"
               @toggle-park="togglePark"
               @open-timeline="timelineOpen = true"
-              @open-library="sessionId && libraryViewOpen(sessionId)"
+              @open-library="sessionId && libraryViewOpen({ session: sessionId, cwd })"
               @open-talk="openAskMenu"
               @tools-opening="refreshAskTargets"
               @restart-agent="restart"

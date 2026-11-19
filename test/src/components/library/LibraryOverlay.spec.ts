@@ -8,10 +8,10 @@ import type { ResumableList } from "../../../../src/composables/useDirLists";
 
 const libraryOpen = ref(true);
 const closeLibrary = vi.fn();
-let requestedSession: string | null = null;
+let requested: { session: string; cwd: string | null } | null = null;
 vi.mock("../../../../src/composables/useLibraryView", () => ({
   useLibraryView: () => ({ isOpen: libraryOpen, close: closeLibrary }),
-  libraryRequestedSession: () => requestedSession,
+  libraryRequested: () => requested,
 }));
 
 let page: LibraryConversation[] = [];
@@ -111,7 +111,7 @@ const press = async (key: string) => {
 };
 
 beforeEach(() => {
-  requestedSession = null;
+  requested = null;
   closeLibrary.mockClear();
   marks = { pinned: [], names: {} };
   saveFails = false;

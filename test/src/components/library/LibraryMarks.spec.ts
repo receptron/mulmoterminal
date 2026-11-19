@@ -8,10 +8,10 @@ import type { ResumableList } from "../../../../src/composables/useDirLists";
 
 const libraryOpen = ref(true);
 const closeLibrary = vi.fn();
-let requestedSession: string | null = null;
+let requested: { session: string; cwd: string | null } | null = null;
 vi.mock("../../../../src/composables/useLibraryView", () => ({
   useLibraryView: () => ({ isOpen: libraryOpen, close: closeLibrary }),
-  libraryRequestedSession: () => requestedSession,
+  libraryRequested: () => requested,
 }));
 
 let page: LibraryConversation[] = [];
@@ -25,6 +25,7 @@ let saveGate: Promise<void> = Promise.resolve();
 let marksGate: Promise<void> = Promise.resolve();
 let marksUnreadable = false;
 let conversationGate: Promise<void> = Promise.resolve();
+const conversationGates = new Map<string, Promise<void>>();
 let more: { conversations: LibraryConversation[]; hasMore: boolean; indexFinishedAt: number | null } | null = null;
 /** The finished pass the next first page says it reflects. */
 let pageFinished: number | null = 1;
@@ -50,9 +51,10 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
     await marksGate;
     return answer;
   },
-  loadLibraryConversation: async (id: string) => {
-    await conversationGate;
-    return page.find((c) => c.id === id) ?? null;
+  loadLibraryConversation: async (id: string, cwd: string | null = null) => {
+    const gate = conversationGates.get(id) ?? conversationGate;
+    await gate;
+    return page.find((c) => c.id === id && c.cwd === cwd) ?? page.find((c) => c.id === id) ?? null;
   },
   saveLibraryMark: async (id: string, change: { pinned?: boolean; name?: string | null }) => {
     saved.push({ id, change });
@@ -116,7 +118,7 @@ const press = async (key: string) => {
 };
 
 beforeEach(() => {
-  requestedSession = null;
+  requested = null;
   closeLibrary.mockClear();
   marks = { pinned: [], names: {} };
   saved.length = 0;
@@ -125,6 +127,7 @@ beforeEach(() => {
   marksGate = Promise.resolve();
   marksUnreadable = false;
   conversationGate = Promise.resolve();
+  conversationGates.clear();
   libraryOpen.value = true;
   page = [conversation("a", "Burn subtitles"), conversation("b", "CI under ten minutes", { endedAt: NOW - 30 * 24 * 3_600_000 })];
   status = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
@@ -524,9 +527,39 @@ describe("LibraryOverlay pins and names", () => {
     page = [...page, old]; // readable by id…
     const api = await import("../../../../src/composables/libraryApi");
     vi.spyOn(api, "loadLibraryPage").mockResolvedValue({ conversations: page.slice(0, 2), hasMore: true, indexFinishedAt: 1 }); // …not listed
-    requestedSession = "from-a-cell";
+    requested = { session: "from-a-cell", cwd: null };
     const wrapper = await mountLibrary();
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Opened from its cell");
+    vi.mocked(api.loadLibraryPage).mockRestore();
+  });
+
+  it("opens on the copy of a session in the cell's own project when one id sits in two", async () => {
+    page = [conversation("twin", "In the clip studio"), conversation("twin", "In the other project", { cwd: "/Users/me/work/other" }), ...page];
+    const wrapper = await mountLibrary(); // both copies listed before the request arrives
+    requested = { session: "twin", cwd: "/Users/me/work/other" };
+    const { router } = await import("../../../../src/router");
+    await router.push({ name: "library", query: { session: "twin", cwd: "/Users/me/work/other" } });
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("In the other project");
+  });
+
+  it("lets the newer of two requests decide, whichever answers first", async () => {
+    const older = conversation("older", "Asked for first", { endedAt: NOW - 400 * 24 * 3_600_000 });
+    const newer = conversation("newer", "Asked for second", { endedAt: NOW - 400 * 24 * 3_600_000 });
+    page = [...page, older, newer];
+    const api = await import("../../../../src/composables/libraryApi");
+    vi.spyOn(api, "loadLibraryPage").mockResolvedValue({ conversations: page.slice(0, 2), hasMore: true, indexFinishedAt: 1 });
+    let releaseOlder: () => void = () => {};
+    conversationGates.set("older", new Promise((resolve) => (releaseOlder = resolve)));
+    requested = { session: "older", cwd: null };
+    const { router } = await import("../../../../src/router");
+    const wrapper = await mountLibrary();
+    requested = { session: "newer", cwd: null };
+    await router.push({ name: "library", query: { session: "newer" } });
+    await flushPromises();
+    releaseOlder();
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Asked for second");
     vi.mocked(api.loadLibraryPage).mockRestore();
   });
 });
