@@ -109,7 +109,12 @@ describe("/api/library/marks", () => {
     dirs.push(dir);
     const app = express();
     app.use(express.json());
-    mountLibraryRoutes(app, { call: () => Promise.resolve(null), marksFile: path.join(dir, "marks.json") });
+    // The index holds one conversation; any other id is not found.
+    const known = "0f6a7c2e-1b2c-4d3e-8f90-123456789abc";
+    mountLibraryRoutes(app, {
+      call: (method, args) => Promise.resolve(method === "conversation" && args[0] === known ? { id: known } : null),
+      marksFile: path.join(dir, "marks.json"),
+    });
     return routeCall(app);
   };
 
@@ -132,10 +137,31 @@ describe("/api/library/marks", () => {
   it.each([
     ["an empty body", "{}", "0f6a7c2e-1b2c-4d3e-8f90-123456789abc"],
     ["a wrong-typed field", JSON.stringify({ pinned: "yes" }), "0f6a7c2e-1b2c-4d3e-8f90-123456789abc"],
-    ["an id that is not a session id", JSON.stringify({ pinned: true }), "..%2Fetc"],
+    ["an id that is not path-safe", JSON.stringify({ pinned: true }), "..%2Fetc"],
   ])("refuses %s", async (_label, body, id) => {
     const call = appWithMarks();
     expect((await call(`/api/library/marks/${id}`, { method: "PUT", headers: { "content-type": "application/json" }, body })).status).toBe(400);
+  });
+});
+
+describe("PUT /api/library/marks/:id for a conversation the index does not hold", () => {
+  it("answers 404 and writes nothing", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "mt-library-marks-unknown-"));
+    try {
+      const app = express();
+      app.use(express.json());
+      mountLibraryRoutes(app, { call: () => Promise.resolve(null), marksFile: path.join(dir, "marks.json") });
+      const call = routeCall(app);
+      const answer = await call("/api/library/marks/agent-1", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pinned: true }),
+      });
+      expect(answer.status).toBe(404);
+      expect((await call("/api/library/marks")).body).toEqual({ pinned: [], names: {} });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -171,10 +197,10 @@ describe("isMarkableId", () => {
   it.each([
     ["0f6a7c2e-1b2c-4d3e-8f90-123456789abc", true],
     ["agent-a1b2c3d4e5f60718", true],
-    ["abc-1", false],
+    ["agent-1", true],
     ["--resume", false],
-    ["agent-", false],
     ["../marks", false],
+    ["a/b", false],
     ["", false],
   ])("%s → %s", (id, expected) => {
     expect(isMarkableId(id)).toBe(expected);
