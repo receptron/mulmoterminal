@@ -413,4 +413,14 @@ describe("LibraryOverlay pins and names", () => {
     await flushPromises();
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Newer than the read");
   });
+
+  it("treats two copies of one session id in different directories as two rows to read", async () => {
+    page = [conversation("dup", "Copy one", { cwd: "/w/one" }), conversation("dup", "Copy two", { cwd: "/w/two", endedAt: NOW - 1000 })];
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-rename-start]").trigger("click");
+    await press("ArrowDown"); // the other copy
+    expect(wrapper.find("[data-testid=library-rename]").exists()).toBe(false);
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Copy two");
+  });
 });

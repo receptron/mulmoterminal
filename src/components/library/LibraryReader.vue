@@ -6,7 +6,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import TranscriptPane from "../TranscriptPane.vue";
 import { LIBRARY_NAME_MAX, type LibraryConversation } from "../../../common/library";
-import { costLabel, metaParts } from "./libraryRows";
+import { conversationKey, costLabel, metaParts } from "./libraryRows";
 
 const props = defineProps<{ conversation: LibraryConversation; now: number; notice: string | null; name: string | null; pinned: boolean }>();
 const emit = defineEmits<{ resume: []; pin: [pinned: boolean]; rename: [id: string, name: string | null] }>();
@@ -22,7 +22,7 @@ const shownTitle = computed(() => props.name ?? props.conversation.title ?? t("l
 let renaming: string | null = null;
 // Another conversation chosen mid-rename or with the menu open: both belong to the one left behind.
 watch(
-  () => props.conversation.id,
+  () => conversationKey(props.conversation),
   () => {
     draft.value = null;
     renaming = null;
@@ -143,7 +143,7 @@ const lines = computed(() => {
       </p>
     </header>
     <div class="flex min-h-0 flex-1">
-      <TranscriptPane :key="conversation.id" :session-id="conversation.id" :cwd="conversation.cwd" :agent="conversation.agent" embedded />
+      <TranscriptPane :key="conversationKey(conversation)" :session-id="conversation.id" :cwd="conversation.cwd" :agent="conversation.agent" embedded />
     </div>
     <!-- A row of its own rather than floating over the conversation, so the last lines are never under
          it; the notice wraps beside the button and drops above it when the row is narrow. -->
