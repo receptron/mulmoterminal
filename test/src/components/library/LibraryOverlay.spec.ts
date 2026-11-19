@@ -452,4 +452,27 @@ describe("LibraryOverlay", () => {
     await flushPromises();
     expect(opened).toEqual([]);
   }, 10_000);
+
+  it("keeps a wake that arrives while a progress answer is on its way", async () => {
+    const api = await import("../../../../src/composables/libraryApi");
+    const wrapper = await mountLibrary();
+    const interval = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 300));
+    await interval();
+    await interval(); // quiet now
+    let release: () => void = () => {};
+    statusGate = new Promise((resolve) => (release = resolve));
+    hits = [];
+    await wrapper.find("[data-testid=library-search]").setValue("first"); // its answer wakes the poll
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    await interval(); // that tick is now waiting on the held answer
+    hits = []; // a new answer, so the screen sees a change
+    await wrapper.find("[data-testid=library-search]").setValue("second"); // a wake while it waits
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    const asks = vi.spyOn(api, "loadLibraryStatus");
+    release(); // the held answer: idle
+    await flushPromises();
+    await interval();
+    expect(asks).toHaveBeenCalled();
+    asks.mockRestore();
+  }, 30_000);
 });

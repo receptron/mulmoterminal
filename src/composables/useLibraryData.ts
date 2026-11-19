@@ -114,39 +114,52 @@ function usePolledStatus(
   reloadList: () => void,
   listFailed: () => boolean,
 ) {
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  /** The next tick, once it is scheduled and until it fires. */
+  let scheduled: ReturnType<typeof setTimeout> | null = null;
+  /** A tick is waiting for its answer. A wake then cannot schedule (the answer decides), so it is
+   *  remembered and honoured when the answer comes. */
+  let asking = false;
+  let wakeAgain = false;
+  let active = false;
   // Each start is a new generation: a request from before a close and reopen must not schedule a
   // second loop beside the new one.
   let generation = 0;
+  const schedule = (mine: number, delay_ms: number): void => {
+    scheduled = setTimeout(() => {
+      scheduled = null;
+      void tick(mine);
+    }, delay_ms);
+  };
   async function tick(mine: number): Promise<void> {
+    asking = true;
+    wakeAgain = false;
     const next = await loadLibraryStatus();
+    asking = false;
     if (mine !== generation) return; // stopped, or restarted, while asking
     status.value = next;
     const finished = next?.finishedAt ?? null;
     if ((finished !== null && finished !== listReflects()) || listFailed()) reloadList();
-    // A failed read is asked again: during the first build it is the only way the list fills.
-    // Kept going while the list could not be read, too: otherwise a failed read waits for a reopen.
-    timer = next === null || next.indexing || listFailed() ? setTimeout(() => void tick(mine), LIBRARY_STATUS_POLL_MS) : null;
+    // Kept going while the build runs, after a failed read of either kind, and when something woke the
+    // poll while this answer was on its way.
+    if (next === null || next.indexing || listFailed() || wakeAgain) schedule(mine, LIBRARY_STATUS_POLL_MS);
   }
-  let active = false;
   return {
     start: () => {
       active = true;
-      const mine = ++generation;
-      timer = setTimeout(() => void tick(mine), 0);
+      schedule(++generation, 0);
     },
     stop: () => {
       active = false;
+      wakeAgain = false;
       generation++;
-      if (timer !== null) clearTimeout(timer);
-      timer = null;
+      if (scheduled !== null) clearTimeout(scheduled);
+      scheduled = null;
     },
-    /** Makes sure a tick is coming. A loop that already went quiet is woken; one whose read is still
-     *  in flight sees the failure itself when it answers, and keeps going. */
+    /** Makes sure a tick is coming: woken if quiet, remembered if a tick is waiting for its answer. */
     wake: () => {
-      if (!active || timer !== null) return;
-      const mine = generation;
-      timer = setTimeout(() => void tick(mine), LIBRARY_STATUS_POLL_MS);
+      if (!active || scheduled !== null) return;
+      if (asking) wakeAgain = true;
+      else schedule(generation, LIBRARY_STATUS_POLL_MS);
     },
   };
 }
