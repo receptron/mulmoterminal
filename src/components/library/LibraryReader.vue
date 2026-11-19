@@ -156,6 +156,7 @@ const lines = computed(() => {
           class="flex cursor-pointer items-center rounded border-0 bg-transparent p-1 text-secondary hover:bg-hover hover:text-fg"
           :aria-label="t('libraryView.moreActions')"
           :aria-expanded="menuOpen"
+          aria-haspopup="menu"
           @click="menuOpen = !menuOpen"
         >
           <span class="material-symbols-outlined text-[20px]">more_horiz</span>

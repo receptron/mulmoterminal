@@ -71,6 +71,7 @@ describe("isLibraryMarks", () => {
     ["a name past the cap", { pinned: [], names: { a: "x".repeat(LIBRARY_NAME_MAX + 1) } }],
     ["a non-string name", { pinned: [], names: { a: 3 } }],
     ["no names", { pinned: [] }],
+    ["a field this code never writes", { pinned: [], names: {}, pinnd: ["a"] }],
   ])("refuses %s", (_label, value) => {
     expect(isLibraryMarks(value)).toBe(false);
   });

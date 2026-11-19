@@ -130,6 +130,7 @@ const isMarkName = (name: unknown): boolean => typeof name === "string" && name.
  *  refused, not read and then written back. */
 export const isLibraryMarks = (value: unknown): value is LibraryMarks =>
   isRecord(value) &&
+  Object.keys(value).every((key) => key === "pinned" || key === "names") &&
   Array.isArray(value.pinned) &&
   value.pinned.every((id) => typeof id === "string" && id !== "") &&
   new Set(value.pinned).size === value.pinned.length &&
