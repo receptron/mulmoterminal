@@ -87,7 +87,11 @@ describe("the cross-process lock", () => {
 
   it("takes over a lock left by a process that died holding it", async () => {
     const file = scratchFile();
+    // As a dead holder leaves it: a lock always has its owner in it (it is renamed into place so).
+    // An EMPTY directory here would be replaced by the rename on POSIX and refused on Windows, and so
+    // would not test the takeover at all.
     mkdirSync(`${file}.lock`, { recursive: true });
+    writeFileSync(`${file}.lock/owner`, "a-dead-process");
     const old = (Date.now() - MARKS_LOCK_STALE_MS * 2) / 1000;
     utimesSync(`${file}.lock`, old, old);
     expect(await changeLibraryMark("a", { pinned: true }, file)).toEqual({ pinned: ["a"], names: {} });
