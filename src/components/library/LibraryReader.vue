@@ -9,7 +9,7 @@ import { LIBRARY_NAME_MAX, type LibraryConversation } from "../../../common/libr
 import { costLabel, metaParts } from "./libraryRows";
 
 const props = defineProps<{ conversation: LibraryConversation; now: number; notice: string | null; name: string | null; pinned: boolean }>();
-const emit = defineEmits<{ resume: []; pin: [pinned: boolean]; rename: [name: string | null] }>();
+const emit = defineEmits<{ resume: []; pin: [pinned: boolean]; rename: [id: string, name: string | null] }>();
 const { t, locale } = useI18n();
 
 const menuOpen = ref(false);
@@ -18,18 +18,32 @@ const draft = ref<string | null>(null);
 const nameField = ref<HTMLInputElement | null>(null);
 const shownTitle = computed(() => props.name ?? props.conversation.title ?? t("libraryView.untitled"));
 
+/** The conversation the rename was started on: the name is saved for it, whatever is selected by then. */
+let renaming: string | null = null;
+// Another conversation chosen mid-rename or with the menu open: both belong to the one left behind.
+watch(
+  () => props.conversation.id,
+  () => {
+    draft.value = null;
+    renaming = null;
+    menuOpen.value = false;
+  },
+);
+
 async function startRename(): Promise<void> {
   menuOpen.value = false;
+  renaming = props.conversation.id;
   draft.value = props.name ?? props.conversation.title ?? "";
   await nextTick();
   nameField.value?.select();
 }
 function finishRename(): void {
-  if (draft.value === null) return;
+  if (draft.value === null || renaming === null) return;
   // The agent's own title back: an empty name, or one identical to it, clears the user's.
   const typed = draft.value.trim();
-  emit("rename", typed === "" || typed === props.conversation.title ? null : typed);
+  emit("rename", renaming, typed === "" || typed === props.conversation.title ? null : typed);
   draft.value = null;
+  renaming = null;
 }
 const menu = ref<HTMLElement | null>(null);
 // While the menu is open, Esc and a click elsewhere close IT. Esc is caught on the way down

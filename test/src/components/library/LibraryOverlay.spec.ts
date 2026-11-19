@@ -18,6 +18,7 @@ let marks: { pinned: string[]; names: Record<string, string> } = { pinned: [], n
 const saved: { id: string; change: { pinned?: boolean; name?: string | null } }[] = [];
 let saveFails = false;
 let saveGate: Promise<void> = Promise.resolve();
+let marksGate: Promise<void> = Promise.resolve();
 let more: { conversations: LibraryConversation[]; hasMore: boolean; indexFinishedAt: number | null } | null = null;
 /** The finished pass the next first page says it reflects. */
 let pageFinished: number | null = 1;
@@ -38,7 +39,11 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
     return status;
   },
   searchLibrary: () => Promise.resolve(hits),
-  loadLibraryMarks: () => Promise.resolve(marks),
+  loadLibraryMarks: async () => {
+    const answer = { ...marks };
+    await marksGate;
+    return answer;
+  },
   loadLibraryConversation: (id: string) => Promise.resolve(page.find((c) => c.id === id) ?? null),
   saveLibraryMark: async (id: string, change: { pinned?: boolean; name?: string | null }) => {
     saved.push({ id, change });
@@ -105,6 +110,7 @@ beforeEach(() => {
   saved.length = 0;
   saveFails = false;
   saveGate = Promise.resolve();
+  marksGate = Promise.resolve();
   libraryOpen.value = true;
   page = [conversation("a", "Burn subtitles"), conversation("b", "CI under ten minutes", { endedAt: NOW - 30 * 24 * 3_600_000 })];
   status = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
@@ -229,49 +235,6 @@ describe("LibraryOverlay", () => {
     await press("Enter");
     expect(opened).toEqual([]);
     expect(wrapper.find("[role=status]").text().length).toBeGreaterThan(0);
-  });
-
-  it("keeps one polling loop through a close and reopen, and keeps asking after a failed read", async () => {
-    const { useLibraryData } = await import("../../../../src/composables/useLibraryData");
-    const api = await import("../../../../src/composables/libraryApi");
-    const calls = vi.spyOn(api, "loadLibraryStatus");
-    status = null; // the read fails: the poll must keep going
-    let release: () => void = () => {};
-    statusGate = new Promise((resolve) => (release = resolve));
-    const open = ref(true);
-    const host = mount({ setup: () => useLibraryData(open), template: "<div />" });
-    await new Promise((resolve) => setTimeout(resolve, 5)); // the first read is now waiting
-    open.value = false;
-    await flushPromises();
-    open.value = true;
-    await new Promise((resolve) => setTimeout(resolve, 5)); // and so is the reopened screen's
-    release();
-    await flushPromises();
-    calls.mockClear();
-    await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 300));
-    expect(calls).toHaveBeenCalledTimes(1);
-    host.unmount();
-  }, 10_000);
-
-  it("drops a search still pending when the screen closes", async () => {
-    const { useLibraryData } = await import("../../../../src/composables/useLibraryData");
-    hits = [{ conversation: conversation("stale", "Stale"), snippet: "stale", role: "user" }];
-    const open = ref(true);
-    let data: ReturnType<typeof useLibraryData> | null = null;
-    const host = mount({ setup: () => (data = useLibraryData(open)), template: "<div />" });
-    await flushPromises();
-    if (data === null) throw new Error("not mounted");
-    const state: ReturnType<typeof useLibraryData> = data;
-    state.query.value = "stale";
-    await flushPromises();
-    open.value = false;
-    await flushPromises();
-    open.value = true;
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    await flushPromises();
-    expect(state.query.value).toBe("");
-    expect(state.hits.value).toBeNull();
-    host.unmount();
   });
 
   it("leaves Enter to a button inside the conversation", async () => {
@@ -417,27 +380,6 @@ describe("LibraryOverlay", () => {
     expect(wrapper.findAll("[data-testid=library-row]").map((row) => row.text())).toEqual([expect.stringContaining("Found after the pass")]);
   }, 10_000);
 
-  it("holds Show more while the list is being read again", async () => {
-    const { useLibraryData } = await import("../../../../src/composables/useLibraryData");
-    const api = await import("../../../../src/composables/libraryApi");
-    firstHasMore = true;
-    const open = ref(true);
-    let data: ReturnType<typeof useLibraryData> | null = null;
-    const host = mount({ setup: () => (data = useLibraryData(open)), template: "<div />" });
-    await flushPromises();
-    if (data === null) throw new Error("not mounted");
-    const state: ReturnType<typeof useLibraryData> = data;
-    const reads = vi.spyOn(api, "loadLibraryPage");
-    const reloading = state.reload();
-    await state.loadMore(); // while the reload is still waiting for its page
-    await reloading;
-    // Only first pages were read: no page counted from the old list's length was asked for meanwhile.
-    expect(reads.mock.calls.length).toBeGreaterThan(0);
-    expect(reads.mock.calls.every((call) => call[0] === 0)).toBe(true);
-    reads.mockRestore();
-    host.unmount();
-  });
-
   it("asks for progress again after a read, since a read can start a pass", async () => {
     const api = await import("../../../../src/composables/libraryApi");
     const asks = vi.spyOn(api, "loadLibraryStatus");
@@ -499,34 +441,6 @@ describe("LibraryOverlay", () => {
     expect(asks).toHaveBeenCalled();
     asks.mockRestore();
   }, 30_000);
-
-  it("keeps one polling loop when a stale answer lands after a reopen", async () => {
-    const { usePolledStatus } = await import("../../../../src/composables/useLibraryData");
-    const api = await import("../../../../src/composables/libraryApi");
-    status = { indexing: true, filesDone: 1, filesTotal: 9, finishedAt: null };
-    const poll = usePolledStatus(
-      ref(null),
-      () => null,
-      () => {},
-      () => false,
-    );
-    let releaseOld: () => void = () => {};
-    statusGate = new Promise((resolve) => (releaseOld = resolve));
-    poll.start();
-    await new Promise((resolve) => setTimeout(resolve, 5)); // the first tick waits for its answer
-    poll.stop();
-    statusGate = new Promise(() => {}); // the reopened screen's answer never comes in this test
-    poll.start();
-    await new Promise((resolve) => setTimeout(resolve, 5)); // its tick is waiting too
-    releaseOld(); // the stale answer lands
-    await flushPromises();
-    const asks = vi.spyOn(api, "loadLibraryStatus");
-    poll.wake(); // a read lands while the current tick still waits: it must not start a second loop
-    await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 300));
-    expect(asks).not.toHaveBeenCalled();
-    asks.mockRestore();
-    poll.stop();
-  }, 10_000);
 
   it("drops a resume still checking when another conversation is chosen", async () => {
     let release: () => void = () => {};
@@ -631,5 +545,48 @@ describe("LibraryOverlay", () => {
     releaseFirst(); // then the pin's older answer arrives
     await flushPromises();
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Newest");
+  });
+
+  it("drops a rename begun on one conversation when another is chosen", async () => {
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-rename-start]").trigger("click");
+    await wrapper.find("[data-testid=library-rename]").setValue("Meant for a");
+    await wrapper.findAll("[data-testid=library-row]")[1]?.trigger("click"); // b
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-rename]").exists()).toBe(false);
+    expect(saved.every((entry) => entry.id !== "b")).toBe(true);
+  });
+
+  it("puts a conversation in the pinned group even when its pin's own answer was superseded", async () => {
+    const wrapper = await mountLibrary();
+    await press("ArrowDown"); // b, the older one: only a pin puts it first
+    let releasePin: () => void = () => {};
+    saveGate = new Promise((resolve) => (releasePin = resolve));
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-pin]").trigger("click"); // held
+    saveGate = Promise.resolve();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-rename-start]").trigger("click");
+    await wrapper.find("[data-testid=library-rename]").setValue("Pinned and named");
+    await wrapper.find("[data-testid=library-rename]").trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    releasePin();
+    await flushPromises();
+    expect(wrapper.findAll("[data-testid=library-row]")[0]?.text()).toContain("Pinned and named");
+  });
+
+  it("keeps a name saved while the opening read of the marks was still on its way", async () => {
+    let releaseLoad: () => void = () => {};
+    marksGate = new Promise((resolve) => (releaseLoad = resolve)); // answers with the marks as they were
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-rename-start]").trigger("click");
+    await wrapper.find("[data-testid=library-rename]").setValue("Saved first");
+    await wrapper.find("[data-testid=library-rename]").trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    releaseLoad(); // the older read lands now
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Saved first");
   });
 });

@@ -89,8 +89,8 @@ const RESUME_REFUSALS: Record<Exclude<LibraryResume["kind"], "open">, string> = 
 function pinSelected(pin: boolean): void {
   if (selected.value) void changeMark(selected.value.id, { pinned: pin });
 }
-function renameSelected(name: string | null): void {
-  if (selected.value) void changeMark(selected.value.id, { name });
+function renameConversation(id: string, name: string | null): void {
+  void changeMark(id, { name });
 }
 
 function select(conversation: LibraryConversation): void {
@@ -236,7 +236,7 @@ onBeforeUnmount(() => {
             :pinned="marks.pinned.includes(selected.id)"
             @resume="resume"
             @pin="pinSelected"
-            @rename="renameSelected"
+            @rename="renameConversation"
           />
           <p v-else class="m-0 p-6 font-sans text-[13px] text-dim">{{ t("libraryView.pick") }}</p>
         </div>

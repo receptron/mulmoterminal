@@ -23,8 +23,10 @@ export function useLibraryMarks(isOpen: Ref<boolean>) {
 
   async function load(): Promise<void> {
     const mine = ++request;
+    const savesBefore = saveRequest;
     const read = await loadLibraryMarks();
-    if (mine !== request || read === null) return;
+    // A save answered since this read began holds newer marks than the read does.
+    if (mine !== request || read === null || saveRequest !== savesBefore) return;
     marks.value = read;
     await readPinned(read.pinned);
   }
@@ -41,8 +43,11 @@ export function useLibraryMarks(isOpen: Ref<boolean>) {
       saveFailed.value = true;
       return false;
     }
+    const pinsChanged = saved.pinned.join("\n") !== marks.value.pinned.join("\n");
     marks.value = saved;
-    if (update.pinned !== undefined) await readPinned(saved.pinned);
+    // By what the answer says, not by what this change asked: a pin whose own answer was superseded
+    // reaches the screen through the next answer, which holds it.
+    if (pinsChanged) await readPinned(saved.pinned);
     return true;
   }
 
