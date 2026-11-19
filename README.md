@@ -1871,7 +1871,9 @@ narrow and tall for one record you are discussing — and each position keeps it
   newest first, across all projects: its title, then the project, branch, PRs and when. Type to
   search the conversations' text and titles (Japanese included); pick one to read it, and press
   **Resume** (or `Enter`) to open it in a terminal in the directory it ran in. `/` focuses the
-  search, the arrow keys move. `claude -p` and SDK runs, and runs from temp directories, are left
+  search, the arrow keys move. The **⋯** menu pins a conversation to the top of the list or renames
+  it; pins and names are MulmoTerminal's own (`~/.mulmoterminal/library/marks.json`) and the
+  conversation's file is never written. `claude -p` and SDK runs, and runs from temp directories, are left
   out. The index behind it is built in the background the first time you open it and kept up to
   date from what is appended; it lives in `~/.mulmoterminal/library/` and can be deleted at any
   time (it is rebuilt). Design: [`docs/library-design.md`](docs/library-design.md).

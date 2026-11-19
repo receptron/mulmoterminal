@@ -2,7 +2,9 @@
 // Pure — `now` and the locale are handed in, so every boundary can be asserted.
 import type { LibraryConversation } from "../../../common/library";
 
-export const LIBRARY_GROUPS = ["today", "week", "older"] as const;
+export const LIBRARY_GROUPS = ["pinned", "today", "week", "older"] as const;
+/** The groups a conversation falls into by when it ended; "pinned" is the user's, not a time. */
+const TIME_GROUPS = ["today", "week", "older"] as const;
 export type LibraryGroup = (typeof LIBRARY_GROUPS)[number];
 
 const MINUTE_MS = 60_000;
@@ -28,7 +30,7 @@ function daysBefore(dayStart: number, days: number): number {
 }
 
 /** Today is the local calendar day; the week is the six days before it. No time at all is "older". */
-export function groupOf(endedAt: number | null, now: number): LibraryGroup {
+export function groupOf(endedAt: number | null, now: number): (typeof TIME_GROUPS)[number] {
   if (endedAt === null) return "older";
   const today = startOfDay(now);
   if (endedAt >= today) return "today";
@@ -40,12 +42,25 @@ export interface LibraryGroupRows {
   conversations: LibraryConversation[];
 }
 
-/** The rows in their groups, in the order given (the server's, newest first); empty groups left out. */
-export function groupConversations(conversations: readonly LibraryConversation[], now: number): LibraryGroupRows[] {
-  return LIBRARY_GROUPS.map((group) => ({ group, conversations: conversations.filter((c) => groupOf(c.endedAt, now) === group) })).filter(
-    (rows) => rows.conversations.length > 0,
-  );
+/** The rows in their groups: the pinned ones first, in pin order, then the rest by when they ended, in
+ *  the order given (the server's, newest first) and without the pinned ones. Empty groups left out. */
+export function groupConversations(
+  conversations: readonly LibraryConversation[],
+  now: number,
+  pinned: readonly LibraryConversation[] = [],
+): LibraryGroupRows[] {
+  const pinnedIds = new Set(pinned.map((c) => c.id));
+  const rest = conversations.filter((c) => !pinnedIds.has(c.id));
+  const byTime = TIME_GROUPS.map((group) => ({ group, conversations: rest.filter((c) => groupOf(c.endedAt, now) === group) }));
+  return [{ group: "pinned" as const, conversations: [...pinned] }, ...byTime].filter((rows) => rows.conversations.length > 0);
 }
+
+/** The rows in the order the list shows them, for the arrow keys to walk. */
+export const listedInOrder = (groups: readonly LibraryGroupRows[]): LibraryConversation[] => groups.flatMap((rows) => rows.conversations);
+
+/** The user's name for a conversation if they gave one, else its own title. */
+export const displayTitle = (conversation: LibraryConversation, names: Readonly<Record<string, string>>): string | null =>
+  names[conversation.id] ?? conversation.title;
 
 /** The last segment of a path, which is what a project is called; either separator. */
 export function projectName(cwd: string | null): string | null {

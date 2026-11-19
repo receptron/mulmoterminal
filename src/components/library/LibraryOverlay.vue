@@ -17,13 +17,15 @@ import { cellForPanelResume } from "../launchCell";
 import { isEditableTarget } from "../../composables/gridShortcut";
 import { libraryKeyAction, movedIndex } from "./libraryKeys";
 import { libraryResume, type LibraryResume } from "./libraryResume";
-import { conversationKey } from "./libraryRows";
+import { conversationKey, groupConversations, listedInOrder } from "./libraryRows";
+import { useLibraryMarks } from "../../composables/useLibraryMarks";
 import type { LibraryConversation } from "../../../common/library";
 
 const { t } = useI18n();
 const { isOpen, close } = useLibraryView();
 useEscapeToClose(isOpen, close);
 const { conversations, hasMore, loaded, loadFailed, status, query, hits, searching, searchFailed, loadMore } = useLibraryData(isOpen);
+const { marks, pinned, saveFailed, change: changeMark } = useLibraryMarks(isOpen);
 
 const searchField = ref<HTMLInputElement | null>(null);
 /** The chosen row by key, not by object: a reload replaces every object, and must not move the reader. */
@@ -34,7 +36,9 @@ const notice = ref<string | null>(null);
 const now = ref(Date.now());
 
 /** What the list shows right now, in order — what the arrow keys walk. */
-const shown = computed((): LibraryConversation[] => (hits.value ? hits.value.map((hit) => hit.conversation) : conversations.value));
+const shown = computed((): LibraryConversation[] =>
+  hits.value ? hits.value.map((hit) => hit.conversation) : listedInOrder(groupConversations(conversations.value, now.value, pinned.value)),
+);
 // The chosen row while it is still shown, else the first one: Enter always has something to act on.
 const selected = computed(() => shown.value.find((c) => conversationKey(c) === chosenKey.value) ?? shown.value[0] ?? null);
 // Only the FIRST build is worth a line: later passes catch up in seconds on what was appended, and a
@@ -81,6 +85,13 @@ const RESUME_REFUSALS: Record<Exclude<LibraryResume["kind"], "open">, string> = 
   "no-cwd": "libraryView.resumeNoCwd",
   unchecked: "libraryView.resumeUnchecked",
 };
+
+function pinSelected(pin: boolean): void {
+  if (selected.value) void changeMark(selected.value.id, { pinned: pin });
+}
+function renameSelected(name: string | null): void {
+  if (selected.value) void changeMark(selected.value.id, { name });
+}
 
 function select(conversation: LibraryConversation): void {
   chosenKey.value = conversationKey(conversation);
@@ -201,6 +212,8 @@ onBeforeUnmount(() => {
             :selected-key="selected ? conversationKey(selected) : null"
             :now="now"
             :has-more="hasMore"
+            :pinned="pinned"
+            :names="marks.names"
             @select="select"
             @more="loadMore"
           />
@@ -214,7 +227,17 @@ onBeforeUnmount(() => {
           >
             <span class="material-symbols-outlined text-[18px]">arrow_back</span>{{ t("libraryView.back") }}
           </button>
-          <LibraryReader v-if="selected" :conversation="selected" :now="now" :notice="notice" @resume="resume" />
+          <LibraryReader
+            v-if="selected"
+            :conversation="selected"
+            :now="now"
+            :notice="saveFailed ? t('libraryView.saveFailed') : notice"
+            :name="marks.names[selected.id] ?? null"
+            :pinned="marks.pinned.includes(selected.id)"
+            @resume="resume"
+            @pin="pinSelected"
+            @rename="renameSelected"
+          />
           <p v-else class="m-0 p-6 font-sans text-[13px] text-dim">{{ t("libraryView.pick") }}</p>
         </div>
       </div>

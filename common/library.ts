@@ -109,3 +109,31 @@ export const isLibraryIndexStatus = (value: unknown): value is LibraryIndexStatu
   typeof value.filesDone === "number" &&
   typeof value.filesTotal === "number" &&
   nullableNumber(value.finishedAt);
+
+// ---- what the user marks on a conversation ------------------------------------------------------
+
+/** A name the user gave, kept to one line of a list. */
+export const LIBRARY_NAME_MAX = 200;
+
+/** Pins and names, by session id. MulmoTerminal's own record: the agent's transcript is never written. */
+export interface LibraryMarks {
+  /** Newest pin first. */
+  pinned: string[];
+  names: Record<string, string>;
+}
+
+export const emptyLibraryMarks = (): LibraryMarks => ({ pinned: [], names: {} });
+
+export const isLibraryMarks = (value: unknown): value is LibraryMarks =>
+  isRecord(value) &&
+  Array.isArray(value.pinned) &&
+  value.pinned.every((id) => typeof id === "string") &&
+  isRecord(value.names) &&
+  Object.values(value.names).every((name) => typeof name === "string");
+
+/** One change to one conversation's marks; a field left out is left as it is. */
+export interface LibraryMarkChange {
+  pinned?: boolean;
+  /** Null or blank clears the name. */
+  name?: string | null;
+}

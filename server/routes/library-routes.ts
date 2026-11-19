@@ -6,6 +6,12 @@ import type { ConversationFilter } from "../backends/library/index-queries.js";
 import { MAX_QUERY_CHARS } from "../backends/library/library-search.js";
 import { createLibraryClient } from "../backends/library/library-client.js";
 import type { LibraryCaller, LibraryMethod } from "../backends/library/library-service.js";
+import { changeLibraryMark, readLibraryMarks } from "../backends/library/library-marks.js";
+import type { LibraryMarkChange } from "../../common/library.js";
+import { requestBody } from "./requestBody.js";
+
+/** A session id as the agents write them: letters, digits and dashes (subagents use `agent-…`). */
+const SESSION_ID_SHAPE = /^[A-Za-z0-9-]{1,128}$/;
 
 export const LIBRARY_PAGE_DEFAULT = 50;
 export const LIBRARY_PAGE_MAX = 200;
@@ -13,6 +19,8 @@ export const LIBRARY_PAGE_MAX = 200;
 export interface LibraryRouteDeps {
   /** Override the worker, for tests. */
   call?: LibraryCaller;
+  /** Override where pins and names live, for tests. */
+  marksFile?: string;
 }
 
 const flag = (value: unknown): boolean => value === "1" || value === "true";
@@ -61,6 +69,7 @@ export function mountLibraryRoutes(app: Express, deps: LibraryRouteDeps = {}): v
     if (conversation === null) res.status(404).json({ error: "conversation not found" });
     else if (conversation !== undefined) res.json(conversation);
   });
+  mountMarkRoutes(app, deps.marksFile);
   app.get("/api/library/search", async (req, res) => {
     const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
     if (query === "" || query.length > MAX_QUERY_CHARS) {
@@ -69,5 +78,38 @@ export function mountLibraryRoutes(app: Express, deps: LibraryRouteDeps = {}): v
     }
     const hits = await answer(res, call, "search", [query, filterOf(req.query), pageLimit(req.query.limit)]);
     if (hits !== undefined) res.json({ hits });
+  });
+}
+
+/** A change from a request body: only the fields it carries, each of the right type. */
+export function markChangeOf(body: Record<string, unknown>): LibraryMarkChange | null {
+  const change: LibraryMarkChange = {};
+  if (typeof body.pinned === "boolean") change.pinned = body.pinned;
+  if (typeof body.name === "string" || body.name === null) change.name = body.name;
+  return Object.keys(change).length === 0 ? null : change;
+}
+
+// Pins and names live in MulmoTerminal's own file, not in the index, so they are read and written
+// here rather than on the worker. 500 when the file exists but cannot be read: answering "none"
+// would let the next change overwrite what the user had.
+function mountMarkRoutes(app: Express, marksFile: string | undefined): void {
+  app.get("/api/library/marks", async (_req, res) => {
+    try {
+      res.json(await readLibraryMarks(marksFile));
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "the marks could not be read" });
+    }
+  });
+  app.put("/api/library/marks/:id", async (req, res) => {
+    const change = markChangeOf(requestBody(req.body));
+    if (change === null || !SESSION_ID_SHAPE.test(req.params.id)) {
+      res.status(400).json({ error: "expected { pinned?: boolean, name?: string | null } for a session id" });
+      return;
+    }
+    try {
+      res.json(await changeLibraryMark(req.params.id, change, marksFile));
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "the marks could not be saved" });
+    }
   });
 }

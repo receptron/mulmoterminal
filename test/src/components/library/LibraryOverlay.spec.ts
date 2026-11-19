@@ -7,12 +7,16 @@ import type { LibraryConversation, LibraryIndexStatus, LibrarySearchHit } from "
 import type { ResumableList } from "../../../../src/composables/useDirLists";
 
 const libraryOpen = ref(true);
-vi.mock("../../../../src/composables/useLibraryView", () => ({ useLibraryView: () => ({ isOpen: libraryOpen, close: vi.fn() }) }));
+const closeLibrary = vi.fn();
+vi.mock("../../../../src/composables/useLibraryView", () => ({ useLibraryView: () => ({ isOpen: libraryOpen, close: closeLibrary }) }));
 
 let page: LibraryConversation[] = [];
 let status: LibraryIndexStatus | null = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
 let hits: LibrarySearchHit[] = [];
 let statusGate: Promise<void> = Promise.resolve();
+let marks: { pinned: string[]; names: Record<string, string> } = { pinned: [], names: {} };
+const saved: { id: string; change: { pinned?: boolean; name?: string | null } }[] = [];
+let saveFails = false;
 let more: { conversations: LibraryConversation[]; hasMore: boolean; indexFinishedAt: number | null } | null = null;
 /** The finished pass the next first page says it reflects. */
 let pageFinished: number | null = 1;
@@ -33,6 +37,16 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
     return status;
   },
   searchLibrary: () => Promise.resolve(hits),
+  loadLibraryMarks: () => Promise.resolve(marks),
+  loadLibraryConversation: (id: string) => Promise.resolve(page.find((c) => c.id === id) ?? null),
+  saveLibraryMark: (id: string, change: { pinned?: boolean; name?: string | null }) => {
+    saved.push({ id, change });
+    if (saveFails) return Promise.resolve(null);
+    if (change.pinned !== undefined)
+      marks = { ...marks, pinned: change.pinned ? [id, ...marks.pinned.filter((p) => p !== id)] : marks.pinned.filter((p) => p !== id) };
+    if (change.name !== undefined) marks = { ...marks, names: change.name ? { ...marks.names, [id]: change.name } : {} };
+    return Promise.resolve(marks);
+  },
 }));
 
 const opened: unknown[] = [];
@@ -81,6 +95,10 @@ const press = async (key: string) => {
 };
 
 beforeEach(() => {
+  closeLibrary.mockClear();
+  marks = { pinned: [], names: {} };
+  saved.length = 0;
+  saveFails = false;
   libraryOpen.value = true;
   page = [conversation("a", "Burn subtitles"), conversation("b", "CI under ten minutes", { endedAt: NOW - 30 * 24 * 3_600_000 })];
   status = { indexing: false, filesDone: 2, filesTotal: 2, finishedAt: 1 };
@@ -528,4 +546,54 @@ describe("LibraryOverlay", () => {
     await flushPromises();
     expect(wrapper.find("[role=status]").exists()).toBe(true);
   }, 10_000);
+
+  it("pins the conversation from the More menu, and lists it first", async () => {
+    const wrapper = await mountLibrary();
+    await press("ArrowDown"); // the older one
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-pin]").trigger("click");
+    await flushPromises();
+    expect(saved).toEqual([{ id: "b", change: { pinned: true } }]);
+    expect(wrapper.findAll("[data-testid=library-row]")[0]?.text()).toContain("CI under ten minutes");
+    expect(wrapper.text()).toContain("Pinned");
+  });
+
+  it("renames in place: Enter saves, and the list and reader show the new name", async () => {
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-rename-start]").trigger("click");
+    const field = wrapper.find("[data-testid=library-rename]");
+    await field.setValue("Subtitles, done");
+    await field.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(saved).toEqual([{ id: "a", change: { name: "Subtitles, done" } }]);
+    expect(wrapper.find("[data-testid=library-reader]").text()).toContain("Subtitles, done");
+    expect(wrapper.findAll("[data-testid=library-row]")[0]?.text()).toContain("Subtitles, done");
+    expect(opened).toEqual([]); // Enter in the name field is not a resume
+  });
+
+  it("cancels a rename on Esc without closing the Library", async () => {
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-rename-start]").trigger("click");
+    const field = wrapper.find("[data-testid=library-rename]");
+    await field.setValue("Not this");
+    field.element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-rename]").exists()).toBe(false);
+    expect(saved).toEqual([]);
+    expect(closeLibrary).not.toHaveBeenCalled();
+    await press("Escape"); // the same key outside the field does close it
+    expect(closeLibrary).toHaveBeenCalled();
+  });
+
+  it("says so when a change could not be saved, and leaves the screen as it was", async () => {
+    saveFails = true;
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await wrapper.find("[data-testid=library-pin]").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[role=status]").exists()).toBe(true);
+    expect(wrapper.text()).not.toContain("Pinned");
+  });
 });

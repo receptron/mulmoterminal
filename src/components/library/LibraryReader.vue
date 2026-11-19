@@ -2,15 +2,39 @@
 // One conversation, read (#3329): its title, one grey line of facts — including the cost and the
 // lines it changed, which the list leaves out — and the conversation itself, through the same
 // transcript view the terminal's side pane uses.
-import { computed } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import TranscriptPane from "../TranscriptPane.vue";
-import type { LibraryConversation } from "../../../common/library";
+import { LIBRARY_NAME_MAX, type LibraryConversation } from "../../../common/library";
 import { costLabel, metaParts } from "./libraryRows";
 
-const props = defineProps<{ conversation: LibraryConversation; now: number; notice: string | null }>();
-const emit = defineEmits<{ resume: [] }>();
+const props = defineProps<{ conversation: LibraryConversation; now: number; notice: string | null; name: string | null; pinned: boolean }>();
+const emit = defineEmits<{ resume: []; pin: [pinned: boolean]; rename: [name: string | null] }>();
 const { t, locale } = useI18n();
+
+const menuOpen = ref(false);
+/** The name being typed, or null while not renaming. */
+const draft = ref<string | null>(null);
+const nameField = ref<HTMLInputElement | null>(null);
+const shownTitle = computed(() => props.name ?? props.conversation.title ?? t("libraryView.untitled"));
+
+async function startRename(): Promise<void> {
+  menuOpen.value = false;
+  draft.value = props.name ?? props.conversation.title ?? "";
+  await nextTick();
+  nameField.value?.select();
+}
+function finishRename(): void {
+  if (draft.value === null) return;
+  // The agent's own title back: an empty name, or one identical to it, clears the user's.
+  const typed = draft.value.trim();
+  emit("rename", typed === "" || typed === props.conversation.title ? null : typed);
+  draft.value = null;
+}
+function pickPin(): void {
+  menuOpen.value = false;
+  emit("pin", !props.pinned);
+}
 
 const facts = computed(() => {
   const parts = metaParts(props.conversation, props.now, locale.value);
@@ -26,7 +50,23 @@ const lines = computed(() => {
 <template>
   <article class="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="library-reader">
     <header class="px-4 pb-2 pt-5">
-      <h2 class="m-0 text-balance font-sans text-[20px] font-[650] text-fg">{{ conversation.title ?? t("libraryView.untitled") }}</h2>
+      <!-- Esc here ends the rename, not the Library: the overlay closes on a window-level Esc. -->
+      <input
+        v-if="draft !== null"
+        ref="nameField"
+        v-model="draft"
+        data-testid="library-rename"
+        :aria-label="t('libraryView.rename')"
+        :maxlength="LIBRARY_NAME_MAX"
+        class="w-full rounded border border-accent bg-base px-2 py-1 font-sans text-[20px] font-[650] text-fg outline-none"
+        @keydown.enter.stop.prevent="finishRename"
+        @keydown.esc.stop.prevent="draft = null"
+        @blur="finishRename"
+      />
+      <h2 v-else class="m-0 flex items-center gap-2 text-balance font-sans text-[20px] font-[650] text-fg">
+        <span v-if="pinned" class="material-symbols-outlined text-[18px] text-dim" :aria-label="t('libraryView.groups.pinned')">push_pin</span>
+        {{ shownTitle }}
+      </h2>
       <p class="m-0 mt-1 flex flex-wrap gap-x-3 font-sans text-[12px] text-dim">
         <span v-for="fact in facts" :key="fact">{{ fact }}</span>
         <span v-if="lines" class="font-mono"
@@ -40,6 +80,38 @@ const lines = computed(() => {
     <!-- A row of its own rather than floating over the conversation, so the last lines are never under
          it; the notice wraps beside the button and drops above it when the row is narrow. -->
     <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-border px-4 py-2">
+      <div class="relative mr-auto">
+        <button
+          type="button"
+          data-testid="library-more-actions"
+          class="flex cursor-pointer items-center rounded border-0 bg-transparent p-1 text-secondary hover:bg-hover hover:text-fg"
+          :aria-label="t('libraryView.moreActions')"
+          :aria-expanded="menuOpen"
+          @click="menuOpen = !menuOpen"
+        >
+          <span class="material-symbols-outlined text-[20px]">more_horiz</span>
+        </button>
+        <div v-if="menuOpen" role="menu" class="absolute bottom-full left-0 mb-1 min-w-[12rem] rounded-[6px] border border-border bg-panel py-1 shadow-lg">
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="library-pin"
+            class="flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 py-1.5 text-left font-sans text-[13px] text-fg hover:bg-hover"
+            @click="pickPin"
+          >
+            <span class="material-symbols-outlined text-[18px]">push_pin</span>{{ t(pinned ? "libraryView.unpin" : "libraryView.pin") }}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="library-rename-start"
+            class="flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 py-1.5 text-left font-sans text-[13px] text-fg hover:bg-hover"
+            @click="startRename"
+          >
+            <span class="material-symbols-outlined text-[18px]">edit</span>{{ t("libraryView.rename") }}
+          </button>
+        </div>
+      </div>
       <span v-if="notice" class="min-w-0 max-w-[44ch] flex-1 basis-[16rem] font-sans text-[12px] text-secondary" role="status">{{ notice }}</span>
       <button
         type="button"

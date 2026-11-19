@@ -4,8 +4,12 @@
 import { describe, it, expect } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import express from "express";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach } from "vitest";
 import { routeCall } from "../../helpers/routeCall";
-import { filterOf, mountLibraryRoutes, queryCount } from "../../../server/routes/library-routes";
+import { filterOf, markChangeOf, mountLibraryRoutes, queryCount } from "../../../server/routes/library-routes";
 import { applyTranscriptScan, finishLease, prepareLibraryStore, takeLease } from "../../../server/backends/library/index-store";
 import { createLibraryIndex } from "../../../server/backends/library/library-index";
 import { createLocalLibraryService } from "../../../server/backends/library/library-service";
@@ -94,5 +98,46 @@ describe("query parsing", () => {
       includeAutomated: true,
     });
     expect(filterOf({ cwd: "", temporary: "yes" })).toEqual({ includeTemporary: false, includeSidechains: false, includeAutomated: false });
+  });
+});
+
+describe("/api/library/marks", () => {
+  const dirs: string[] = [];
+  afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+  const appWithMarks = () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "mt-library-marks-route-"));
+    dirs.push(dir);
+    const app = express();
+    app.use(express.json());
+    mountLibraryRoutes(app, { call: () => Promise.resolve(null), marksFile: path.join(dir, "marks.json") });
+    return routeCall(app);
+  };
+
+  it("saves a pin and a name, and reads them back", async () => {
+    const call = appWithMarks();
+    expect((await call("/api/library/marks")).body).toEqual({ pinned: [], names: {} });
+    await call("/api/library/marks/abc-1", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ pinned: true }) });
+    const saved = await call("/api/library/marks/abc-1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Mine" }),
+    });
+    expect(saved.body).toEqual({ pinned: ["abc-1"], names: { "abc-1": "Mine" } });
+  });
+
+  it.each([
+    ["an empty body", "{}", "abc"],
+    ["a wrong-typed field", JSON.stringify({ pinned: "yes" }), "abc"],
+    ["an id that is not a session id", JSON.stringify({ pinned: true }), "..%2Fetc"],
+  ])("refuses %s", async (_label, body, id) => {
+    const call = appWithMarks();
+    expect((await call(`/api/library/marks/${id}`, { method: "PUT", headers: { "content-type": "application/json" }, body })).status).toBe(400);
+  });
+});
+
+describe("markChangeOf", () => {
+  it("keeps only fields of the right type", () => {
+    expect(markChangeOf({ pinned: true, name: null, extra: 1 })).toEqual({ pinned: true, name: null });
+    expect(markChangeOf({ pinned: 1, name: 3 })).toBeNull();
   });
 });
