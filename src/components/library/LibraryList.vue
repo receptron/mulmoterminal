@@ -4,7 +4,7 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import type { LibraryConversation, LibrarySearchHit } from "../../../common/library";
-import { conversationKey, groupConversations, metaParts } from "./libraryRows";
+import { conversationKey, displayTitle, groupConversations, metaParts } from "./libraryRows";
 
 const props = defineProps<{
   conversations: readonly LibraryConversation[];
@@ -12,13 +12,16 @@ const props = defineProps<{
   selectedKey: string | null;
   now: number;
   hasMore: boolean;
+  pinned: readonly LibraryConversation[];
+  pinnedIds: readonly string[];
+  names: Readonly<Record<string, string>>;
 }>();
 const emit = defineEmits<{ select: [conversation: LibraryConversation]; more: [] }>();
 const { t, locale } = useI18n();
 
-const groups = computed(() => groupConversations(props.conversations, props.now));
+const groups = computed(() => groupConversations(props.conversations, props.now, props.pinned, new Set(props.pinnedIds)));
 const meta = (conversation: LibraryConversation): string => metaParts(conversation, props.now, locale.value).join(" · ");
-const title = (conversation: LibraryConversation): string => conversation.title ?? t("libraryView.untitled");
+const title = (conversation: LibraryConversation): string => displayTitle(conversation, props.names) ?? t("libraryView.untitled");
 </script>
 
 <template>

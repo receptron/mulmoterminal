@@ -4,9 +4,12 @@ import { isUnknownArray } from "../../common/isUnknownArray";
 import {
   isLibraryConversation,
   isLibraryIndexStatus,
+  isLibraryMarks,
   isLibrarySearchHit,
   type LibraryConversation,
   type LibraryIndexStatus,
+  type LibraryMarkChange,
+  type LibraryMarks,
   type LibrarySearchHit,
 } from "../../common/library";
 import { jsonBody } from "../jsonBody";
@@ -46,4 +49,29 @@ export async function loadLibraryPage(offset: number): Promise<LibraryPage | nul
 export async function searchLibrary(query: string, signal: AbortSignal): Promise<LibrarySearchHit[] | null> {
   const body = await readJson(`/api/library/search?q=${encodeURIComponent(query)}&limit=${String(LIBRARY_PAGE)}`, signal);
   return body !== null && isUnknownArray(body.hits) ? body.hits.filter(isLibrarySearchHit) : null;
+}
+
+export async function loadLibraryConversation(id: string): Promise<LibraryConversation | null> {
+  const body = await readJson(`/api/library/conversations/${encodeURIComponent(id)}`);
+  return isLibraryConversation(body) ? body : null;
+}
+
+export async function loadLibraryMarks(): Promise<LibraryMarks | null> {
+  const body = await readJson("/api/library/marks");
+  return isLibraryMarks(body) ? body : null;
+}
+
+/** The marks after the change, or null when it was not saved. */
+export async function saveLibraryMark(id: string, change: LibraryMarkChange): Promise<LibraryMarks | null> {
+  try {
+    const response = await fetchWithTimeout(`/api/library/marks/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(change),
+    });
+    const body = response.ok ? await jsonBody(response) : null;
+    return isLibraryMarks(body) ? body : null;
+  } catch {
+    return null;
+  }
 }

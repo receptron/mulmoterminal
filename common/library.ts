@@ -109,3 +109,39 @@ export const isLibraryIndexStatus = (value: unknown): value is LibraryIndexStatu
   typeof value.filesDone === "number" &&
   typeof value.filesTotal === "number" &&
   nullableNumber(value.finishedAt);
+
+// ---- what the user marks on a conversation ------------------------------------------------------
+
+/** A name the user gave, kept to one line of a list. */
+export const LIBRARY_NAME_MAX = 200;
+
+/** Pins and names, by session id. MulmoTerminal's own record: the agent's transcript is never written. */
+export interface LibraryMarks {
+  /** Newest pin first. */
+  pinned: string[];
+  names: Record<string, string>;
+}
+
+export const emptyLibraryMarks = (): LibraryMarks => ({ pinned: [], names: {} });
+
+// One line, as every write leaves it: a name with a line break was not written by this code.
+const isMarkName = (name: unknown): boolean => typeof name === "string" && name.trim() !== "" && name.length <= LIBRARY_NAME_MAX && !/[\r\n]/.test(name);
+
+/** The shape this code writes and nothing looser: a file edited by hand into something else is
+ *  refused, not read and then written back. */
+export const isLibraryMarks = (value: unknown): value is LibraryMarks =>
+  isRecord(value) &&
+  Object.keys(value).every((key) => key === "pinned" || key === "names") &&
+  Array.isArray(value.pinned) &&
+  value.pinned.every((id) => typeof id === "string" && id !== "") &&
+  new Set(value.pinned).size === value.pinned.length &&
+  isRecord(value.names) &&
+  Object.keys(value.names).every((id) => id !== "") &&
+  Object.values(value.names).every(isMarkName);
+
+/** One change to one conversation's marks; a field left out is left as it is. */
+export interface LibraryMarkChange {
+  pinned?: boolean;
+  /** Null or blank clears the name. */
+  name?: string | null;
+}
