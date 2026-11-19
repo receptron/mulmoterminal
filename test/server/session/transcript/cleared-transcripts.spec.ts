@@ -118,6 +118,20 @@ describe("hydrateClearedTranscripts", () => {
     expect(clearedTranscripts.has(SESSION)).toBe(true);
   });
 
+  // A permission or I/O failure says nothing about the file; dropping the mark on it loses the
+  // successor for good.
+  it("keeps a mark when the transcript check fails for a reason other than a missing file", async () => {
+    await markTranscriptCleared(SESSION, cwd, CLAUDE_ID, marksDir);
+    clearedTranscripts.clear();
+    const denied = Object.assign(new Error("permission denied"), { code: "EACCES" });
+    vi.spyOn(fs, "stat").mockRejectedValue(denied);
+
+    await hydrateClearedTranscripts(marksDir);
+    vi.mocked(fs.stat).mockRestore();
+    expect(clearedTranscripts.has(SESSION)).toBe(true);
+    expect(await exists(markerFile())).toBe(true);
+  });
+
   it.each([
     ["with a successor id", CLAUDE_ID],
     ["without one", undefined],

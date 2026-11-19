@@ -16,7 +16,7 @@
 // belongs to one server, so per-id files never race.
 //
 // A mark ends only when claude `/resume`s back to our own id (conversation-move.ts), or at boot when
-// neither our transcript nor the successor's is on disk. NOT by the file growing: claude appends a
+// both our transcript and the successor's are confirmed missing (mark-prune.ts). NOT by the file growing: claude appends a
 // cost-state line to the transcript it leaves AFTER the hook that announces the move, so any size
 // taken here is already too small and expired every mark on the next boot. The `size` is still
 // written because an older server rejects a mark without one.
@@ -26,6 +26,7 @@ import { MULMOTERMINAL_HOME, SESSION_ID_RE } from "../../config/env.js";
 import { isRecord } from "../../../common/isRecord.js";
 import { messageOf } from "../../errors.js";
 import { claudeTranscriptFile } from "../session-home.js";
+import { presenceOfStatError, shouldPruneMark, type TranscriptPresence } from "./mark-prune.js";
 
 const CLEARED_DIR = path.join(MULMOTERMINAL_HOME, "cleared-transcripts");
 
@@ -97,17 +98,15 @@ async function transcriptSize(cwd: string, id: string): Promise<number> {
   }
 }
 
-const transcriptExists = (cwd: string, id: string): Promise<boolean> =>
-  fs.stat(claudeTranscriptFile(cwd, id)).then(
-    () => true,
-    () => false,
-  );
+const transcriptPresence = (cwd: string, id: string): Promise<TranscriptPresence> =>
+  fs.stat(claudeTranscriptFile(cwd, id)).then((): TranscriptPresence => "present", presenceOfStatError);
 
-/** Whether the mark still describes something: our frozen file, or the conversation it moved to.
- *  Only the successor exists for a cell that moved before its first turn was written. */
-async function markHasTranscript(mark: ClearedMark, id: string): Promise<boolean> {
-  if (await transcriptExists(mark.cwd, id)) return true;
-  return mark.claudeId !== undefined && transcriptExists(mark.cwd, mark.claudeId);
+/** Whether the mark no longer describes anything: neither our frozen file nor the conversation it
+ *  moved to is on disk. Only the successor exists for a cell that moved before its first turn. */
+async function markIsStale(mark: ClearedMark, id: string): Promise<boolean> {
+  const own = await transcriptPresence(mark.cwd, id);
+  const successor = mark.claudeId === undefined ? null : await transcriptPresence(mark.cwd, mark.claudeId);
+  return shouldPruneMark(own, successor);
 }
 
 /** Mark a session's transcript frozen. Best-effort on disk: failing to persist must not stop the
@@ -167,7 +166,7 @@ async function restoreMark(dir: string, file: string): Promise<void> {
   if (!SESSION_ID_RE.test(id)) return; // not ours / not a session id — leave it alone
   // Awaited: a marker left behind would be re-examined on every restart from here on.
   const mark = parseClearedMark(await readMark(dir, id));
-  if (!mark || !(await markHasTranscript(mark, id))) return removeMarker(dir, id);
+  if (!mark || (await markIsStale(mark, id))) return removeMarker(dir, id);
   clearedTranscripts.add(id);
   // The successor even without a time: the spawn resumes it, and the mark was kept for its sake.
   // A mark with neither draws no line, which is what an older one meant when it was written.
