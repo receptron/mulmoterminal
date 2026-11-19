@@ -9,7 +9,7 @@
 import { isRecord } from "../../../common/isRecord.js";
 import { readString } from "../../../common/readString.js";
 import { finiteNumber } from "../../../common/finiteNumber.js";
-import type { LibraryPrLink } from "../../../common/library.js";
+import type { LibraryConversation, LibraryPrLink } from "../../../common/library.js";
 import { conversationTurnsFromParsed, customTitleOfRecord } from "../../session/transcript/transcript.js";
 
 /** A turn's text is searched from its start; past this it is long pasted material, not the ask. */
@@ -17,23 +17,12 @@ export const TURN_TEXT_CAP = 1000;
 /** The first prompt stands in for a title, and a title is one line. */
 export const FIRST_PROMPT_TITLE_CAP = 200;
 
-export interface ConversationState {
+/** The summary fields as the row will carry them, plus the three a title is chosen from. */
+export type ConversationState = Omit<LibraryConversation, "id" | "agent" | "title" | "parentId" | "isTemporary"> & {
   aiTitle: string | null;
   customTitle: string | null;
   firstPrompt: string | null;
-  cwd: string | null;
-  gitBranch: string | null;
-  prs: LibraryPrLink[];
-  costUsd: number | null;
-  linesAdded: number | null;
-  linesRemoved: number | null;
-  startedAt: number | null;
-  endedAt: number | null;
-  skills: string[];
-  hookErrors: number;
-  userTurns: number;
-  isSidechain: boolean;
-}
+};
 
 export interface IndexedTurn {
   role: "user" | "assistant";

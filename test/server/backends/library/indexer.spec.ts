@@ -12,6 +12,7 @@ import { conversationOfRow, findConversation, listConversations } from "../../..
 import { searchLibrary } from "../../../../server/backends/library/library-search";
 import { runIndexPass, type IndexPassDeps } from "../../../../server/backends/library/indexer";
 import { HEAD_BYTES } from "../../../../server/backends/library/opened-file";
+import { SCAN_BATCH_ITEMS } from "../../../../server/backends/library/scan-batches";
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
@@ -140,6 +141,30 @@ describe("runIndexPass", () => {
       chmodSync(file, 0o600);
     }
     expect(ids()).toEqual(["s1"]);
+  });
+
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)("deletes nothing when a project directory could not be read", async () => {
+    const { deps, transcript, ids } = setup();
+    transcript("s1", prompt("in a project that turns unreadable"));
+    transcript("s2", prompt("elsewhere"), "-w-other");
+    await runIndexPass(deps);
+    const projectDir = path.join(deps.projectsRoot, "-w-app");
+    chmodSync(projectDir, 0o000);
+    try {
+      await runIndexPass({ ...deps, now_ms: () => 100_000 });
+    } finally {
+      chmodSync(projectDir, 0o700);
+    }
+    expect(ids().sort()).toEqual(["s1", "s2"]);
+  });
+
+  it("indexes a file with more prose turns than one batch holds", async () => {
+    const { db, deps, transcript } = setup();
+    const count = SCAN_BATCH_ITEMS * 2 + 3;
+    transcript("s1", Array.from({ length: count }, (_, i) => prompt(`turn number ${String(i)}`)).join(""));
+    await runIndexPass(deps);
+    expect(Number(db.prepare("select count(*) as n from turns where conv = 's1'").get()?.n)).toBe(count);
+    expect(conversationOfRow(findConversation(db, "s1") ?? {}).userTurns).toBe(count);
   });
 
   it("keeps a temp project's summary but not its text, and links a subagent to its parent", async () => {

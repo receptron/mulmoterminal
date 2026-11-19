@@ -11,8 +11,10 @@ import type { LibraryService } from "../../../../server/backends/library/library
 import { isRecord } from "../../../../common/isRecord";
 
 const cleanups: (() => Promise<void> | void)[] = [];
+// Newest first: the worker holds the database open, and Windows will not remove a directory with an
+// open file in it, so the client registered after its directory must close before the directory goes.
 afterEach(async () => {
-  for (const cleanup of cleanups.splice(0)) await cleanup();
+  for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
 function scratch() {

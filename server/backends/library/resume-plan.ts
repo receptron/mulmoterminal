@@ -14,7 +14,10 @@ export type ResumePlan = { kind: "skip" } | { kind: "restart" } | { kind: "resum
 
 export function resumePlan(remembered: RememberedOffset | null, stamp: FileStampRead): ResumePlan {
   if (remembered === null || stamp.size < remembered.size) return { kind: "restart" };
-  if (stamp.size === remembered.size) return stamp.mtimeMs === remembered.mtimeMs ? { kind: "skip" } : { kind: "restart" };
+  if (stamp.size === remembered.size && stamp.mtimeMs !== remembered.mtimeMs) return { kind: "restart" };
+  // Unchanged, but not read to the end: a pass that stopped between batches, or a last line still
+  // being written. Only the tail is read again.
+  if (stamp.size === remembered.size) return remembered.scannedTo < stamp.size ? { kind: "resume", from: remembered.scannedTo } : { kind: "skip" };
   if (remembered.scannedTo > stamp.size) return { kind: "restart" };
   return { kind: "resume", from: remembered.scannedTo };
 }

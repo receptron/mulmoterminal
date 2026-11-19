@@ -187,14 +187,19 @@ function deleteConversationTurns(db: DatabaseSync, conv: string): void {
   db.prepare("delete from turns where conv = ? and role != 'prompt'").run(conv);
 }
 
-/** Drops every transcript the last walk did not see: the index holds nothing its source does not. */
-export function removeMissingTranscripts(db: DatabaseSync, seen: ReadonlySet<string>): number {
-  const gone = db
-    .prepare("select f.path, c.id from files f left join conversations c on c.path = f.path where f.kind = 'transcript'")
-    .all()
-    .filter((row) => typeof row.path === "string" && !seen.has(row.path));
-  inTransaction(db, () => gone.forEach((row) => removeTranscript(db, String(row.path), typeof row.id === "string" ? row.id : null)));
-  return gone.length;
+/** Drops every transcript the last walk did not see: the index holds nothing its source does not.
+ *  Only while `owner` still holds the lease — a pass that lost it may be looking at a listing taken
+ *  before another process indexed files it never saw. Answers how many went, or null for "not ours". */
+export function removeMissingTranscripts(db: DatabaseSync, owner: string, seen: ReadonlySet<string>): number | null {
+  return inTransaction(db, () => {
+    if (db.prepare("select owner from lease where id = 1").get()?.owner !== owner) return null;
+    const gone = db
+      .prepare("select f.path, c.id from files f left join conversations c on c.path = f.path where f.kind = 'transcript'")
+      .all()
+      .filter((row) => typeof row.path === "string" && !seen.has(row.path));
+    gone.forEach((row) => removeTranscript(db, readString(row.path), typeof row.id === "string" ? row.id : null));
+    return gone.length;
+  });
 }
 
 function removeTranscript(db: DatabaseSync, path: string, id: string | null): void {

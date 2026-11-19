@@ -8,12 +8,22 @@
 import type { DatabaseSync } from "node:sqlite";
 import { setImmediate as yieldToLoop } from "node:timers/promises";
 import { isRecord } from "../../../common/isRecord.js";
-import { forEachJsonlRecordIn } from "../../infra/fs/jsonl-file.js";
 import { emptyConversationState, foldConversationRecord, type IndexedTurn } from "./conversation-fold.js";
 import { historyPromptOf, type HistoryPrompt } from "./history-fold.js";
-import { applyHistoryScan, applyTranscriptScan, finishLease, readFileMark, recordProgress, removeMissingTranscripts, takeLease } from "./index-store.js";
-import { resumePlan, unlessReplaced } from "./resume-plan.js";
-import { withOpenedFile } from "./opened-file.js";
+import {
+  applyHistoryScan,
+  applyTranscriptScan,
+  finishLease,
+  readFileMark,
+  recordProgress,
+  removeMissingTranscripts,
+  takeLease,
+  type FileMark,
+  type FileStampRead,
+} from "./index-store.js";
+import { scanInBatches } from "./scan-batches.js";
+import { resumePlan, unlessReplaced, type ResumePlan } from "./resume-plan.js";
+import { withOpenedFile, type OpenedFile } from "./opened-file.js";
 import { isTemporaryCwd } from "./temporary-path.js";
 import { listTranscriptFiles, type TranscriptFile } from "./transcript-files.js";
 
@@ -33,7 +43,8 @@ export interface IndexPassDeps {
 /** False when another process holds the lease, or took it over part-way. */
 export async function runIndexPass(deps: IndexPassDeps): Promise<boolean> {
   if (!takeLease(deps.db, deps.owner, deps.now_ms(), LEASE_TTL_MS)) return false;
-  const files = await listTranscriptFiles(deps.projectsRoot);
+  const listing = await listTranscriptFiles(deps.projectsRoot);
+  const files = listing.files;
   const seen = new Set<string>();
   for (const [done, file] of files.entries()) {
     if (!takeLease(deps.db, deps.owner, deps.now_ms(), LEASE_TTL_MS)) return false;
@@ -41,7 +52,8 @@ export async function runIndexPass(deps: IndexPassDeps): Promise<boolean> {
     if (done % PROGRESS_EVERY_FILES === 0) recordProgress(deps.db, deps.owner, done, files.length);
     await yieldToLoop();
   }
-  removeMissingTranscripts(deps.db, seen);
+  // A walk that could not read some directory does not know those files are gone.
+  if (listing.complete) removeMissingTranscripts(deps.db, deps.owner, seen);
   await scanHistorySafely(deps);
   recordProgress(deps.db, deps.owner, files.length, files.length);
   finishLease(deps.db, deps.owner, deps.now_ms());
@@ -61,27 +73,45 @@ async function scanTranscriptSafely(deps: IndexPassDeps, file: TranscriptFile): 
 
 const isMissingFile = (err: unknown): boolean => isRecord(err) && err.code === "ENOENT";
 
+interface ScanStart {
+  mark: FileMark | null;
+  plan: ResumePlan;
+  head: string;
+  /** Measured before reading, and recorded as what was read: see BatchStart.to. */
+  stamp: FileStampRead;
+}
+
+/** Where a scan of this file starts, or null when it does not need one. */
+async function startOf(db: DatabaseSync, path: string, opened: OpenedFile): Promise<ScanStart | null> {
+  const mark = readFileMark(db, path);
+  const stamp = await opened.stamp();
+  const plan = resumePlan(mark, stamp);
+  if (plan.kind === "skip") return null;
+  const head = await opened.head();
+  return { mark, plan: unlessReplaced(plan, mark?.head ?? null, head), head, stamp };
+}
+
 export async function scanTranscript(deps: IndexPassDeps, file: TranscriptFile): Promise<void> {
   await withOpenedFile(file.path, async (opened) => {
-    const mark = readFileMark(deps.db, file.path);
-    const plan = resumePlan(mark, await opened.stamp());
-    if (plan.kind === "skip") return;
-    const head = await opened.head();
-    const confirmed = unlessReplaced(plan, mark?.head ?? null, head);
+    const start = await startOf(deps.db, file.path, opened);
+    if (start === null) return;
+    const { mark, plan, head, stamp } = start;
     // A stored state that no longer parses cannot be continued; reading from the start can.
-    const resumable = confirmed.kind === "resume" && mark?.state ? { from: confirmed.from, state: mark.state } : null;
+    const resumable = plan.kind === "resume" && mark?.state ? { from: plan.from, state: mark.state } : null;
     const { from, state } = resumable ?? { from: 0, state: emptyConversationState() };
-    const turns: IndexedTurn[] = [];
-    const to = await forEachJsonlRecordIn(opened.handle, { from, atLineStart: true }, (record) => {
-      const turn = foldConversationRecord(state, record);
-      if (turn !== null) turns.push(turn);
-    });
-    const isTemporary = isTemporaryCwd(state.cwd, deps.temporaryRoots);
-    applyTranscriptScan(deps.db, {
-      ...{ path: file.path, id: file.id, agent: "claude", parentId: file.parentId, isTemporary },
-      ...{ owner: deps.owner, expectedScannedTo: mark?.scannedTo ?? null, stamp: await opened.stamp(), head, to },
-      ...{ restart: resumable === null, state, turns: isTemporary ? [] : turns },
-    });
+    const scan = { from, to: stamp.size, restart: resumable === null, expectedScannedTo: mark?.scannedTo ?? null };
+    await scanInBatches<IndexedTurn>(
+      opened.handle,
+      scan,
+      (record) => foldConversationRecord(state, record),
+      (batch) => {
+        const isTemporary = isTemporaryCwd(state.cwd, deps.temporaryRoots);
+        return applyTranscriptScan(deps.db, {
+          ...{ path: file.path, id: file.id, agent: "claude", parentId: file.parentId, isTemporary, owner: deps.owner, stamp, head, state },
+          ...{ expectedScannedTo: batch.expectedScannedTo, to: batch.to, restart: batch.restart, turns: isTemporary ? [] : batch.items },
+        });
+      },
+    );
   });
 }
 
@@ -95,20 +125,13 @@ async function scanHistorySafely(deps: IndexPassDeps): Promise<void> {
 
 export async function scanHistory(deps: IndexPassDeps): Promise<void> {
   await withOpenedFile(deps.historyFile, async (opened) => {
-    const mark = readFileMark(deps.db, deps.historyFile);
-    const plan = resumePlan(mark, await opened.stamp());
-    if (plan.kind === "skip") return;
-    const head = await opened.head();
-    const confirmed = unlessReplaced(plan, mark?.head ?? null, head);
-    const from = confirmed.kind === "resume" ? confirmed.from : 0;
-    const prompts: HistoryPrompt[] = [];
-    const to = await forEachJsonlRecordIn(opened.handle, { from, atLineStart: true }, (record) => {
-      const prompt = historyPromptOf(record);
-      if (prompt !== null) prompts.push(prompt);
-    });
-    applyHistoryScan(deps.db, {
-      ...{ path: deps.historyFile, owner: deps.owner, expectedScannedTo: mark?.scannedTo ?? null },
-      ...{ stamp: await opened.stamp(), head, to, restart: confirmed.kind === "restart", prompts },
-    });
+    const start = await startOf(deps.db, deps.historyFile, opened);
+    if (start === null) return;
+    const { mark, plan, head, stamp } = start;
+    const from = plan.kind === "resume" ? plan.from : 0;
+    const scan = { from, to: stamp.size, restart: plan.kind === "restart", expectedScannedTo: mark?.scannedTo ?? null };
+    await scanInBatches<HistoryPrompt>(opened.handle, scan, historyPromptOf, (batch) =>
+      applyHistoryScan(deps.db, { path: deps.historyFile, owner: deps.owner, stamp, head, ...batch, prompts: batch.items }),
+    );
   });
 }

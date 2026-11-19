@@ -74,7 +74,8 @@ describe("resumePlan", () => {
 
   it.each([
     ["never seen", null, { size: 10, mtimeMs: 1 }, { kind: "restart" }],
-    ["unchanged", remembered, { size: 100, mtimeMs: 5 }, { kind: "skip" }],
+    ["unchanged and read to the end", { size: 100, mtimeMs: 5, scannedTo: 100 }, { size: 100, mtimeMs: 5 }, { kind: "skip" }],
+    ["unchanged but not read to the end", remembered, { size: 100, mtimeMs: 5 }, { kind: "resume", from: 90 }],
     ["grew", remembered, { size: 150, mtimeMs: 6 }, { kind: "resume", from: 90 }],
     ["shrank", remembered, { size: 50, mtimeMs: 6 }, { kind: "restart" }],
     ["rewritten at the same size", remembered, { size: 100, mtimeMs: 6 }, { kind: "restart" }],

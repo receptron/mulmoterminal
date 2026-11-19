@@ -143,10 +143,21 @@ describe("removeMissingTranscripts", () => {
     const db = freshDb();
     commit(db, "kept", { turns: [turn("kept text")] });
     commit(db, "gone", { turns: [turn("gone text")] });
-    expect(removeMissingTranscripts(db, new Set(["/p/kept.jsonl"]))).toBe(1);
+    expect(removeMissingTranscripts(db, OWNER, new Set(["/p/kept.jsonl"]))).toBe(1);
     expect(listConversations(db, {}, 0, 10).map((row) => row.id)).toEqual(["kept"]);
     expect(readFileMark(db, "/p/gone.jsonl")).toBeNull();
     expect(turnCount(db)).toBe(1);
+  });
+});
+
+describe("removeMissingTranscripts without the lease", () => {
+  it("deletes nothing for a process that no longer holds it", () => {
+    const db = freshDb();
+    commit(db, "a", { turns: [turn("indexed by the new owner")] });
+    finishLease(db, OWNER, 0);
+    takeLease(db, "new-owner", 0, 100);
+    expect(removeMissingTranscripts(db, OWNER, new Set())).toBeNull();
+    expect(listConversations(db, {}, 0, 10)).toHaveLength(1);
   });
 });
 
