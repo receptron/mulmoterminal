@@ -56,6 +56,24 @@ function onMenuKey(event: KeyboardEvent): void {
   menuOpen.value = false;
   menuButton.value?.focus(); // back where the keyboard came from, not to the page
 }
+/** The menu's own keys: the arrows move between its items, and Tab leaves it (closing it). */
+function onMenuItemsKey(event: KeyboardEvent): void {
+  const items = [...(menu.value?.querySelectorAll<HTMLElement>("[role=menuitem]") ?? [])];
+  const at = items.findIndex((item) => item === document.activeElement);
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    event.stopPropagation(); // the Library's arrows move its list, not this menu
+    const next = (at + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+    items[next]?.focus();
+  } else if (event.key === "Tab") {
+    menuOpen.value = false;
+  }
+}
+function onMenuFocusOut(event: FocusEvent): void {
+  if (event.relatedTarget instanceof Node && menu.value?.contains(event.relatedTarget)) return;
+  if (event.relatedTarget !== null) menuOpen.value = false; // focus went somewhere else on the page
+}
+
 function onOutsidePointer(event: PointerEvent): void {
   if (event.target instanceof Node && menu.value?.contains(event.target)) return;
   menuOpen.value = false;
@@ -135,7 +153,13 @@ const lines = computed(() => {
         >
           <span class="material-symbols-outlined text-[20px]">more_horiz</span>
         </button>
-        <div v-if="menuOpen" role="menu" class="absolute bottom-full left-0 mb-1 min-w-[12rem] rounded-[6px] border border-border bg-panel py-1 shadow-lg">
+        <div
+          v-if="menuOpen"
+          role="menu"
+          class="absolute bottom-full left-0 mb-1 min-w-[12rem] rounded-[6px] border border-border bg-panel py-1 shadow-lg"
+          @keydown="onMenuItemsKey"
+          @focusout="onMenuFocusOut"
+        >
           <button
             type="button"
             role="menuitem"

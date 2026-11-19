@@ -326,4 +326,19 @@ describe("LibraryOverlay pins and names", () => {
     await flushPromises();
     expect(wrapper.findAll("[data-testid=library-row]")[0]?.text()).toContain("CI under ten minutes");
   });
+
+  it("moves through the More menu with the arrows, and closes it when focus leaves", async () => {
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+    await flushPromises();
+    const items = wrapper.findAll("[role=menuitem]");
+    expect(document.activeElement).toBe(items[0]?.element);
+    await wrapper.find("[role=menu]").trigger("keydown", { key: "ArrowDown" });
+    expect(document.activeElement).toBe(items[1]?.element);
+    await wrapper.find("[role=menu]").trigger("keydown", { key: "ArrowDown" });
+    expect(document.activeElement).toBe(items[0]?.element); // wraps
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Burn subtitles"); // the list did not move
+    await wrapper.find("[role=menu]").trigger("keydown", { key: "Tab" });
+    expect(wrapper.find("[role=menu]").exists()).toBe(false);
+  });
 });

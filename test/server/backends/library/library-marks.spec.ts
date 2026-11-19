@@ -99,4 +99,17 @@ describe("the cross-process lock", () => {
     });
     expect(readFileSync(`${file}.lock/owner`, "utf8")).toBe("someone-else");
   });
+
+  it("does not write when the lock was taken over while it worked", async () => {
+    const file = scratchFile();
+    await changeLibraryMark("kept", { pinned: true }, file);
+    const write = withMarksLock(file, (stillHeld) =>
+      changeUnlocked("lost", { pinned: true }, file, async () => {
+        writeFileSync(`${file}.lock/owner`, "someone-else"); // taken over during the pause
+        return stillHeld();
+      }),
+    );
+    await expect(write).rejects.toThrow("taken over");
+    expect(await readLibraryMarks(file)).toEqual({ pinned: ["kept"], names: {} });
+  });
 });

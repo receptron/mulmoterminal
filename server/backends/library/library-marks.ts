@@ -46,23 +46,32 @@ const MARKS_LOCK_ATTEMPTS = 200;
  *  directory beside the file: several servers share one HOME, and each would otherwise read the same
  *  marks and replace the other's change. `mkdir` is the lock because it is atomic everywhere. */
 export function changeLibraryMark(id: string, change: LibraryMarkChange, file: string = LIBRARY_MARKS_FILE): Promise<LibraryMarks> {
-  return serialize(file, () => withMarksLock(file, () => changeUnlocked(id, change, file)));
+  return serialize(file, () => withMarksLock(file, (stillHeld) => changeUnlocked(id, change, file, stillHeld)));
 }
 
-/** The change itself, holding no lock — exported only for the specs that race two of them. */
-export async function changeUnlocked(id: string, change: LibraryMarkChange, file: string): Promise<LibraryMarks> {
+/** The change itself — exported for the specs that race two of them. `stillHeld` is asked right
+ *  before writing: a holder paused past the stale time, whose lock another has taken, must not write
+ *  over that holder's change with what it read before the pause. A narrow window between the check
+ *  and the rename remains; a lease without a fencing token cannot close it. */
+export async function changeUnlocked(
+  id: string,
+  change: LibraryMarkChange,
+  file: string,
+  stillHeld: () => Promise<boolean> = () => Promise.resolve(true),
+): Promise<LibraryMarks> {
   const next = applyMarkChange(await readLibraryMarks(file), id, change);
+  if (!(await stillHeld())) throw new Error(`${file}: the lock was taken over before this change could be written`);
   await writeFileAtomic(file, `${JSON.stringify(next, null, 2)}\n`);
   return next;
 }
 
-export async function withMarksLock<T>(file: string, work: () => Promise<T>): Promise<T> {
+export async function withMarksLock<T>(file: string, work: (stillHeld: () => Promise<boolean>) => Promise<T>): Promise<T> {
   const lock = `${file}.lock`;
   await fs.mkdir(path.dirname(file), { recursive: true });
   const owner = randomUUID();
   await acquire(lock, owner);
   try {
-    return await work();
+    return await work(async () => (await fs.readFile(ownerFile(lock), "utf8").catch(() => null)) === owner);
   } finally {
     await release(lock, owner);
   }
