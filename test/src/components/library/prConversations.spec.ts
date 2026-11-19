@@ -24,6 +24,13 @@ describe("prPage", () => {
     ["https://github.com.evil.example/o/r/pull/1", false],
     ["javascript:alert(1)", false],
     ["https://github.com/o/r/pull/1 extra", false],
+    ["https://github.com@evil.example/payload", false],
+    ["https://evilgithub.com/o/r/pull/1", false],
+    ["https://gist.github.com/o/1", false],
+    ["https://user:pass@github.com/o/r/pull/1", false],
+    ["https://github.com:8443/o/r/pull/1", false],
+    ["https://GITHUB.COM/o/r/pull/1", false],
+    ["https://github.com./o/r/pull/1", false],
     ["", false],
   ])("%s → %s", (url, opens) => {
     expect(prPage({ number: 1, repository: "o/r", url })).toBe(opens ? url : null);
