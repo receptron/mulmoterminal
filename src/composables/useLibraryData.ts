@@ -108,7 +108,7 @@ function usePagedConversations() {
 
 /** Polls progress while the index is being built, and reloads the list whenever a pass has finished
  *  that the list does not reflect — the first build, a list read part-way through it, a catch-up. */
-function usePolledStatus(
+export function usePolledStatus(
   status: Ref<LibraryIndexStatus | null>,
   listReflects: () => number | null | undefined,
   reloadList: () => void,
@@ -116,9 +116,10 @@ function usePolledStatus(
 ) {
   /** The next tick, once it is scheduled and until it fires. */
   let scheduled: ReturnType<typeof setTimeout> | null = null;
-  /** A tick is waiting for its answer. A wake then cannot schedule (the answer decides), so it is
-   *  remembered and honoured when the answer comes. */
-  let asking = false;
+  /** The generation whose tick is waiting for its answer, or null. A wake then cannot schedule (the
+   *  answer decides), so it is remembered and honoured when the answer comes. Kept per generation: a
+   *  stale answer from before a close and reopen must not clear the current tick's flag. */
+  let askingFor: number | null = null;
   let wakeAgain = false;
   let active = false;
   // Each start is a new generation: a request from before a close and reopen must not schedule a
@@ -131,11 +132,11 @@ function usePolledStatus(
     }, delay_ms);
   };
   async function tick(mine: number): Promise<void> {
-    asking = true;
+    askingFor = mine;
     wakeAgain = false;
     const next = await loadLibraryStatus();
-    asking = false;
-    if (mine !== generation) return; // stopped, or restarted, while asking
+    if (mine !== generation) return; // stopped, or restarted, while asking — touching nothing
+    askingFor = null;
     status.value = next;
     const finished = next?.finishedAt ?? null;
     if ((finished !== null && finished !== listReflects()) || listFailed()) reloadList();
@@ -158,7 +159,7 @@ function usePolledStatus(
     /** Makes sure a tick is coming: woken if quiet, remembered if a tick is waiting for its answer. */
     wake: () => {
       if (!active || scheduled !== null) return;
-      if (asking) wakeAgain = true;
+      if (askingFor === generation) wakeAgain = true;
       else schedule(generation, LIBRARY_STATUS_POLL_MS);
     },
   };

@@ -475,4 +475,32 @@ describe("LibraryOverlay", () => {
     expect(asks).toHaveBeenCalled();
     asks.mockRestore();
   }, 30_000);
+
+  it("keeps one polling loop when a stale answer lands after a reopen", async () => {
+    const { usePolledStatus } = await import("../../../../src/composables/useLibraryData");
+    const api = await import("../../../../src/composables/libraryApi");
+    status = { indexing: true, filesDone: 1, filesTotal: 9, finishedAt: null };
+    const poll = usePolledStatus(
+      ref(null),
+      () => null,
+      () => {},
+      () => false,
+    );
+    let releaseOld: () => void = () => {};
+    statusGate = new Promise((resolve) => (releaseOld = resolve));
+    poll.start();
+    await new Promise((resolve) => setTimeout(resolve, 5)); // the first tick waits for its answer
+    poll.stop();
+    statusGate = new Promise(() => {}); // the reopened screen's answer never comes in this test
+    poll.start();
+    await new Promise((resolve) => setTimeout(resolve, 5)); // its tick is waiting too
+    releaseOld(); // the stale answer lands
+    await flushPromises();
+    const asks = vi.spyOn(api, "loadLibraryStatus");
+    poll.wake(); // a read lands while the current tick still waits: it must not start a second loop
+    await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 300));
+    expect(asks).not.toHaveBeenCalled();
+    asks.mockRestore();
+    poll.stop();
+  }, 10_000);
 });
