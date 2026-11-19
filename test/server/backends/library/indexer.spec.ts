@@ -8,7 +8,7 @@ import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { prepareLibraryStore, readFileMark, takeLease } from "../../../../server/backends/library/index-store";
-import { conversationOfRow, findConversation, listConversations } from "../../../../server/backends/library/index-queries";
+import { conversationOfRow, conversationsForRepository, findConversation, listConversations } from "../../../../server/backends/library/index-queries";
 import { searchLibrary } from "../../../../server/backends/library/library-search";
 import { runIndexPass, type IndexPassDeps } from "../../../../server/backends/library/indexer";
 import { HEAD_BYTES } from "../../../../server/backends/library/opened-file";
@@ -67,6 +67,22 @@ describe("runIndexPass", () => {
     expect(conversationOfRow(findConversation(db, "s1") ?? {}).cwd).toBe("/w/other");
     expect(conversationOfRow(findConversation(db, "s1", "/w/app") ?? {}).cwd).toBe("/w/app");
     expect(conversationOfRow(findConversation(db, "s1", "/w/nowhere") ?? {}).cwd).toBe("/w/other");
+  });
+
+  it("finds the conversations that linked a PR in a repository, the earliest begun first", async () => {
+    const { db, deps, transcript } = setup();
+    const at = (day: number, text: string): string =>
+      line({ type: "user", cwd: "/w/app", timestamp: `2026-11-${String(day)}T08:00:00.000Z`, message: { content: text } });
+    const prLink = (number: number, repository: string): string =>
+      line({ type: "pr-link", prNumber: number, prUrl: `https://github.com/${repository}/pull/${String(number)}`, prRepository: repository });
+    transcript("later", at(18, "came back to it") + prLink(5, "receptron/mulmoterminal"));
+    transcript("opener", at(10, "opened it") + prLink(5, "Receptron/MulmoTerminal"));
+    transcript("elsewhere", at(11, "another repo") + prLink(5, "receptron/other"));
+    transcript("none", at(12, "no PR"));
+    await runIndexPass(deps);
+    const ids = (limit: number): string[] => conversationsForRepository(db, "receptron/mulmoterminal", limit).map((row) => conversationOfRow(row).id);
+    expect(ids(10)).toEqual(["opener", "later"]);
+    expect(ids(1)).toEqual(["opener"]);
   });
 
   it("does not prefer a copy with no project recorded when no project is asked for", async () => {

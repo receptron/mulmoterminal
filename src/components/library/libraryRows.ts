@@ -1,6 +1,7 @@
 // How the Library lists conversations (#3329): the groups, the grey line under a title, and when.
 // Pure — `now` and the locale are handed in, so every boundary can be asserted.
 import type { LibraryConversation } from "../../../common/library";
+import { prPage } from "./prConversations";
 
 export const LIBRARY_GROUPS = ["pinned", "today", "week", "older"] as const;
 /** The groups a conversation falls into by when it ended; "pinned" is the user's, not a time. */
@@ -106,6 +107,31 @@ export function metaParts(conversation: LibraryConversation, now: number, locale
   return [projectName(conversation.cwd), conversation.gitBranch, prs, whenLabel(conversation.endedAt, now, locale)].filter(
     (part): part is string => part !== null && part !== "",
   );
+}
+
+/** One PR in the reader's grey line: its number, and its page when it has one to open. */
+export interface PrMention {
+  text: string;
+  url: string | null;
+}
+
+/** The reader's grey line, where the PRs open: the same parts as `metaParts`, with the PRs apart. */
+export type ReaderMetaPart = { kind: "text"; text: string } | { kind: "prs"; prs: PrMention[] };
+
+export function readerMetaParts(conversation: LibraryConversation, now: number, locale: string): ReaderMetaPart[] {
+  const text = (value: string | null): ReaderMetaPart[] => (value === null || value === "" ? [] : [{ kind: "text", text: value }]);
+  const newest = conversation.prs.slice(-SHOWN_PRS).reverse();
+  const rest = conversation.prs.length - newest.length;
+  const prs: PrMention[] = [
+    ...newest.map((pr) => ({ text: `#${String(pr.number)}`, url: prPage(pr) })),
+    ...(rest > 0 ? [{ text: `+${String(rest)}`, url: null }] : []),
+  ];
+  return [
+    ...text(projectName(conversation.cwd)),
+    ...text(conversation.gitBranch),
+    ...(prs.length > 0 ? [{ kind: "prs" as const, prs }] : []),
+    ...text(whenLabel(conversation.endedAt, now, locale)),
+  ];
 }
 
 /** Cost as the reader's currency format; null when the agent recorded none. */

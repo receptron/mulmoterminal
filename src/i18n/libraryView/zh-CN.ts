@@ -30,5 +30,6 @@ export const libraryViewZhCN = {
     marksUnreadable: "无法读取置顶和名称，因此未显示。",
     saveFailed: "无法保存此更改。请稍后再试。",
     more: "显示更多",
+    openPrConversation: "打开创建此 PR 的对话",
   },
 };

@@ -473,4 +473,17 @@ describe("LibraryOverlay", () => {
     await flushPromises();
     expect(wrapper.find("[role=status]").exists()).toBe(true);
   }, 10_000);
+
+  it("links the reader's PR numbers to their pages", async () => {
+    page = [
+      conversation("a", "Burn subtitles", {
+        prs: [{ number: 3345, repository: "receptron/mulmoterminal", url: "https://github.com/receptron/mulmoterminal/pull/3345" }],
+      }),
+    ];
+    const wrapper = await mountLibrary();
+    const link = wrapper.find("[data-testid=library-reader-prs] a");
+    expect(link.text()).toBe("#3345");
+    expect(link.attributes("href")).toBe("https://github.com/receptron/mulmoterminal/pull/3345");
+    expect(link.attributes("rel")).toContain("noopener");
+  });
 });

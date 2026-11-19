@@ -81,7 +81,27 @@ export function mountLibraryRoutes(app: Express, deps: LibraryRouteDeps = {}): v
     const hits = await answer(res, call, "search", [query, filterOf(req.query), pageLimit(req.query.limit)]);
     if (hits !== undefined) res.json({ hits });
   });
+  app.get("/api/library/repository-conversations", async (req, res) => {
+    const repository = typeof req.query.repo === "string" ? req.query.repo : "";
+    if (!isRepositoryName(repository)) {
+      res.status(400).json({ error: "repo must be owner/repo" });
+      return;
+    }
+    const conversations = await answer(res, call, "forRepository", [repository, REPOSITORY_CONVERSATIONS_MAX]);
+    if (conversations !== undefined) res.json({ conversations });
+  });
 }
+
+/** How many conversations one repository's lookup answers with: a PR list shows one page of PRs, and
+ *  the conversations behind them are the earliest begun, so a cap only drops later returns to a PR. */
+export const REPOSITORY_CONVERSATIONS_MAX = 500;
+
+/** `owner/repo` as GitHub spells one — the shape the GitHub view lists PRs under. Neither half is all
+ *  dots, which GitHub does not allow either. */
+export const isRepositoryName = (value: string): boolean => {
+  const halves = value.split("/");
+  return halves.length === 2 && halves.every((half) => /^[A-Za-z0-9_.-]{1,100}$/.test(half) && !/^\.+$/.test(half));
+};
 
 /** A change from a request body, or null when any field it carries is malformed — the whole request is
  *  refused rather than applied in part. A name past the cap is malformed too: the UI cannot send one. */

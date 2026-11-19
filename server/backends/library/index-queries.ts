@@ -38,6 +38,16 @@ export function listConversations(db: DatabaseSync, filter: ConversationFilter, 
     .all(...where.params, limit, offset);
 }
 
+/** The conversations that linked a pull request in `repository` (`owner/repo`, any case), the earliest
+ *  begun first — the one that opened a PR started before those that came back to it. */
+export function conversationsForRepository(db: DatabaseSync, repository: string, limit: number): Record<string, unknown>[] {
+  const where = filterClause({});
+  const linked = "exists (select 1 from json_each(c.prs) j where lower(json_extract(j.value, '$.repository')) = lower(?))";
+  return db
+    .prepare(`select c.* from conversations c where ${linked} and ${where.sql} order by c.started_at asc nulls last, c.path limit ?`)
+    .all(repository, ...where.params, limit);
+}
+
 /** A conversation by session id. The same id can sit in two project directories (a copied or moved
  *  transcript): the one in `cwd` is preferred when given, else — or when none is there — the newest. `=` rather than
  *  `is`, so that no cwd given never prefers a copy that has none recorded. */

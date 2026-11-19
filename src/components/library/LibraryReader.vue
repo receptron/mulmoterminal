@@ -6,7 +6,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import TranscriptPane from "../TranscriptPane.vue";
 import { LIBRARY_NAME_MAX, type LibraryConversation } from "../../../common/library";
-import { conversationKey, costLabel, metaParts } from "./libraryRows";
+import { conversationKey, costLabel, readerMetaParts, type ReaderMetaPart } from "./libraryRows";
 
 const props = defineProps<{ conversation: LibraryConversation; now: number; notice: string | null; name: string | null; pinned: boolean }>();
 const emit = defineEmits<{ resume: []; pin: [pinned: boolean]; rename: [id: string, name: string | null] }>();
@@ -104,10 +104,10 @@ function pickPin(): void {
   emit("pin", !props.pinned);
 }
 
-const facts = computed(() => {
-  const parts = metaParts(props.conversation, props.now, locale.value);
+const facts = computed((): ReaderMetaPart[] => {
+  const parts = readerMetaParts(props.conversation, props.now, locale.value);
   const cost = costLabel(props.conversation.costUsd, locale.value);
-  return cost === null ? parts : [...parts, cost];
+  return cost === null ? parts : [...parts, { kind: "text", text: cost }];
 });
 const lines = computed(() => {
   const { linesAdded, linesRemoved } = props.conversation;
@@ -136,7 +136,17 @@ const lines = computed(() => {
         {{ shownTitle }}
       </h2>
       <p class="m-0 mt-1 flex flex-wrap gap-x-3 font-sans text-[12px] text-dim">
-        <span v-for="fact in facts" :key="fact">{{ fact }}</span>
+        <template v-for="(fact, index) in facts" :key="index">
+          <span v-if="fact.kind === 'text'">{{ fact.text }}</span>
+          <span v-else class="inline-flex gap-1" data-testid="library-reader-prs">
+            <template v-for="pr in fact.prs" :key="pr.text">
+              <a v-if="pr.url" :href="pr.url" target="_blank" rel="noopener noreferrer" class="text-dim underline-offset-2 hover:text-fg hover:underline">{{
+                pr.text
+              }}</a>
+              <span v-else>{{ pr.text }}</span>
+            </template>
+          </span>
+        </template>
         <span v-if="lines" class="font-mono"
           ><span class="text-ok">+{{ lines.added }}</span> <span class="text-err-text">−{{ lines.removed }}</span></span
         >

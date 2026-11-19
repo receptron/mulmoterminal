@@ -1876,7 +1876,9 @@ narrow and tall for one record you are discussing — and each position keeps it
   conversation's file is never written. `claude -p` and SDK runs, and runs from temp directories, are left
   out. The index behind it is built in the background the first time you open it and kept up to
   date from what is appended; it is `~/.mulmoterminal/library/index.db` and can be deleted at any
-  time (it is rebuilt). `marks.json` beside it holds your pins and names and is not rebuilt. Design: [`docs/library-design.md`](docs/library-design.md).
+  time (it is rebuilt). `marks.json` beside it holds your pins and names and is not rebuilt.
+  A conversation's PR numbers open the PR; in the GitHub view, a PR a conversation made has a
+  `local_library` button beside it that opens that conversation in the Library. Design: [`docs/library-design.md`](docs/library-design.md).
 - **Skills viewer** — **More features** → **Skills** lists every Claude skill on disk in three
   columns — where it lives, its skills, its `SKILL.md`. The places are your `~/.claude/skills`,
   each enabled plugin (skills shown as `plugin:skill`), and the `.claude/skills` of each folder a

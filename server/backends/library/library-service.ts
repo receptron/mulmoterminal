@@ -1,7 +1,7 @@
 // What the Library's routes ask of the index (#3328), as one async interface: the worker answers it
 // in production, and the specs answer it in-thread over an in-memory database.
 import type { LibraryConversation, LibraryConversationPage, LibraryIndexStatus, LibrarySearchHit } from "../../../common/library.js";
-import { conversationOfRow, findConversation, listConversations, type ConversationFilter } from "./index-queries.js";
+import { conversationOfRow, conversationsForRepository, findConversation, listConversations, type ConversationFilter } from "./index-queries.js";
 import type { LibraryIndex } from "./library-index.js";
 import { inReadSnapshot, readLease } from "./index-store.js";
 import { searchLibrary } from "./library-search.js";
@@ -11,6 +11,8 @@ export interface LibraryService {
   list(filter: ConversationFilter, offset: number, limit: number): Promise<LibraryConversationPage>;
   conversation(id: string, cwd?: string | null): Promise<LibraryConversation | null>;
   search(query: string, filter: ConversationFilter, limit: number): Promise<LibrarySearchHit[]>;
+  /** The conversations that linked a PR in one repository, the earliest begun first. */
+  forRepository(repository: string, limit: number): Promise<LibraryConversation[]>;
 }
 
 /** Every call also asks the index to catch up — in the background, so the answer is what the
@@ -38,6 +40,7 @@ export function createLocalLibraryService(index: LibraryIndex): LibraryService {
         return row === null ? null : conversationOfRow(row);
       }),
     search: (query, filter, limit) => answer(() => searchLibrary(index.db, query, filter, limit)),
+    forRepository: (repository, limit) => answer(() => conversationsForRepository(index.db, repository, limit).map(conversationOfRow)),
   };
 }
 

@@ -30,5 +30,6 @@ export const libraryViewJa = {
     marksUnreadable: "ピン留めと名前を読めなかったため、表示していません。",
     saveFailed: "変更を保存できませんでした。少し待ってからもう一度試してください。",
     more: "さらに表示",
+    openPrConversation: "この PR を作った会話を開く",
   },
 };

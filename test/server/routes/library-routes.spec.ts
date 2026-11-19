@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach } from "vitest";
 import { routeCall } from "../../helpers/routeCall";
-import { filterOf, isMarkableId, markChangeOf, mountLibraryRoutes, queryCount } from "../../../server/routes/library-routes";
+import { filterOf, isMarkableId, markChangeOf, mountLibraryRoutes, queryCount, REPOSITORY_CONVERSATIONS_MAX } from "../../../server/routes/library-routes";
 import { applyTranscriptScan, finishLease, prepareLibraryStore, takeLease } from "../../../server/backends/library/index-store";
 import { createLibraryIndex } from "../../../server/backends/library/library-index";
 import { createLocalLibraryService } from "../../../server/backends/library/library-service";
@@ -55,6 +55,18 @@ describe("/api/library", () => {
     const call = appWithConversations(1);
     expect((await call("/api/library/conversations/s0")).body).toMatchObject({ id: "s0", title: "title 0" });
     expect((await call("/api/library/conversations/nope")).status).toBe(404);
+  });
+
+  it("answers a repository's PR conversations, and refuses a name that is not owner/repo", async () => {
+    const asked: unknown[][] = [];
+    const app = express();
+    mountLibraryRoutes(app, { call: (method, args) => (asked.push([method, ...args]), Promise.resolve([])) });
+    const call = routeCall(app);
+    expect((await call("/api/library/repository-conversations?repo=receptron%2Fmulmoterminal")).body).toEqual({ conversations: [] });
+    for (const bad of ["", "receptron", "a/b/c", "a b/c", "%2E%2E%2Fx"]) {
+      expect((await call(`/api/library/repository-conversations?repo=${bad}`)).status, bad).toBe(400);
+    }
+    expect(asked).toEqual([["forRepository", "receptron/mulmoterminal", REPOSITORY_CONVERSATIONS_MAX]]);
   });
 
   it("passes the project a conversation is asked for in, so a session copied into two picks its own", async () => {

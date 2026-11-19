@@ -51,6 +51,12 @@ export async function searchLibrary(query: string, signal: AbortSignal): Promise
   return body !== null && isUnknownArray(body.hits) ? body.hits.filter(isLibrarySearchHit) : null;
 }
 
+/** The conversations that linked a PR in `repository`, the earliest begun first. */
+export async function loadRepositoryConversations(repository: string): Promise<LibraryConversation[] | null> {
+  const body = await readJson(`/api/library/repository-conversations?repo=${encodeURIComponent(repository)}`);
+  return body !== null && isUnknownArray(body.conversations) ? body.conversations.filter(isLibraryConversation) : null;
+}
+
 /** One conversation by id; `cwd` picks among copies of one session in several projects. */
 export async function loadLibraryConversation(id: string, cwd: string | null = null): Promise<LibraryConversation | null> {
   const query = cwd === null ? "" : `?cwd=${encodeURIComponent(cwd)}`;
