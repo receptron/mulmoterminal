@@ -4,6 +4,7 @@
 // works, and a save over its change would lose it without a word.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
 import { dropMemoryDraft, keepMemoryDraft, memoryDraftFor, memoryDraftKey } from "./memoryDrafts";
+import { isImeConfirming } from "../../composables/imeComposition";
 import { useI18n } from "vue-i18n";
 import { saveLibraryMemoryFile } from "../../composables/libraryApi";
 import { readResumableList } from "../../composables/useDirLists";
@@ -88,12 +89,13 @@ async function save(): Promise<void> {
 /** ⌘Enter (Ctrl+Enter elsewhere) saves; Esc stops editing, not the Library. */
 function onKey(event: KeyboardEvent): void {
   if (event.key === "Escape") {
-    // Esc while composing (Japanese input) cancels the composition, not the edit.
-    if (event.isComposing) return;
+    // Esc while composing (Japanese input) cancels the composition, not the edit — Safari's
+    // compositionend-before-keydown included.
+    if (isImeConfirming(event)) return;
     event.preventDefault();
     event.stopPropagation();
     cancel();
-  } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !event.isComposing) {
+  } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !isImeConfirming(event)) {
     event.preventDefault();
     event.stopPropagation();
     void save();

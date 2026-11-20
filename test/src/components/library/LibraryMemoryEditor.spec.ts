@@ -16,6 +16,7 @@ vi.mock("../../../../src/composables/useDirLists", () => ({
 
 const LibraryMemoryEditor = (await import("../../../../src/components/library/LibraryMemoryEditor.vue")).default;
 const { dropMemoryDraft } = await import("../../../../src/components/library/memoryDrafts");
+const { resetImeComposition } = await import("../../../../src/composables/imeComposition");
 
 beforeEach(() => {
   dropMemoryDraft("-w-app/a.md"); // drafts outlive an editor, by design: not a test
@@ -115,10 +116,18 @@ describe("LibraryMemoryEditor", () => {
     expect(((await mountEditor()).find("[data-testid=memory-editor-field]").element as HTMLTextAreaElement).value).not.toBe("half-written");
   });
 
-  it("leaves Esc to an IME composition", async () => {
+  it("leaves Esc and ⌘Enter to an IME composition, Safari's late compositionend included", async () => {
     const wrapper = await mountEditor();
-    await wrapper.find("[data-testid=memory-editor-field]").trigger("keydown", { key: "Escape", isComposing: true });
+    const field = wrapper.find("[data-testid=memory-editor-field]");
+    await field.trigger("keydown", { key: "Escape", isComposing: true });
+    // Safari: compositionend first, then the confirming keydown with isComposing already false.
+    window.dispatchEvent(new CompositionEvent("compositionstart"));
+    window.dispatchEvent(new CompositionEvent("compositionend"));
+    await field.trigger("keydown", { key: "Enter", metaKey: true, keyCode: 229 });
+    await field.trigger("keydown", { key: "Escape", keyCode: 229 });
     expect(wrapper.emitted("cancel")).toBeUndefined();
+    expect(saves).toEqual([]);
+    resetImeComposition();
   });
 
   it("saves an untouched file with mixed line endings exactly as it was", async () => {
