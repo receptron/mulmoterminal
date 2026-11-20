@@ -150,7 +150,7 @@ const isFileIssue = (value: unknown): value is MemoryFileIssue => {
   if (value.kind === "not-in-index") return true;
   if (value.kind === "no-frontmatter") return isStringList(value.missing);
   if (value.kind === "broken-link") return isStringList(value.names);
-  if (value.kind === "in-work-copies") return Array.isArray(value.copies) && value.copies.every(isWorkCopy);
+  if (value.kind === "in-work-copies") return Array.isArray(value.copies) && value.copies.length > 0 && value.copies.every(isWorkCopy);
   return value.kind === "missing-path" && isStringList(value.paths);
 };
 

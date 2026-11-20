@@ -100,6 +100,25 @@ describe("readMemoryHealth across work copies", () => {
     });
   });
 
+  it("calls two memories holding a written U+FFFD the same when their bytes are", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "mt-memory-copies-"));
+    dirs.push(root);
+    const cwds = ["app2", "app3"].map((name) => path.join(root, name));
+    cwds.forEach((cwd) => {
+      const folder = path.join(root, "projects", cwd.replace(/[^a-zA-Z0-9\-_]/g, "-"), "memory");
+      mkdirSync(folder, { recursive: true });
+      writeFileSync(path.join(folder, "MEMORY.md"), "- [A](a.md)\n");
+      writeFileSync(path.join(folder, "a.md"), MEMORY("a", "a replacement character: \uFFFD"));
+    });
+    const health = await readMemoryHealth(path.join(root, "projects"), cwds, 0, () => Promise.resolve("github.com/o/app"));
+    expect(
+      health
+        .flatMap((project) => project.files["a.md"] ?? [])
+        .flatMap((issue) => (issue.kind === "in-work-copies" ? issue.copies : []))
+        .map((copy) => copy.same),
+    ).toEqual([true, true]);
+  });
+
   it("never calls two files the same when their bytes are not text, though they read alike", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "mt-memory-copies-"));
     dirs.push(root);
