@@ -1,6 +1,6 @@
 // The `[[links]]` a merge of memory points elsewhere (#3331), decided on texts alone — nothing here reads a disk.
 import { Lexer } from "marked";
-import { parseMemoryFrontmatter } from "../../../common/libraryMemory.js";
+import { memoryLinkNames, parseMemoryFrontmatter } from "../../../common/libraryMemory.js";
 import { isToken, MEMORY_LINK, type MarkdownToken } from "./memory-health.js";
 
 interface TextRange {
@@ -90,11 +90,8 @@ function rewriteBodyLinks(body: string, from: ReadonlySet<string>, to: string): 
   return { text: result, count: rewritten.count };
 }
 
-/** The names a `[[link]]` reaches a memory by: its file name without `.md`, and its frontmatter name. */
-export function namesOf(file: string, text: string): Set<string> {
-  const name = parseMemoryFrontmatter(text).fields.name?.trim() ?? "";
-  return new Set([file.replace(/\.md$/, ""), name].filter((candidate) => candidate !== ""));
-}
+/** The names a `[[link]]` reaches a memory by — the health check's and the reader's rule. */
+export const namesOf = (file: string, text: string): Set<string> => new Set(memoryLinkNames({ file, name: parseMemoryFrontmatter(text).fields.name ?? null }));
 
 /** The name a link to a memory is written with: its frontmatter name when a `[[link]]` can hold it,
  *  else its file name. */

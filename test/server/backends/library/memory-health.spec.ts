@@ -141,6 +141,14 @@ describe("memoryHealth", () => {
     expect(memoryHealth(input({ files, index }), new Set()).files).toEqual({ "a.md": [{ kind: "broken-link", names: ["nowhere"] }] });
   });
 
+  it("takes a quoted name with spaces around it as the name without them, as a link's own are", () => {
+    const files = [
+      { file: "a.md", text: memory("a", "[[alpha]] [[ alpha ]]") },
+      { file: "b.md", text: '---\nname: " alpha "\ndescription: d\ntype: feedback\n---\n' },
+    ];
+    expect(memoryHealth(input({ files, index: { text: "[a](a.md)[b](b.md)", lines: 1, bytes: 20 } }), new Set()).files).toEqual({});
+  });
+
   it("reports only the named paths found missing, and judges an unreadable file on its listing alone", () => {
     const files = [
       { file: "a.md", text: memory("a", "`src/gone.ts` and `src/here.ts`") },

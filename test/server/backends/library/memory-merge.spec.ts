@@ -230,6 +230,13 @@ describe("the links a merge points at the memory that stays", () => {
     expect(read("c.md")).toBe("---\nname: gamma\ndescription: grew out of [[alpha]]\n---\nSee [[beta]].\n");
   });
 
+  it("rewrites a link by a quoted name with spaces around it, as the health check reads that name", async () => {
+    const spaced = '---\nname: " alpha "\n---\nAlpha body.\n';
+    const { layout, read, merge } = linked({ "a.md": spaced });
+    expect(await mergeMemory(merge(`${B}\nAlpha body.\n`, memoryVersion(spaced)), layout, NOW)).toMatchObject({ kind: "merged", links: 3 });
+    expect(read("d.md")).toBe("Also [[beta]].\r\n```\r\n[[alpha]]\r\n```\r\n");
+  });
+
   it("leaves a link by a name another memory has too: it still means that one", async () => {
     const { layout, read, merge } = linked({ "z.md": "---\nname: alpha\n---\nAnother alpha.\n" });
     expect(await mergeMemory(merge(), layout, NOW)).toMatchObject({ kind: "merged", links: 1 });

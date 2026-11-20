@@ -5,6 +5,8 @@ import {
   frontmatterStillOpen,
   isLibraryMemoryHealth,
   isLibraryMemoryProject,
+  linkNamesMemory,
+  memoryLinkNames,
   memoryType,
   parseMemoryFrontmatter,
   projectSlug,
@@ -68,6 +70,37 @@ describe("frontmatterStillOpen", () => {
     ["", false],
   ])("%j → %s", (text, open) => {
     expect(frontmatterStillOpen(text)).toBe(open);
+  });
+});
+
+describe("linkNamesMemory / memoryLinkNames", () => {
+  it("names a memory by its file without .md or its frontmatter name, either side's spaces aside", () => {
+    const memory = { file: "a.md", name: " alpha " };
+    expect(["a", "alpha", " alpha", "a ", "a.md", "alph", ""].map((link) => linkNamesMemory(link, memory))).toEqual([
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+    ]);
+    expect(linkNamesMemory("x", { file: "a.md", name: null })).toBe(false);
+    expect(linkNamesMemory(" ", { file: "a.md", name: "   " })).toBe(false);
+    expect(memoryLinkNames(memory)).toEqual(["a", "alpha"]);
+    expect(memoryLinkNames({ file: "a.md", name: "a" })).toEqual(["a"]);
+    expect(memoryLinkNames({ file: "a.md", name: "  " })).toEqual(["a"]);
+  });
+
+  it("agrees with itself: a link names a memory exactly when its trimmed text is one of the memory's names", () => {
+    const LINKS = ["a", " a", "alpha", "alpha ", "b", "", " ", "a.md"];
+    const NAMES = [null, "", " ", "alpha", " alpha ", "a", "b c"];
+    LINKS.forEach((link) =>
+      NAMES.forEach((name) => {
+        const memory = { file: "a.md", name };
+        expect(linkNamesMemory(link, memory)).toBe(memoryLinkNames(memory).includes(link.trim()));
+      }),
+    );
   });
 });
 

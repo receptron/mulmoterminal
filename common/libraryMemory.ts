@@ -79,6 +79,18 @@ export function frontmatterStillOpen(text: string): boolean {
   return normalized.startsWith("---\n") && frontmatterEnd(normalized) === -1;
 }
 
+/** Whether a `[[link]]` names a memory: by its file name without `.md`, or by its frontmatter `name`,
+ *  either side's surrounding spaces aside (a link's own are, and a quoted value can carry some). The one
+ *  rule the reader, the health check and a merge's rewrite all decide a link's memory by. */
+export const linkNamesMemory = (link: string, memory: { file: string; name: string | null }): boolean => {
+  const wanted = link.trim();
+  return wanted !== "" && (wanted === memory.file.replace(/\.md$/, "") || wanted === (memory.name ?? "").trim());
+};
+
+/** The names a `[[link]]` reaches a memory by, as `linkNamesMemory` decides it. */
+export const memoryLinkNames = (memory: { file: string; name: string | null }): string[] =>
+  [memory.file.replace(/\.md$/, ""), (memory.name ?? "").trim()].filter((name, at, all) => name !== "" && all.indexOf(name) === at);
+
 export function parseMemoryFrontmatter(text: string): MemoryFrontmatter {
   const normalized = normalizedMemory(text);
   const end = frontmatterEnd(normalized);

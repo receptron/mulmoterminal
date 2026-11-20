@@ -54,6 +54,9 @@ describe("linkTarget and memoryTitle", () => {
     expect(linkTarget(here, "reply-in-japanese")).toBe(named);
     expect(linkTarget(here, "plain")?.file).toBe("plain.md");
     expect(linkTarget(here, "elsewhere")).toBeNull();
+    const spaced = memory("s.md", { name: " spaced " });
+    expect(linkTarget(project("b", [spaced]), "spaced")).toBe(spaced);
+    expect(linkTarget(project("b", [spaced]), " s ")).toBe(spaced);
   });
 
   it("titles a memory by its name, else its file without .md", () => {

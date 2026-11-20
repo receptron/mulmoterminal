@@ -5,6 +5,7 @@ import { Lexer } from "marked";
 import {
   MEMORY_INDEX_BYTES_MAX,
   MEMORY_INDEX_LINES_MAX,
+  memoryLinkNames,
   memoryType,
   parseMemoryFrontmatter,
   type LibraryMemoryHealth,
@@ -113,9 +114,9 @@ export function memoryHealth(input: MemoryHealthInput, missingPaths: ReadonlySet
   const fileNames = new Set(input.files.map((file) => file.file));
   const listed = input.index?.text == null ? null : new Set(indexEntries(input.index.text));
   const names = new Set(
-    input.files
-      .flatMap((file) => [file.file.replace(/\.md$/, ""), ...(file.text === null ? [] : [parseMemoryFrontmatter(file.text).fields.name ?? ""])])
-      .filter((name) => name !== ""),
+    input.files.flatMap((file) =>
+      memoryLinkNames({ file: file.file, name: file.text === null ? null : (parseMemoryFrontmatter(file.text).fields.name ?? null) }),
+    ),
   );
   const issues: MemoryProjectIssue[] = [];
   if (input.index === null && input.files.length > 0) issues.push({ kind: "no-index" });
