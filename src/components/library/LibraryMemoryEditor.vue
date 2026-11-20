@@ -104,7 +104,8 @@ function onKey(event: KeyboardEvent): void {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col" data-testid="memory-editor">
+  <!-- Keys on the whole editor, so Esc from a button ends the edit too, not the Library. -->
+  <div class="flex min-h-0 flex-1 flex-col" data-testid="memory-editor" @keydown="onKey">
     <p v-if="sessionRunning" class="m-0 px-4 pt-3 font-sans text-[12px] text-warn" role="status" data-testid="memory-editor-running">
       {{ t("libraryView.memory.edit.running") }}
     </p>
@@ -115,7 +116,7 @@ function onKey(event: KeyboardEvent): void {
       :aria-label="t('libraryView.memory.edit.label')"
       spellcheck="false"
       data-testid="memory-editor-field"
-      @keydown="onKey"
+      :readonly="saving"
     ></textarea>
     <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-border px-4 py-2">
       <p v-if="notice" class="m-0 mr-auto font-sans text-[12px] text-err-text" role="status" data-testid="memory-editor-notice">

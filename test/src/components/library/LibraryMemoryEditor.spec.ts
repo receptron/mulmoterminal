@@ -139,4 +139,27 @@ describe("LibraryMemoryEditor", () => {
     await flushPromises();
     expect(saves[0]?.[2]).toBe(mixed);
   });
+
+  it("holds the text still while a save is on its way", async () => {
+    let finish: (value: MemorySaveResult) => void = () => {};
+    result = { kind: "saved", version: "v2" };
+    const wrapper = await mountEditor();
+    const api = await import("../../../../src/composables/libraryApi");
+    const slow = vi.spyOn(api, "saveLibraryMemoryFile").mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    await wrapper.find("[data-testid=memory-editor-save]").trigger("click");
+    expect(wrapper.find("[data-testid=memory-editor-field]").attributes("readonly")).toBeDefined();
+    finish({ kind: "saved", version: "v2" });
+    await flushPromises();
+    slow.mockRestore();
+  });
+
+  it("ends the edit on Esc from a button too, without letting the Library see it", async () => {
+    const wrapper = await mountEditor();
+    const library = vi.fn();
+    window.addEventListener("keydown", library);
+    await wrapper.find("[data-testid=memory-editor-save]").trigger("keydown", { key: "Escape" });
+    window.removeEventListener("keydown", library);
+    expect(wrapper.emitted("cancel")).toHaveLength(1);
+    expect(library).not.toHaveBeenCalled();
+  });
 });
