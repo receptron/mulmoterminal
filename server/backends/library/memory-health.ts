@@ -27,7 +27,7 @@ const withoutCode = (body: string): string => body.replace(/```[\s\S]*?(```|$)/g
 
 /** The memory files `MEMORY.md` points at: the targets of its Markdown links that name a file here. */
 export function indexEntries(indexText: string): string[] {
-  return [...indexText.matchAll(/\]\(([^)\s]+\.md)\)/g)].map((match) => match[1] ?? "").filter((target) => !target.includes("/"));
+  return [...indexText.matchAll(/\]\(([^)\s]+\.md)\)/g)].map((match) => (match[1] ?? "").replace(/^\.\//, "")).filter((target) => !target.includes("/"));
 }
 
 /** The `[[name]]` links in a body, outside code. */
@@ -96,10 +96,13 @@ export function memoryHealth(input: MemoryHealthInput, missingPaths: ReadonlySet
   return { slug: input.slug, issues, files };
 }
 
-/** The top folder of an absolute path — `/Users` of `/Users/me/x.md`, `C:\\work` of `C:\\work\\x.md` —
+/** The top folder of an absolute path — `/Users` of `/Users/me/x.md`, `C:\\work` of `C:\\work\\x.md`, the share
+ *  of a network path —
  *  with the path flavour handed in, so both are decided the same on any system. */
 export function topFolder(resolved: string, flavour: Pick<typeof path, "parse" | "sep" | "join">): string | null {
   const { root } = flavour.parse(resolved);
+  // A network share (`\\\\server\\share\\`) is itself what shows the path is reachable from here.
+  if (root.startsWith("\\\\")) return root;
   const top = resolved
     .slice(root.length)
     .split(flavour.sep)

@@ -28,7 +28,7 @@ const input = (over: Partial<MemoryHealthInput> = {}): MemoryHealthInput => ({
 
 describe("indexEntries, linkNames, pathReferences", () => {
   it("reads the index's links to files here, and nothing else", () => {
-    expect(indexEntries("- [A](a.md)\n- [B](sub/b.md) [site](https://x.dev/c.md) [C](c.md)")).toEqual(["a.md", "c.md"]);
+    expect(indexEntries("- [A](a.md)\n- [B](sub/b.md) [site](https://x.dev/c.md) [C](c.md) [D](./d.md)")).toEqual(["a.md", "c.md", "d.md"]);
   });
 
   it("reads [[links]] outside code only", () => {
@@ -61,6 +61,7 @@ describe("indexEntries, linkNames, pathReferences", () => {
     expect(topFolder("/sche_b1.cgi", path.posix)).toBe("/sche_b1.cgi");
     expect(topFolder("C:\\work\\src\\gone.ts", path.win32)).toBe("C:\\work");
     expect(topFolder("/", path.posix)).toBeNull();
+    expect(topFolder("\\\\server\\share\\gone.ts", path.win32)).toBe("\\\\server\\share\\");
   });
 
   it("expands ~\\ on Windows only", () => {
