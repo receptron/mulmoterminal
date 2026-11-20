@@ -3,14 +3,15 @@
 // memory file in a memory folder.
 import { describe, it, expect, afterEach } from "vitest";
 import express from "express";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { routeCall } from "../../helpers/routeCall";
 import { mountLibraryRoutes } from "../../../server/routes/library-routes";
 import {
-  headOf,
+  isSameFile,
   listMemoryProjects,
+  openRegularFile,
   MEMORY_FOLDERS_REUSE_MS,
   MEMORY_HEAD_MAX_BYTES,
   MEMORY_HEAD_STEP_BYTES,
@@ -128,13 +129,32 @@ describe("a frontmatter longer than one read", () => {
   });
 });
 
-describe("reading a memory's head", () => {
-  it("reads nothing when the file opened is not the one checked (a swap in between)", async () => {
+describe("opening a memory file", () => {
+  it.skipIf(process.platform === "win32")("opens a regular file, and refuses a link or a folder", async () => {
     const { root } = setup();
-    const file = path.join(root, "-w-app", "memory", "a.md");
-    const checked = lstatSync(file);
-    expect(await headOf(file, checked)).toContain("name: alpha");
-    expect(await headOf(file, { dev: checked.dev, ino: checked.ino + 1 })).toBe("");
+    const folder = path.join(root, "-w-app", "memory");
+    symlinkSync(path.join(folder, "a.md"), path.join(folder, "via-link.md"));
+    const opened = await openRegularFile(path.join(folder, "a.md"));
+    expect(opened).not.toBeNull();
+    await opened?.handle.close();
+    expect(await openRegularFile(path.join(folder, "via-link.md"))).toBeNull();
+    expect(await openRegularFile(folder)).toBeNull();
+    expect(await openRegularFile(path.join(folder, "missing.md"))).toBeNull();
+  });
+
+  it("takes the file opened as the one checked only when device and inode both agree", () => {
+    expect(isSameFile({ dev: 1, ino: 2 }, { dev: 1, ino: 2 })).toBe(true);
+    expect(isSameFile({ dev: 1, ino: 2 }, { dev: 1, ino: 3 })).toBe(false); // swapped in between
+    expect(isSameFile({ dev: 1, ino: 2 }, { dev: 9, ino: 2 })).toBe(false);
+  });
+
+  it.skipIf(process.platform === "win32")("leaves out an index that is a link", async () => {
+    const { root } = setup();
+    const index = path.join(root, "-w-other", "memory", "MEMORY.md");
+    rmSync(index);
+    symlinkSync(path.join(root, "-w-app", "memory", "MEMORY.md"), index);
+    const other = (await listMemoryProjects(root, [], 0)).find((project) => project.slug === "-w-other");
+    expect(other?.index ?? null).toBeNull();
   });
 });
 

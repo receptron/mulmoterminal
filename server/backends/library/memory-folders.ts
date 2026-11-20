@@ -1,6 +1,6 @@
 // Reading Claude Code's memory folders for the Library (#3331): `<projects>/<slug>/memory/`, each
 // with its `MEMORY.md` index and its memory files. Read only.
-import { createReadStream, promises as fs, type Dirent } from "node:fs";
+import { promises as fs, type Dirent } from "node:fs";
 import path from "node:path";
 import {
   frontmatterStillOpen,
@@ -43,16 +43,27 @@ async function isTheIndex(folder: string, name: string): Promise<boolean> {
 export const MEMORY_HEAD_STEP_BYTES = 8 * 1024;
 export const MEMORY_HEAD_MAX_BYTES = 64 * 1024;
 
-/** `seen` is the file as it was checked (a regular file, not a link): what is opened must be that file,
- *  or a link swapped in between would be read through. */
-export async function headOf(file: string, seen: { dev: number; ino: number }): Promise<string> {
+/** Whether two looks at a path saw one file: the same device and inode. */
+export const isSameFile = (a: { dev: number; ino: number }, b: { dev: number; ino: number }): boolean => a.dev === b.dev && a.ino === b.ino;
+
+/** A regular file opened for reading, or null: not a link, and the handle is the very file that was
+ *  checked — a link swapped in between the check and the open is refused. Every read in this file
+ *  goes through here. */
+export async function openRegularFile(file: string): Promise<{ handle: fs.FileHandle; mtimeMs: number } | null> {
+  const seen = await fs.lstat(file).catch(() => null);
+  if (seen === null || !seen.isFile()) return null;
   const handle = await fs.open(file, "r").catch(() => null);
-  if (handle === null) return "";
+  if (handle === null) return null;
+  const opened = await handle.stat().catch(() => null);
+  if (opened !== null && isSameFile(seen, opened)) return { handle, mtimeMs: seen.mtimeMs };
+  await handle.close();
+  return null;
+}
+
+async function headOf(handle: fs.FileHandle): Promise<string> {
+  const chunks: Buffer[] = [];
+  let read = 0;
   try {
-    const opened = await handle.stat();
-    if (opened.dev !== seen.dev || opened.ino !== seen.ino) return "";
-    const chunks: Buffer[] = [];
-    let read = 0;
     while (read < MEMORY_HEAD_MAX_BYTES) {
       const buffer = Buffer.alloc(MEMORY_HEAD_STEP_BYTES);
       const { bytesRead } = await handle.read(buffer, 0, buffer.length, read);
@@ -61,27 +72,29 @@ export async function headOf(file: string, seen: { dev: number; ino: number }): 
       read += bytesRead;
       if (!frontmatterStillOpen(Buffer.concat(chunks).toString("utf8"))) break;
     }
-    return Buffer.concat(chunks).toString("utf8");
   } catch {
-    return "";
-  } finally {
-    await handle.close();
+    // What was read before a failure is still the head there is.
   }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 /** A memory file as the list shows it. Only a regular file is one — a link is left out — and one that
  *  cannot be read (too large, not text) is still listed by its file name, for the reader to say so. */
 async function memoryFileOf(folder: string, file: string): Promise<LibraryMemoryFile | null> {
-  const info = await fs.lstat(path.join(folder, file)).catch(() => null);
-  if (info === null || !info.isFile()) return null;
-  const { fields, metadata } = parseMemoryFrontmatter(await headOf(path.join(folder, file), info));
-  return {
-    file,
-    name: fields.name ?? null,
-    description: fields.description ?? null,
-    type: metadata.type ?? fields.type ?? null,
-    updatedAt: info.mtimeMs,
-  };
+  const opened = await openRegularFile(path.join(folder, file));
+  if (opened === null) return null;
+  try {
+    const { fields, metadata } = parseMemoryFrontmatter(await headOf(opened.handle));
+    return {
+      file,
+      name: fields.name ?? null,
+      description: fields.description ?? null,
+      type: metadata.type ?? fields.type ?? null,
+      updatedAt: opened.mtimeMs,
+    };
+  } finally {
+    await opened.handle.close();
+  }
 }
 
 const NEWLINE = 0x0a;
@@ -90,14 +103,13 @@ const NEWLINE = 0x0a;
  *  Claude Code loads is exactly the one the gauge must show, not leave out. A last line without a
  *  newline counts. Not through a link, like every read here. */
 async function indexOf(folder: string): Promise<LibraryMemoryProject["index"]> {
-  const file = path.join(folder, MEMORY_INDEX_FILE);
-  const info = await fs.lstat(file).catch(() => null);
-  if (info === null || !info.isFile()) return null;
+  const opened = await openRegularFile(path.join(folder, MEMORY_INDEX_FILE));
+  if (opened === null) return null;
   let newlines = 0;
   let bytes = 0;
   let last = NEWLINE;
   try {
-    for await (const chunk of createReadStream(file)) {
+    for await (const chunk of opened.handle.createReadStream({ autoClose: false })) {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
       for (const byte of buffer) if (byte === NEWLINE) newlines += 1;
       bytes += buffer.length;
@@ -105,6 +117,8 @@ async function indexOf(folder: string): Promise<LibraryMemoryProject["index"]> {
     }
   } catch {
     return null;
+  } finally {
+    await opened.handle.close();
   }
   return { lines: newlines + (last === NEWLINE ? 0 : 1), bytes };
 }
