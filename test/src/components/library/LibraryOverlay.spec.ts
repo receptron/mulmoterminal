@@ -3,11 +3,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ref } from "vue";
 import { mount, flushPromises } from "@vue/test-utils";
+import type { LibraryMemoryProject } from "../../../../common/libraryMemory";
 import type { LibraryConversation, LibraryIndexStatus, LibrarySearchHit } from "../../../../common/library";
 import type { ResumableList } from "../../../../src/composables/useDirLists";
 
 const libraryOpen = ref(true);
 const closeLibrary = vi.fn();
+let memoryProjects: LibraryMemoryProject[] = [];
+let memoryTexts: Record<string, { text: string | null }> = {};
 let requested: { session: string; cwd: string | null } | null = null;
 vi.mock("../../../../src/composables/useLibraryView", () => ({
   useLibraryView: () => ({ isOpen: libraryOpen, close: closeLibrary }),
@@ -34,6 +37,8 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
   // The reader's changed-files strip, which these specs do not look at.
   loadLibraryFiles: () => Promise.resolve([]),
   loadLibraryFileText: () => Promise.resolve(null),
+  loadLibraryMemory: () => Promise.resolve(memoryProjects),
+  loadLibraryMemoryFile: (slug: string, file: string) => Promise.resolve(memoryTexts[`${slug}/${file}`] ?? null),
   loadLibraryPage: (offset: number) => {
     if (offset === 0 && pageFailures > 0) {
       pageFailures--;
@@ -115,6 +120,8 @@ const press = async (key: string) => {
 
 beforeEach(() => {
   requested = null;
+  memoryProjects = [];
+  memoryTexts = {};
   closeLibrary.mockClear();
   marks = { pinned: [], names: {} };
   saveFails = false;
@@ -515,5 +522,22 @@ describe("LibraryOverlay", () => {
       "https://github.com/o/four/pull/1",
       "https://github.com/o/three/pull/1",
     ]);
+  });
+
+  it("switches to memory and back, the arrows moving through the memories there", async () => {
+    const memory = (file: string) => ({ file, name: file.replace(".md", ""), description: null, type: null, updatedAt: NOW });
+    memoryProjects = [{ slug: "-w-app", cwd: "/w/app", index: null, files: [memory("one.md"), memory("two.md")] }];
+    memoryTexts = { "-w-app/one.md": { text: "first" }, "-w-app/two.md": { text: "second" } };
+    const wrapper = await mountLibrary();
+    expect(wrapper.find("[data-testid=library-kind-memory]").text()).toContain("2");
+    await wrapper.find("[data-testid=library-kind-memory]").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("one");
+    await press("ArrowDown");
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("two");
+    await wrapper.find("[data-testid=library-kind-conversations]").trigger("click");
+    expect(wrapper.find("[data-testid=library-memory]").exists()).toBe(false);
+    expect(wrapper.find("[data-testid=library-reader]").exists()).toBe(true);
   });
 });

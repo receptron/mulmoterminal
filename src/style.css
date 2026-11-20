@@ -353,6 +353,12 @@
     cursor: pointer;
     border-bottom: 1px dotted var(--accent);
   }
+  /* A link naming nothing there (a Library memory's [[name]] with no such memory): visibly not one. */
+  .wiki-body .wiki-link[aria-disabled="true"] {
+    color: var(--text-dim);
+    cursor: default;
+    border-bottom-color: transparent;
+  }
 
   /* Project-wide icon convention: Material Symbols (outlined). Icons inherit the
      surrounding text size by default; set font-size on the element to scale, and

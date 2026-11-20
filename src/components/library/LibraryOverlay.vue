@@ -2,11 +2,14 @@
 // The Library (#3329; design in docs/library-design.md): every Claude conversation on this machine,
 // searchable, readable, and resumable where it ran. A search field, the kinds (conversations only,
 // for now), and list | reader — one column at phone width, where choosing a row opens the reader.
-import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import FullScreenOverlay from "../FullScreenOverlay.vue";
 import LibraryList from "./LibraryList.vue";
 import LibraryReader from "./LibraryReader.vue";
+import LibraryMemory from "./LibraryMemory.vue";
+import { filterMemory } from "./memoryRows";
+import { useLibraryMemory } from "../../composables/useLibraryMemory";
 import { libraryRequested, useLibraryView } from "../../composables/useLibraryView";
 import { loadLibraryConversation } from "../../composables/libraryApi";
 import { router } from "../../router";
@@ -27,6 +30,11 @@ const { t } = useI18n();
 const { isOpen, close } = useLibraryView();
 useEscapeToClose(isOpen, close);
 const { conversations, hasMore, loaded, loadFailed, status, query, hits, searching, searchFailed, loadMore } = useLibraryData(isOpen);
+const { projects: memoryProjects, loaded: memoryLoaded, failed: memoryFailed } = useLibraryMemory(isOpen);
+const memoryCount = computed(() => filterMemory(memoryProjects.value, query.value).reduce((sum, project) => sum + project.files.length, 0));
+/** Which kind the list shows: the conversations, or Claude Code's memory. */
+const kind = ref<"conversations" | "memory">("conversations");
+const memoryView = useTemplateRef<{ move(by: number): Promise<void> }>("memoryView");
 const { marks, pinned, saveFailedFor, loadFailed: marksFailed, change: changeMark } = useLibraryMarks(isOpen);
 
 const searchField = ref<HTMLInputElement | null>(null);
@@ -218,9 +226,16 @@ function onKey(event: KeyboardEvent): void {
   const action = libraryKeyAction({ key: event.key, inSearch, inOtherField: editable && !inSearch, onOtherControl, composing: event.isComposing, modified });
   if (action === null) return;
   event.preventDefault();
+  runKeyAction(action);
+}
+
+function runKeyAction(action: NonNullable<ReturnType<typeof libraryKeyAction>>): void {
+  const by = action === "up" ? -1 : 1;
   if (action === "focus-search") searchField.value?.focus();
+  // Enter edits a memory once editing lands; the arrows move through the memories meanwhile.
+  else if (kind.value === "memory") void (action === "primary" ? undefined : memoryView.value?.move(by));
   else if (action === "primary") void resume();
-  else void move(action === "up" ? -1 : 1);
+  else void move(by);
 }
 window.addEventListener("keydown", onKey);
 onBeforeUnmount(() => {
@@ -251,17 +266,44 @@ onBeforeUnmount(() => {
           />
           <kbd class="rounded border border-border px-1 font-sans text-[11px] text-dim">/</kbd>
         </label>
-        <div class="mt-2 flex items-center gap-3 font-sans text-[13px]">
-          <span class="rounded bg-hover px-2 py-1 text-fg">
+        <div class="mt-2 flex items-center gap-3 font-sans text-[13px]" role="group" :aria-label="t('libraryView.kinds.label')">
+          <button
+            type="button"
+            data-testid="library-kind-conversations"
+            class="cursor-pointer rounded border-0 px-2 py-1"
+            :class="kind === 'conversations' ? 'bg-hover text-fg' : 'bg-transparent text-secondary hover:text-fg'"
+            :aria-pressed="kind === 'conversations'"
+            @click="kind = 'conversations'"
+          >
             {{ t("libraryView.kinds.conversations") }}
             <span class="text-dim">{{ hits ? hits.length : conversations.length }}{{ hasMore && !hits ? "+" : "" }}</span>
-          </span>
+          </button>
+          <button
+            type="button"
+            data-testid="library-kind-memory"
+            class="cursor-pointer rounded border-0 px-2 py-1"
+            :class="kind === 'memory' ? 'bg-hover text-fg' : 'bg-transparent text-secondary hover:text-fg'"
+            :aria-pressed="kind === 'memory'"
+            @click="kind = 'memory'"
+          >
+            {{ t("libraryView.memory.kind") }}
+            <span class="text-dim">{{ memoryCount }}</span>
+          </button>
           <span v-if="progress" class="text-dim" role="status" data-testid="library-progress">{{ progress }}</span>
           <span v-else-if="searching" class="text-dim">{{ t("libraryView.searching") }}</span>
         </div>
       </div>
 
-      <p v-if="loadFailed" class="m-0 px-4 py-6 font-sans text-[13px] text-err-text">{{ t("libraryView.loadFailed") }}</p>
+      <LibraryMemory
+        v-if="kind === 'memory'"
+        ref="memoryView"
+        :projects="memoryProjects"
+        :loaded="memoryLoaded"
+        :failed="memoryFailed"
+        :query="query"
+        :now="now"
+      />
+      <p v-else-if="loadFailed" class="m-0 px-4 py-6 font-sans text-[13px] text-err-text">{{ t("libraryView.loadFailed") }}</p>
       <p v-else-if="!loaded" class="m-0 px-4 py-6 font-sans text-[13px] text-dim">{{ t("libraryView.loading") }}</p>
       <p v-else-if="searchFailed && !searching" class="m-0 px-4 py-6 font-sans text-[13px] text-err-text" data-testid="library-search-failed">
         {{ t("libraryView.searchFailed") }}

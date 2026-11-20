@@ -2,6 +2,7 @@
 // a 503 while the index cannot be opened, a timeout, or a body that is not the wire shape.
 import { isUnknownArray } from "../../common/isUnknownArray";
 import { isLibraryFileText, isLibraryTrackedFile, type LibraryFileText, type LibraryTrackedFile } from "../../common/libraryFiles";
+import { isLibraryMemoryProject, type LibraryMemoryProject } from "../../common/libraryMemory";
 import {
   isLibraryConversation,
   isLibraryPrCreator,
@@ -69,6 +70,18 @@ export async function loadLibraryFiles(id: string, cwd: string | null): Promise<
 /** One version of one of those files: a kept number, or the file as it is now. */
 export async function loadLibraryFileText(id: string, cwd: string | null, trackingPath: string, version: number | "now"): Promise<LibraryFileText | null> {
   const body = await readJson(conversationPath(id, cwd, "file", { file: trackingPath, version: String(version) }));
+  return isLibraryFileText(body) ? body : null;
+}
+
+/** Every project's memory folder: its index and its memories. */
+export async function loadLibraryMemory(): Promise<LibraryMemoryProject[] | null> {
+  const body = await readJson("/api/library/memory");
+  return body !== null && isUnknownArray(body.projects) ? body.projects.filter(isLibraryMemoryProject) : null;
+}
+
+/** One memory file's text (or the index's). */
+export async function loadLibraryMemoryFile(slug: string, file: string): Promise<LibraryFileText | null> {
+  const body = await readJson(`/api/library/memory/${encodeURIComponent(slug)}/${encodeURIComponent(file)}`);
   return isLibraryFileText(body) ? body : null;
 }
 

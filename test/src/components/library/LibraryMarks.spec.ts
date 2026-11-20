@@ -3,11 +3,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ref } from "vue";
 import { mount, flushPromises } from "@vue/test-utils";
+import type { LibraryMemoryProject } from "../../../../common/libraryMemory";
 import type { LibraryConversation, LibraryIndexStatus, LibrarySearchHit } from "../../../../common/library";
 import type { ResumableList } from "../../../../src/composables/useDirLists";
 
 const libraryOpen = ref(true);
 const closeLibrary = vi.fn();
+let memoryProjects: LibraryMemoryProject[] = [];
+let memoryTexts: Record<string, { text: string | null }> = {};
 let requested: { session: string; cwd: string | null } | null = null;
 vi.mock("../../../../src/composables/useLibraryView", () => ({
   useLibraryView: () => ({ isOpen: libraryOpen, close: closeLibrary }),
@@ -37,6 +40,8 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
   // The reader's changed-files strip, which these specs do not look at.
   loadLibraryFiles: () => Promise.resolve([]),
   loadLibraryFileText: () => Promise.resolve(null),
+  loadLibraryMemory: () => Promise.resolve(memoryProjects),
+  loadLibraryMemoryFile: (slug: string, file: string) => Promise.resolve(memoryTexts[`${slug}/${file}`] ?? null),
   loadLibraryPage: (offset: number) => {
     if (offset === 0 && pageFailures > 0) {
       pageFailures--;
@@ -130,6 +135,8 @@ beforeEach(async () => {
 
 beforeEach(() => {
   requested = null;
+  memoryProjects = [];
+  memoryTexts = {};
   closeLibrary.mockClear();
   marks = { pinned: [], names: {} };
   saved.length = 0;

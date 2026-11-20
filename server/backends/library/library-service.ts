@@ -1,7 +1,7 @@
 // What the Library's routes ask of the index (#3328), as one async interface: the worker answers it
 // in production, and the specs answer it in-thread over an in-memory database.
 import type { LibraryConversation, LibraryConversationPage, LibraryIndexStatus, LibraryPrCreator, LibrarySearchHit } from "../../../common/library.js";
-import { conversationOfRow, findConversation, listConversations, prCreators, type ConversationFilter } from "./index-queries.js";
+import { conversationDirectories, conversationOfRow, findConversation, listConversations, prCreators, type ConversationFilter } from "./index-queries.js";
 import type { LibraryIndex } from "./library-index.js";
 import { inReadSnapshot, readLease } from "./index-store.js";
 import { searchLibrary } from "./library-search.js";
@@ -19,6 +19,8 @@ export interface LibraryService {
   /** Where a conversation's transcript is, and its directory, for what the index does not hold (its
    *  file history). */
   transcript(id: string, cwd: string | null): Promise<LibraryTranscript | null>;
+  /** Every directory a conversation ran in, to name the memory folders by. */
+  directories(): Promise<string[]>;
   /** The conversation that made each of these PRs in one repository, for those the index knows. */
   prCreators(repository: string, numbers: number[]): Promise<LibraryPrCreator[]>;
 }
@@ -54,6 +56,7 @@ export function createLocalLibraryService(index: LibraryIndex): LibraryService {
         if (row === null || typeof row.path !== "string") return null;
         return { path: row.path, cwd: typeof row.cwd === "string" ? row.cwd : null };
       }),
+    directories: () => answer(() => conversationDirectories(index.db)),
     prCreators: (repository, numbers) =>
       answer(() => prCreators(index.db, repository, numbers).map((row) => ({ number: Number(row.pr_number), conversation: conversationOfRow(row) }))),
   };

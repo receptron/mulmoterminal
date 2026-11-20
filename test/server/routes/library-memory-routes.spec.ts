@@ -1,0 +1,82 @@
+// @vitest-environment node
+// The Library's memory routes (#3331): what the folders read as, and that a request reaches only a
+// memory file in a memory folder.
+import { describe, it, expect, afterEach } from "vitest";
+import express from "express";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { routeCall } from "../../helpers/routeCall";
+import { mountLibraryRoutes } from "../../../server/routes/library-routes";
+
+const dirs: string[] = [];
+afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+
+const INDEX = "- [A](a.md) — one\n- [B](b.md) — two\n";
+
+function setup(directories: string[] = ["/w/app"]) {
+  const root = mkdtempSync(path.join(tmpdir(), "mt-memory-routes-"));
+  dirs.push(root);
+  const write = (relative: string, text: string, mtime_s = 1_700_000_000): void => {
+    const file = path.join(root, relative);
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, text);
+    utimesSync(file, mtime_s, mtime_s);
+  };
+  write("-w-app/memory/MEMORY.md", INDEX);
+  write("-w-app/memory/a.md", "---\nname: alpha\ndescription: first\nmetadata:\n  type: feedback\n---\nBody [[beta]].", 1_700_000_050);
+  write("-w-app/memory/b.md", "plain, no frontmatter", 1_700_000_100); // newer, though listed second on disk
+  write("-w-app/memory/notes.txt", "not a memory");
+  write("-w-other/memory/MEMORY.md", "");
+  mkdirSync(path.join(root, "-w-empty", "memory"), { recursive: true });
+  write("-w-app/secret.md", "outside the memory folder");
+  const app = express();
+  mountLibraryRoutes(app, { call: () => Promise.resolve(directories), projectsRoot: root });
+  return { call: routeCall(app), root };
+}
+
+describe("/api/library/memory", () => {
+  it("lists the folders that hold memory, named by their directory, the newest written first", async () => {
+    const { call } = setup();
+    const projects = (await call("/api/library/memory")).body.projects;
+    expect(projects).toEqual([
+      {
+        slug: "-w-app",
+        cwd: "/w/app",
+        index: { lines: 2, bytes: Buffer.byteLength(INDEX) },
+        files: [
+          { file: "b.md", name: null, description: null, type: null, updatedAt: 1_700_000_100_000 },
+          { file: "a.md", name: "alpha", description: "first", type: "feedback", updatedAt: 1_700_000_050_000 },
+        ],
+      },
+      { slug: "-w-other", cwd: null, index: { lines: 0, bytes: 0 }, files: [] },
+    ]);
+  });
+
+  it.skipIf(process.platform === "win32")("leaves out a memory file that is a link", async () => {
+    const { call, root } = setup();
+    symlinkSync(path.join(root, "-w-app", "secret.md"), path.join(root, "-w-app", "memory", "linked.md"));
+    expect((await call("/api/library/memory")).body.projects).toEqual([
+      expect.objectContaining({ slug: "-w-app", files: [expect.objectContaining({ file: "b.md" }), expect.objectContaining({ file: "a.md" })] }),
+      expect.objectContaining({ slug: "-w-other" }),
+    ]);
+  });
+});
+
+describe("/api/library/memory/:slug/:file", () => {
+  it("answers a memory file and the index", async () => {
+    const { call } = setup();
+    expect((await call("/api/library/memory/-w-app/b.md")).body).toEqual({ text: "plain, no frontmatter" });
+    expect((await call("/api/library/memory/-w-app/MEMORY.md")).body.text).toContain("[A](a.md)");
+  });
+
+  it("reaches nothing outside a memory folder", async () => {
+    const { call } = setup();
+    const status = async (url: string) => (await call(url)).status;
+    expect(await status("/api/library/memory/-w-app/missing.md")).toBe(404);
+    expect(await status("/api/library/memory/-w-app/notes.txt")).toBe(400);
+    expect(await status("/api/library/memory/-w-app/..%2Fsecret.md")).toBe(400);
+    expect(await status("/api/library/memory/..%2F-w-app/a.md")).toBe(400);
+    expect(await status("/api/library/memory/-w-app/.hidden.md")).toBe(400);
+  });
+});
