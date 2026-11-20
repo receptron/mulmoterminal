@@ -49,6 +49,7 @@ export function useWorkCopyWrite(changed: () => void) {
     }
     if (there.text === text) {
       notice.value = { kind: "same", name: target.name };
+      changed(); // the copy was judged different: judge it again
       return;
     }
     const [saved, running] = await Promise.all([saveLibraryMemoryFile(target.slug, target.file, text, there.version), sessionRunningIn(target.cwd)]);

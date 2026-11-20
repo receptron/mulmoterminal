@@ -55,10 +55,12 @@ describe("useWorkCopyWrite", () => {
   });
 
   it("writes nothing when the copy already holds the text, cannot be read, or changed before the write", async () => {
-    const { notice, writeThere } = useWorkCopyWrite(() => undefined);
+    const changed = vi.fn();
+    const { notice, writeThere } = useWorkCopyWrite(changed);
     there = { text: "mine", version: "v" };
     await writeThere(TARGET, "mine");
     expect(notice.value).toEqual({ kind: "same", name: "app3" });
+    expect(changed).toHaveBeenCalledTimes(1); // judged again, as it was judged different
     there = null;
     await writeThere(TARGET, "mine");
     expect(notice.value).toEqual({ kind: "failed", name: "app3" });
