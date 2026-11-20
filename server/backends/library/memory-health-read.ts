@@ -79,9 +79,14 @@ async function isLocalPath(resolved: string): Promise<boolean> {
 /** The paths the memories name that are not on disk. Only existence is asked — nothing is read. */
 async function missingReferences(input: MemoryHealthInput, cwd: string | null): Promise<Set<string>> {
   const references = [...new Set(input.files.flatMap((file) => (file.text === null ? [] : pathReferences(file.text))))];
+  // A path under the project is judged only when the project is here; one elsewhere only when its top
+  // folder is (a site's `/x.cgi` is not this disk's).
+  const projectHere = cwd !== null && (await exists(cwd));
   const checked = await inBatches(references, FILES_AT_ONCE, async (reference) => {
     const resolved = resolveReference(reference, cwd, os.homedir(), process.platform === "win32");
-    if (resolved === null || !(await isLocalPath(resolved))) return null;
+    if (resolved === null) return null;
+    const underProject = cwd !== null && !path.isAbsolute(reference) && !reference.startsWith("~");
+    if (underProject ? !projectHere : !(await isLocalPath(resolved))) return null;
     return (await exists(resolved)) ? null : reference;
   });
   return new Set(checked.filter((reference): reference is string => reference !== null));

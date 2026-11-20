@@ -217,4 +217,22 @@ describe("readMemoryHealth", () => {
     expect([...directoriesBySlug(["/tmp/a.b", "/tmp/a-b", "/w/app"])]).toEqual([["-w-app", "/w/app"]]);
     expect([...directoriesBySlug(["/w/app", "/w/app"])]).toEqual([["-w-app", "/w/app"]]);
   });
+
+  it("judges a relative path when the project is here, and none when it is not", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "mt-memory-health-"));
+    dirs.push(root);
+    const here = path.join(root, "here");
+    mkdirSync(here, { recursive: true });
+    const away = path.join(root, "away-not-on-this-disk");
+    const write = (project: string, text: string): void => {
+      const folder = path.join(root, "projects", project.replace(/[^a-zA-Z0-9\-_]/g, "-"), "memory");
+      mkdirSync(folder, { recursive: true });
+      writeFileSync(path.join(folder, "MEMORY.md"), "- [A](a.md)\n");
+      writeFileSync(path.join(folder, "a.md"), text);
+    };
+    write(here, memory("a", "`src/gone.ts`"));
+    write(away, memory("a", "`src/gone.ts`"));
+    const health = await readMemoryHealth(path.join(root, "projects"), [here, away], 0);
+    expect(health.map((project) => project.slug)).toEqual([here.replace(/[^a-zA-Z0-9\-_]/g, "-")]);
+  });
 });
