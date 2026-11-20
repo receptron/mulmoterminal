@@ -8,6 +8,18 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@13.2.0 — 2026-11-20
+
+> **Setup guide:** [13.2.0 — Changed files and memory in the Library](https://receptron.github.io/mulmoterminal/guide/en/v13.2.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.2.0.html))
+
+### The files a Library conversation changed, with each turn's diff (#3350)
+
+Closes #3330 (the first half was #3346). At the end of the Library's reader, a **Changed files** strip lists the files the conversation edited; for the file chosen it shows the whole change (the first kept version to the file as it is now) or one turn's change (`v1 → v2`, …, `vN → now`) in the existing `cmDiffView`. The data is Claude Code's own file history: the transcript's `file-history-snapshot` and `file-history-delta` records and the copies in `~/.claude/file-history/<session>/<hash>@v<n>`. Read only; only files edited with Claude Code's edit tools are there, and the strip says so. No request names a path: the file is picked by its tracking path out of the transcript's own records, a kept copy is read from that session's directory under the name the transcript gave it (after a `<16 hex>@v<n>` shape check), and links are refused for the file and the copy. Lines past `FILE_HISTORY_LINE_MAX` are dropped unparsed, the fold is capped (`TRACKED_FILES_MAX`, `VERSIONS_PER_FILE_MAX`, `TRACKED_VERSIONS_MAX`), and text over `LIBRARY_FILE_TEXT_MAX` or containing a NUL byte is not sent. A named copy that is gone reads as unreadable, not absent, so a turn is not shown as creating the whole file.
+
+### Claude Code's memory in the Library, by project (#3352)
+
+Part 1 of 4 for #3331. A **Memory** kind beside Conversations lists every project's auto memory, grouped by project and named by the project's directory (Claude Code's slug rule applied to every directory the index has seen). Each heading shows how full `MEMORY.md` is against what Claude Code loads (200 lines and 25,000 bytes, the constants in its 2.1.292 binary, kept in `common/libraryMemory.ts`) and warns past nine tenths. A memory is read as Markdown through the wiki's sanitizing renderer; its `[[name]]` links open the memory they name, and one naming nothing in that project is visibly not a link. The search box narrows by name, description or file name. Read only; editing, health checks and merging across work copies are the next PRs. A folder is asked for by slug and a file by name, each shape-checked and joined under the agent's projects root; a memory file that is a link is neither listed nor read, while a linked project or memory folder is followed (that is how Claude Code reads it).
+
 ## mulmoterminal@13.1.0 — 2026-11-20
 
 > **Setup guide:** [13.1.0 — The Library, and Restart keeps your conversation](https://receptron.github.io/mulmoterminal/guide/en/v13.1.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.1.0.html))

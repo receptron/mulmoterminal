@@ -4,7 +4,7 @@ nav_title: Feature list
 layout: default
 parent: English
 nav_order: 6.5
-as_of: 13.1.0
+as_of: 13.2.0
 description: "Every capability MulmoTerminal has today, one line each with the release it arrived in, grouped by area (as of 9.1.0)."
 ---
 
@@ -106,6 +106,8 @@ More: [Agents](agents.html)
 
 More: [Conversations](conversation.html)
 
+- The Library's Memory kind lists Claude Code's auto memory by project, shows how full each MEMORY.md is against what Claude Code loads, and reads each memory as Markdown with its [[links]] working (v13.2.0)
+- The Library's reader shows the files a conversation edited, with the whole change or one turn's change as a diff, from Claude Code's own file history (v13.2.0)
 - The Library (More features → Library) lists every Claude conversation on this machine, newest first, with full-text search over what was said; pick one to read it, and Resume opens it in a terminal where it ran (v13.1.0)
 - Library conversations can be pinned to the top and renamed, kept beside the index rather than in the conversation's file (v13.1.0)
 - A Claude cell's History menu opens its conversation in the Library (v13.1.0)

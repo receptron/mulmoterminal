@@ -8,8 +8,8 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **13.1.0 is out.** The new Library lists every Claude conversation on this machine, searchable
-> and resumable, and Restart now keeps the conversation you moved to. [Setup guide](v13.1.0.html)
+> **13.2.0 is out.** The Library now shows the files a conversation changed, as a diff, and
+> Claude Code's memory by project. [Setup guide](v13.2.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 
