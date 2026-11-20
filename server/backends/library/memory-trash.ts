@@ -5,7 +5,9 @@
 // while and only while this server runs: after that the file is still in the Trash, put back by hand.
 //
 // As with a save, another process writing between a check here and the step it guards is the window
-// left: each step re-reads what it changes, so what such a race costs is a line, never a memory's text.
+// left. For a delete, each step re-reads what it changes, so such a race costs a line, never a memory's
+// text. A merge also writes the memory it keeps, and that write — on the merge and on its Undo — has a
+// save's own window: a change landing between its check and its rename is written over.
 import { randomUUID } from "node:crypto";
 import { link, lstat, rm } from "node:fs/promises";
 import path from "node:path";
