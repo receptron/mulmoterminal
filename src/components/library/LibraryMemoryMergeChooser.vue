@@ -8,16 +8,17 @@ import { movedIndex } from "./libraryKeys";
 defineProps<{ title: string; choices: { key: string; title: string; file: string }[] }>();
 const emit = defineEmits<{ (e: "pick", key: string): void; (e: "cancel"): void }>();
 const { t } = useI18n();
-const list = useTemplateRef<HTMLElement>("list");
+const chooser = useTemplateRef<HTMLElement>("chooser");
 
 onMounted(async () => {
   await nextTick();
-  list.value?.querySelector("button")?.focus();
+  // The first choice, or Cancel when there is none: focus inside, so Esc is the chooser's.
+  chooser.value?.querySelector("button")?.focus();
 });
 
 /** The arrows move between the choices, held at either end, as they move through the list. */
 function moveFocus(by: number): void {
-  const choices = [...(list.value?.querySelectorAll<HTMLButtonElement>("[data-testid=memory-merge-choice]") ?? [])];
+  const choices = [...(chooser.value?.querySelectorAll<HTMLButtonElement>("[data-testid=memory-merge-choice]") ?? [])];
   const at = choices.findIndex((choice) => choice === document.activeElement);
   choices[movedIndex(at, by, choices.length)]?.focus();
 }
@@ -32,10 +33,10 @@ function onKey(event: KeyboardEvent): void {
 </script>
 
 <template>
-  <div class="min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-3" data-testid="memory-merge-chooser" @keydown="onKey">
+  <div ref="chooser" class="min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-3" data-testid="memory-merge-chooser" @keydown="onKey">
     <p class="m-0 mb-2 font-sans text-[13px] text-secondary">{{ t("libraryView.memory.merge.choose", { title }) }}</p>
     <p v-if="choices.length === 0" class="m-0 font-sans text-[13px] text-dim">{{ t("libraryView.memory.merge.none") }}</p>
-    <div ref="list" class="flex flex-col">
+    <div class="flex flex-col">
       <button
         v-for="choice in choices"
         :key="choice.key"

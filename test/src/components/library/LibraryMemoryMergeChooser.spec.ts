@@ -26,4 +26,11 @@ describe("LibraryMemoryMergeChooser", () => {
     expect(wrapper.emitted("pick")).toEqual([["k-b"]]);
     wrapper.unmount();
   });
+
+  it("focuses Cancel when there is nothing to merge into, so Esc is still the chooser's", async () => {
+    const wrapper = mount(LibraryMemoryMergeChooser, { props: { title: "x", choices: [] }, attachTo: document.body, global: { plugins: [i18n] } });
+    await flushPromises();
+    expect(document.activeElement?.getAttribute("data-testid")).toBe("memory-merge-cancel");
+    wrapper.unmount();
+  });
 });
