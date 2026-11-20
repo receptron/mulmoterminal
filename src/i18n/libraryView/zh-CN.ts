@@ -44,6 +44,20 @@ export const libraryViewZhCN = {
       folded: "{count} 行未更改",
     },
     memory: {
+      copies: {
+        intro: "此仓库的其他工作副本中也有：",
+        add: "把它的正文加到这里",
+        write: "把这段正文写到那里",
+        written: "已把这条记忆的正文写到 {name}。",
+        running: "那里有正在运行的会话，可能仍在使用旧的正文。",
+        same: "{name} 已经是这段正文。",
+        changed: "{name} 中的记忆在读取后已改动，因此没有写入。",
+        failed: "无法写入 {name}。",
+        undone: "已恢复 {name} 原来的正文。",
+        "undo-changed": "{name} 中的记忆之后已改动，因此没有恢复原来的正文。",
+        "undo-failed": "无法恢复 {name} 原来的正文。点撤销再试一次。",
+        editing: "正在加入 {name} 中的正文：保存时只写入这条记忆。",
+      },
       merge: {
         action: "合并到另一条记忆",
         choose: "将“{title}”合并到：",
@@ -92,7 +106,6 @@ export const libraryViewZhCN = {
         "no-frontmatter": "frontmatter 中没有 {fields}。",
         "broken-link": "它链接到 {names}，但此项目中没有这个名字的记忆。",
         "missing-path": "它提到的 {paths} 已经不存在。",
-        "in-work-copies": "此仓库的其他工作副本中也有：{copies}。",
         "index-over-limit": "MEMORY.md 超出了 Claude Code 读入的范围，后面的部分不会被读到。",
         "no-index": "没有 MEMORY.md，Claude Code 不会被告知这些记忆。",
         "dead-index-entry": "MEMORY.md 列出了 {files}，但这里没有。",

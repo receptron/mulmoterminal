@@ -44,6 +44,20 @@ export const libraryViewZhTW = {
       folded: "{count} 行未變更",
     },
     memory: {
+      copies: {
+        intro: "此儲存庫的其他工作副本中也有：",
+        add: "把它的內文加到這裡",
+        write: "把這段內文寫到那裡",
+        written: "已把這則記憶的內文寫到 {name}。",
+        running: "那裡有正在執行的工作階段，可能仍在使用舊的內文。",
+        same: "{name} 已經是這段內文。",
+        changed: "{name} 中的記憶在讀取後已變更，因此沒有寫入。",
+        failed: "無法寫入 {name}。",
+        undone: "已復原 {name} 原本的內文。",
+        "undo-changed": "{name} 中的記憶之後已變更，因此沒有復原原本的內文。",
+        "undo-failed": "無法復原 {name} 原本的內文。按復原再試一次。",
+        editing: "正在加入 {name} 中的內文：儲存時只寫入這則記憶。",
+      },
       merge: {
         action: "合併到另一則記憶",
         choose: "將「{title}」合併到：",
@@ -92,7 +106,6 @@ export const libraryViewZhTW = {
         "no-frontmatter": "frontmatter 中沒有 {fields}。",
         "broken-link": "它連結到 {names}，但此專案中沒有這個名字的記憶。",
         "missing-path": "它提到的 {paths} 已經不存在。",
-        "in-work-copies": "此儲存庫的其他工作副本中也有：{copies}。",
         "index-over-limit": "MEMORY.md 超出了 Claude Code 讀入的範圍，後面的部分不會被讀到。",
         "no-index": "沒有 MEMORY.md，Claude Code 不會被告知這些記憶。",
         "dead-index-entry": "MEMORY.md 列出了 {files}，但這裡沒有。",
