@@ -31,7 +31,7 @@ async function entriesOf(dir: string): Promise<Dirent[]> {
 /** Whether a file IS the index Claude Code opens as `MEMORY.md`: the same file on disk, so `memory.md`
  *  is the index on a case-insensitive disk (macOS, Windows) and a memory of its own beside it on a
  *  case-sensitive one (Linux). */
-async function isTheIndex(folder: string, name: string): Promise<boolean> {
+export async function isTheIndex(folder: string, name: string): Promise<boolean> {
   if (name.toLowerCase() !== MEMORY_INDEX_FILE.toLowerCase()) return false;
   const statOf = (file: string) => fs.lstat(path.join(folder, file)).catch(() => null);
   const [file, index] = await Promise.all([statOf(name), statOf(MEMORY_INDEX_FILE)]);
