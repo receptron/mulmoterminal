@@ -48,6 +48,7 @@ describe("indexEntries, linkNames, pathReferences", () => {
     ["plain server/foo.ts outside a span", []],
     ["```\n`in/a/fence.ts`\n```", []],
     ["`a/b.ts` twice `a/b.ts`", ["a/b.ts"]],
+    ["`src/foo+bar.ts` `config/app.properties`", ["src/foo+bar.ts", "config/app.properties"]],
     ["``src/double.ts`` in a double span", ["src/double.ts"]],
     ["~~~\n`in/tilde/fence.ts`\n~~~", []],
   ])("%s → %j", (body, references) => {

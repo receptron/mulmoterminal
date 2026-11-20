@@ -69,7 +69,7 @@ export function pathReferences(body: string): string[] {
     .spans.map((span) => span.trim())
     .filter((span) => span.length >= 3 && span.length <= 300);
   const looksLikePath = (span: string): boolean =>
-    /^(?:[A-Za-z]:)?[~./\\\w-][\w.@~/\\-]*\.[A-Za-z0-9]{1,8}$/.test(span) && /[/\\]/.test(span) && !span.includes("//");
+    /^(?:[A-Za-z]:)?[~./\\\w-][\w.@~/\\+-]*\.[A-Za-z0-9]{1,12}$/.test(span) && /[/\\]/.test(span) && !span.includes("//");
   return [...new Set(spans.filter(looksLikePath))];
 }
 
