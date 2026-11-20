@@ -2,6 +2,7 @@
 // The lines of MEMORY.md a delete takes out and an undo puts back (#3331).
 import { describe, it, expect } from "vitest";
 import { indexLines, withEntryBack, withoutEntry } from "../../../../server/backends/library/memory-index-lines";
+import { seededRandom } from "../../../helpers/seededRandom";
 
 describe("indexLines", () => {
   it("keeps each line's own ending, so joining them gives the same text back", () => {
@@ -10,12 +11,8 @@ describe("indexLines", () => {
   });
   it("over generated text: the lines join back to it, none is empty, and each ends only at its end", () => {
     const parts = ["a", "\r", "\n", "\r\n", " ", "—"];
-    let seed = 7;
-    const next = (n: number): number => {
-      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-      return seed % n;
-    };
-    Array.from({ length: 5000 }, () => Array.from({ length: next(12) }, () => parts[next(parts.length)]).join("")).forEach((text) => {
+    const draws = seededRandom(7);
+    Array.from({ length: 5000 }, () => Array.from({ length: draws.below(12) }, () => draws.pick(parts)).join("")).forEach((text) => {
       const lines = indexLines(text);
       expect(lines.join("")).toBe(text);
       lines.forEach((line) => {

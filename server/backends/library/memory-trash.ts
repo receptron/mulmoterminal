@@ -39,6 +39,13 @@ const modeOf = async (file: string): Promise<number> => (await lstat(file)).mode
 
 const forget = (now_ms: number): void => undos.forEach((undo, id) => now_ms - undo.at_ms > MEMORY_UNDO_KEEP_MS && undos.delete(id));
 
+/** What a delete or an undo does to the disk, replaceable in specs to make one step fail or race. */
+export interface MemoryTrashSteps {
+  replace: Replace;
+  move: typeof trashEntry;
+}
+const DISK: MemoryTrashSteps = { replace: replaceKeepingMode, move: trashEntry };
+
 /** Moves `file` to the Trash when its text is still `expected`, and takes its lines out of the index.
  *  A memory that cannot be kept in step with its index (one this cannot rewrite) is refused. */
 export function trashMemory(
@@ -46,10 +53,10 @@ export function trashMemory(
   expected: string,
   layout: NonNullable<TrashLayout>,
   now: Date,
-  replace: Replace = replaceKeepingMode,
+  steps: MemoryTrashSteps = DISK,
 ): Promise<MemoryTrashResult> {
   const index = path.join(path.dirname(file), MEMORY_INDEX_FILE);
-  return serialize(file, () => serialize(index, () => trashChecked({ file, index, expected, layout, now, replace })));
+  return serialize(file, () => serialize(index, () => trashChecked({ file, index, expected, layout, now, steps })));
 }
 
 interface TrashRequest {
@@ -58,34 +65,48 @@ interface TrashRequest {
   expected: string;
   layout: NonNullable<TrashLayout>;
   now: Date;
-  replace: Replace;
+  steps: MemoryTrashSteps;
 }
 
-async function trashChecked({ file, index, expected, layout, now, replace }: TrashRequest): Promise<MemoryTrashResult> {
+/** The text's version, or null when it is not a faithful text (or not there). */
+async function versionOf(file: string): Promise<string | null> {
+  const read = await readBoundedText(file);
+  return read.text !== null && isFaithfulText(read.text) ? memoryVersion(read.text) : null;
+}
+
+async function trashChecked({ file, index, expected, layout, now, steps }: TrashRequest): Promise<MemoryTrashResult> {
   const current = await readBoundedText(file);
   if (current.text === null) return current.reason === "absent" ? { kind: "conflict", version: null } : { kind: "refused" };
   if (!isFaithfulText(current.text)) return { kind: "refused" };
   if (memoryVersion(current.text) !== expected) return { kind: "conflict", version: memoryVersion(current.text) };
-  const before = await readIndex(index);
-  if (before === "unreadable") return { kind: "refused" };
-  const edit = before === null ? null : withoutEntry(before, path.basename(file));
-  // Whatever the identity check after the move says, the file is in the Trash now, so it is undone
-  // the same way; only a refusal to cross volumes leaves it where it was.
-  const moved = trashEntry(file, layout, now, () => file);
-  if (moved.outcome === "other-volume") return { kind: "other-volume" };
-  const kept = before !== null && edit !== null && edit.removed.length > 0 ? { before, written: memoryVersion(edit.text), removed: edit.removed } : null;
-  if (kept !== null && edit !== null) await rewriteIndexOrPutBack(replace, index, edit.text, { trashed: moved.target, file, info: moved.info });
+  if ((await readIndex(index)) === "unreadable") return { kind: "refused" }; // before moving anything
+  const landed = steps.move(file, layout, now, () => file);
+  if (landed.outcome === "other-volume") return { kind: "other-volume" };
+  const moved: Moved = { trashed: landed.target, file, info: landed.info };
+  // The agent may have written the memory between the check and the move: what reached the Trash is
+  // checked again, and anything but the text that was read goes back.
+  if ((await versionOf(moved.trashed)) !== expected) {
+    await putBack(moved);
+    return { kind: "conflict", version: await versionOf(file) };
+  }
+  const kept = await takeOutOfIndex(steps.replace, index, moved);
   forget(now.getTime());
   const id = randomUUID();
-  undos.set(id, { file, trashed: moved.target, info: moved.info, index: kept, at_ms: now.getTime() });
+  undos.set(id, { ...moved, index: kept, at_ms: now.getTime() });
   return { kind: "trashed", undo: id };
 }
 
-/** The index without the memory's lines; when that write fails, the memory comes back out of the Trash
- *  so the two never disagree. */
-async function rewriteIndexOrPutBack(replace: Replace, index: string, text: string, moved: Moved): Promise<void> {
+/** The index without the memory's lines, edited from its text as it is now, after the move — not as it
+ *  was before, which the agent may have changed since. When it cannot be written, the memory comes
+ *  back out of the Trash so the two never disagree. */
+async function takeOutOfIndex(replace: Replace, index: string, moved: Moved): Promise<Undo["index"]> {
   try {
-    await replace(index, text, await modeOf(index));
+    const before = await readIndex(index);
+    if (before === "unreadable") throw new Error(`${index} became unreadable`);
+    const edit = before === null ? null : withoutEntry(before, path.basename(moved.file));
+    if (before === null || edit === null || edit.removed.length === 0) return null;
+    await replace(index, edit.text, await modeOf(index));
+    return { before, written: memoryVersion(edit.text), removed: edit.removed };
   } catch (err) {
     await putBack(moved);
     throw err;
@@ -99,20 +120,29 @@ interface Moved {
 }
 
 /** The trashed file at its own name again, never over a file made there since: a hard link fails on
- *  an existing name, where a rename would replace it. A disk without hard links cannot put it back
- *  here; it stays in the Trash. */
-async function putBack({ trashed, file, info }: Moved): Promise<MemoryRestoreResult> {
+ *  an existing name, where a rename would replace it. The Trash keeps its copy until `dropTrashed`.
+ *  A disk without hard links cannot put it back here; it stays in the Trash. */
+async function linkBack({ trashed, file }: Moved): Promise<MemoryRestoreResult> {
   try {
     await link(trashed, file);
+    return "restored";
   } catch (err) {
     const code = err instanceof Error && "code" in err ? err.code : null;
     if (code === "EEXIST") return "taken";
     if (code === "ENOENT" && !(await exists(trashed))) return "gone"; // the Trash was emptied
     throw err;
   }
+}
+
+async function dropTrashed({ trashed, info }: Moved): Promise<void> {
   await rm(trashed, { force: true });
   if (info !== null) await rm(info, { force: true });
-  return "restored";
+}
+
+async function putBack(moved: Moved): Promise<MemoryRestoreResult> {
+  const outcome = await linkBack(moved);
+  if (outcome === "restored") await dropTrashed(moved);
+  return outcome;
 }
 
 const exists = async (file: string): Promise<boolean> => {
@@ -126,27 +156,35 @@ const exists = async (file: string): Promise<boolean> => {
 
 /** Puts a deleted memory back, and its lines into the index: the index as it was when nothing has
  *  changed it since, otherwise the lines at its end. A file made at that name since is not replaced. */
-export function restoreMemory(id: string, now: Date): Promise<MemoryRestoreResult> {
+export function restoreMemory(id: string, now: Date, replace: Replace = replaceKeepingMode): Promise<MemoryRestoreResult> {
   forget(now.getTime());
   const undo = undos.get(id);
   if (undo === undefined) return Promise.resolve("gone");
   const index = path.join(path.dirname(undo.file), MEMORY_INDEX_FILE);
-  return serialize(undo.file, () => serialize(index, () => restoreChecked(id, undo, index)));
+  return serialize(undo.file, () => serialize(index, () => restoreChecked(id, undo, index, replace)));
 }
 
-/** A second undo of the same delete, queued behind the first, finds the Trash entry gone. */
-async function restoreChecked(id: string, undo: Undo, index: string): Promise<MemoryRestoreResult> {
-  const outcome = await putBack(undo);
+/** The file first, then its lines; when the lines cannot be written the file goes out again and the
+ *  undo stays, so it can be tried again. A second undo of the same delete, queued behind the first,
+ *  finds the Trash entry gone. */
+async function restoreChecked(id: string, undo: Undo, index: string, replace: Replace): Promise<MemoryRestoreResult> {
+  const outcome = await linkBack(undo);
   if (outcome === "gone") undos.delete(id);
   if (outcome !== "restored") return outcome;
+  try {
+    if (undo.index !== null) await indexBack(replace, index, path.basename(undo.file), undo.index);
+  } catch (err) {
+    await rm(undo.file, { force: true }); // the link just made; the Trash still holds the file
+    throw err;
+  }
+  await dropTrashed(undo);
   undos.delete(id);
-  if (undo.index !== null) await indexBack(index, path.basename(undo.file), undo.index);
   return "restored";
 }
 
-async function indexBack(index: string, file: string, kept: NonNullable<Undo["index"]>): Promise<void> {
+async function indexBack(replace: Replace, index: string, file: string, kept: NonNullable<Undo["index"]>): Promise<void> {
   const now = await readIndex(index);
   if (now === null || now === "unreadable") return; // gone or unreadable since: the health check says so
   const next = memoryVersion(now) === kept.written ? kept.before : withEntryBack(now, file, kept.removed);
-  if (next !== now) await replaceKeepingMode(index, next, await modeOf(index));
+  if (next !== now) await replace(index, next, await modeOf(index));
 }

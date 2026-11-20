@@ -5,8 +5,9 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { MEMORY_UNDO_KEEP_MS, restoreMemory, trashMemory } from "../../../../server/backends/library/memory-trash";
+import { replaceKeepingMode } from "../../../../server/backends/library/memory-write";
+import { trashEntry, type TrashLayout } from "../../../../server/files/tree-ops";
 import { memoryVersion } from "../../../../server/backends/library/memory-write";
-import type { TrashLayout } from "../../../../server/files/tree-ops";
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
@@ -83,14 +84,63 @@ describe("trashMemory", () => {
   it("puts the memory back when the index cannot be written, so the two never disagree", async () => {
     const { file, layout, read, trashed } = setup();
     const failing = () => Promise.reject(new Error("disk full"));
-    await expect(trashMemory(file, memoryVersion("alpha"), layout, NOW, failing)).rejects.toThrow("disk full");
+    await expect(trashMemory(file, memoryVersion("alpha"), layout, NOW, { replace: failing, move: trashEntry })).rejects.toThrow("disk full");
     expect(read("a.md")).toBe("alpha");
     expect(read("MEMORY.md")).toBe(INDEX);
     expect(trashed()).toEqual([]);
   });
 });
 
+describe("trashMemory, when the agent writes between the check and the move", () => {
+  /** The move, with `before` run just before it — where the agent's write would land. */
+  const movingAfter = (before: () => void) => ({
+    replace: replaceKeepingMode,
+    move: (...args: Parameters<typeof trashEntry>) => {
+      before();
+      return trashEntry(...args);
+    },
+  });
+
+  it("puts back a memory that changed, and says it changed", async () => {
+    const { file, layout, read, trashed } = setup();
+    const result = await trashMemory(
+      file,
+      memoryVersion("alpha"),
+      layout,
+      NOW,
+      movingAfter(() => writeFileSync(file, "the agent's newer text")),
+    );
+    expect(result).toEqual({ kind: "conflict", version: memoryVersion("the agent's newer text") });
+    expect(read("a.md")).toBe("the agent's newer text");
+    expect(read("MEMORY.md")).toBe(INDEX);
+    expect(trashed()).toEqual([]);
+  });
+  it("edits the index as it is after the move, keeping a line the agent added", async () => {
+    const { file, layout, read, memory } = setup();
+    const added = () => writeFileSync(path.join(memory, "MEMORY.md"), `${INDEX}- [C](c.md) — the agent's\n`);
+    expect((await trashMemory(file, memoryVersion("alpha"), layout, NOW, movingAfter(added))).kind).toBe("trashed");
+    expect(read("MEMORY.md")).toBe("# Memory\n- [B](b.md) — two\n- [C](c.md) — the agent's\n");
+  });
+  it("puts the memory back when the index became one it cannot rewrite", async () => {
+    const { file, layout, read, memory, trashed } = setup();
+    const garbled = () => writeFileSync(path.join(memory, "MEMORY.md"), Buffer.from([0x2d, 0x20, 0xff, 0x0a]));
+    await expect(trashMemory(file, memoryVersion("alpha"), layout, NOW, movingAfter(garbled))).rejects.toThrow("unreadable");
+    expect(read("a.md")).toBe("alpha");
+    expect(trashed()).toEqual([]);
+  });
+});
+
 describe("restoreMemory", () => {
+  it("leaves the memory in the Trash when its index line cannot be written, and can be tried again", async () => {
+    const { file, layout, read, trashed } = setup();
+    const undo = undoOf(await trashMemory(file, memoryVersion("alpha"), layout, NOW));
+    await expect(restoreMemory(undo, NOW, () => Promise.reject(new Error("disk full")))).rejects.toThrow("disk full");
+    expect(existsSync(file)).toBe(false);
+    expect(trashed()).toEqual(["a.md"]);
+    expect(await restoreMemory(undo, NOW)).toBe("restored");
+    expect(read("a.md")).toBe("alpha");
+    expect(read("MEMORY.md")).toBe(INDEX);
+  });
   it("puts the file and the index back as they were", async () => {
     const { file, layout, read, trashed } = setup();
     const undo = undoOf(await trashMemory(file, memoryVersion("alpha"), layout, NOW));
