@@ -2,7 +2,14 @@
 // with its `MEMORY.md` index and its memory files. Read only.
 import { createReadStream, promises as fs, type Dirent } from "node:fs";
 import path from "node:path";
-import { MEMORY_INDEX_FILE, parseMemoryFrontmatter, projectSlug, type LibraryMemoryFile, type LibraryMemoryProject } from "../../../common/libraryMemory.js";
+import {
+  frontmatterStillOpen,
+  MEMORY_INDEX_FILE,
+  parseMemoryFrontmatter,
+  projectSlug,
+  type LibraryMemoryFile,
+  type LibraryMemoryProject,
+} from "../../../common/libraryMemory.js";
 
 /** Folders read at once: a machine has thousands of project folders, most with no memory at all. */
 const FOLDERS_AT_ONCE = 64;
@@ -30,8 +37,6 @@ const isIndexName = (name: string): boolean => name.toLowerCase() === MEMORY_IND
 export const MEMORY_HEAD_STEP_BYTES = 8 * 1024;
 export const MEMORY_HEAD_MAX_BYTES = 64 * 1024;
 
-const frontmatterClosed = (text: string): boolean => !text.startsWith("---") || /\n---(?:\r?\n|$)/.test(text.slice(3));
-
 async function headOf(file: string): Promise<string> {
   const handle = await fs.open(file, "r").catch(() => null);
   if (handle === null) return "";
@@ -44,7 +49,7 @@ async function headOf(file: string): Promise<string> {
       if (bytesRead === 0) break;
       chunks.push(buffer.subarray(0, bytesRead));
       read += bytesRead;
-      if (frontmatterClosed(Buffer.concat(chunks).toString("utf8"))) break;
+      if (!frontmatterStillOpen(Buffer.concat(chunks).toString("utf8"))) break;
     }
     return Buffer.concat(chunks).toString("utf8");
   } catch {

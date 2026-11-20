@@ -1,7 +1,7 @@
 // Claude Code's memory as the Library reads it (#3331): the frontmatter, and the folder a directory's
 // memory is kept in.
 import { describe, it, expect } from "vitest";
-import { isLibraryMemoryProject, parseMemoryFrontmatter, projectSlug } from "../../common/libraryMemory";
+import { frontmatterStillOpen, isLibraryMemoryProject, parseMemoryFrontmatter, projectSlug } from "../../common/libraryMemory";
 
 describe("parseMemoryFrontmatter", () => {
   it("reads the flat keys and the metadata block apart from the body, keeping keys it does not know", () => {
@@ -46,6 +46,21 @@ describe("parseMemoryFrontmatter", () => {
 
   it("reads Windows line endings and single quotes", () => {
     expect(parseMemoryFrontmatter("---\r\nname: 'it''s'\r\n---\r\nbody").fields).toEqual({ name: "it's" });
+  });
+});
+
+describe("frontmatterStillOpen", () => {
+  it.each([
+    ["---\nname: a\n", true],
+    ["\uFEFF---\nname: a\n", true],
+    ["---\r\nname: a\r\n", true],
+    ["---\nname: a\n---\nbody", false],
+    ["---\nname: a\n---", false],
+    ["---\nname: a\n---draft", true],
+    ["no frontmatter", false],
+    ["", false],
+  ])("%j → %s", (text, open) => {
+    expect(frontmatterStillOpen(text)).toBe(open);
   });
 });
 

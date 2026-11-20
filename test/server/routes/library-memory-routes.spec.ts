@@ -114,9 +114,11 @@ describe("a frontmatter longer than one read", () => {
     const long = (filler: number): string => `---\nnotes: ${"n".repeat(filler)}\nname: found\nmetadata:\n  type: project\n---\nbody`;
     writeFileSync(path.join(root, "-w-other", "memory", "long.md"), long(MEMORY_HEAD_STEP_BYTES * 3));
     writeFileSync(path.join(root, "-w-other", "memory", "too-long.md"), long(MEMORY_HEAD_MAX_BYTES));
+    writeFileSync(path.join(root, "-w-other", "memory", "marked.md"), `\uFEFF${long(MEMORY_HEAD_STEP_BYTES * 2)}`);
     const files = (await listMemoryProjects(root, [], 0)).find((project) => project.slug === "-w-other")?.files ?? [];
     expect(files.find((file) => file.file === "long.md")).toEqual(expect.objectContaining({ name: "found", type: "project" }));
     expect(files.find((file) => file.file === "too-long.md")).toEqual(expect.objectContaining({ name: null }));
+    expect(files.find((file) => file.file === "marked.md")).toEqual(expect.objectContaining({ name: "found" })); // behind a byte-order mark
   });
 });
 

@@ -58,13 +58,27 @@ const KEY_VALUE = /^([A-Za-z_][\w-]*):(.*)$/;
 
 /** The frontmatter between the opening `---` and the next one, as the memory files write it: flat
  *  keys and one `metadata:` block indented under them. No frontmatter: all of it is body. */
-export function parseMemoryFrontmatter(text: string): MemoryFrontmatter {
-  // A byte-order mark (a file saved by some Windows editors) would hide the opening `---`.
-  const normalized = text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
-  // The closing delimiter is a line of exactly `---` (a `---draft` line inside is not one), at the
-  // end of the file or followed by a newline.
+/** The text as the frontmatter rules read it: no byte-order mark (some Windows editors write one, and
+ *  it would hide the opening `---`), and `\n` line ends. */
+const normalizedMemory = (text: string): string => text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
+
+/** Where the closing delimiter starts, or -1: a line of exactly `---` (a `---draft` line inside is not
+ *  one), at the end of the text or followed by a newline. -1 too when there is no opening line. */
+function frontmatterEnd(normalized: string): number {
   const close = normalized.startsWith("---\n") ? /\n---(?:\n|$)/.exec(normalized.slice(3)) : null;
-  const end = close === null ? -1 : close.index + 3;
+  return close === null ? -1 : close.index + 3;
+}
+
+/** Whether a frontmatter opens and has not closed yet — what a reader of a file's head asks to know
+ *  whether to read on. */
+export function frontmatterStillOpen(text: string): boolean {
+  const normalized = normalizedMemory(text);
+  return normalized.startsWith("---\n") && frontmatterEnd(normalized) === -1;
+}
+
+export function parseMemoryFrontmatter(text: string): MemoryFrontmatter {
+  const normalized = normalizedMemory(text);
+  const end = frontmatterEnd(normalized);
   if (end === -1) return { fields: {}, metadata: {}, body: text };
   const fields: Record<string, string> = {};
   const metadata: Record<string, string> = {};
