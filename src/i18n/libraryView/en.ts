@@ -44,9 +44,17 @@ export const libraryViewEn = {
       folded: "{count} unchanged lines",
     },
     memory: {
+      merge: {
+        action: "Merge into another memory",
+        choose: "Merge “{title}” into:",
+        cancel: "Cancel",
+        none: "No other memory in this project to merge into.",
+        editing: "Merging “{title}” in: saving also moves it to the Trash, with its line in MEMORY.md.",
+      },
       trash: {
         action: "Move to Trash",
         trashed: "Moved “{title}” to the Trash.",
+        merged: "Merged “{title}” into “{into}”.",
         running: "A session is running in this project; it may still use the memory.",
         undo: "Undo",
         dismiss: "Dismiss",
@@ -71,6 +79,7 @@ export const libraryViewEn = {
         reload: "read it again",
         failed: "Could not save. Try again in a moment.",
         "too-large": "Too large to save here.",
+        "from-changed": "The memory being merged in changed since you opened it, so nothing was merged. Copy your edit, then",
       },
       healthFailed: "Could not check what can be tidied.",
       tidy: "{count} can be tidied",

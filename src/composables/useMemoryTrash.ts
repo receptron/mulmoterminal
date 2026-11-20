@@ -7,8 +7,10 @@ import { trashLibraryMemoryFile, undoLibraryMemoryTrash, type MemoryTrashResult 
 /** How long the notice, and so its Undo, stays. */
 export const MEMORY_TRASH_NOTICE_MS = 10_000;
 
+/** `into`: the title of the memory it was merged into, when it went by a merge. */
 export type MemoryTrashNotice =
-  { kind: "trashed"; title: string; key: string; undo: string; running: boolean; undoFailed?: boolean } | { kind: "changed" | "failed" | "taken" | "gone" };
+  | { kind: "trashed"; title: string; key: string; undo: string; running: boolean; undoFailed?: boolean; into?: string }
+  | { kind: "changed" | "failed" | "taken" | "gone" };
 
 export interface MemoryTrashTarget {
   slug: string;
@@ -44,6 +46,12 @@ export function useMemoryTrash(changed: () => void) {
     return result.kind;
   }
 
+  /** A merge done in the editor: the same notice, with the same Undo, as a move to the Trash. */
+  function merged(target: Pick<MemoryTrashTarget, "title" | "key">, into: string, undo: string): void {
+    show({ kind: "trashed", title: target.title, key: target.key, undo, running: false, into });
+    changed();
+  }
+
   /** The key of the memory put back, or null when it was not. */
   async function undo(): Promise<string | null> {
     const shown = notice.value;
@@ -59,5 +67,5 @@ export function useMemoryTrash(changed: () => void) {
   }
 
   onBeforeUnmount(() => clearTimeout(timer));
-  return { available, notice, trash, undo, dismiss: () => show(null) };
+  return { available, notice, trash, merged, undo, dismiss: () => show(null) };
 }

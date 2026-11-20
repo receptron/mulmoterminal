@@ -352,3 +352,54 @@ describe("deleting a memory to the Trash and undoing it", () => {
     expect((await call("/api/library/memory-undo", post({}))).status).toBe(400);
   });
 });
+
+describe("POST /api/library/memory/:slug/:file/merge", () => {
+  const post = (body: unknown) => ({ method: "POST" as const, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const A_TEXT = "---\nname: alpha\ndescription: first\nmetadata:\n  type: feedback\n---\nBody [[beta]].";
+  const B_TEXT = "plain, no frontmatter";
+  const merging = (overrides: Record<string, unknown> = {}) =>
+    post({ text: "merged", version: memoryVersion(B_TEXT), from: "a.md", fromVersion: memoryVersion(A_TEXT), ...overrides });
+
+  it("writes the merged memory, moves the other to the Trash with its index line, and one undo puts both back", async () => {
+    const { call, root } = setup();
+    const memory = path.join(root, "-w-app", "memory");
+    const merged = await call("/api/library/memory/-w-app/b.md/merge", merging());
+    expect(merged.status).toBe(200);
+    expect(merged.body.version).toBe(memoryVersion("merged"));
+    expect(readFileSync(path.join(memory, "b.md"), "utf8")).toBe("merged");
+    expect(existsSync(path.join(memory, "a.md"))).toBe(false);
+    expect(readFileSync(path.join(memory, "MEMORY.md"), "utf8")).toBe("- [B](b.md) — two\n");
+    expect((await call("/api/library/memory-undo", post({ undo: merged.body.undo }))).status).toBe(200);
+    expect(readFileSync(path.join(memory, "b.md"), "utf8")).toBe(B_TEXT);
+    expect(readFileSync(path.join(memory, "a.md"), "utf8")).toBe(A_TEXT);
+    expect(readFileSync(path.join(memory, "MEMORY.md"), "utf8")).toBe(INDEX);
+  });
+  it("answers 409 naming the memory that changed, and changes nothing", async () => {
+    const { call, root } = setup();
+    const into = await call("/api/library/memory/-w-app/b.md/merge", merging({ version: memoryVersion("older") }));
+    expect([into.status, into.body.file]).toEqual([409, "into"]);
+    const from = await call("/api/library/memory/-w-app/b.md/merge", merging({ fromVersion: memoryVersion("older") }));
+    expect([from.status, from.body.file]).toEqual([409, "from"]);
+    expect(readFileSync(path.join(root, "-w-app", "memory", "b.md"), "utf8")).toBe(B_TEXT);
+    expect(existsSync(path.join(root, "-w-app", "memory", "a.md"))).toBe(true);
+  });
+  it("refuses one memory merged into itself, the index, another project's memory, or a name not spelt as on disk", async () => {
+    const { call } = setup();
+    for (const [url, from] of [
+      ["/api/library/memory/-w-app/b.md/merge", "b.md"],
+      ["/api/library/memory/-w-app/b.md/merge", "MEMORY.md"],
+      ["/api/library/memory/-w-app/MEMORY.md/merge", "a.md"],
+      ["/api/library/memory/-w-app/b.md/merge", "../../-w-other/memory/top.md"],
+      ["/api/library/memory/-w-app/b.md/merge", "A.md"],
+      ["/api/library/memory/-w-app/B.md/merge", "a.md"],
+    ] as const) {
+      expect((await call(url, merging({ from }))).status, `${url} from ${from}`).toBe(400);
+    }
+    expect((await call("/api/library/memory/-w-app/b.md/merge", merging({ fromVersion: "nope" }))).status).toBe(400);
+  });
+  it("answers 501 when this system has no Trash, changing nothing", async () => {
+    const { call, root } = setup(["/w/app"], "none");
+    expect((await call("/api/library/memory/-w-app/b.md/merge", merging())).status).toBe(501);
+    expect(readFileSync(path.join(root, "-w-app", "memory", "b.md"), "utf8")).toBe(B_TEXT);
+  });
+});

@@ -1899,7 +1899,9 @@ narrow and tall for one record you are discussing — and each position keeps it
   **Edit** (`Enter`) changes a memory's whole text in place (`⌘Enter` saves, `Esc` cancels); a save
   is refused when the file changed on disk since it was opened, and a running session there is warned of.
   **⋯** → **Move to Trash** moves a memory to the system Trash with its lines in `MEMORY.md`, and
-  **Undo** in the notice puts both back. Design: [`docs/library-design.md`](docs/library-design.md).
+  **Undo** in the notice puts both back. **⋯** → **Merge into another memory** picks another memory of
+  the same project and opens it in the editor with this one's body added at its end; saving writes it
+  and moves this one to the Trash with its lines, and **Undo** puts both back. Design: [`docs/library-design.md`](docs/library-design.md).
 - **Skills viewer** — **More features** → **Skills** lists every Claude skill on disk in three
   columns — where it lives, its skills, its `SKILL.md`. The places are your `~/.claude/skills`,
   each enabled plugin (skills shown as `plugin:skill`), and the `.claude/skills` of each folder a
