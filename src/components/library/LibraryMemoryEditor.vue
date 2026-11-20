@@ -46,7 +46,15 @@ function useStaleDraft(): void {
   notice.value = null;
 }
 const opened = props.text.replace(/\r\n?/g, "\n");
-const mergedDraft = (body: string): string => `${opened.trimEnd()}\n\n${body.replace(/\r\n?/g, "\n").trim()}\n`;
+/** This memory, a blank line, then the other's body: only the line breaks where they join are
+ *  dropped, so a hard break's spaces or a body opening with an indented block stay as they were. */
+function mergedDraft(body: string): string {
+  const kept = withoutTrailingBreaks(opened);
+  const added = body.replace(/\r\n?/g, "\n").replace(/^\n+/, "");
+  const ending = added.endsWith("\n") ? "" : "\n";
+  return [kept, "\n\n", added, ending].join("");
+}
+const withoutTrailingBreaks = (text: string): string => (text.endsWith("\n") ? withoutTrailingBreaks(text.slice(0, -1)) : text);
 const draft = ref(props.merging ? mergedDraft(props.merging.body) : (kept?.text ?? props.text).replace(/\r\n?/g, "\n"));
 /** The draft as it goes to disk: an untouched draft is the file exactly as it was (mixed line endings
  *  included); an edited one takes CRLF throughout when the file had any. */
