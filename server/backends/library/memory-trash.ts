@@ -82,12 +82,11 @@ async function trashChecked({ file, index, expected, layout, now, steps }: Trash
   if ((await readIndex(index)) === "unreadable") return { kind: "refused" }; // before moving anything
   const landed = steps.move(file, layout, now, () => file);
   if (landed.outcome === "other-volume") return { kind: "other-volume" };
-  // What reached the Trash is not what was identified before the move: nothing here is ours to edit.
-  if (landed.outcome !== "trashed") return { kind: "refused" };
   const moved: Moved = { trashed: landed.target, file, info: landed.info };
-  // The agent may have written the memory between the check and the move: what reached the Trash is
-  // checked again, and anything but the text that was read goes back.
-  if ((await versionOf(moved.trashed)) !== expected) {
+  // The agent may have written the memory between the check and the move, or swapped another file in
+  // (the move then reports it escaped): what reached the Trash was at the memory's name an instant
+  // ago, and anything but the file and text that were read goes back there.
+  if (landed.outcome !== "trashed" || (await versionOf(moved.trashed)) !== expected) {
     await putBack(moved);
     return { kind: "conflict", version: await versionOf(file) };
   }

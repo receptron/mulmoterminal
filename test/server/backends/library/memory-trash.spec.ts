@@ -136,14 +136,16 @@ describe("trashMemory, when the agent writes between the check and the move", ()
     expect(read("MEMORY.md")).toBe(INDEX);
     expect(trashed()).toEqual(["a.md"]);
   });
-  it("edits nothing when what reached the Trash is not the file identified before the move", async () => {
-    const { file, layout, read } = setup();
+  it("puts back what reached the Trash when it is not the file identified before the move", async () => {
+    const { file, layout, read, trashed } = setup();
     const swapped = {
       replace: replaceKeepingMode,
       move: (...args: Parameters<typeof trashEntry>) => ({ ...trashEntry(...args), outcome: "escaped" as const }),
     };
-    expect(await trashMemory(file, memoryVersion("alpha"), layout, NOW, swapped)).toEqual({ kind: "refused" });
+    expect(await trashMemory(file, memoryVersion("alpha"), layout, NOW, swapped)).toEqual({ kind: "conflict", version: memoryVersion("alpha") });
+    expect(read("a.md")).toBe("alpha");
     expect(read("MEMORY.md")).toBe(INDEX);
+    expect(trashed()).toEqual([]);
   });
   it("puts the memory back when the index became one it cannot rewrite", async () => {
     const { file, layout, read, memory, trashed } = setup();
