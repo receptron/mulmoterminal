@@ -54,7 +54,11 @@ function mergedDraft(body: string): string {
   const ending = added.endsWith("\n") ? "" : "\n";
   return [kept, "\n\n", added, ending].join("");
 }
-const withoutTrailingBreaks = (text: string): string => (text.endsWith("\n") ? withoutTrailingBreaks(text.slice(0, -1)) : text);
+const withoutTrailingBreaks = (text: string): string =>
+  text.slice(
+    0,
+    [...text].reduce((end, char, at) => (char === "\n" ? end : at + 1), 0),
+  );
 const draft = ref(props.merging ? mergedDraft(props.merging.body) : (kept?.text ?? props.text).replace(/\r\n?/g, "\n"));
 /** The draft as it goes to disk: an untouched draft is the file exactly as it was (mixed line endings
  *  included); an edited one takes CRLF throughout when the file had any. */

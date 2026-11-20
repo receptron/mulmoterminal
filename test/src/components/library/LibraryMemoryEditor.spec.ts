@@ -54,6 +54,21 @@ describe("LibraryMemoryEditor", () => {
     expect(wrapper.find<HTMLTextAreaElement>("[data-testid=memory-editor-field]").element.value).toBe("kept line  \n\n    code\nmore\n");
   });
 
+  it("seeds a merge onto a memory ending in a great many line breaks", async () => {
+    const wrapper = mount(LibraryMemoryEditor, {
+      props: {
+        slug: "-w-app",
+        file: "a.md",
+        text: `kept${"\n".repeat(30_000)}`,
+        version: "v1",
+        cwd: null,
+        merging: { file: "b.md", version: "v2", title: "b", body: "added" },
+      },
+    });
+    await flushPromises();
+    expect(wrapper.find<HTMLTextAreaElement>("[data-testid=memory-editor-field]").element.value).toBe("kept\n\nadded\n");
+  });
+
   it("saves the whole text, unknown frontmatter and all, over the version it opened, on ⌘Enter", async () => {
     const wrapper = await mountEditor();
     await wrapper.find("[data-testid=memory-editor-field]").setValue("---\nname: a\nodd: kept\n---\nnew body");
