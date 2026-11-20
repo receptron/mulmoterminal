@@ -41,6 +41,7 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
   loadLibraryFiles: () => Promise.resolve([]),
   loadLibraryFileText: () => Promise.resolve(null),
   loadLibraryMemory: () => Promise.resolve(memoryProjects),
+  loadLibraryMemoryHealth: () => Promise.resolve([]),
   loadLibraryMemoryFile: (slug: string, file: string) => Promise.resolve(memoryTexts[`${slug}/${file}`] ?? null),
   loadLibraryPage: (offset: number) => {
     if (offset === 0 && pageFailures > 0) {

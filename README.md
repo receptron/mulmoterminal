@@ -1892,7 +1892,10 @@ narrow and tall for one record you are discussing — and each position keeps it
   the whole change or of one turn's (read only; read from Claude Code's own file history).
   **Memory** beside **Conversations** lists Claude Code's auto memory for every project, with how
   full each `MEMORY.md` is against what Claude Code loads (200 lines / 25,000 bytes); a memory
-  reads as Markdown and its `[[name]]` links open the memory they name (read only for now). Design: [`docs/library-design.md`](docs/library-design.md).
+  reads as Markdown and its `[[name]]` links open the memory they name (read only for now).
+  Memory that can be tidied is marked with a dot and counted above the list (**Show** narrows to
+  it): a memory missing from `MEMORY.md`, missing frontmatter, a `[[link]]` to no memory, a file it
+  names that is gone, or an index that is missing, overfull or pointing at a file that is gone. Design: [`docs/library-design.md`](docs/library-design.md).
 - **Skills viewer** — **More features** → **Skills** lists every Claude skill on disk in three
   columns — where it lives, its skills, its `SKILL.md`. The places are your `~/.claude/skills`,
   each enabled plugin (skills shown as `plugin:skill`), and the `.claude/skills` of each folder a

@@ -9,6 +9,7 @@ import path from "node:path";
 import { routeCall } from "../../helpers/routeCall";
 import { mountLibraryRoutes } from "../../../server/routes/library-routes";
 import {
+  inBatches,
   isSameFile,
   listMemoryProjects,
   openRegularFile,
@@ -138,6 +139,22 @@ describe("a frontmatter longer than one read", () => {
     expect(files.find((file) => file.file === "long.md")).toEqual(expect.objectContaining({ name: "found", type: "project" }));
     expect(files.find((file) => file.file === "too-long.md")).toEqual(expect.objectContaining({ name: null }));
     expect(files.find((file) => file.file === "marked.md")).toEqual(expect.objectContaining({ name: "found" })); // behind a byte-order mark
+  });
+});
+
+describe("inBatches", () => {
+  it("never has more than the batch size running, and keeps the order", async () => {
+    let running = 0;
+    let most = 0;
+    const results = await inBatches([...Array(40).keys()], 16, async (item) => {
+      running += 1;
+      most = Math.max(most, running);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      running -= 1;
+      return item * 2;
+    });
+    expect(most).toBe(16);
+    expect(results).toEqual([...Array(40).keys()].map((item) => item * 2));
   });
 });
 

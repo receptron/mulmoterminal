@@ -115,3 +115,46 @@ export const isLibraryMemoryProject = (value: unknown): value is LibraryMemoryPr
   (value.index === null || (isRecord(value.index) && typeof value.index.lines === "number" && typeof value.index.bytes === "number")) &&
   Array.isArray(value.files) &&
   value.files.every(isMemoryFile);
+
+/** A memory's type: `metadata.type`, or a top-level `type` as some memory files write it — an empty one
+ *  falls through. The list and the health check both decide it here. */
+export const memoryType = (frontmatter: Pick<MemoryFrontmatter, "fields" | "metadata">): string | null =>
+  frontmatter.metadata.type?.trim() || frontmatter.fields.type?.trim() || null;
+
+/** What can be tidied in one memory file (#3331). */
+export type MemoryFileIssue =
+  | { kind: "not-in-index" }
+  | { kind: "no-frontmatter"; missing: string[] }
+  | { kind: "broken-link"; names: string[] }
+  | { kind: "missing-path"; paths: string[] };
+
+/** What can be tidied in a project's memory as a whole: its index. */
+export type MemoryProjectIssue = { kind: "index-over-limit" } | { kind: "no-index" } | { kind: "dead-index-entry"; files: string[] };
+
+export interface LibraryMemoryHealth {
+  slug: string;
+  issues: MemoryProjectIssue[];
+  /** By file name; a file with nothing to tidy is not listed. */
+  files: Record<string, MemoryFileIssue[]>;
+}
+
+const isStringList = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === "string");
+
+const isFileIssue = (value: unknown): value is MemoryFileIssue => {
+  if (!isRecord(value)) return false;
+  if (value.kind === "not-in-index") return true;
+  if (value.kind === "no-frontmatter") return isStringList(value.missing);
+  if (value.kind === "broken-link") return isStringList(value.names);
+  return value.kind === "missing-path" && isStringList(value.paths);
+};
+
+const isProjectIssue = (value: unknown): value is MemoryProjectIssue =>
+  isRecord(value) && (value.kind === "index-over-limit" || value.kind === "no-index" || (value.kind === "dead-index-entry" && isStringList(value.files)));
+
+export const isLibraryMemoryHealth = (value: unknown): value is LibraryMemoryHealth =>
+  isRecord(value) &&
+  typeof value.slug === "string" &&
+  Array.isArray(value.issues) &&
+  value.issues.every(isProjectIssue) &&
+  isRecord(value.files) &&
+  Object.values(value.files).every((issues) => Array.isArray(issues) && issues.every(isFileIssue));
