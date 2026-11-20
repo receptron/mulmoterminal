@@ -135,7 +135,7 @@ describe("LibraryMemoryEditor", () => {
   });
 
   it("saves an untouched file with mixed line endings exactly as it was", async () => {
-    const mixed = "---\r\nname: a\n---\r\nbody\n";
+    const mixed = "---\r\nname: a\n---\rbody\n"; // CRLF, LF and a lone CR
     const wrapper = mount(LibraryMemoryEditor, { props: { slug: "-w-app", file: "mixed.md", text: mixed, version: "v1", cwd: null } });
     await flushPromises();
     expect((wrapper.vm as unknown as { dirty: boolean }).dirty).toBe(false);

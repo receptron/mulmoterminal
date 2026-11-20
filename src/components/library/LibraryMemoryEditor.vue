@@ -27,8 +27,8 @@ const { t } = useI18n();
 const crlf = props.text.includes("\r\n");
 const draftKey = memoryDraftKey(props.slug, props.file);
 const kept = memoryDraftFor(draftKey, props.version);
-const draft = ref((kept?.text ?? props.text).replace(/\r\n/g, "\n"));
-const opened = props.text.replace(/\r\n/g, "\n");
+const draft = ref((kept?.text ?? props.text).replace(/\r\n?/g, "\n"));
+const opened = props.text.replace(/\r\n?/g, "\n");
 /** The draft as it goes to disk: an untouched draft is the file exactly as it was (mixed line endings
  *  included); an edited one takes CRLF throughout when the file had any. */
 const asWritten = (text: string): string => {
