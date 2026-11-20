@@ -121,6 +121,21 @@ describe("trashMemory, when the agent writes between the check and the move", ()
     expect((await trashMemory(file, memoryVersion("alpha"), layout, NOW, movingAfter(added))).kind).toBe("trashed");
     expect(read("MEMORY.md")).toBe("# Memory\n- [B](b.md) — two\n- [C](c.md) — the agent's\n");
   });
+  it("leaves the index's lines for a memory made at that name right after the move", async () => {
+    const { file, layout, read, trashed } = setup();
+    const remade = {
+      replace: replaceKeepingMode,
+      move: (...args: Parameters<typeof trashEntry>) => {
+        const landed = trashEntry(...args);
+        writeFileSync(file, "the agent's new a.md");
+        return landed;
+      },
+    };
+    expect((await trashMemory(file, memoryVersion("alpha"), layout, NOW, remade)).kind).toBe("trashed");
+    expect(read("a.md")).toBe("the agent's new a.md");
+    expect(read("MEMORY.md")).toBe(INDEX);
+    expect(trashed()).toEqual(["a.md"]);
+  });
   it("puts the memory back when the index became one it cannot rewrite", async () => {
     const { file, layout, read, memory, trashed } = setup();
     const garbled = () => writeFileSync(path.join(memory, "MEMORY.md"), Buffer.from([0x2d, 0x20, 0xff, 0x0a]));

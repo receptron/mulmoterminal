@@ -103,7 +103,8 @@ async function takeOutOfIndex(replace: Replace, index: string, moved: Moved): Pr
   try {
     const before = await readIndex(index);
     if (before === "unreadable") throw new Error(`${index} became unreadable`);
-    const edit = before === null ? null : withoutEntry(before, path.basename(moved.file));
+    // A memory made at that name since the move is what its lines now point at: they stay.
+    const edit = before === null || (await exists(moved.file)) ? null : withoutEntry(before, path.basename(moved.file));
     if (before === null || edit === null || edit.removed.length === 0) return null;
     await replace(index, edit.text, await modeOf(index));
     return { before, written: memoryVersion(edit.text), removed: edit.removed };
