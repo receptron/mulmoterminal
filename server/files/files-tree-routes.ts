@@ -1,10 +1,9 @@
 // The routes behind the tree's file operations (#2578). Each takes the pane's `?cwd=` base and a
 // `?path=` under it, like every browse route, and answers with the new path relative to the base.
-import os from "node:os";
 import path from "node:path";
 import type { Express, Request, Response } from "express";
 import { requestBody } from "../routes/requestBody.js";
-import { createEntry, entryExists, entryUnder, moveToTrash, renameEntry, trashLayout, validEntryName, type EntryKind, type TrashLayout } from "./tree-ops.js";
+import { createEntry, entryExists, entryUnder, moveToTrash, renameEntry, systemTrash, validEntryName, type EntryKind, type TrashLayout } from "./tree-ops.js";
 
 interface TreeRouteDeps {
   /** The browse base for a raw `?cwd=` value, or null when a cwd was named and is gone (namedBase). */
@@ -12,8 +11,6 @@ interface TreeRouteDeps {
   /** Where deleted entries go; the machine's own Trash unless a spec gives it another. */
   trash?: () => TrashLayout;
 }
-
-const systemTrash = (): TrashLayout => trashLayout(process.platform, process.env, os.homedir());
 
 const GONE = "the pane's folder is no longer there";
 const relPath = (req: Request): string => (typeof req.query.path === "string" ? req.query.path : "");

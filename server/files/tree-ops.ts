@@ -9,6 +9,7 @@
 // Deleting is offered only where the Trash is known: macOS's `~/.Trash`, and the freedesktop Trash on
 // Linux. Elsewhere there is no delete at all, rather than a delete that cannot be undone.
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { containedPath, namesAWindowsDevice, realContainedWithin } from "./pathContainment.js";
 import { isSamePath } from "../infra/fs/path-within.js";
@@ -109,6 +110,9 @@ export function trashLayout(platform: NodeJS.Platform, env: NodeJS.ProcessEnv, h
   return { kind: "freedesktop", files: path.posix.join(trash, "files"), info: path.posix.join(trash, "info") };
 }
 
+/** This machine's own Trash. */
+export const systemTrash = (): TrashLayout => trashLayout(process.platform, process.env, os.homedir());
+
 /** How many names are tried before the Trash is given up on: an error that repeats for every name
  *  (an unreadable Trash) must end the search, not spin the server's one thread. */
 export const MAX_TRASH_NAME_TRIES = 1000;
@@ -154,7 +158,15 @@ export function trashInfo(originalAbs: string, deletedAt: Date): string {
  *  (EXDEV) rather than copied and deleted — a delete must not be the only copy's last step. `recheck`
  *  is the entry's own check: "escaped" when, after the move, it no longer names a place inside, or what
  *  reached the Trash is not the entry that was identified before the move. */
-export function moveToTrash(abs: string, layout: NonNullable<TrashLayout>, now: Date, recheck: Recheck): "trashed" | "other-volume" | "escaped" {
+export function moveToTrash(abs: string, layout: NonNullable<TrashLayout>, now: Date, recheck: Recheck): TrashMove["outcome"] {
+  return trashEntry(abs, layout, now, recheck).outcome;
+}
+
+/** Where an entry went in the Trash, and its freedesktop info file: what putting it back needs. */
+export type TrashMove = { outcome: "trashed" | "other-volume" | "escaped"; target: string; info: string | null };
+
+/** `moveToTrash`, also saying where the entry landed. */
+export function trashEntry(abs: string, layout: NonNullable<TrashLayout>, now: Date, recheck: Recheck): TrashMove {
   fs.mkdirSync(layout.files, { recursive: true, mode: 0o700 });
   if (layout.kind === "freedesktop") fs.mkdirSync(layout.info, { recursive: true, mode: 0o700 });
   const infoFor = (name: string): string | null => (layout.kind === "freedesktop" ? path.join(layout.info, `${name}.trashinfo`) : null);
@@ -169,10 +181,10 @@ export function moveToTrash(abs: string, layout: NonNullable<TrashLayout>, now: 
   if (info) fs.writeFileSync(info, trashInfo(abs, now), { flag: "wx", mode: 0o600 });
   const target = path.join(layout.files, name);
   const moving = moveUnlessReleased(abs, target, info);
-  if (moving === "other-volume") return moving;
+  if (moving === "other-volume") return { outcome: moving, target, info };
   // Checked only once the move is done: the info file then describes what is in the Trash, whatever
   // the check says, and must stay so the entry can be put back.
-  return recheck() !== null && holds(target, moving) ? "trashed" : "escaped";
+  return { outcome: recheck() !== null && holds(target, moving) ? "trashed" : "escaped", target, info };
 }
 
 /** Move `abs` to `target`, with the identity it had just before; when the move fails, the reserved

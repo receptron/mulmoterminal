@@ -44,6 +44,18 @@ export const libraryViewZhTW = {
       folded: "{count} 行未變更",
     },
     memory: {
+      trash: {
+        action: "移到垃圾桶",
+        trashed: "已將「{title}」移到垃圾桶。",
+        running: "此專案中有正在執行的工作階段，可能仍會用到這條記憶。",
+        undo: "復原",
+        dismiss: "關閉",
+        changed: "開啟後記憶已變更，因此沒有移動。已重新讀取。",
+        failed: "無法將記憶移到垃圾桶。",
+        taken: "之後出現了同名的記憶，因此移走的那條留在垃圾桶中。",
+        gone: "這裡已無法復原。記憶在垃圾桶中。",
+        "undo-failed": "無法放回記憶。按復原再試一次。",
+      },
       edit: {
         staleDraft: "有一份在舊版本上開始、未儲存的編輯；檔案此後已改動。",
         useStale: "使用它",

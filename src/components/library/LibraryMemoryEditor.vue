@@ -7,7 +7,7 @@ import { dropMemoryDraft, keepMemoryDraft, memoryDraftFor, memoryDraftKey, stale
 import { isImeConfirming } from "../../composables/imeComposition";
 import { useI18n } from "vue-i18n";
 import { saveLibraryMemoryFile } from "../../composables/libraryApi";
-import { readResumableList } from "../../composables/useDirLists";
+import { sessionRunningIn } from "./memorySessions";
 import { MEMORY_EDIT_MAX_BYTES } from "../../../common/libraryMemory";
 
 const props = defineProps<{
@@ -85,8 +85,7 @@ function cancel(): void {
 onMounted(async () => {
   await nextTick();
   field.value?.focus();
-  const list = props.cwd === null ? null : await readResumableList(props.cwd, "claude");
-  sessionRunning.value = (list?.sessions ?? []).some((session) => (session.runningKey ?? null) !== null);
+  sessionRunning.value = await sessionRunningIn(props.cwd);
 });
 
 async function save(): Promise<void> {

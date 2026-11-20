@@ -113,6 +113,40 @@ export async function saveLibraryMemoryFile(slug: string, file: string, text: st
   }
 }
 
+export type MemoryTrashResult = { kind: "trashed"; undo: string } | { kind: "changed" } | { kind: "failed" };
+
+/** Moves a memory to the Trash, with its lines in MEMORY.md, while it is still the text read. */
+export async function trashLibraryMemoryFile(slug: string, file: string, version: string): Promise<MemoryTrashResult> {
+  try {
+    const response = await fetchWithTimeout(`${memoryFileUrl(slug, file)}/trash`, postJson({ version }), LIBRARY_READ_TIMEOUT_MS);
+    if (response.status === 409) return { kind: "changed" };
+    const body = response.ok ? await jsonBody(response) : null;
+    return body !== null && typeof body.undo === "string" ? { kind: "trashed", undo: body.undo } : { kind: "failed" };
+  } catch {
+    return { kind: "failed" };
+  }
+}
+
+/** "taken": a file of that name was made since; "gone": too late to undo here (it is in the Trash). */
+export type MemoryUndoResult = "restored" | "taken" | "gone" | "failed";
+
+export async function undoLibraryMemoryTrash(undo: string): Promise<MemoryUndoResult> {
+  try {
+    const response = await fetchWithTimeout("/api/library/memory-undo", postJson({ undo }), LIBRARY_READ_TIMEOUT_MS);
+    if (response.ok) return "restored";
+    if (response.status === 409) return "taken";
+    return response.status === 410 ? "gone" : "failed";
+  } catch {
+    return "failed";
+  }
+}
+
+const postJson = (body: Record<string, unknown>): RequestInit => ({
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify(body),
+});
+
 /** The conversation that made each of these PRs in `repository`, for those the Library knows. */
 export async function loadPrCreators(repository: string, numbers: readonly number[]): Promise<LibraryPrCreator[] | null> {
   const asked = numbers.slice(0, PR_CREATORS_MAX).join(",");

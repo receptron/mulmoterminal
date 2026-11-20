@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The Library's memory kind (#3331): every project's memory, grouped by project with how full its
 // MEMORY.md is, and one memory read beside the list — its frontmatter apart from its body, and its
-// `[[name]]` links followed. Read only here; editing is a later step.
+// `[[name]]` links followed. Edited in place, and moved to the Trash with Undo.
 import { computed, nextTick, ref, useTemplateRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
@@ -16,6 +16,8 @@ import {
 } from "../../../common/libraryMemory";
 import { renderWikiHtml } from "../../wikiMarkdown";
 import LibraryMemoryEditor from "./LibraryMemoryEditor.vue";
+import LibraryMoreMenu from "./LibraryMoreMenu.vue";
+import { useMemoryTrash } from "../../composables/useMemoryTrash";
 import { hasMemoryDraft, memoryDraftKey } from "./memoryDrafts";
 import type { LibraryFileText } from "../../../common/libraryFiles";
 import { loadLibraryMemoryFile } from "../../composables/libraryApi";
@@ -187,6 +189,37 @@ function onReload(): void {
   rereads.value += 1;
 }
 
+const moreMenu = useTemplateRef<{ close: () => void }>("moreMenu");
+const { available: trashOffered, notice: trashNotice, trash, undo, dismiss: dismissTrashNotice } = useMemoryTrash(() => emit("changed"));
+
+/** The memory being read, to the Trash; the reader moves on to the next one in the list. */
+async function trashSelected(): Promise<void> {
+  moreMenu.value?.close();
+  const row = selected.value;
+  const version = text.value?.version;
+  if (row === null || typeof version !== "string") return;
+  const at = rows.value.indexOf(row);
+  const next = rows.value[at + 1]?.key ?? rows.value[at - 1]?.key ?? null;
+  const target = { slug: row.project.slug, file: row.memory.file, version, title: memoryTitle(row.memory), key: row.key, cwd: row.project.cwd };
+  const outcome = await trash(target);
+  if (outcome === "trashed" && selected.value?.key === row.key) chosenKey.value = next;
+  else if (outcome === "changed") rereads.value += 1;
+}
+
+async function undoTrash(): Promise<void> {
+  const restored = await undo();
+  if (restored !== null) chosenKey.value = restored;
+}
+
+function trashNoticeText(): string {
+  const shown = trashNotice.value;
+  if (shown === null) return "";
+  if (shown.kind !== "trashed") return t(`libraryView.memory.trash.${shown.kind}`);
+  if (shown.undoFailed === true) return t("libraryView.memory.trash.undo-failed");
+  const done = t("libraryView.memory.trash.trashed", { title: shown.title });
+  return shown.running ? `${done} ${t("libraryView.memory.trash.running")}` : done;
+}
+
 defineExpose({ move, startEdit });
 </script>
 
@@ -311,9 +344,20 @@ defineExpose({ move, startEdit });
           <div v-else :class="BODY_CLASS" data-testid="memory-body" v-html="bodyHtml"></div>
         </div>
         <footer v-if="text?.version" class="flex items-center justify-end gap-3 border-t border-border px-4 py-2">
+          <LibraryMoreMenu v-if="trashOffered" ref="moreMenu" :key="selected.key">
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="memory-trash"
+              class="flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 py-1.5 text-left font-sans text-[13px] text-fg hover:bg-hover"
+              @click="trashSelected"
+            >
+              <span class="material-symbols-outlined text-[18px]">delete</span>{{ t("libraryView.memory.trash.action") }}
+            </button>
+          </LibraryMoreMenu>
           <span
             v-if="hasMemoryDraft(memoryDraftKey(selected.project.slug, selected.memory.file))"
-            class="mr-auto font-sans text-[12px] text-secondary"
+            class="min-w-0 flex-1 font-sans text-[12px] text-secondary"
             data-testid="memory-draft-kept"
           >
             {{ t("libraryView.memory.edit.draftKept") }}
@@ -332,4 +376,30 @@ defineExpose({ move, startEdit });
       </template>
     </article>
   </div>
+  <!-- Outside the list, so it stays when the last memory went and the list became the empty sentence. -->
+  <p
+    v-if="trashNotice"
+    class="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border px-4 py-2 font-sans text-[12px] text-secondary"
+    role="status"
+    data-testid="memory-trash-notice"
+  >
+    <span class="min-w-0">{{ trashNoticeText() }}</span>
+    <button
+      v-if="trashNotice.kind === 'trashed'"
+      type="button"
+      class="cursor-pointer border-0 bg-transparent p-0 font-sans text-[12px] font-semibold text-accent hover:underline"
+      data-testid="memory-trash-undo"
+      @click="undoTrash"
+    >
+      {{ t("libraryView.memory.trash.undo") }}
+    </button>
+    <button
+      type="button"
+      class="ml-auto flex cursor-pointer items-center border-0 bg-transparent p-0 text-dim hover:text-fg"
+      :aria-label="t('libraryView.memory.trash.dismiss')"
+      @click="dismissTrashNotice"
+    >
+      <span class="material-symbols-outlined text-[16px]">close</span>
+    </button>
+  </p>
 </template>

@@ -11,10 +11,22 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
     return Promise.resolve(text === undefined ? null : { text, ...(text === null ? {} : { version: "v1" }) });
   },
   saveLibraryMemoryFile: () => Promise.resolve({ kind: "saved", version: "v2" }),
+  trashLibraryMemoryFile: (...args: unknown[]) => trashCalls.push(args) && Promise.resolve(trashAnswer),
+  undoLibraryMemoryTrash: (undo: string) => undoCalls.push(undo) && Promise.resolve(undoAnswer),
 }));
-vi.mock("../../../../src/composables/useDirLists", () => ({ readResumableList: () => Promise.resolve(null) }));
+let running = false;
+vi.mock("../../../../src/composables/useDirLists", () => ({
+  readResumableList: () => Promise.resolve(running ? { sessions: [{ runningKey: "k" }] } : null),
+}));
+let trashHere = true;
+vi.mock("../../../../src/components/treeFileOpsApi", () => ({ trashAvailable: () => Promise.resolve(trashHere) }));
+let trashCalls: unknown[][] = [];
+let undoCalls: string[] = [];
+let trashAnswer: { kind: string; undo?: string } = { kind: "trashed", undo: "u-1" };
+let undoAnswer = "restored";
 
 const LibraryMemory = (await import("../../../../src/components/library/LibraryMemory.vue")).default;
+const { MEMORY_TRASH_NOTICE_MS } = await import("../../../../src/composables/useMemoryTrash");
 
 const NOW = Date.UTC(2026, 10, 20, 12);
 const memory = (file: string, name: string | null, type: string | null = "feedback"): LibraryMemoryFile => ({
@@ -30,6 +42,13 @@ const projects: LibraryMemoryProject[] = [
 ];
 
 beforeEach(() => {
+  vi.useRealTimers();
+  running = false;
+  trashHere = true;
+  trashCalls = [];
+  undoCalls = [];
+  trashAnswer = { kind: "trashed", undo: "u-1" };
+  undoAnswer = "restored";
   texts = {
     "-w-app/reply.md": "---\nname: reply-in-japanese\n---\nAlways Japanese. See [[codex-sandbox]] and [[gone]].",
     "-w-app/codex.md": "---\nname: codex-sandbox\n---\nThe sandbox refuses rm.",
@@ -220,5 +239,97 @@ describe("LibraryMemory", () => {
     await wrapper.findAll("[data-testid=memory-row]")[1]?.trigger("click");
     await flushPromises();
     expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("codex-sandbox");
+  });
+
+  describe("moving a memory to the Trash", () => {
+    const trashFirst = async (wrapper: Awaited<ReturnType<typeof mountMemory>>) => {
+      await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+      await wrapper.find("[data-testid=memory-trash]").trigger("click");
+      await flushPromises();
+    };
+    const title = (wrapper: Awaited<ReturnType<typeof mountMemory>>) => wrapper.find("[data-testid=memory-reader] h2").text();
+
+    it("moves the memory read, on its version, says so with Undo, and reads the next one", async () => {
+      const wrapper = await mountMemory();
+      await trashFirst(wrapper);
+      expect(trashCalls).toEqual([["-w-app", "reply.md", "v1"]]);
+      expect(wrapper.emitted("changed")).toHaveLength(1);
+      expect(wrapper.find("[data-testid=memory-trash-notice]").text()).toContain("Moved “reply-in-japanese” to the Trash.");
+      expect(title(wrapper)).toBe("codex-sandbox");
+      await wrapper.find("[data-testid=memory-trash-undo]").trigger("click");
+      await flushPromises();
+      expect(undoCalls).toEqual(["u-1"]);
+      expect(wrapper.emitted("changed")).toHaveLength(2);
+      expect(title(wrapper)).toBe("reply-in-japanese");
+      expect(wrapper.find("[data-testid=memory-trash-notice]").exists()).toBe(false);
+    });
+
+    it("reads the previous memory when the last one in the list went", async () => {
+      const wrapper = await mountMemory();
+      await wrapper.findAll("[data-testid=memory-row]")[2]?.trigger("click");
+      await flushPromises();
+      await trashFirst(wrapper);
+      expect(trashCalls[0]?.[1]).toBe("lib.md");
+      expect(title(wrapper)).toBe("codex-sandbox");
+    });
+
+    it("adds that a session is running in the project, as editing does", async () => {
+      running = true;
+      const wrapper = await mountMemory();
+      await trashFirst(wrapper);
+      expect(wrapper.find("[data-testid=memory-trash-notice]").text()).toContain("A session is running in this project");
+    });
+
+    it("leaves a memory changed since it was read, says so, and reads it again", async () => {
+      trashAnswer = { kind: "changed" };
+      const wrapper = await mountMemory();
+      texts["-w-app/reply.md"] = "---\nname: reply-in-japanese\n---\nThe agent's newer text.";
+      await trashFirst(wrapper);
+      expect(wrapper.find("[data-testid=memory-trash-notice]").text()).toContain("changed since it was opened");
+      expect(wrapper.find("[data-testid=memory-trash-undo]").exists()).toBe(false);
+      expect(wrapper.emitted("changed")).toBeUndefined();
+      expect(title(wrapper)).toBe("reply-in-japanese");
+      expect(wrapper.find("[data-testid=memory-body]").text()).toBe("The agent's newer text.");
+    });
+
+    it("says why an undo did not put it back", async () => {
+      undoAnswer = "taken";
+      const wrapper = await mountMemory();
+      await trashFirst(wrapper);
+      await wrapper.find("[data-testid=memory-trash-undo]").trigger("click");
+      await flushPromises();
+      expect(wrapper.find("[data-testid=memory-trash-notice]").text()).toContain("stays in the Trash");
+      expect(title(wrapper)).toBe("codex-sandbox");
+    });
+
+    it("keeps Undo after an undo that failed, and puts it back on a second try", async () => {
+      undoAnswer = "failed";
+      const wrapper = await mountMemory();
+      await trashFirst(wrapper);
+      await wrapper.find("[data-testid=memory-trash-undo]").trigger("click");
+      await flushPromises();
+      expect(wrapper.find("[data-testid=memory-trash-notice]").text()).toContain("could not be put back");
+      undoAnswer = "restored";
+      await wrapper.find("[data-testid=memory-trash-undo]").trigger("click");
+      await flushPromises();
+      expect(undoCalls).toEqual(["u-1", "u-1"]);
+      expect(title(wrapper)).toBe("reply-in-japanese");
+    });
+
+    it("lets the notice go after a while", async () => {
+      const wrapper = await mountMemory();
+      vi.useFakeTimers();
+      await trashFirst(wrapper);
+      expect(wrapper.find("[data-testid=memory-trash-notice]").exists()).toBe(true);
+      vi.advanceTimersByTime(MEMORY_TRASH_NOTICE_MS);
+      await flushPromises();
+      expect(wrapper.find("[data-testid=memory-trash-notice]").exists()).toBe(false);
+    });
+
+    it("offers no Trash where the system has none", async () => {
+      trashHere = false;
+      const wrapper = await mountMemory();
+      expect(wrapper.find("[data-testid=library-more-actions]").exists()).toBe(false);
+    });
   });
 });

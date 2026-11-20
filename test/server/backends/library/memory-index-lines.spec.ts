@@ -1,0 +1,67 @@
+// @vitest-environment node
+// The lines of MEMORY.md a delete takes out and an undo puts back (#3331).
+import { describe, it, expect } from "vitest";
+import { indexLines, withEntryBack, withoutEntry } from "../../../../server/backends/library/memory-index-lines";
+import { seededRandom } from "../../../helpers/seededRandom";
+
+describe("indexLines", () => {
+  it("keeps each line's own ending, so joining them gives the same text back", () => {
+    ["", "a", "a\n", "a\r\nb\rc\nd", "\n\n", "x\r\n"].forEach((text) => expect(indexLines(text).join("")).toBe(text));
+    expect(indexLines("a\r\nb\rc")).toEqual(["a\r\n", "b\r", "c"]);
+  });
+  it("over generated text: the lines join back to it, none is empty, and each ends only at its end", () => {
+    const parts = ["a", "\r", "\n", "\r\n", " ", "—"];
+    const draws = seededRandom(7);
+    Array.from({ length: 5000 }, () => Array.from({ length: draws.below(12) }, () => draws.pick(parts)).join("")).forEach((text) => {
+      const lines = indexLines(text);
+      expect(lines.join("")).toBe(text);
+      lines.forEach((line) => {
+        expect(line).not.toBe("");
+        expect(line.replace(/(\r\n|\r|\n)$/, "")).not.toMatch(/[\r\n]/);
+      });
+    });
+  });
+});
+
+describe("withoutEntry", () => {
+  it("takes out every line that links to the file, and only those", () => {
+    const index = "# Memory\n- [A](a.md) — one\n- [B](b.md) — two\n- also [A again](./a.md)\n";
+    expect(withoutEntry(index, "a.md")).toEqual({
+      text: "# Memory\n- [B](b.md) — two\n",
+      removed: [
+        { at: 1, line: "- [A](a.md) — one\n" },
+        { at: 3, line: "- also [A again](./a.md)\n" },
+      ],
+    });
+  });
+  it("leaves a line that only names the file in prose, or links to another that ends the same", () => {
+    const index = "see a.md\n- [X](xa.md)\n- [Y](sub/a.md)\n";
+    expect(withoutEntry(index, "a.md")).toEqual({ text: index, removed: [] });
+  });
+  it("keeps CRLF and a last line with no ending as they were", () => {
+    expect(withoutEntry("- [A](a.md)\r\n- [B](b.md)", "a.md")).toEqual({ text: "- [B](b.md)", removed: [{ at: 0, line: "- [A](a.md)\r\n" }] });
+    expect(withoutEntry("- [B](b.md)\r\n- [A](a.md)", "a.md").text).toBe("- [B](b.md)\r\n");
+  });
+  it("gives an empty index back empty", () => {
+    expect(withoutEntry("", "a.md")).toEqual({ text: "", removed: [] });
+  });
+});
+
+describe("withEntryBack", () => {
+  const removed = [{ at: 0, line: "- [A](a.md)\n" }];
+  it("adds the lines at the end, with the index's own line ending", () => {
+    expect(withEntryBack("- [B](b.md)\n", removed)).toBe("- [B](b.md)\n- [A](a.md)\n");
+    expect(withEntryBack("- [B](b.md)", removed)).toBe("- [B](b.md)\n- [A](a.md)\n");
+    expect(withEntryBack("- [B](b.md)\r\n", [{ at: 0, line: "- [A](a.md)" }])).toBe("- [B](b.md)\r\n- [A](a.md)\r\n");
+    expect(withEntryBack("", removed)).toBe("- [A](a.md)\n");
+  });
+  it("adds nothing when the index lists the file again, or nothing was taken out", () => {
+    expect(withEntryBack("- [A again](a.md)\n", removed)).toBe("- [A again](a.md)\n");
+    expect(withEntryBack("- [B](b.md)\n", [])).toBe("- [B](b.md)\n");
+  });
+  it("adds back a line that also linked a memory the index no longer lists", () => {
+    const both = [{ at: 0, line: "- [A](a.md) and [B](b.md)\n" }];
+    expect(withEntryBack("- [A again](a.md)\n", both)).toBe("- [A again](a.md)\n- [A](a.md) and [B](b.md)\n");
+    expect(withEntryBack("- [A again](a.md)\n- [B](b.md)\n", both)).toBe("- [A again](a.md)\n- [B](b.md)\n");
+  });
+});

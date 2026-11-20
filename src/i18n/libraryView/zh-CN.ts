@@ -44,6 +44,18 @@ export const libraryViewZhCN = {
       folded: "{count} 行未更改",
     },
     memory: {
+      trash: {
+        action: "移到废纸篓",
+        trashed: "已将“{title}”移到废纸篓。",
+        running: "此项目中有正在运行的会话，可能仍会用到这条记忆。",
+        undo: "撤销",
+        dismiss: "关闭",
+        changed: "打开后记忆已改动，因此没有移动。已重新读取。",
+        failed: "无法将记忆移到废纸篓。",
+        taken: "之后出现了同名的记忆，因此移走的那条留在废纸篓中。",
+        gone: "这里已无法撤销。记忆在废纸篓中。",
+        "undo-failed": "无法放回记忆。点撤销再试一次。",
+      },
       edit: {
         staleDraft: "有一份在旧版本上开始、未保存的编辑；文件此后已改动。",
         useStale: "使用它",
