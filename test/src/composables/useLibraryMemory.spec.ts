@@ -72,4 +72,13 @@ describe("useLibraryMemory", () => {
     await flushPromises();
     expect(memory.health.value.size).toBe(0);
   });
+
+  it("tells a failed health check apart from nothing to tidy", async () => {
+    answer = [project("p")];
+    healthGate = Promise.resolve();
+    healthAnswer = null;
+    const memory = useLibraryMemory(ref(true));
+    await flushPromises();
+    expect([memory.healthFailed.value, memory.health.value.size]).toEqual([true, 0]);
+  });
 });

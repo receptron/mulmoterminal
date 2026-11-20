@@ -38,13 +38,16 @@ export const linkNames = (body: string): string[] => [...withoutCode(body).match
  *  a package (`@scope/name@1.2.3`, a slash and a dot too) is not one. */
 export function pathReferences(body: string): string[] {
   const spans = [...body.replace(/```[\s\S]*?(```|$)/g, " ").matchAll(/`([^`\n]{3,300})`/g)].map((match) => (match[1] ?? "").trim());
-  const looksLikePath = (span: string): boolean => /^[~./\w-][\w.@~/-]*\.[A-Za-z0-9]{1,8}$/.test(span) && span.includes("/") && !span.includes("//");
+  const looksLikePath = (span: string): boolean =>
+    /^(?:[A-Za-z]:)?[~./\\\w-][\w.@~/\\-]*\.[A-Za-z0-9]{1,8}$/.test(span) && /[/\\]/.test(span) && !span.includes("//");
   return [...new Set(spans.filter(looksLikePath))];
 }
 
 /** Where a named path is on disk: `~/` under the home, absolute as it is, relative under the project's
- *  directory — or null when it is relative and the directory is not known. */
-export function resolveReference(reference: string, cwd: string | null, home: string): string | null {
+ *  directory — or null when it is relative and the directory is not known, or when it is written the
+ *  Windows way (a drive or backslashes) on another system, where it would read as a relative name. */
+export function resolveReference(reference: string, cwd: string | null, home: string, windows: boolean): string | null {
+  if (!windows && /(?:^[A-Za-z]:)|\\/.test(reference)) return null;
   if (reference.startsWith("~/")) return path.join(home, reference.slice(2));
   if (path.isAbsolute(reference)) return reference;
   return cwd === null ? null : path.resolve(cwd, reference);

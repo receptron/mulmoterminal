@@ -30,7 +30,13 @@ const { t } = useI18n();
 const { isOpen, close } = useLibraryView();
 useEscapeToClose(isOpen, close);
 const { conversations, hasMore, loaded, loadFailed, status, query, hits, searching, searchFailed, loadMore } = useLibraryData(isOpen);
-const { projects: memoryProjects, loaded: memoryLoaded, failed: memoryFailed, health: memoryHealth } = useLibraryMemory(isOpen);
+const {
+  projects: memoryProjects,
+  loaded: memoryLoaded,
+  failed: memoryFailed,
+  health: memoryHealth,
+  healthFailed: memoryHealthFailed,
+} = useLibraryMemory(isOpen);
 const memoryCount = computed(() => filterMemory(memoryProjects.value, query.value).reduce((sum, project) => sum + project.files.length, 0));
 /** Which kind the list shows: the conversations, or Claude Code's memory. */
 const kind = ref<"conversations" | "memory">("conversations");
@@ -306,6 +312,7 @@ onBeforeUnmount(() => {
         :query="query"
         :now="now"
         :health="memoryHealth"
+        :health-failed="memoryHealthFailed"
       />
       <p v-else-if="loadFailed" class="m-0 px-4 py-6 font-sans text-[13px] text-err-text">{{ t("libraryView.loadFailed") }}</p>
       <p v-else-if="!loaded" class="m-0 px-4 py-6 font-sans text-[13px] text-dim">{{ t("libraryView.loading") }}</p>

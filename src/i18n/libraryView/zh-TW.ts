@@ -44,6 +44,7 @@ export const libraryViewZhTW = {
       folded: "{count} 行未變更",
     },
     memory: {
+      healthFailed: "無法檢查可以整理的記憶。",
       tidy: "有 {count} 項可以整理",
       tidyShow: "查看",
       tidyAll: "顯示全部",

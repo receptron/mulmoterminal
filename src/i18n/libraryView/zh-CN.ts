@@ -44,6 +44,7 @@ export const libraryViewZhCN = {
       folded: "{count} 行未更改",
     },
     memory: {
+      healthFailed: "无法检查可以整理的记忆。",
       tidy: "有 {count} 项可以整理",
       tidyShow: "查看",
       tidyAll: "显示全部",

@@ -2,7 +2,7 @@
 // What can be tidied in memory (#3331): every rule both ways — what it reports, and what it must leave
 // alone — then the reader over a real folder, where existence is asked of the disk.
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -49,10 +49,17 @@ describe("indexEntries, linkNames, pathReferences", () => {
   });
 
   it("resolves a reference under the home, as given, or under the project — and gives up on a relative one with no project", () => {
-    expect(resolveReference("~/.x/y.md", "/w/app", "/home/me")).toBe(path.join("/home/me", ".x/y.md"));
-    expect(resolveReference("/abs/y.md", null, "/home/me")).toBe("/abs/y.md");
-    expect(resolveReference("src/y.ts", "/w/app", "/home/me")).toBe(path.resolve("/w/app", "src/y.ts"));
-    expect(resolveReference("src/y.ts", null, "/home/me")).toBeNull();
+    expect(resolveReference("~/.x/y.md", "/w/app", "/home/me", false)).toBe(path.join("/home/me", ".x/y.md"));
+    expect(resolveReference("/abs/y.md", null, "/home/me", false)).toBe("/abs/y.md");
+    expect(resolveReference("src/y.ts", "/w/app", "/home/me", false)).toBe(path.resolve("/w/app", "src/y.ts"));
+    expect(resolveReference("src/y.ts", null, "/home/me", false)).toBeNull();
+  });
+
+  it("judges a path written the Windows way only on Windows", () => {
+    expect(pathReferences("`C:\\work\\src\\app.ts` `src\\b.ts`")).toEqual(["C:\\work\\src\\app.ts", "src\\b.ts"]);
+    expect(resolveReference("C:\\work\\src\\app.ts", "/w/app", "/home/me", false)).toBeNull();
+    expect(resolveReference("src\\b.ts", "/w/app", "/home/me", false)).toBeNull();
+    expect(resolveReference("src\\b.ts", "/w/app", "/home/me", true)).not.toBeNull();
   });
 });
 
@@ -139,8 +146,32 @@ describe("readMemoryHealth", () => {
     write(`${slug}/memory/MEMORY.md`, "- [A](a.md)\n");
     write(`${slug}/memory/a.md`, memory("a", "`src/here.ts` `src/gone.ts` `/sche_b1.cgi`"));
     write("-tidy/memory/MEMORY.md", "- [T](t.md)\n");
+    // An index that is there but cannot be read (past the read cap) is not "no index", and lists nothing.
+    write("-big/memory/MEMORY.md", `${"- [x](x.md) — padding\n".repeat(60_000)}`);
+    write("-big/memory/b.md", memory("b"));
     write("-tidy/memory/t.md", memory("t"));
     const health = await readMemoryHealth(path.join(root, "projects"), [project], 0);
-    expect(health).toEqual([{ slug, issues: [], files: { "a.md": [{ kind: "missing-path", paths: ["src/gone.ts"] }] } }]);
+    expect(health).toHaveLength(2); // the tidy project is not listed
+    expect(health).toEqual(
+      expect.arrayContaining([
+        { slug, issues: [], files: { "a.md": [{ kind: "missing-path", paths: ["src/gone.ts"] }] } },
+        { slug: "-big", issues: [{ kind: "index-over-limit" }], files: {} },
+      ]),
+    );
+  });
+
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)("does not call an index that cannot be opened missing", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "mt-memory-health-"));
+    dirs.push(root);
+    const folder = path.join(root, "projects", "-locked", "memory");
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(path.join(folder, "a.md"), memory("a"));
+    writeFileSync(path.join(folder, "MEMORY.md"), "- [A](a.md)\n");
+    chmodSync(path.join(folder, "MEMORY.md"), 0o000);
+    try {
+      expect(await readMemoryHealth(path.join(root, "projects"), [], 0)).toEqual([]);
+    } finally {
+      chmodSync(path.join(folder, "MEMORY.md"), 0o600);
+    }
   });
 });

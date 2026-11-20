@@ -10,6 +10,8 @@ export function useLibraryMemory(isOpen: Ref<boolean>) {
   const failed = ref(false);
   /** What can be tidied, by project. Read beside the list and not waited for: the list shows first. */
   const health = ref(new Map<string, LibraryMemoryHealth>());
+  /** The health check could not be read: not the same as nothing to tidy. */
+  const healthFailed = ref(false);
   let reads = 0;
   watch(
     isOpen,
@@ -21,9 +23,12 @@ export function useLibraryMemory(isOpen: Ref<boolean>) {
       failed.value = false;
       projects.value = [];
       health.value = new Map();
+      healthFailed.value = false;
       void (async () => {
         const judged = await loadLibraryMemoryHealth();
-        if (mine === reads) health.value = new Map((judged ?? []).map((project) => [project.slug, project]));
+        if (mine !== reads) return;
+        healthFailed.value = judged === null;
+        health.value = new Map((judged ?? []).map((project) => [project.slug, project]));
       })();
       const found = await loadLibraryMemory();
       if (mine !== reads) return;
@@ -33,5 +38,5 @@ export function useLibraryMemory(isOpen: Ref<boolean>) {
     },
     { immediate: true },
   );
-  return { projects, loaded, failed, health };
+  return { projects, loaded, failed, health, healthFailed };
 }

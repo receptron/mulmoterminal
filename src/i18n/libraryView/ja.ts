@@ -44,6 +44,7 @@ export const libraryViewJa = {
       folded: "変更のない {count} 行",
     },
     memory: {
+      healthFailed: "整えられる記憶を調べられませんでした。",
       tidy: "{count} 件を整えられます",
       tidyShow: "見る",
       tidyAll: "すべて表示",

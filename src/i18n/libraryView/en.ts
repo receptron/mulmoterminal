@@ -44,6 +44,7 @@ export const libraryViewEn = {
       folded: "{count} unchanged lines",
     },
     memory: {
+      healthFailed: "Could not check what can be tidied.",
       tidy: "{count} can be tidied",
       tidyShow: "Show",
       tidyAll: "Show all",

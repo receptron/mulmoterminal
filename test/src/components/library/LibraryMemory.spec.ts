@@ -146,7 +146,34 @@ describe("LibraryMemory", () => {
     expect(wrapper.find("[data-testid=memory-issue]").text()).toBe("It links to [[gone]], but no memory here has that name.");
   });
 
+  it("keeps a project whose only issue is its index when narrowed, rather than saying nothing matches", async () => {
+    const health = new Map<string, LibraryMemoryHealth>([["-w-lib", { slug: "-w-lib", issues: [{ kind: "index-over-limit" }], files: {} }]]);
+    const wrapper = await mountMemory("", health);
+    await wrapper.find("[data-testid=memory-tidy-toggle]").trigger("click");
+    expect(wrapper.find("[data-testid=memory-no-match]").exists()).toBe(false);
+    expect(wrapper.find("[data-testid=memory-project-issue]").text()).toContain("MEMORY.md is longer than Claude Code loads");
+  });
+
   it("shows no tidy line when there is nothing to tidy", async () => {
     expect((await mountMemory()).find("[data-testid=memory-tidy]").exists()).toBe(false);
+  });
+
+  it("says the check failed rather than looking as if all were tidy", async () => {
+    const wrapper = mount(LibraryMemory, { props: { projects, loaded: true, failed: false, query: "", now: NOW, health: new Map(), healthFailed: true } });
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-health-failed]").text()).toBe("Could not check what can be tidied.");
+  });
+
+  it("moves to a shown memory when narrowing hides the one being read, and stays there when widened", async () => {
+    const health = new Map<string, LibraryMemoryHealth>([["-w-app", { slug: "-w-app", issues: [], files: { "codex.md": [{ kind: "not-in-index" }] } }]]);
+    const wrapper = await mountMemory("", health);
+    expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("reply-in-japanese");
+    await wrapper.find("[data-testid=memory-tidy-toggle]").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("codex-sandbox");
+    expect(wrapper.find("[data-testid=memory-row][aria-current=true]").text()).toContain("codex-sandbox");
+    await wrapper.find("[data-testid=memory-tidy-toggle]").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("codex-sandbox");
   });
 });

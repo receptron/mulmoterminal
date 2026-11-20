@@ -29,6 +29,8 @@ const props = defineProps<{
   now: number;
   /** What can be tidied, by project slug; empty until judged. */
   health: ReadonlyMap<string, LibraryMemoryHealth>;
+  /** The check itself failed: say so, rather than look as if all were tidy. */
+  healthFailed?: boolean;
 }>();
 const { t, locale } = useI18n();
 
@@ -38,6 +40,12 @@ const tidy = computed(() => tidyCount(props.health));
 const shown = computed(() => {
   const matching = filterMemory(props.projects, props.query);
   return tidyOnly.value ? filterTidy(matching, props.health) : matching;
+});
+
+// Narrowing can hide the memory being read: move to the first one still shown, so the reader and the
+// highlighted row agree, and widening again does not jump back to a hidden choice.
+watch(tidyOnly, () => {
+  if (selected.value !== null && chosenKey.value !== selected.value.key) chosenKey.value = selected.value.key;
 });
 
 /** One sentence per issue, in the reader's language. */
@@ -139,7 +147,7 @@ defineExpose({ move });
   <p v-if="failed" class="m-0 px-4 py-6 font-sans text-[13px] text-err-text" data-testid="memory-failed">{{ t("libraryView.memory.loadFailed") }}</p>
   <p v-else-if="!loaded" class="m-0 px-4 py-6 font-sans text-[13px] text-dim">{{ t("libraryView.loading") }}</p>
   <p v-else-if="projects.length === 0" class="m-0 px-4 py-6 font-sans text-[13px] text-dim" data-testid="memory-empty">{{ t("libraryView.memory.empty") }}</p>
-  <p v-else-if="rows.length === 0" class="m-0 px-4 py-6 font-sans text-[13px] text-dim" data-testid="memory-no-match">
+  <p v-else-if="shown.length === 0" class="m-0 px-4 py-6 font-sans text-[13px] text-dim" data-testid="memory-no-match">
     {{ t("libraryView.noMatch", { query: query.trim() }) }}
   </p>
   <div v-else class="flex min-h-0 flex-1 border-t border-border" data-testid="library-memory">
@@ -147,6 +155,9 @@ defineExpose({ move });
       class="min-h-0 w-[360px] flex-none overflow-y-auto border-r border-border py-2 max-[760px]:w-full max-[760px]:border-r-0"
       :class="readerShown ? 'max-[760px]:hidden' : ''"
     >
+      <p v-if="healthFailed" class="m-0 px-4 pb-1 font-sans text-[12px] text-err-text" data-testid="memory-health-failed">
+        {{ t("libraryView.memory.healthFailed") }}
+      </p>
       <p v-if="tidy > 0" class="m-0 flex items-center gap-2 px-4 pb-1 font-sans text-[12px] text-secondary" data-testid="memory-tidy">
         <span class="h-[6px] w-[6px] flex-none rounded-full bg-warn" aria-hidden="true"></span>
         {{ t("libraryView.memory.tidy", { count: tidy }) }}

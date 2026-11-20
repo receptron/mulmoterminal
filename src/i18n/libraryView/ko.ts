@@ -44,6 +44,7 @@ export const libraryViewKo = {
       folded: "변경 없는 {count}줄",
     },
     memory: {
+      healthFailed: "정리할 수 있는 기억을 확인하지 못했습니다.",
       tidy: "{count}건을 정리할 수 있습니다",
       tidyShow: "보기",
       tidyAll: "모두 보기",
