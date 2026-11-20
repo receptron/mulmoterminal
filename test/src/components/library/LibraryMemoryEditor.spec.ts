@@ -120,4 +120,14 @@ describe("LibraryMemoryEditor", () => {
     await wrapper.find("[data-testid=memory-editor-field]").trigger("keydown", { key: "Escape", isComposing: true });
     expect(wrapper.emitted("cancel")).toBeUndefined();
   });
+
+  it("saves an untouched file with mixed line endings exactly as it was", async () => {
+    const mixed = "---\r\nname: a\n---\r\nbody\n";
+    const wrapper = mount(LibraryMemoryEditor, { props: { slug: "-w-app", file: "mixed.md", text: mixed, version: "v1", cwd: null } });
+    await flushPromises();
+    expect((wrapper.vm as unknown as { dirty: boolean }).dirty).toBe(false);
+    await wrapper.find("[data-testid=memory-editor-save]").trigger("click");
+    await flushPromises();
+    expect(saves[0]?.[2]).toBe(mixed);
+  });
 });
