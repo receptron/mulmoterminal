@@ -114,6 +114,7 @@ describe("dispatchLibraryRequest", () => {
     conversation: (...args) => (calls.push(["conversation", ...args]), Promise.resolve(null)),
     prCreators: (...args) => (calls.push(["prCreators", ...args]), Promise.resolve([])),
     transcript: (...args) => (calls.push(["transcript", ...args]), Promise.resolve(null)),
+    directories: () => (calls.push(["directories"]), Promise.resolve([])),
     search: (...args) => (calls.push(["search", ...args]), Promise.resolve([])),
   };
 

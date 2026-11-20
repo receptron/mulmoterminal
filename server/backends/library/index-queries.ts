@@ -61,6 +61,14 @@ export function prCreatorsQuery(repository: string, numbers: readonly number[]):
   return { sql: `select * from (${linked}) where rank = 1 order by pr_number`, params: [repository, JSON.stringify(numbers), ...where.params] };
 }
 
+/** Every directory a conversation ran in — what names a project's memory folder. */
+export const conversationDirectories = (db: DatabaseSync): string[] =>
+  db
+    .prepare("select distinct cwd from conversations where cwd is not null")
+    .all()
+    .map((row) => row.cwd)
+    .filter((cwd): cwd is string => typeof cwd === "string");
+
 /** A conversation by session id. The same id can sit in two project directories (a copied or moved
  *  transcript): the one in `cwd` is preferred when given, else — or when none is there — the newest. `=` rather than
  *  `is`, so that no cwd given never prefers a copy that has none recorded. */
