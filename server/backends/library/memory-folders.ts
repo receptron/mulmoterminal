@@ -142,8 +142,12 @@ export const MEMORY_FOLDERS_REUSE_MS = 30_000;
 
 const folderLists = new Map<string, { at: number; slugs: Promise<string[]> }>();
 
+// A linked project folder is followed, as the routes follow it and as Claude Code does: one that does
+// not lead to a folder holding memory simply has none.
 async function slugsWithMemory(projectsRoot: string): Promise<string[]> {
-  const slugs = (await entriesOf(projectsRoot)).filter((entry) => entry.isDirectory() && isProjectSlug(entry.name)).map((entry) => entry.name);
+  const slugs = (await entriesOf(projectsRoot))
+    .filter((entry) => (entry.isDirectory() || entry.isSymbolicLink()) && isProjectSlug(entry.name))
+    .map((entry) => entry.name);
   const kept: string[] = [];
   for (let start = 0; start < slugs.length; start += FOLDERS_AT_ONCE) {
     const batch = slugs.slice(start, start + FOLDERS_AT_ONCE);

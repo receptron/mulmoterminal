@@ -67,6 +67,18 @@ describe("/api/library/memory", () => {
     ]);
   });
 
+  it.skipIf(process.platform === "win32")("follows a linked project folder, as the routes and Claude Code do", async () => {
+    const { call, root } = setup();
+    const elsewhere = path.join(root, "..", `${path.basename(root)}-shared`);
+    mkdirSync(path.join(elsewhere, "memory"), { recursive: true });
+    dirs.push(elsewhere);
+    writeFileSync(path.join(elsewhere, "memory", "shared.md"), "---\nname: shared\n---\nkept in a linked folder");
+    symlinkSync(elsewhere, path.join(root, "-w-linked"));
+    const projects = (await call("/api/library/memory")).body.projects;
+    expect(projects).toEqual(expect.arrayContaining([expect.objectContaining({ slug: "-w-linked", files: [expect.objectContaining({ name: "shared" })] })]));
+    expect((await call("/api/library/memory/-w-linked/shared.md")).body.text).toContain("kept in a linked folder");
+  });
+
   it.skipIf(process.platform === "win32")("leaves out a memory file that is a link", async () => {
     const { call, root } = setup();
     symlinkSync(path.join(root, "-w-app", "secret.md"), path.join(root, "-w-app", "memory", "linked.md"));
