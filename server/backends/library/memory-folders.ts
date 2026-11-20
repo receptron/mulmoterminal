@@ -24,17 +24,29 @@ async function entriesOf(dir: string): Promise<Dirent[]> {
  *  the index Claude Code opens, and must not show a second time as a memory. */
 const isIndexName = (name: string): boolean => name.toLowerCase() === MEMORY_INDEX_FILE.toLowerCase();
 
-/** What the list reads of each memory: its frontmatter, which opens the file. The whole of it is read
- *  only when one is opened, so a folder of large memories costs this much each. */
-export const MEMORY_HEAD_BYTES = 8 * 1024;
+/** What the list reads of each memory: its frontmatter, which opens the file — read in steps until its
+ *  closing line, up to a bound. The whole of a memory is read only when one is opened, so a folder of
+ *  large memories costs this much each. A frontmatter past the bound lists the memory by its file name. */
+export const MEMORY_HEAD_STEP_BYTES = 8 * 1024;
+export const MEMORY_HEAD_MAX_BYTES = 64 * 1024;
+
+const frontmatterClosed = (text: string): boolean => !text.startsWith("---") || /\n---(?:\r?\n|$)/.test(text.slice(3));
 
 async function headOf(file: string): Promise<string> {
   const handle = await fs.open(file, "r").catch(() => null);
   if (handle === null) return "";
   try {
-    const buffer = Buffer.alloc(MEMORY_HEAD_BYTES);
-    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    return buffer.subarray(0, bytesRead).toString("utf8");
+    const chunks: Buffer[] = [];
+    let read = 0;
+    while (read < MEMORY_HEAD_MAX_BYTES) {
+      const buffer = Buffer.alloc(MEMORY_HEAD_STEP_BYTES);
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, read);
+      if (bytesRead === 0) break;
+      chunks.push(buffer.subarray(0, bytesRead));
+      read += bytesRead;
+      if (frontmatterClosed(Buffer.concat(chunks).toString("utf8"))) break;
+    }
+    return Buffer.concat(chunks).toString("utf8");
   } catch {
     return "";
   } finally {

@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { routeCall } from "../../helpers/routeCall";
 import { mountLibraryRoutes } from "../../../server/routes/library-routes";
-import { listMemoryProjects, MEMORY_FOLDERS_REUSE_MS, MEMORY_HEAD_BYTES } from "../../../server/backends/library/memory-folders";
+import { listMemoryProjects, MEMORY_FOLDERS_REUSE_MS, MEMORY_HEAD_MAX_BYTES, MEMORY_HEAD_STEP_BYTES } from "../../../server/backends/library/memory-folders";
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
@@ -102,9 +102,21 @@ describe("what the list reads of a memory", () => {
   it("reads the frontmatter from the start of a large memory, not the whole of it", async () => {
     const { root } = setup();
     const head = "---\nname: large\ndescription: big body\n---\n";
-    writeFileSync(path.join(root, "-w-other", "memory", "large.md"), head + "x".repeat(MEMORY_HEAD_BYTES * 50) + "\nname: not-frontmatter\n");
+    writeFileSync(path.join(root, "-w-other", "memory", "large.md"), head + "x".repeat(MEMORY_HEAD_MAX_BYTES * 50) + "\nname: not-frontmatter\n");
     const other = (await listMemoryProjects(root, [], 0)).find((project) => project.slug === "-w-other");
     expect(other?.files.find((file) => file.file === "large.md")).toEqual(expect.objectContaining({ name: "large", description: "big body" }));
+  });
+});
+
+describe("a frontmatter longer than one read", () => {
+  it("is read on to its closing line, and up to the bound only", async () => {
+    const { root } = setup();
+    const long = (filler: number): string => `---\nnotes: ${"n".repeat(filler)}\nname: found\nmetadata:\n  type: project\n---\nbody`;
+    writeFileSync(path.join(root, "-w-other", "memory", "long.md"), long(MEMORY_HEAD_STEP_BYTES * 3));
+    writeFileSync(path.join(root, "-w-other", "memory", "too-long.md"), long(MEMORY_HEAD_MAX_BYTES));
+    const files = (await listMemoryProjects(root, [], 0)).find((project) => project.slug === "-w-other")?.files ?? [];
+    expect(files.find((file) => file.file === "long.md")).toEqual(expect.objectContaining({ name: "found", type: "project" }));
+    expect(files.find((file) => file.file === "too-long.md")).toEqual(expect.objectContaining({ name: null }));
   });
 });
 
