@@ -27,9 +27,9 @@ function memoryFileOf(projectsRoot: string, slug: unknown, file: unknown): strin
 export function memoryEditOf(body: Record<string, unknown>): { text: string; version: string } | null {
   const { text, version } = body;
   if (typeof text !== "string" || typeof version !== "string" || !/^[0-9a-f]{64}$/.test(version)) return null;
-  // Only a text this Library could read back and edit again: no NUL (it would read as binary) and no
-  // U+FFFD (it would read as not the file's own bytes).
-  if (text.includes("\u0000") || !isFaithfulText(text)) return null;
+  // Only a text this Library could read back and edit again: no NUL (it would read as binary), no
+  // U+FFFD, and nothing UTF-8 cannot hold as given (a lone surrogate is written as U+FFFD).
+  if (text.includes("\u0000") || !isFaithfulText(text) || Buffer.from(text, "utf8").toString("utf8") !== text) return null;
   return Buffer.byteLength(text) <= MEMORY_EDIT_MAX_BYTES ? { text, version } : null;
 }
 
