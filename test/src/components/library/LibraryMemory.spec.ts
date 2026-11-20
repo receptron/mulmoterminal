@@ -104,6 +104,15 @@ describe("LibraryMemory", () => {
     expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("lib");
   });
 
+  it("reads the chosen memory again when the list is read again, as on reopening", async () => {
+    const wrapper = await mountMemory();
+    expect(wrapper.find("[data-testid=memory-body]").text()).toContain("Always Japanese.");
+    texts["-w-app/reply.md"] = "---\nname: reply-in-japanese\n---\nRewritten while the Library was closed.";
+    await wrapper.setProps({ projects: projects.map((project) => ({ ...project })) });
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-body]").text()).toBe("Rewritten while the Library was closed.");
+  });
+
   it("says a memory could not be read rather than showing it empty", async () => {
     texts["-w-app/reply.md"] = null;
     const wrapper = await mountMemory();

@@ -23,8 +23,10 @@ const selected = computed(() => rows.value.find((row) => row.key === chosenKey.v
 const text = ref<LibraryFileText | null>(null);
 let reads = 0;
 
+// Read again when another memory is chosen, when it changed on disk, and when the list is read again
+// (each time the Library opens), so a memory written while it was closed never shows its old text.
 watch(
-  () => selected.value?.key ?? null,
+  () => [selected.value?.key ?? null, selected.value?.memory.updatedAt ?? null, props.projects] as const,
   async () => {
     const row = selected.value;
     const mine = ++reads;
