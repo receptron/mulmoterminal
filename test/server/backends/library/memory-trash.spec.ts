@@ -1,7 +1,7 @@
 // @vitest-environment node
 // Deleting a memory to the Trash with its MEMORY.md lines, and undoing it (#3331).
 import { describe, it, expect, afterEach } from "vitest";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { MEMORY_UNDO_KEEP_MS, restoreMemory, trashMemory } from "../../../../server/backends/library/memory-trash";
@@ -136,6 +136,15 @@ describe("trashMemory, when the agent writes between the check and the move", ()
     expect(read("MEMORY.md")).toBe(INDEX);
     expect(trashed()).toEqual(["a.md"]);
   });
+  it("edits nothing when what reached the Trash is not the file identified before the move", async () => {
+    const { file, layout, read } = setup();
+    const swapped = {
+      replace: replaceKeepingMode,
+      move: (...args: Parameters<typeof trashEntry>) => ({ ...trashEntry(...args), outcome: "escaped" as const }),
+    };
+    expect(await trashMemory(file, memoryVersion("alpha"), layout, NOW, swapped)).toEqual({ kind: "refused" });
+    expect(read("MEMORY.md")).toBe(INDEX);
+  });
   it("puts the memory back when the index became one it cannot rewrite", async () => {
     const { file, layout, read, memory, trashed } = setup();
     const garbled = () => writeFileSync(path.join(memory, "MEMORY.md"), Buffer.from([0x2d, 0x20, 0xff, 0x0a]));
@@ -146,6 +155,17 @@ describe("trashMemory, when the agent writes between the check and the move", ()
 });
 
 describe("restoreMemory", () => {
+  it("never removes a file the agent put at that name while a failed undo was writing the index", async () => {
+    const { file, layout, read, memory } = setup();
+    const undo = undoOf(await trashMemory(file, memoryVersion("alpha"), layout, NOW));
+    const replacedThenFailed = async () => {
+      writeFileSync(path.join(memory, "agent.tmp"), "the agent's a.md");
+      renameSync(path.join(memory, "agent.tmp"), file);
+      throw new Error("disk full");
+    };
+    await expect(restoreMemory(undo, NOW, replacedThenFailed)).rejects.toThrow("disk full");
+    expect(read("a.md")).toBe("the agent's a.md");
+  });
   it("leaves the memory in the Trash when its index line cannot be written, and can be tried again", async () => {
     const { file, layout, read, trashed } = setup();
     const undo = undoOf(await trashMemory(file, memoryVersion("alpha"), layout, NOW));

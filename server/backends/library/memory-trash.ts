@@ -82,6 +82,8 @@ async function trashChecked({ file, index, expected, layout, now, steps }: Trash
   if ((await readIndex(index)) === "unreadable") return { kind: "refused" }; // before moving anything
   const landed = steps.move(file, layout, now, () => file);
   if (landed.outcome === "other-volume") return { kind: "other-volume" };
+  // What reached the Trash is not what was identified before the move: nothing here is ours to edit.
+  if (landed.outcome !== "trashed") return { kind: "refused" };
   const moved: Moved = { trashed: landed.target, file, info: landed.info };
   // The agent may have written the memory between the check and the move: what reached the Trash is
   // checked again, and anything but the text that was read goes back.
@@ -146,6 +148,12 @@ async function putBack(moved: Moved): Promise<MemoryRestoreResult> {
   return outcome;
 }
 
+/** Removes `file` only while it is still the same file as `kept`: one the agent put there since stays. */
+async function unlinkIfSame(file: string, kept: string): Promise<void> {
+  const [named, original] = await Promise.all([lstat(file).catch(() => null), lstat(kept).catch(() => null)]);
+  if (named !== null && original !== null && named.dev === original.dev && named.ino === original.ino) await rm(file, { force: true });
+}
+
 const exists = async (file: string): Promise<boolean> => {
   try {
     await lstat(file);
@@ -175,7 +183,7 @@ async function restoreChecked(id: string, undo: Undo, index: string, replace: Re
   try {
     if (undo.index !== null) await indexBack(replace, index, path.basename(undo.file), undo.index);
   } catch (err) {
-    await rm(undo.file, { force: true }); // the link just made; the Trash still holds the file
+    await unlinkIfSame(undo.file, undo.trashed); // the link just made; the Trash still holds the file
     throw err;
   }
   await dropTrashed(undo);
