@@ -11,6 +11,7 @@ import {
   memoryHealth,
   pathReferences,
   resolveReference,
+  topFolder,
   type MemoryHealthInput,
 } from "../../../../server/backends/library/memory-health";
 import { readMemoryHealth } from "../../../../server/backends/library/memory-health-read";
@@ -53,6 +54,18 @@ describe("indexEntries, linkNames, pathReferences", () => {
     expect(resolveReference("/abs/y.md", null, "/home/me", false)).toBe("/abs/y.md");
     expect(resolveReference("src/y.ts", "/w/app", "/home/me", false)).toBe(path.resolve("/w/app", "src/y.ts"));
     expect(resolveReference("src/y.ts", null, "/home/me", false)).toBeNull();
+  });
+
+  it("takes an absolute path's top folder, on either system's paths", () => {
+    expect(topFolder("/Users/me/x.md", path.posix)).toBe("/Users");
+    expect(topFolder("/sche_b1.cgi", path.posix)).toBe("/sche_b1.cgi");
+    expect(topFolder("C:\\work\\src\\gone.ts", path.win32)).toBe("C:\\work");
+    expect(topFolder("/", path.posix)).toBeNull();
+  });
+
+  it("expands ~\\ on Windows only", () => {
+    expect(resolveReference("~\\gone.ts", "/w/app", "/home/me", true)).toBe(path.join("/home/me", "gone.ts"));
+    expect(resolveReference("~\\gone.ts", "/w/app", "/home/me", false)).toBeNull();
   });
 
   it("judges a path written the Windows way only on Windows", () => {
@@ -104,6 +117,11 @@ describe("memoryHealth", () => {
       "a.md": [{ kind: "no-frontmatter", missing: ["description", "type"] }],
       "c.md": [{ kind: "no-frontmatter", missing: ["name", "description", "type"] }],
     });
+  });
+
+  it("takes a top-level type when the metadata's is empty", () => {
+    const files = [{ file: "a.md", text: "---\nname: a\ndescription: d\nmetadata:\n  type:\ntype: feedback\n---\n" }];
+    expect(memoryHealth(input({ files }), new Set()).files).toEqual({});
   });
 
   it("reports a link naming no memory here, by frontmatter name or by file", () => {

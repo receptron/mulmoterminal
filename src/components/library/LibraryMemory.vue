@@ -42,6 +42,12 @@ const shown = computed(() => {
   return tidyOnly.value ? filterTidy(matching, props.health) : matching;
 });
 
+// A list read again (the Library opened again) starts unnarrowed: what was being looked at may be gone.
+watch(
+  () => props.projects,
+  () => (tidyOnly.value = false),
+);
+
 // Narrowing can hide the memory being read: move to the first one still shown, so the reader and the
 // highlighted row agree, and widening again does not jump back to a hidden choice.
 watch(tidyOnly, () => {

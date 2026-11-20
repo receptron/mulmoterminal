@@ -6,7 +6,7 @@ import path from "node:path";
 import { MEMORY_INDEX_FILE, projectSlug, type LibraryMemoryHealth } from "../../../common/libraryMemory.js";
 import { readBoundedText } from "./file-history-read.js";
 import { indexOf, memoryFileNames, memorySlugs } from "./memory-folders.js";
-import { memoryHealth, pathReferences, resolveReference, type MemoryHealthInput } from "./memory-health.js";
+import { memoryHealth, pathReferences, resolveReference, topFolder, type MemoryHealthInput } from "./memory-health.js";
 
 /** Projects judged at once, and memory files read at once within one: a folder can hold thousands. */
 const PROJECTS_AT_ONCE = 8;
@@ -41,20 +41,18 @@ async function inputOf(projectsRoot: string, slug: string): Promise<MemoryHealth
 /** Whether an absolute path could be one on this machine: its top folder is here. `/sche_b1.cgi` or
  *  `/be9/x.cgi` in a memory are a site's paths, not this disk's. */
 async function isLocalPath(resolved: string): Promise<boolean> {
-  const top = resolved.split(path.sep).filter((part) => part !== "")[0];
-  return top !== undefined && (await exists(path.join(path.parse(resolved).root, top)));
+  const top = topFolder(resolved, path);
+  return top !== null && (await exists(top));
 }
 
 /** The paths the memories name that are not on disk. Only existence is asked — nothing is read. */
 async function missingReferences(input: MemoryHealthInput, cwd: string | null): Promise<Set<string>> {
   const references = [...new Set(input.files.flatMap((file) => (file.text === null ? [] : pathReferences(file.text))))];
-  const checked = await Promise.all(
-    references.map(async (reference) => {
-      const resolved = resolveReference(reference, cwd, os.homedir(), process.platform === "win32");
-      if (resolved === null || !(await isLocalPath(resolved))) return null;
-      return (await exists(resolved)) ? null : reference;
-    }),
-  );
+  const checked = await inBatches(references, FILES_AT_ONCE, async (reference) => {
+    const resolved = resolveReference(reference, cwd, os.homedir(), process.platform === "win32");
+    if (resolved === null || !(await isLocalPath(resolved))) return null;
+    return (await exists(resolved)) ? null : reference;
+  });
   return new Set(checked.filter((reference): reference is string => reference !== null));
 }
 

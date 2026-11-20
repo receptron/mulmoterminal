@@ -176,4 +176,13 @@ describe("LibraryMemory", () => {
     await flushPromises();
     expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("codex-sandbox");
   });
+
+  it("starts unnarrowed when the list is read again, as on reopening", async () => {
+    const health = new Map<string, LibraryMemoryHealth>([["-w-app", { slug: "-w-app", issues: [], files: { "codex.md": [{ kind: "not-in-index" }] } }]]);
+    const wrapper = await mountMemory("", health);
+    await wrapper.find("[data-testid=memory-tidy-toggle]").trigger("click");
+    expect(wrapper.findAll("[data-testid=memory-row]")).toHaveLength(1);
+    await wrapper.setProps({ projects: projects.map((project) => ({ ...project })) });
+    expect(wrapper.findAll("[data-testid=memory-row]")).toHaveLength(3);
+  });
 });

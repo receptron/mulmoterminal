@@ -48,7 +48,7 @@ export function pathReferences(body: string): string[] {
  *  Windows way (a drive or backslashes) on another system, where it would read as a relative name. */
 export function resolveReference(reference: string, cwd: string | null, home: string, windows: boolean): string | null {
   if (!windows && /(?:^[A-Za-z]:)|\\/.test(reference)) return null;
-  if (reference.startsWith("~/")) return path.join(home, reference.slice(2));
+  if (reference.startsWith("~/") || (windows && reference.startsWith("~\\"))) return path.join(home, reference.slice(2));
   if (path.isAbsolute(reference)) return reference;
   return cwd === null ? null : path.resolve(cwd, reference);
 }
@@ -65,7 +65,7 @@ function fileIssues(
   if (listed !== null && !listed.has(file.file)) issues.push({ kind: "not-in-index" });
   if (file.text === null) return issues;
   const { fields, metadata, body } = parseMemoryFrontmatter(file.text);
-  const present: Record<string, string | undefined> = { ...fields, type: metadata.type ?? fields.type };
+  const present: Record<string, string | undefined> = { ...fields, type: metadata.type?.trim() || fields.type };
   const missing = REQUIRED_FIELDS.filter((field) => (present[field] ?? "").trim() === "");
   if (missing.length > 0) issues.push({ kind: "no-frontmatter", missing });
   const broken = [...new Set(linkNames(body))].filter((name) => !names.has(name));
@@ -94,4 +94,15 @@ export function memoryHealth(input: MemoryHealthInput, missingPaths: ReadonlySet
     input.files.map((file) => [file.file, fileIssues(file, listed, names, missingPaths)] as const).filter(([, found]) => found.length > 0),
   );
   return { slug: input.slug, issues, files };
+}
+
+/** The top folder of an absolute path — `/Users` of `/Users/me/x.md`, `C:\\work` of `C:\\work\\x.md` —
+ *  with the path flavour handed in, so both are decided the same on any system. */
+export function topFolder(resolved: string, flavour: Pick<typeof path, "parse" | "sep" | "join">): string | null {
+  const { root } = flavour.parse(resolved);
+  const top = resolved
+    .slice(root.length)
+    .split(flavour.sep)
+    .filter((part) => part !== "")[0];
+  return top === undefined ? null : flavour.join(root, top);
 }
