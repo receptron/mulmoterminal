@@ -36,7 +36,7 @@ describe("foldFileHistory", () => {
     expect(files.map(trackedFileOf)).toEqual([
       {
         trackingPath: "src/a.ts",
-        path: "/w/app/src/a.ts",
+        path: path.join("/w/app/src", "a.ts"), // the platform's own separator
         versions: [
           { version: 1, at: Date.parse("2026-11-19T05:00:00.000Z"), exists: true },
           { version: 2, at: Date.parse("2026-11-19T06:00:00.000Z"), exists: true },
