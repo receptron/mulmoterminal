@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The Library's memory kind (#3331): every project's memory, grouped by project with how full its
 // MEMORY.md is, and one memory read beside the list — its frontmatter apart from its body, and its
-// `[[name]]` links followed. Edited in place, and moved to the Trash with Undo.
+// `[[name]]` links followed. Edited in place, moved to the Trash or merged into another, with Undo.
 import { computed, nextTick, ref, useTemplateRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
@@ -17,6 +17,7 @@ import {
 import { renderWikiHtml } from "../../wikiMarkdown";
 import LibraryMemoryEditor from "./LibraryMemoryEditor.vue";
 import LibraryMoreMenu from "./LibraryMoreMenu.vue";
+import LibraryMemoryMergeChooser from "./LibraryMemoryMergeChooser.vue";
 import { useMemoryTrash } from "../../composables/useMemoryTrash";
 import { hasMemoryDraft, memoryDraftKey } from "./memoryDrafts";
 import type { LibraryFileText } from "../../../common/libraryFiles";
@@ -168,9 +169,14 @@ async function move(by: number): Promise<void> {
 }
 /** Editing the memory being read, in place of its body. */
 const editing = ref(false);
+/** Choosing the memory to merge the one being read into, in place of its body. */
+const choosingMerge = ref(false);
 watch(
   () => selected.value?.key ?? null,
-  () => (editing.value = false),
+  () => {
+    editing.value = false;
+    choosingMerge.value = false;
+  },
 );
 
 /** Enter, from the overlay: the primary action, editing. */
@@ -180,17 +186,62 @@ function startEdit(): void {
 
 function onSaved(saved: string, version: string): void {
   text.value = { text: saved, version };
-  editing.value = false;
+  stopEditing();
   emit("changed");
 }
 
 function onReload(): void {
-  editing.value = false;
+  stopEditing();
   rereads.value += 1;
 }
 
+function stopEditing(): void {
+  editing.value = false;
+  merging.value = null;
+}
+
+/** A memory being merged into the one now read: chosen in the reader, then edited into it there. */
+const merging = ref<{ into: string; key: string; file: string; version: string; title: string; body: string } | null>(null);
+const mergeChoices = computed(() => {
+  const row = selected.value;
+  if (row === null) return [];
+  return row.project.files
+    .filter((memory) => memory.file !== row.memory.file)
+    .map((memory) => ({ key: memoryKey(row.project.slug, memory.file), title: memoryTitle(memory), file: memory.file }));
+});
+
+function chooseMerge(): void {
+  moreMenu.value?.close();
+  choosingMerge.value = true;
+}
+
+/** Reads the memory chosen to merge into, and edits it with the one that was read added at its end. */
+function pickMerge(into: string): void {
+  const row = selected.value;
+  const version = text.value?.version;
+  if (row === null || text.value?.text == null || typeof version !== "string") return;
+  const body = parseMemoryFrontmatter(text.value.text).body;
+  merging.value = { into, key: row.key, file: row.memory.file, version, title: memoryTitle(row.memory), body };
+  chosenKey.value = into;
+}
+
+// The editor opens once the memory merged into has been read; choosing another one gives the merge up.
+watch(text, (read) => {
+  const pending = merging.value;
+  if (pending === null) return;
+  if (selected.value?.key !== pending.into) merging.value = null;
+  else if (typeof read?.version === "string") editing.value = true;
+});
+
+function onMerged(saved: string, version: string, undoId: string): void {
+  const done = merging.value;
+  text.value = { text: saved, version };
+  stopEditing();
+  if (done !== null && selected.value !== null) mergedNotice(done, memoryTitle(selected.value.memory), undoId);
+}
+
 const moreMenu = useTemplateRef<{ close: () => void }>("moreMenu");
-const { available: trashOffered, notice: trashNotice, trash, undo, dismiss: dismissTrashNotice } = useMemoryTrash(() => emit("changed"));
+const { available: trashOffered, notice: trashNotice, trash, merged: mergedNotice, undo, dismiss: dismissTrashNotice } = useMemoryTrash(() => emit("changed"));
 
 /** The memory being read, to the Trash; the reader moves on to the next one in the list. */
 async function trashSelected(): Promise<void> {
@@ -216,6 +267,7 @@ function trashNoticeText(): string {
   if (shown === null) return "";
   if (shown.kind !== "trashed") return t(`libraryView.memory.trash.${shown.kind}`);
   if (shown.undoFailed === true) return t("libraryView.memory.trash.undo-failed");
+  if (shown.into !== undefined) return t("libraryView.memory.trash.merged", { title: shown.title, into: shown.into });
   const done = t("libraryView.memory.trash.trashed", { title: shown.title });
   return shown.running ? `${done} ${t("libraryView.memory.trash.running")}` : done;
 }
@@ -326,16 +378,25 @@ defineExpose({ move, startEdit });
       <LibraryMemoryEditor
         v-if="editing && text?.text != null && text.version"
         ref="editor"
-        :key="selected.key"
+        :key="merging ? `${selected.key}:merge` : selected.key"
         :leave-refused="leaveRefused"
+        :merging="merging && merging.into === selected.key ? merging : null"
         :slug="selected.project.slug"
         :file="selected.memory.file"
         :text="text.text"
         :version="text.version"
         :cwd="selected.project.cwd"
         @saved="onSaved"
-        @cancel="editing = false"
+        @merged="onMerged"
+        @cancel="stopEditing"
         @reload="onReload"
+      />
+      <LibraryMemoryMergeChooser
+        v-else-if="choosingMerge"
+        :title="memoryTitle(selected.memory)"
+        :choices="mergeChoices"
+        @pick="pickMerge"
+        @cancel="choosingMerge = false"
       />
       <template v-else>
         <div class="min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-3" @click="onBodyActivate" @keydown="onBodyActivate">
@@ -353,6 +414,15 @@ defineExpose({ move, startEdit });
               @click="trashSelected"
             >
               <span class="material-symbols-outlined text-[18px]">delete</span>{{ t("libraryView.memory.trash.action") }}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="memory-merge"
+              class="flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 py-1.5 text-left font-sans text-[13px] text-fg hover:bg-hover"
+              @click="chooseMerge"
+            >
+              <span class="material-symbols-outlined text-[18px]">merge</span>{{ t("libraryView.memory.merge.action") }}
             </button>
           </LibraryMoreMenu>
           <span

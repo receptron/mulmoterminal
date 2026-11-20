@@ -44,9 +44,17 @@ export const libraryViewZhCN = {
       folded: "{count} 行未更改",
     },
     memory: {
+      merge: {
+        action: "合并到另一条记忆",
+        choose: "将“{title}”合并到：",
+        cancel: "取消",
+        none: "此项目中没有可以合并到的其他记忆。",
+        editing: "正在合并“{title}”：保存后，它会连同 MEMORY.md 中的行一起移到废纸篓。",
+      },
       trash: {
         action: "移到废纸篓",
         trashed: "已将“{title}”移到废纸篓。",
+        merged: "已将“{title}”合并到“{into}”。",
         running: "此项目中有正在运行的会话，可能仍会用到这条记忆。",
         undo: "撤销",
         dismiss: "关闭",
@@ -71,6 +79,7 @@ export const libraryViewZhCN = {
         reload: "重新读取",
         failed: "无法保存。请稍后再试。",
         "too-large": "太大，无法在此保存。",
+        "from-changed": "要合并进来的记忆在打开后已改动，因此没有合并。请先复制你的编辑，然后",
       },
       healthFailed: "无法检查可以整理的记忆。",
       tidy: "有 {count} 项可以整理",

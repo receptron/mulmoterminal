@@ -44,9 +44,17 @@ export const libraryViewKo = {
       folded: "변경 없는 {count}줄",
     },
     memory: {
+      merge: {
+        action: "다른 기억에 합치기",
+        choose: "“{title}”을(를) 합칠 곳:",
+        cancel: "취소",
+        none: "이 프로젝트에는 합칠 다른 기억이 없습니다.",
+        editing: "“{title}”을(를) 합치는 중: 저장하면 MEMORY.md의 줄과 함께 휴지통으로 옮겨집니다.",
+      },
       trash: {
         action: "휴지통으로 이동",
         trashed: "“{title}”을(를) 휴지통으로 옮겼습니다.",
+        merged: "“{title}”을(를) “{into}”에 합쳤습니다.",
         running: "이 프로젝트에서 실행 중인 세션이 있어 아직 이 기억을 쓸 수 있습니다.",
         undo: "실행 취소",
         dismiss: "닫기",
@@ -71,6 +79,7 @@ export const libraryViewKo = {
         reload: "다시 읽기",
         failed: "저장하지 못했습니다. 잠시 후 다시 시도하세요.",
         "too-large": "너무 커서 여기서 저장할 수 없습니다.",
+        "from-changed": "합칠 기억이 연 뒤에 바뀌어 합치지 않았습니다. 편집 내용을 복사한 뒤",
       },
       healthFailed: "정리할 수 있는 기억을 확인하지 못했습니다.",
       tidy: "{count}건을 정리할 수 있습니다",

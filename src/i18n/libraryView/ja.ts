@@ -44,9 +44,17 @@ export const libraryViewJa = {
       folded: "変更のない {count} 行",
     },
     memory: {
+      merge: {
+        action: "ほかの記憶に統合する",
+        choose: "「{title}」の統合先:",
+        cancel: "やめる",
+        none: "このプロジェクトには統合先になる記憶がほかにありません。",
+        editing: "「{title}」を統合しています。保存すると、それは MEMORY.md の行と一緒にごみ箱へ移ります。",
+      },
       trash: {
         action: "ごみ箱へ移す",
         trashed: "「{title}」をごみ箱へ移しました。",
+        merged: "「{title}」を「{into}」に統合しました。",
         running: "このプロジェクトで動いているセッションがあり、まだこの記憶を使うかもしれません。",
         undo: "取り消す",
         dismiss: "閉じる",
@@ -71,6 +79,7 @@ export const libraryViewJa = {
         reload: "読み直す",
         failed: "保存できませんでした。少し待ってからもう一度試してください。",
         "too-large": "大きすぎてここでは保存できません。",
+        "from-changed": "統合する側の記憶が開いたあとに変わったので、統合しませんでした。編集を写してから",
       },
       healthFailed: "整えられる記憶を調べられませんでした。",
       tidy: "{count} 件を整えられます",

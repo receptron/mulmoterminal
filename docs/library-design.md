@@ -63,6 +63,8 @@ follows is a refusal to add one of those, and the reason sits next to it.
   puts the file back without replacing one made at that name since. Its gap is the save's: another
   process writing between a check and the step it guards. Each step re-reads what it changes, so
   the cost of such a race is an index line (which the health check then reports), never a memory's text.
+  Merging two memories is that delete plus a save over the other, under the same checks, and its one
+  Undo reverses both; every change takes its files in name order, then the index.
 - **The index**: `~/.mulmoterminal/library/index.db`, shared by every server under the same HOME
   and built by one of them at a time. It is a copy of the agent's files and is rebuilt if deleted.
   It is opened only on a worker thread, which both builds and queries it: SQLite in Node is

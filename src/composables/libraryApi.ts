@@ -127,6 +127,31 @@ export async function trashLibraryMemoryFile(slug: string, file: string, version
   }
 }
 
+/** "changed" names the memory that changed since it was opened: the one kept, or the one merged into it. */
+export type MemoryMergeResult = { kind: "merged"; version: string; undo: string } | { kind: "changed"; file: "into" | "from" } | { kind: "failed" };
+
+export interface MemoryMergeRequest {
+  slug: string;
+  into: string;
+  text: string;
+  version: string;
+  from: string;
+  fromVersion: string;
+}
+
+/** Writes `text` over `into` and moves `from` to the Trash with its lines in MEMORY.md, as one change. */
+export async function mergeLibraryMemoryFiles({ slug, into, text, version, from, fromVersion }: MemoryMergeRequest): Promise<MemoryMergeResult> {
+  try {
+    const response = await fetchWithTimeout(`${memoryFileUrl(slug, into)}/merge`, postJson({ text, version, from, fromVersion }), LIBRARY_READ_TIMEOUT_MS);
+    const body = await jsonBody(response);
+    if (response.status === 409) return { kind: "changed", file: body.file === "from" ? "from" : "into" };
+    if (!response.ok || typeof body.version !== "string" || typeof body.undo !== "string") return { kind: "failed" };
+    return { kind: "merged", version: body.version, undo: body.undo };
+  } catch {
+    return { kind: "failed" };
+  }
+}
+
 /** "taken": a file of that name was made since; "gone": too late to undo here (it is in the Trash). */
 export type MemoryUndoResult = "restored" | "taken" | "gone" | "failed";
 

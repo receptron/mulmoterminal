@@ -13,6 +13,7 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
   saveLibraryMemoryFile: () => Promise.resolve({ kind: "saved", version: "v2" }),
   trashLibraryMemoryFile: (...args: unknown[]) => trashCalls.push(args) && Promise.resolve(trashAnswer),
   undoLibraryMemoryTrash: (undo: string) => undoCalls.push(undo) && Promise.resolve(undoAnswer),
+  mergeLibraryMemoryFiles: (request: unknown) => mergeCalls.push(request) && Promise.resolve(mergeAnswer),
 }));
 let running = false;
 vi.mock("../../../../src/composables/useDirLists", () => ({
@@ -24,6 +25,8 @@ let trashCalls: unknown[][] = [];
 let undoCalls: string[] = [];
 let trashAnswer: { kind: string; undo?: string } = { kind: "trashed", undo: "u-1" };
 let undoAnswer = "restored";
+let mergeCalls: unknown[] = [];
+let mergeAnswer: { kind: string; version?: string; undo?: string; file?: string } = { kind: "merged", version: "v3", undo: "u-m" };
 
 const LibraryMemory = (await import("../../../../src/components/library/LibraryMemory.vue")).default;
 const { MEMORY_TRASH_NOTICE_MS } = await import("../../../../src/composables/useMemoryTrash");
@@ -49,6 +52,8 @@ beforeEach(() => {
   undoCalls = [];
   trashAnswer = { kind: "trashed", undo: "u-1" };
   undoAnswer = "restored";
+  mergeCalls = [];
+  mergeAnswer = { kind: "merged", version: "v3", undo: "u-m" };
   texts = {
     "-w-app/reply.md": "---\nname: reply-in-japanese\n---\nAlways Japanese. See [[codex-sandbox]] and [[gone]].",
     "-w-app/codex.md": "---\nname: codex-sandbox\n---\nThe sandbox refuses rm.",
@@ -330,6 +335,88 @@ describe("LibraryMemory", () => {
       trashHere = false;
       const wrapper = await mountMemory();
       expect(wrapper.find("[data-testid=library-more-actions]").exists()).toBe(false);
+    });
+  });
+
+  describe("merging into another memory", () => {
+    const chooseMerge = async (wrapper: Awaited<ReturnType<typeof mountMemory>>) => {
+      await wrapper.find("[data-testid=library-more-actions]").trigger("click");
+      await wrapper.find("[data-testid=memory-merge]").trigger("click");
+      await flushPromises();
+    };
+    const pickFirst = async (wrapper: Awaited<ReturnType<typeof mountMemory>>) => {
+      await wrapper.find("[data-testid=memory-merge-choice]").trigger("click");
+      await flushPromises();
+    };
+
+    it("offers the other memories of its project, edits the chosen one with this one's body added, and merges on save with Undo", async () => {
+      const wrapper = await mountMemory();
+      await chooseMerge(wrapper);
+      expect(wrapper.findAll("[data-testid=memory-merge-choice]").map((choice) => choice.text())).toEqual(["codex-sandboxcodex.md"]);
+      await pickFirst(wrapper);
+      expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("codex-sandbox");
+      expect(wrapper.find("[data-testid=memory-editor-merging]").text()).toContain("reply-in-japanese");
+      const field = wrapper.find<HTMLTextAreaElement>("[data-testid=memory-editor-field]").element;
+      expect(field.value).toBe("---\nname: codex-sandbox\n---\nThe sandbox refuses rm.\n\nAlways Japanese. See [[codex-sandbox]] and [[gone]].\n");
+      await wrapper.find("[data-testid=memory-editor-save]").trigger("click");
+      await flushPromises();
+      expect(mergeCalls).toEqual([{ slug: "-w-app", into: "codex.md", text: field.value, version: "v1", from: "reply.md", fromVersion: "v1" }]);
+      expect(wrapper.find("[data-testid=memory-editor]").exists()).toBe(false);
+      expect(wrapper.find("[data-testid=memory-trash-notice]").text()).toContain("Merged “reply-in-japanese” into “codex-sandbox”.");
+      expect(wrapper.emitted("changed")).toHaveLength(1);
+      await wrapper.find("[data-testid=memory-trash-undo]").trigger("click");
+      await flushPromises();
+      expect(undoCalls).toEqual(["u-m"]);
+      expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("reply-in-japanese");
+    });
+
+    it("says when the memory merged in changed since, and merges nothing", async () => {
+      mergeAnswer = { kind: "changed", file: "from" };
+      const wrapper = await mountMemory();
+      await chooseMerge(wrapper);
+      await pickFirst(wrapper);
+      await wrapper.find("[data-testid=memory-editor-save]").trigger("click");
+      await flushPromises();
+      expect(wrapper.find("[data-testid=memory-editor-notice]").text()).toContain("being merged in changed");
+      expect(wrapper.find("[data-testid=memory-trash-notice]").exists()).toBe(false);
+    });
+
+    it("goes back to reading on Esc in the chooser, and on Cancel in the editor, keeping no draft", async () => {
+      const wrapper = await mountMemory();
+      await chooseMerge(wrapper);
+      await wrapper.find("[data-testid=memory-merge-chooser]").trigger("keydown", { key: "Escape" });
+      expect(wrapper.find("[data-testid=memory-merge-chooser]").exists()).toBe(false);
+      expect(wrapper.find("[data-testid=memory-body]").exists()).toBe(true);
+      await chooseMerge(wrapper);
+      await pickFirst(wrapper);
+      await wrapper.find("[data-testid=memory-editor-cancel]").trigger("click");
+      await flushPromises();
+      expect(wrapper.find("[data-testid=memory-editor]").exists()).toBe(false);
+      expect(wrapper.find("[data-testid=memory-draft-kept]").exists()).toBe(false);
+      await wrapper.find("[data-testid=memory-edit]").trigger("click");
+      await flushPromises();
+      expect(wrapper.find("[data-testid=memory-editor-merging]").exists()).toBe(false);
+    });
+
+    it("keeps no draft when the Library closes in the middle of a merge", async () => {
+      const wrapper = await mountMemory();
+      await chooseMerge(wrapper);
+      await pickFirst(wrapper);
+      wrapper.unmount();
+      const again = await mountMemory();
+      await again.findAll("[data-testid=memory-row]")[1]?.trigger("click");
+      await flushPromises();
+      expect(again.find("[data-testid=memory-reader] h2").text()).toBe("codex-sandbox");
+      expect(again.find("[data-testid=memory-draft-kept]").exists()).toBe(false);
+    });
+
+    it("says there is nothing to merge into when the project has one memory", async () => {
+      const wrapper = await mountMemory();
+      await wrapper.findAll("[data-testid=memory-row]")[2]?.trigger("click");
+      await flushPromises();
+      await chooseMerge(wrapper);
+      expect(wrapper.find("[data-testid=memory-merge-chooser]").text()).toContain("No other memory in this project");
+      expect(wrapper.find("[data-testid=memory-merge-choice]").exists()).toBe(false);
     });
   });
 });

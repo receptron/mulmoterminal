@@ -6,7 +6,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, wa
 import { dropMemoryDraft, keepMemoryDraft, memoryDraftFor, memoryDraftKey, staleMemoryDraftFor } from "./memoryDrafts";
 import { isImeConfirming } from "../../composables/imeComposition";
 import { useI18n } from "vue-i18n";
-import { saveLibraryMemoryFile } from "../../composables/libraryApi";
+import { mergeLibraryMemoryFiles, saveLibraryMemoryFile, type MemorySaveResult } from "../../composables/libraryApi";
 import { sessionRunningIn } from "./memorySessions";
 import { MEMORY_EDIT_MAX_BYTES } from "../../../common/libraryMemory";
 
@@ -18,17 +18,24 @@ const props = defineProps<{
   cwd: string | null;
   /** Bumped when moving to another memory was refused because of this draft. */
   leaveRefused?: number;
+  /** Another memory of this project being merged into this one: its body is added to the draft, and
+   *  saving also moves it to the Trash. A merge keeps no draft — it is one step, begun again or not. */
+  merging?: { file: string; version: string; title: string; body: string } | null;
 }>();
-const emit = defineEmits<{ (e: "saved", text: string, version: string): void; (e: "cancel" | "reload"): void }>();
+const emit = defineEmits<{
+  (e: "saved", text: string, version: string): void;
+  (e: "merged", text: string, version: string, undo: string): void;
+  (e: "cancel" | "reload"): void;
+}>();
 const { t } = useI18n();
 
 /** A textarea gives every line break as `\n`: a file written with `\r\n` is saved with them again,
  *  so opening and saving it unchanged changes nothing. */
 const crlf = props.text.includes("\r\n");
 const draftKey = memoryDraftKey(props.slug, props.file);
-const kept = memoryDraftFor(draftKey, props.version);
+const kept = props.merging ? null : memoryDraftFor(draftKey, props.version);
 /** A draft begun on a version the file has since left: offered, not applied. */
-const stale = ref(staleMemoryDraftFor(draftKey, props.version));
+const stale = ref(props.merging ? null : staleMemoryDraftFor(draftKey, props.version));
 /** Whether the draft kept for this memory is the one in this editor: only then is it ours to drop. */
 let holdsKept = kept !== null;
 function useStaleDraft(): void {
@@ -38,8 +45,9 @@ function useStaleDraft(): void {
   stale.value = null;
   notice.value = null;
 }
-const draft = ref((kept?.text ?? props.text).replace(/\r\n?/g, "\n"));
 const opened = props.text.replace(/\r\n?/g, "\n");
+const mergedDraft = (body: string): string => `${opened.trimEnd()}\n\n${body.replace(/\r\n?/g, "\n").trim()}\n`;
+const draft = ref(props.merging ? mergedDraft(props.merging.body) : (kept?.text ?? props.text).replace(/\r\n?/g, "\n"));
 /** The draft as it goes to disk: an untouched draft is the file exactly as it was (mixed line endings
  *  included); an edited one takes CRLF throughout when the file had any. */
 const asWritten = (text: string): string => {
@@ -50,7 +58,7 @@ const asWritten = (text: string): string => {
 const dirty = computed(() => asWritten(draft.value) !== props.text);
 defineExpose({ dirty });
 const saving = ref(false);
-const notice = ref<"changed" | "failed" | "too-large" | "unsaved" | "restored" | null>(kept === null ? null : "restored");
+const notice = ref<"changed" | "from-changed" | "failed" | "too-large" | "unsaved" | "restored" | null>(kept === null ? null : "restored");
 watch(
   () => props.leaveRefused,
   () => (notice.value = "unsaved"),
@@ -64,7 +72,7 @@ let settled = false;
 
 // Gone with an unsaved draft (the Library closed, the kind switched): kept for next time.
 onBeforeUnmount(() => {
-  if (!settled && dirty.value) keepMemoryDraft(draftKey, { version: props.version, text: asWritten(draft.value) });
+  if (!settled && !props.merging && dirty.value) keepMemoryDraft(draftKey, { version: props.version, text: asWritten(draft.value) });
 });
 
 /** Read the file again after a conflict: the draft is given up, as the notice said. */
@@ -96,13 +104,28 @@ async function save(): Promise<void> {
   }
   saving.value = true;
   const text = asWritten(draft.value);
-  const result = await saveLibraryMemoryFile(props.slug, props.file, text, props.version);
+  if (props.merging) await merge(text, props.merging);
+  else saved(text, await saveLibraryMemoryFile(props.slug, props.file, text, props.version));
   saving.value = false;
-  if (result.kind === "saved") {
+}
+
+function saved(text: string, result: MemorySaveResult): void {
+  if (result.kind !== "saved") {
+    notice.value = result.kind;
+    return;
+  }
+  settled = true;
+  if (holdsKept) dropMemoryDraft(draftKey);
+  emit("saved", text, result.version);
+}
+
+async function merge(text: string, merging: NonNullable<typeof props.merging>): Promise<void> {
+  const request = { slug: props.slug, into: props.file, text, version: props.version, from: merging.file, fromVersion: merging.version };
+  const result = await mergeLibraryMemoryFiles(request);
+  if (result.kind === "merged") {
     settled = true;
-    if (holdsKept) dropMemoryDraft(draftKey);
-    emit("saved", text, result.version);
-  } else notice.value = result.kind;
+    emit("merged", text, result.version, result.undo);
+  } else notice.value = result.kind === "changed" && result.file === "from" ? "from-changed" : result.kind;
 }
 
 /** ⌘Enter (Ctrl+Enter elsewhere) saves; Esc stops editing, not the Library. */
@@ -137,6 +160,9 @@ function onKey(event: KeyboardEvent): void {
         {{ t("libraryView.memory.edit.useStale") }}
       </button>
     </p>
+    <p v-if="merging" class="m-0 px-4 pt-3 font-sans text-[12px] text-secondary" role="status" data-testid="memory-editor-merging">
+      {{ t("libraryView.memory.merge.editing", { title: merging.title }) }}
+    </p>
     <p v-if="sessionRunning" class="m-0 px-4 pt-3 font-sans text-[12px] text-warn" role="status" data-testid="memory-editor-running">
       {{ t("libraryView.memory.edit.running") }}
     </p>
@@ -153,7 +179,7 @@ function onKey(event: KeyboardEvent): void {
       <p v-if="notice" class="m-0 mr-auto font-sans text-[12px] text-err-text" role="status" data-testid="memory-editor-notice">
         {{ t(`libraryView.memory.edit.${notice}`) }}
         <button
-          v-if="notice === 'changed'"
+          v-if="notice === 'changed' || notice === 'from-changed'"
           type="button"
           class="ml-1 cursor-pointer border-0 bg-transparent p-0 font-sans text-[12px] text-accent hover:underline"
           @click="reload"

@@ -44,9 +44,17 @@ export const libraryViewZhTW = {
       folded: "{count} 行未變更",
     },
     memory: {
+      merge: {
+        action: "合併到另一則記憶",
+        choose: "將「{title}」合併到：",
+        cancel: "取消",
+        none: "此專案中沒有可以合併到的其他記憶。",
+        editing: "正在合併「{title}」：儲存後，它會連同 MEMORY.md 中的行一起移到垃圾桶。",
+      },
       trash: {
         action: "移到垃圾桶",
         trashed: "已將「{title}」移到垃圾桶。",
+        merged: "已將「{title}」合併到「{into}」。",
         running: "此專案中有正在執行的工作階段，可能仍會用到這條記憶。",
         undo: "復原",
         dismiss: "關閉",
@@ -71,6 +79,7 @@ export const libraryViewZhTW = {
         reload: "重新讀取",
         failed: "無法儲存。請稍後再試。",
         "too-large": "太大，無法在此儲存。",
+        "from-changed": "要合併進來的記憶在開啟後已變更，因此沒有合併。請先複製你的編輯，然後",
       },
       healthFailed: "無法檢查可以整理的記憶。",
       tidy: "有 {count} 項可以整理",
