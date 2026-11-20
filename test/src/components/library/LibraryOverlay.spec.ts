@@ -546,6 +546,10 @@ describe("LibraryOverlay", () => {
     first?.element.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
     await flushPromises();
     expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("two");
+    // Enter on a focused row is the row's own: not swallowed by the Library.
+    const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    wrapper.findAll("[data-testid=memory-row]")[0]?.element.dispatchEvent(enter);
+    expect(enter.defaultPrevented).toBe(false);
     // On a link in the body, the arrows are the link's, not the list's.
     const link = wrapper.find("[data-testid=memory-body] span[data-page]");
     link.element.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));

@@ -84,6 +84,20 @@ describe("the index gauge", () => {
   });
 });
 
+describe("a memory that cannot be read", () => {
+  it("is listed by its file name, and its read says why", async () => {
+    const { call, root } = setup();
+    writeFileSync(path.join(root, "-w-other", "memory", "huge.md"), "x".repeat(1_000_001));
+    const other = (await call("/api/library/memory")).body.projects;
+    expect(other).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ slug: "-w-other", files: expect.arrayContaining([expect.objectContaining({ file: "huge.md", name: null })]) }),
+      ]),
+    );
+    expect((await call("/api/library/memory/-w-other/huge.md")).body).toEqual({ text: null, reason: "too-large" });
+  });
+});
+
 describe("finding the folders that hold memory", () => {
   it("looks for them again only after the reuse time, while reading the memory in them fresh", async () => {
     const { root } = setup();

@@ -225,7 +225,8 @@ function onKey(event: KeyboardEvent): void {
   const modified = event.metaKey || event.ctrlKey || event.altKey;
   const onOtherControl = target?.closest(OTHER_CONTROLS) != null && target.closest("[data-library-row]") === null;
   const action = libraryKeyAction({ key: event.key, inSearch, inOtherField: editable && !inSearch, onOtherControl, composing: event.isComposing, modified });
-  if (action === null) return;
+  // Enter does nothing of the Library's own in Memory yet: left to the focused control (a row presses).
+  if (action === null || (action === "primary" && kind.value === "memory")) return;
   event.preventDefault();
   runKeyAction(action);
 }
@@ -233,8 +234,7 @@ function onKey(event: KeyboardEvent): void {
 function runKeyAction(action: NonNullable<ReturnType<typeof libraryKeyAction>>): void {
   const by = action === "up" ? -1 : 1;
   if (action === "focus-search") searchField.value?.focus();
-  // Enter edits a memory once editing lands; the arrows move through the memories meanwhile.
-  else if (kind.value === "memory") void (action === "primary" ? undefined : memoryView.value?.move(by));
+  else if (kind.value === "memory") void memoryView.value?.move(by);
   else if (action === "primary") void resume();
   else void move(by);
 }

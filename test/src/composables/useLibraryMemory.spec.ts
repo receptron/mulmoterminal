@@ -37,5 +37,12 @@ describe("useLibraryMemory", () => {
     release();
     await flushPromises();
     expect([memory.loaded.value, memory.failed.value, memory.projects.value]).toEqual([true, true, []]);
+    // And the failure is not shown while the next open is read.
+    isOpen.value = false;
+    await flushPromises();
+    gate = new Promise(() => {});
+    isOpen.value = true;
+    await flushPromises();
+    expect([memory.loaded.value, memory.failed.value]).toEqual([false, false]);
   });
 });

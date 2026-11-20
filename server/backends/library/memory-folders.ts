@@ -21,17 +21,19 @@ async function entriesOf(dir: string): Promise<Dirent[]> {
   }
 }
 
+/** A memory file as the list shows it. Only a regular file is one — a link is left out — and one that
+ *  cannot be read (too large, not text) is still listed by its file name, for the reader to say so. */
 async function memoryFileOf(folder: string, file: string): Promise<LibraryMemoryFile | null> {
-  const read = await readBoundedText(path.join(folder, file));
-  if (read.text === null) return null;
-  const { fields, metadata } = parseMemoryFrontmatter(read.text);
   const info = await fs.lstat(path.join(folder, file)).catch(() => null);
+  if (info === null || !info.isFile()) return null;
+  const read = await readBoundedText(path.join(folder, file));
+  const { fields, metadata } = parseMemoryFrontmatter(read.text ?? "");
   return {
     file,
     name: fields.name ?? null,
     description: fields.description ?? null,
     type: metadata.type ?? fields.type ?? null,
-    updatedAt: info?.mtimeMs ?? 0,
+    updatedAt: info.mtimeMs,
   };
 }
 
