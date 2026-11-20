@@ -31,6 +31,9 @@ let pageFailures = 0;
 let firstHasMore = false;
 vi.mock("../../../../src/composables/libraryApi", () => ({
   LIBRARY_PAGE: 50,
+  // The reader's changed-files strip, which these specs do not look at.
+  loadLibraryFiles: () => Promise.resolve([]),
+  loadLibraryFileText: () => Promise.resolve(null),
   loadLibraryPage: (offset: number) => {
     if (offset === 0 && pageFailures > 0) {
       pageFailures--;
