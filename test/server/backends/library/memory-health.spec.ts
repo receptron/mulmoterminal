@@ -14,7 +14,7 @@ import {
   topFolder,
   type MemoryHealthInput,
 } from "../../../../server/backends/library/memory-health";
-import { MEMORY_CHECK_MAX_BYTES, readMemoryHealth } from "../../../../server/backends/library/memory-health-read";
+import { directoriesBySlug, MEMORY_CHECK_MAX_BYTES, readMemoryHealth } from "../../../../server/backends/library/memory-health-read";
 import { MEMORY_INDEX_BYTES_MAX, MEMORY_INDEX_LINES_MAX } from "../../../../common/libraryMemory";
 
 const memory = (name: string, body = "", extra = ""): string =>
@@ -211,5 +211,10 @@ describe("readMemoryHealth", () => {
     expect(await read()).toEqual({ "a.md": [{ kind: "broken-link", names: ["gone"] }] });
     writeFileSync(path.join(folder, "a.md"), memory("a", "now tidy, and a longer body than before"));
     expect(await read()).toEqual({});
+  });
+
+  it("leaves a folder's directory unknown when two directories share its name", () => {
+    expect([...directoriesBySlug(["/tmp/a.b", "/tmp/a-b", "/w/app"])]).toEqual([["-w-app", "/w/app"]]);
+    expect([...directoriesBySlug(["/w/app", "/w/app"])]).toEqual([["-w-app", "/w/app"]]);
   });
 });

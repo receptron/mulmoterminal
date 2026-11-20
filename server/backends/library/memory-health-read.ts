@@ -27,10 +27,22 @@ const exists = (file: string): Promise<boolean> =>
 /** The most of one memory the checks read: real memories are a few kilobytes; a larger one is judged
  *  on its listing alone (its links and paths are not looked for). */
 export const MEMORY_CHECK_MAX_BYTES = 256 * 1024;
-const CACHED_TEXTS = 4096;
+/** How much text the cache keeps in all; the oldest goes first past it. */
+export const CACHED_TEXT_BYTES = 16 * 1024 * 1024;
 
 /** Texts by file and stamp, so opening the Library again reads only what changed since. */
 const texts = new Map<string, string | null>();
+let cachedBytes = 0;
+
+function remember(key: string, text: string | null): void {
+  texts.set(key, text);
+  cachedBytes += text?.length ?? 0;
+  while (cachedBytes > CACHED_TEXT_BYTES && texts.size > 0) {
+    const [oldest, kept] = texts.entries().next().value ?? ["", null];
+    texts.delete(oldest);
+    cachedBytes -= kept?.length ?? 0;
+  }
+}
 
 async function memoryText(file: string): Promise<string | null> {
   const info = await fs.lstat(file).catch(() => null);
@@ -39,8 +51,7 @@ async function memoryText(file: string): Promise<string | null> {
   const known = texts.get(key);
   if (known !== undefined) return known;
   const text = (await readBoundedText(file)).text;
-  texts.set(key, text);
-  if (texts.size > CACHED_TEXTS) texts.delete(texts.keys().next().value ?? "");
+  remember(key, text);
   return text;
 }
 
@@ -76,10 +87,19 @@ async function missingReferences(input: MemoryHealthInput, cwd: string | null): 
   return new Set(checked.filter((reference): reference is string => reference !== null));
 }
 
+/** The directory each folder belongs to, when only one directory has that folder's name: two that
+ *  differ only in a character the name drops (`a.b`, `a-b`) leave it unknown, and its relative paths
+ *  are not judged rather than judged against the wrong checkout. */
+export function directoriesBySlug(cwds: readonly string[]): Map<string, string> {
+  const found = new Map<string, Set<string>>();
+  cwds.forEach((cwd) => found.set(projectSlug(cwd), (found.get(projectSlug(cwd)) ?? new Set()).add(cwd)));
+  return new Map([...found].flatMap(([slug, dirs]) => (dirs.size === 1 ? [[slug, [...dirs][0] ?? ""] as const] : [])));
+}
+
 /** Every project with something to tidy, judged by rule. `cwds` name the projects' directories, which
  *  relative paths in their memory are taken against. */
 export async function readMemoryHealth(projectsRoot: string, cwds: readonly string[], now_ms: number = Date.now()): Promise<LibraryMemoryHealth[]> {
-  const bySlug = new Map(cwds.map((cwd) => [projectSlug(cwd), cwd] as const));
+  const bySlug = directoriesBySlug(cwds);
   const slugs = await memorySlugs(projectsRoot, now_ms);
   const results: LibraryMemoryHealth[] = [];
   for (let start = 0; start < slugs.length; start += PROJECTS_AT_ONCE) {
