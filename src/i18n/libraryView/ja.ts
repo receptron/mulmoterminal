@@ -44,6 +44,7 @@ export const libraryViewJa = {
       folded: "変更のない {count} 行",
     },
     memory: {
+      shortcuts: "/ 検索 · ↑↓ 移動 · Esc 閉じる",
       kind: "記憶",
       loadFailed: "記憶のフォルダを読めませんでした。",
       empty: "まだ記憶はありません。Claude Code が作業しながら、プロジェクトごとの memory フォルダに書きます。",

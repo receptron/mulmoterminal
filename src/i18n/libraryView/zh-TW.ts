@@ -44,6 +44,7 @@ export const libraryViewZhTW = {
       folded: "{count} 行未變更",
     },
     memory: {
+      shortcuts: "/ 搜尋 · ↑↓ 移動 · Esc 關閉",
       kind: "記憶",
       loadFailed: "無法讀取記憶資料夾。",
       empty: "還沒有記憶。Claude Code 會在工作時寫到每個專案的 memory 資料夾。",

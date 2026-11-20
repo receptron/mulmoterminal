@@ -76,6 +76,14 @@ describe("LibraryMemory", () => {
     expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("codex-sandbox");
   });
 
+  it("shows an image in a memory as its alt text, fetching nothing", async () => {
+    texts["-w-app/reply.md"] = "---\nname: reply-in-japanese\n---\nsee ![the secret](/.env) here";
+    const wrapper = await mountMemory();
+    const body = wrapper.find("[data-testid=memory-body]");
+    expect(body.find("img").exists()).toBe(false);
+    expect(body.text()).toContain("see the secret here");
+  });
+
   it("narrows to what the search matches, and says when nothing does", async () => {
     expect((await mountMemory("codex")).findAll("[data-testid=memory-row]").map((row) => row.text())).toEqual([expect.stringContaining("codex-sandbox")]);
     expect((await mountMemory("zzz")).find("[data-testid=memory-no-match]").exists()).toBe(true);

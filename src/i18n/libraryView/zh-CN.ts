@@ -44,6 +44,7 @@ export const libraryViewZhCN = {
       folded: "{count} 行未更改",
     },
     memory: {
+      shortcuts: "/ 搜索 · ↑↓ 移动 · Esc 关闭",
       kind: "记忆",
       loadFailed: "无法读取记忆文件夹。",
       empty: "还没有记忆。Claude Code 会在工作时写到每个项目的 memory 文件夹。",

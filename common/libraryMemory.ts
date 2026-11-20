@@ -59,7 +59,8 @@ const KEY_VALUE = /^([A-Za-z_][\w-]*):(.*)$/;
 /** The frontmatter between the opening `---` and the next one, as the memory files write it: flat
  *  keys and one `metadata:` block indented under them. No frontmatter: all of it is body. */
 export function parseMemoryFrontmatter(text: string): MemoryFrontmatter {
-  const normalized = text.replace(/\r\n/g, "\n");
+  // A byte-order mark (a file saved by some Windows editors) would hide the opening `---`.
+  const normalized = text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
   const end = normalized.startsWith("---\n") ? normalized.indexOf("\n---", 3) : -1;
   if (end === -1) return { fields: {}, metadata: {}, body: text };
   const fields: Record<string, string> = {};

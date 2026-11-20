@@ -44,6 +44,7 @@ export const libraryViewEn = {
       folded: "{count} unchanged lines",
     },
     memory: {
+      shortcuts: "/ search · ↑↓ move · Esc close",
       kind: "Memory",
       loadFailed: "Your memory folders could not be read.",
       empty: "No memory yet. Claude Code writes it as it works, under each project's memory folder.",

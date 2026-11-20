@@ -530,9 +530,11 @@ describe("LibraryOverlay", () => {
     memoryTexts = { "-w-app/one.md": { text: "first" }, "-w-app/two.md": { text: "second" } };
     const wrapper = await mountLibrary();
     expect(wrapper.find("[data-testid=library-kind-memory]").text()).toContain("2");
+    expect(wrapper.text()).toContain("Enter resume");
     await wrapper.find("[data-testid=library-kind-memory]").trigger("click");
     await flushPromises();
     expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("one");
+    expect(wrapper.text()).not.toContain("Enter resume"); // Enter does nothing in memory yet
     await press("ArrowDown");
     await flushPromises();
     expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("two");

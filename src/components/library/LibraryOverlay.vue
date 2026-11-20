@@ -248,7 +248,9 @@ onBeforeUnmount(() => {
   <FullScreenOverlay v-if="isOpen" :region-label="t('libraryView.region')" :close-label="t('libraryView.close')" @close="close">
     <template #header>
       <span class="font-sans text-[14px] font-[650] text-fg">{{ t("libraryView.title") }}</span>
-      <span class="hidden font-sans text-[12px] text-dim sm:inline">{{ t("libraryView.shortcuts") }}</span>
+      <span class="hidden font-sans text-[12px] text-dim sm:inline">{{
+        kind === "memory" ? t("libraryView.memory.shortcuts") : t("libraryView.shortcuts")
+      }}</span>
     </template>
 
     <div class="flex min-h-0 flex-1 flex-col">

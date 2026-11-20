@@ -35,6 +35,10 @@ describe("parseMemoryFrontmatter", () => {
     expect(parsed.fields).toEqual({ other: "" });
   });
 
+  it("reads frontmatter behind a byte-order mark", () => {
+    expect(parseMemoryFrontmatter("\uFEFF---\nname: marked\n---\nbody")).toEqual({ fields: { name: "marked" }, metadata: {}, body: "body" });
+  });
+
   it("reads Windows line endings and single quotes", () => {
     expect(parseMemoryFrontmatter("---\r\nname: 'it''s'\r\n---\r\nbody").fields).toEqual({ name: "it's" });
   });

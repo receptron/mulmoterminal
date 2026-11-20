@@ -42,6 +42,9 @@ const bodyHtml = computed((): string => {
   const row = selected.value;
   if (row === null || text.value?.text == null) return "";
   const doc = new DOMParser().parseFromString(renderWikiHtml(text.value.text), "text/html");
+  // The wiki points an image at the workspace's file route; a memory has no files of its own to show,
+  // so an image is its alt text and nothing is fetched.
+  doc.querySelectorAll("img").forEach((image) => image.replaceWith(doc.createTextNode(image.getAttribute("alt") ?? "")));
   doc.querySelectorAll("span[data-page]").forEach((link) => {
     if (linkTarget(row.project, link.getAttribute("data-page") ?? "") !== null) return;
     link.setAttribute("aria-disabled", "true");
