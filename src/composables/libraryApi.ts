@@ -1,6 +1,7 @@
 // The Library's reads (#3329): /api/library/* answered as checked values, or null for any failure —
 // a 503 while the index cannot be opened, a timeout, or a body that is not the wire shape.
 import { isUnknownArray } from "../../common/isUnknownArray";
+import { isLibraryFileText, isLibraryTrackedFile, type LibraryFileText, type LibraryTrackedFile } from "../../common/libraryFiles";
 import {
   isLibraryConversation,
   isLibraryPrCreator,
@@ -52,6 +53,23 @@ export async function loadLibraryPage(offset: number): Promise<LibraryPage | nul
 export async function searchLibrary(query: string, signal: AbortSignal): Promise<LibrarySearchHit[] | null> {
   const body = await readJson(`/api/library/search?q=${encodeURIComponent(query)}&limit=${String(LIBRARY_PAGE)}`, signal);
   return body !== null && isUnknownArray(body.hits) ? body.hits.filter(isLibrarySearchHit) : null;
+}
+
+const conversationPath = (id: string, cwd: string | null, rest: string, query: Record<string, string> = {}): string => {
+  const params = new URLSearchParams({ ...query, ...(cwd === null ? {} : { cwd }) });
+  return `/api/library/conversations/${encodeURIComponent(id)}/${rest}?${params.toString()}`;
+};
+
+/** The files a conversation changed with Claude Code's edit tools, and the versions kept of each. */
+export async function loadLibraryFiles(id: string, cwd: string | null): Promise<LibraryTrackedFile[] | null> {
+  const body = await readJson(conversationPath(id, cwd, "files"));
+  return body !== null && isUnknownArray(body.files) ? body.files.filter(isLibraryTrackedFile) : null;
+}
+
+/** One version of one of those files: a kept number, or the file as it is now. */
+export async function loadLibraryFileText(id: string, cwd: string | null, trackingPath: string, version: number | "now"): Promise<LibraryFileText | null> {
+  const body = await readJson(conversationPath(id, cwd, "file", { file: trackingPath, version: String(version) }));
+  return isLibraryFileText(body) ? body : null;
 }
 
 /** The conversation that made each of these PRs in `repository`, for those the Library knows. */

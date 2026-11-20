@@ -31,5 +31,17 @@ export const libraryViewJa = {
     saveFailed: "変更を保存できませんでした。少し待ってからもう一度試してください。",
     more: "さらに表示",
     openPrConversation: "#{number} を作った会話を開く",
+    files: {
+      title: "変更したファイル",
+      hint: "Claude Code の編集ツールで変えたファイルです。スクリプトやシェルでの変更はここに出ません。",
+      steps: "どの変更",
+      whole: "会話全体",
+      step: "v{from} → v{to}",
+      stepToNow: "v{from} → 今",
+      "too-large": "大きすぎて表示できません（1 MB 超）。",
+      binary: "テキストのファイルではありません。",
+      unreadable: "この版を読めませんでした。",
+      folded: "変更のない {count} 行",
+    },
   },
 };

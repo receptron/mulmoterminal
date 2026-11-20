@@ -9,6 +9,7 @@ import type { LibraryCaller, LibraryMethod } from "../backends/library/library-s
 import { changeLibraryMark, readLibraryMarks } from "../backends/library/library-marks.js";
 import { isRepositoryName, LIBRARY_NAME_MAX, PR_CREATORS_MAX, type LibraryMarkChange } from "../../common/library.js";
 import { requestBody } from "./requestBody.js";
+import { claudeFileHistoryRoot, mountFileRoutes } from "./library-file-routes.js";
 
 /** Path-safe and short: what a transcript's file name can be. Whether it names a conversation is the
  *  index's to say (a 404), since the index takes any `.jsonl` name, subagents' included. */
@@ -22,6 +23,8 @@ export interface LibraryRouteDeps {
   call?: LibraryCaller;
   /** Override where pins and names live, for tests. */
   marksFile?: string;
+  /** Override Claude Code's file-history directory, for tests. */
+  fileHistoryRoot?: string;
 }
 
 const flag = (value: unknown): boolean => value === "1" || value === "true";
@@ -44,7 +47,7 @@ const sharedCaller: LibraryCaller = (method, args) => {
   return shared(method, args);
 };
 
-async function answer(res: Response, call: LibraryCaller, method: LibraryMethod, args: unknown[]): Promise<unknown> {
+export async function answer(res: Response, call: LibraryCaller, method: LibraryMethod, args: unknown[]): Promise<unknown> {
   try {
     return await call(method, args);
   } catch (err) {
@@ -72,6 +75,7 @@ export function mountLibraryRoutes(app: Express, deps: LibraryRouteDeps = {}): v
     else if (conversation !== undefined) res.json(conversation);
   });
   mountMarkRoutes(app, call, deps.marksFile);
+  mountFileRoutes(app, call, deps.fileHistoryRoot ?? claudeFileHistoryRoot());
   app.get("/api/library/search", async (req, res) => {
     const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
     if (query === "" || query.length > MAX_QUERY_CHARS) {

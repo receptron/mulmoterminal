@@ -5,6 +5,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import TranscriptPane from "../TranscriptPane.vue";
+import LibraryChangedFiles from "./LibraryChangedFiles.vue";
 import { LIBRARY_NAME_MAX, type LibraryConversation } from "../../../common/library";
 import { conversationKey, costLabel, readerMetaParts, type ReaderMetaPart } from "./libraryRows";
 
@@ -156,6 +157,7 @@ const lines = computed(() => {
     <div class="flex min-h-0 flex-1">
       <TranscriptPane :key="conversationKey(conversation)" :session-id="conversation.id" :cwd="conversation.cwd" :agent="conversation.agent" embedded />
     </div>
+    <LibraryChangedFiles :key="conversationKey(conversation)" :conversation="conversation" />
     <!-- A row of its own rather than floating over the conversation, so the last lines are never under
          it; the notice wraps beside the button and drops above it when the row is narrow. -->
     <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-border px-4 py-2">
