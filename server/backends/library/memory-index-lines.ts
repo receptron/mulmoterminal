@@ -19,12 +19,15 @@ export function withoutEntry(indexText: string, file: string): { text: string; r
 }
 
 /** The index with removed lines added back at its end — for when it changed after they were taken
- *  out, so where they stood no longer means anything. Nothing is added when it lists `file` again. */
-export function withEntryBack(indexText: string, file: string, removed: readonly RemovedIndexLine[]): string {
-  if (removed.length === 0 || indexEntries(indexText).includes(file)) return indexText;
+ *  out, so where they stood no longer means anything. A line is left out only when the index already
+ *  lists everything it links to: one that also linked another memory still carries that one's entry. */
+export function withEntryBack(indexText: string, removed: readonly RemovedIndexLine[]): string {
+  const listed = new Set(indexEntries(indexText));
+  const missing = removed.filter(({ line }) => indexEntries(line).some((entry) => !listed.has(entry)));
+  if (missing.length === 0) return indexText;
   const ending = /\r\n|\r|\n/.exec(indexText)?.[0] ?? "\n";
   const parts = [indexText];
   if (indexText !== "" && !/[\r\n]$/.test(indexText)) parts.push(ending);
-  removed.forEach(({ line }) => parts.push(/[\r\n]$/.test(line) ? line : `${line}${ending}`));
+  missing.forEach(({ line }) => parts.push(/[\r\n]$/.test(line) ? line : `${line}${ending}`));
   return parts.join("");
 }

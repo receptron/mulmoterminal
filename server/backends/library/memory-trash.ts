@@ -180,7 +180,7 @@ async function restoreChecked(id: string, undo: Undo, index: string, replace: Re
   if (outcome === "gone") undos.delete(id);
   if (outcome !== "restored") return outcome;
   try {
-    if (undo.index !== null) await indexBack(replace, index, path.basename(undo.file), undo.index);
+    if (undo.index !== null) await indexBack(replace, index, undo.index);
   } catch (err) {
     await unlinkIfSame(undo.file, undo.trashed); // the link just made; the Trash still holds the file
     throw err;
@@ -190,9 +190,9 @@ async function restoreChecked(id: string, undo: Undo, index: string, replace: Re
   return "restored";
 }
 
-async function indexBack(replace: Replace, index: string, file: string, kept: NonNullable<Undo["index"]>): Promise<void> {
+async function indexBack(replace: Replace, index: string, kept: NonNullable<Undo["index"]>): Promise<void> {
   const now = await readIndex(index);
   if (now === null || now === "unreadable") return; // gone or unreadable since: the health check says so
-  const next = memoryVersion(now) === kept.written ? kept.before : withEntryBack(now, file, kept.removed);
+  const next = memoryVersion(now) === kept.written ? kept.before : withEntryBack(now, kept.removed);
   if (next !== now) await replace(index, next, await modeOf(index));
 }

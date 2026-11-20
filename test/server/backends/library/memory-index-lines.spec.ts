@@ -50,13 +50,18 @@ describe("withoutEntry", () => {
 describe("withEntryBack", () => {
   const removed = [{ at: 0, line: "- [A](a.md)\n" }];
   it("adds the lines at the end, with the index's own line ending", () => {
-    expect(withEntryBack("- [B](b.md)\n", "a.md", removed)).toBe("- [B](b.md)\n- [A](a.md)\n");
-    expect(withEntryBack("- [B](b.md)", "a.md", removed)).toBe("- [B](b.md)\n- [A](a.md)\n");
-    expect(withEntryBack("- [B](b.md)\r\n", "a.md", [{ at: 0, line: "- [A](a.md)" }])).toBe("- [B](b.md)\r\n- [A](a.md)\r\n");
-    expect(withEntryBack("", "a.md", removed)).toBe("- [A](a.md)\n");
+    expect(withEntryBack("- [B](b.md)\n", removed)).toBe("- [B](b.md)\n- [A](a.md)\n");
+    expect(withEntryBack("- [B](b.md)", removed)).toBe("- [B](b.md)\n- [A](a.md)\n");
+    expect(withEntryBack("- [B](b.md)\r\n", [{ at: 0, line: "- [A](a.md)" }])).toBe("- [B](b.md)\r\n- [A](a.md)\r\n");
+    expect(withEntryBack("", removed)).toBe("- [A](a.md)\n");
   });
   it("adds nothing when the index lists the file again, or nothing was taken out", () => {
-    expect(withEntryBack("- [A again](a.md)\n", "a.md", removed)).toBe("- [A again](a.md)\n");
-    expect(withEntryBack("- [B](b.md)\n", "a.md", [])).toBe("- [B](b.md)\n");
+    expect(withEntryBack("- [A again](a.md)\n", removed)).toBe("- [A again](a.md)\n");
+    expect(withEntryBack("- [B](b.md)\n", [])).toBe("- [B](b.md)\n");
+  });
+  it("adds back a line that also linked a memory the index no longer lists", () => {
+    const both = [{ at: 0, line: "- [A](a.md) and [B](b.md)\n" }];
+    expect(withEntryBack("- [A again](a.md)\n", both)).toBe("- [A again](a.md)\n- [A](a.md) and [B](b.md)\n");
+    expect(withEntryBack("- [A again](a.md)\n- [B](b.md)\n", both)).toBe("- [A again](a.md)\n- [B](b.md)\n");
   });
 });
