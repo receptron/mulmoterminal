@@ -24,9 +24,23 @@ interface Written {
 /** `changed` runs after a copy was written or put back, to judge the copies again. */
 export function useWorkCopyWrite(changed: () => void) {
   const notice = ref<WorkCopyNotice | null>(null);
+  /** One write or undo at a time: the Undo kept is the last write's, and never another's. */
+  const busy = ref(false);
   let written: Written | null = null;
 
-  async function writeThere(target: WorkCopyTarget, text: string): Promise<void> {
+  async function oneAtATime(task: () => Promise<void>): Promise<void> {
+    if (busy.value) return;
+    busy.value = true;
+    try {
+      await task();
+    } finally {
+      busy.value = false;
+    }
+  }
+
+  const writeThere = (target: WorkCopyTarget, text: string): Promise<void> => oneAtATime(() => write(target, text));
+
+  async function write(target: WorkCopyTarget, text: string): Promise<void> {
     written = null;
     const there = await loadLibraryMemoryFile(target.slug, target.file);
     if (there?.text == null || typeof there.version !== "string") {
@@ -48,7 +62,9 @@ export function useWorkCopyWrite(changed: () => void) {
   }
 
   /** The copy's own text back, over the text written there — not over a change made to it since. */
-  async function undo(): Promise<void> {
+  const undo = (): Promise<void> => oneAtATime(undoLast);
+
+  async function undoLast(): Promise<void> {
     const last = written;
     if (last === null) return;
     const saved = await saveLibraryMemoryFile(last.target.slug, last.target.file, last.before, last.version);
@@ -66,5 +82,5 @@ export function useWorkCopyWrite(changed: () => void) {
     written = null;
     notice.value = null;
   };
-  return { notice, writeThere, undo, dismiss };
+  return { notice, busy, writeThere, undo, dismiss };
 }

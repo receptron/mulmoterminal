@@ -13,7 +13,7 @@ defineProps<{
 }>();
 const emit = defineEmits<{ (e: "add", name: string, body: string): void; (e: "changed"): void }>();
 const { t } = useI18n();
-const { notice, writeThere, undo, dismiss } = useWorkCopyWrite(() => emit("changed"));
+const { notice, busy, writeThere, undo, dismiss } = useWorkCopyWrite(() => emit("changed"));
 
 /** The copy's body, for the editor to add to this memory. */
 async function addHere(copy: WorkCopyTarget): Promise<void> {
@@ -42,7 +42,13 @@ const ACTION = "cursor-pointer border-0 bg-transparent p-0 font-sans text-[12px]
         <span class="text-secondary">{{ t(copy.same ? "libraryView.memory.copySame" : "libraryView.memory.copyDiffers", { name: copy.name }) }}</span>
         <template v-if="!copy.same">
           <button type="button" :class="ACTION" data-testid="memory-copy-add" @click="addHere(copy)">{{ t("libraryView.memory.copies.add") }}</button>
-          <button type="button" :class="ACTION" :disabled="text === null" data-testid="memory-copy-write" @click="text !== null && writeThere(copy, text)">
+          <button
+            type="button"
+            :class="ACTION"
+            :disabled="text === null || busy"
+            data-testid="memory-copy-write"
+            @click="text !== null && writeThere(copy, text)"
+          >
             {{ t("libraryView.memory.copies.write") }}
           </button>
         </template>
@@ -50,7 +56,15 @@ const ACTION = "cursor-pointer border-0 bg-transparent p-0 font-sans text-[12px]
     </ul>
     <p v-if="notice" class="m-0 mt-1 flex flex-wrap items-center gap-x-3 text-[12px] text-secondary" role="status" data-testid="memory-copy-notice">
       <span class="min-w-0">{{ noticeText() }}</span>
-      <button v-if="notice.kind === 'written'" type="button" :class="ACTION" class="font-semibold" data-testid="memory-copy-undo" @click="undo">
+      <button
+        v-if="notice.kind === 'written'"
+        type="button"
+        :class="ACTION"
+        class="font-semibold"
+        :disabled="busy"
+        data-testid="memory-copy-undo"
+        @click="undo"
+      >
         {{ t("libraryView.memory.trash.undo") }}
       </button>
       <button

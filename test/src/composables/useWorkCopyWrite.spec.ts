@@ -3,11 +3,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 let there: { text: string | null; version?: string } | null = { text: "theirs", version: "v-there" };
+/** When set, a read waits for it: a write is then still in flight. */
+let held: Promise<void> | null = null;
 let saveAnswers: { kind: string; version?: string }[] = [];
 const saves: [string, string, string, string][] = [];
 let running = false;
 vi.mock("../../../src/composables/libraryApi", () => ({
-  loadLibraryMemoryFile: () => Promise.resolve(there),
+  loadLibraryMemoryFile: async () => {
+    await held;
+    return there;
+  },
   saveLibraryMemoryFile: (slug: string, file: string, text: string, version: string) => {
     saves.push([slug, file, text, version]);
     return Promise.resolve(saveAnswers.shift() ?? { kind: "saved", version: "v-new" });
@@ -19,6 +24,7 @@ const { useWorkCopyWrite } = await import("../../../src/composables/useWorkCopyW
 const TARGET = { slug: "-w-app3", file: "a.md", name: "app3", cwd: "/w/app3" };
 
 beforeEach(() => {
+  held = null;
   there = { text: "theirs", version: "v-there" };
   saveAnswers = [];
   saves.length = 0;
@@ -74,5 +80,18 @@ describe("useWorkCopyWrite", () => {
     expect(notice.value).toEqual({ kind: "undo-changed", name: "app3" });
     await undo();
     expect(saves).toHaveLength(3);
+  });
+
+  it("takes one write at a time, so the Undo kept is never another write's", async () => {
+    let release = (): void => undefined;
+    held = new Promise((resolve) => (release = resolve));
+    const { busy, writeThere } = useWorkCopyWrite(() => undefined);
+    const first = writeThere(TARGET, "mine");
+    expect(busy.value).toBe(true);
+    await writeThere({ ...TARGET, slug: "-w-app4", name: "app4" }, "mine");
+    release();
+    await first;
+    expect(saves.map(([slug]) => slug)).toEqual(["-w-app3"]);
+    expect(busy.value).toBe(false);
   });
 });
