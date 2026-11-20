@@ -28,6 +28,7 @@ function setup(directories: string[] = ["/w/app"]) {
   write("-w-app/memory/a.md", "---\nname: alpha\ndescription: first\nmetadata:\n  type: feedback\n---\nBody [[beta]].", 1_700_000_050);
   write("-w-app/memory/b.md", "plain, no frontmatter", 1_700_000_100); // newer, though listed second on disk
   write("-w-app/memory/notes.txt", "not a memory");
+  write("-w-other/memory/top.md", "---\nname: top\ntype: reference\n---\nits type at the top level", 1_699_000_000);
   write("-w-other/memory/MEMORY.md", "");
   mkdirSync(path.join(root, "-w-empty", "memory"), { recursive: true });
   write("-w-app/secret.md", "outside the memory folder");
@@ -50,7 +51,12 @@ describe("/api/library/memory", () => {
           { file: "a.md", name: "alpha", description: "first", type: "feedback", updatedAt: 1_700_000_050_000 },
         ],
       },
-      { slug: "-w-other", cwd: null, index: { lines: 0, bytes: 0 }, files: [] },
+      {
+        slug: "-w-other",
+        cwd: null,
+        index: { lines: 0, bytes: 0 },
+        files: [{ file: "top.md", name: "top", description: null, type: "reference", updatedAt: 1_699_000_000_000 }],
+      },
     ]);
   });
 

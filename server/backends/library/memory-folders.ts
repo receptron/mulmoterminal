@@ -26,7 +26,13 @@ async function memoryFileOf(folder: string, file: string): Promise<LibraryMemory
   if (read.text === null) return null;
   const { fields, metadata } = parseMemoryFrontmatter(read.text);
   const info = await fs.lstat(path.join(folder, file)).catch(() => null);
-  return { file, name: fields.name ?? null, description: fields.description ?? null, type: metadata.type ?? null, updatedAt: info?.mtimeMs ?? 0 };
+  return {
+    file,
+    name: fields.name ?? null,
+    description: fields.description ?? null,
+    type: metadata.type ?? fields.type ?? null,
+    updatedAt: info?.mtimeMs ?? 0,
+  };
 }
 
 const NEWLINE = 0x0a;

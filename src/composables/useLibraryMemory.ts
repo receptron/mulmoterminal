@@ -14,6 +14,9 @@ export function useLibraryMemory(isOpen: Ref<boolean>) {
     async (open) => {
       if (!open) return;
       const mine = ++reads;
+      // Not the last open's list while this one is read: a memory removed meanwhile would still show.
+      loaded.value = false;
+      projects.value = [];
       const found = await loadLibraryMemory();
       if (mine !== reads) return;
       failed.value = found === null;
