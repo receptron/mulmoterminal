@@ -1897,7 +1897,9 @@ narrow and tall for one record you are discussing — and each position keeps it
   it): a memory missing from `MEMORY.md`, missing frontmatter, a `[[link]]` to no memory, a file it
   names that is gone, or an index that is missing, overfull or pointing at a file that is gone.
   **Edit** (`Enter`) changes a memory's whole text in place (`⌘Enter` saves, `Esc` cancels); a save
-  is refused when the file changed on disk since it was opened, and a running session there is warned of. Design: [`docs/library-design.md`](docs/library-design.md).
+  is refused when the file changed on disk since it was opened, and a running session there is warned of.
+  **⋯** → **Move to Trash** moves a memory to the system Trash with its lines in `MEMORY.md`, and
+  **Undo** in the notice puts both back. Design: [`docs/library-design.md`](docs/library-design.md).
 - **Skills viewer** — **More features** → **Skills** lists every Claude skill on disk in three
   columns — where it lives, its skills, its `SKILL.md`. The places are your `~/.claude/skills`,
   each enabled plugin (skills shown as `plugin:skill`), and the `.claude/skills` of each folder a

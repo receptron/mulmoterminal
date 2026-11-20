@@ -21,7 +21,9 @@ follows is a refusal to add one of those, and the reason sits next to it.
 3. **One prominent action per item.** Everything else goes in `more_horiz`. `Enter` always runs
    the prominent one.
 4. **Nothing is destroyed.** Every removal moves to the trash and shows a toast with Undo. Files of
-   a running session are read-only.
+   a running session are read-only — except memory, which the agent shares with the person by
+   design: changing a project's memory while a session runs there is warned of, not refused, since
+   the projects most worth tidying are the ones in use.
 5. **Warnings do not shout.** A small dot at the start of the row and one sentence in the reader.
    No red bars, no badge counts.
 6. **Numbers only when asked for.** The list is never a report. The retrospective lives in `/usage`
@@ -55,7 +57,10 @@ follows is a refusal to add one of those, and the reason sits next to it.
   reaches only `<projects>/<slug>/memory/<name>.md`; it writes only over a regular file (never a
   link, never creating one); and it writes only over the text the editor opened, by its SHA-256, so
   a change the agent made meanwhile is refused rather than lost. The window between that check
-  and the atomic rename is the one gap, and it is stated where the write is.
+  and the atomic rename is the one gap, and it is stated where the write is. Deleting a memory
+  (`memory-trash.ts`) moves it to the machine's Trash and writes `MEMORY.md` too, but only to take
+  out the lines that link to that file; Undo is named by an id the server issued, never a path, and
+  puts the file back without replacing one made at that name since.
 - **The index**: `~/.mulmoterminal/library/index.db`, shared by every server under the same HOME
   and built by one of them at a time. It is a copy of the agent's files and is rebuilt if deleted.
   It is opened only on a worker thread, which both builds and queries it: SQLite in Node is

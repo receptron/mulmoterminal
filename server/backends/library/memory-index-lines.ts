@@ -9,7 +9,7 @@ export interface RemovedIndexLine {
 }
 
 /** The index's lines, each with the ending it has, so joining them gives back the same text. */
-export const indexLines = (text: string): string[] => text.match(/[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+$/g) ?? [];
+export const indexLines = (text: string): string[] => text.split(/(?<=\n|\r(?!\n))/).filter((line) => line !== "");
 
 /** The index without the lines that link to `file`, and those lines. */
 export function withoutEntry(indexText: string, file: string): { text: string; removed: RemovedIndexLine[] } {

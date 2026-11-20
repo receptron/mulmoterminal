@@ -8,6 +8,22 @@ describe("indexLines", () => {
     ["", "a", "a\n", "a\r\nb\rc\nd", "\n\n", "x\r\n"].forEach((text) => expect(indexLines(text).join("")).toBe(text));
     expect(indexLines("a\r\nb\rc")).toEqual(["a\r\n", "b\r", "c"]);
   });
+  it("over generated text: the lines join back to it, none is empty, and each ends only at its end", () => {
+    const parts = ["a", "\r", "\n", "\r\n", " ", "—"];
+    let seed = 7;
+    const next = (n: number): number => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed % n;
+    };
+    Array.from({ length: 5000 }, () => Array.from({ length: next(12) }, () => parts[next(parts.length)]).join("")).forEach((text) => {
+      const lines = indexLines(text);
+      expect(lines.join("")).toBe(text);
+      lines.forEach((line) => {
+        expect(line).not.toBe("");
+        expect(line.replace(/(\r\n|\r|\n)$/, "")).not.toMatch(/[\r\n]/);
+      });
+    });
+  });
 });
 
 describe("withoutEntry", () => {
