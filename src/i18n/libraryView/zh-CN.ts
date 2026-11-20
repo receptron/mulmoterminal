@@ -31,5 +31,17 @@ export const libraryViewZhCN = {
     saveFailed: "无法保存此更改。请稍后再试。",
     more: "显示更多",
     openPrConversation: "打开创建 #{number} 的对话",
+    files: {
+      title: "更改的文件",
+      hint: "用 Claude Code 自己的编辑工具改过的文件；用脚本或 shell 做的更改不在这里。",
+      steps: "哪次更改",
+      whole: "整个对话",
+      step: "v{from} → v{to}",
+      stepToNow: "v{from} → 现在",
+      "too-large": "太大，无法在此显示（超过 1 MB）。",
+      binary: "不是文本文件。",
+      unreadable: "无法读取此版本。",
+      folded: "{count} 行未更改",
+    },
   },
 };

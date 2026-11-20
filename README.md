@@ -1887,7 +1887,9 @@ narrow and tall for one record you are discussing — and each position keeps it
   date from what is appended; it is `~/.mulmoterminal/library/index.db` and can be deleted at any
   time (it is rebuilt). `marks.json` beside it holds your pins and names and is not rebuilt.
   A conversation's PR numbers open the PR; in the GitHub view, a PR a conversation made has a
-  `local_library` button beside it that opens that conversation in the Library. Design: [`docs/library-design.md`](docs/library-design.md).
+  `local_library` button beside it that opens that conversation in the Library. **Changed files**
+  under a conversation lists the files it edited with Claude Code's edit tools, each with a diff of
+  the whole change or of one turn's (read only; read from Claude Code's own file history). Design: [`docs/library-design.md`](docs/library-design.md).
 - **Skills viewer** — **More features** → **Skills** lists every Claude skill on disk in three
   columns — where it lives, its skills, its `SKILL.md`. The places are your `~/.claude/skills`,
   each enabled plugin (skills shown as `plugin:skill`), and the `.claude/skills` of each folder a
