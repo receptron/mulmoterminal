@@ -67,7 +67,9 @@ follows is a refusal to add one of those, and the reason sits next to it.
   Undo reverses both; every change takes its files in name order, then the index. A merge also points
   the `[[links]]` to the merged memory at the one kept, in every memory of the folder as listed when
   it starts, and holds all of their turns (one made after that is left as it is); where code is in each is decided by the same lexer as the health check, and a
-  link it cannot place exactly stops the merge before anything is written. The save in a merge,
+  link it cannot place exactly stops the merge before anything is written. Each memory is read again
+  just before its rewrite is written, and one another process changed since stops the merge and puts
+  it all back. The save in a merge,
   and putting that memory back on Undo, keep the save's own gap: a change landing between the check
   and the rename is written over.
 - **The index**: `~/.mulmoterminal/library/index.db`, shared by every server under the same HOME

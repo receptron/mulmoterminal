@@ -223,6 +223,24 @@ describe("the links a merge points at the memory that stays", () => {
     expect(read("c.md")).toBe("C again [[beta]]\n");
   });
 
+  it("leaves a link by a name another memory has too: it still means that one", async () => {
+    const { layout, read, merge } = linked({ "z.md": "---\nname: alpha\n---\nAnother alpha.\n" });
+    expect(await mergeMemory(merge(), layout, NOW)).toMatchObject({ kind: "merged", links: 1 });
+    expect(read("c.md")).toBe("See [[alpha]] and [[beta]], not `[[alpha]]`.\n\n```\n[[alpha]]\n```\n");
+    expect(read("d.md")).toBe(D);
+  });
+
+  it("stops and puts everything back when another process writes a memory whose links it was rewriting", async () => {
+    const { layout, read, trashed, merge, memory } = linked();
+    const agentWritesC = async (target: string, text: string, mode: number): Promise<void> => {
+      await replaceKeepingMode(target, text, mode);
+      // The agent writes c.md just after the merge wrote the memory kept: no turn held here keeps it out.
+      if (path.basename(target) === "b.md" && text !== B) writeFileSync(path.join(memory, "c.md"), "the agent's [[alpha]]\n");
+    };
+    expect(await mergeMemory(merge(), layout, NOW, { replace: agentWritesC, move: trashEntry })).toEqual({ kind: "conflict", file: "links" });
+    expect([read("a.md"), read("b.md"), read("c.md"), read("d.md"), read("MEMORY.md"), trashed()]).toEqual([A, B, "the agent's [[alpha]]\n", D, INDEX, []]);
+  });
+
   it("does not count a link by a name the two memories share, which already reaches the one that stays", async () => {
     const { layout, read, merge } = linked({ "b.md": "---\nname: alpha\n---\nB.\n" });
     const result = await mergeMemory({ ...merge("---\nname: alpha\n---\nB.\n"), intoVersion: memoryVersion("---\nname: alpha\n---\nB.\n") }, layout, NOW);

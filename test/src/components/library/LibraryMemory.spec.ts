@@ -421,6 +421,17 @@ describe("LibraryMemory", () => {
       expect(wrapper.find("[data-testid=memory-trash-notice]").exists()).toBe(false);
     });
 
+    it("says when a memory whose links it rewrites changed meanwhile, and that saving again retries", async () => {
+      mergeAnswer = { kind: "changed", file: "links" };
+      const wrapper = await mountMemory();
+      await chooseMerge(wrapper);
+      await pickFirst(wrapper);
+      await wrapper.find("[data-testid=memory-editor-save]").trigger("click");
+      await flushPromises();
+      expect(wrapper.find("[data-testid=memory-editor-notice]").text()).toContain("whose links this merge rewrites changed meanwhile");
+      expect(wrapper.find("[data-testid=memory-editor]").exists()).toBe(true);
+    });
+
     it("says when the memory merged in changed since, and merges nothing", async () => {
       mergeAnswer = { kind: "changed", file: "from" };
       const wrapper = await mountMemory();

@@ -70,7 +70,9 @@ const asWritten = (text: string): string => {
 const dirty = computed(() => asWritten(draft.value) !== props.text);
 defineExpose({ dirty });
 const saving = ref(false);
-const notice = ref<"changed" | "from-changed" | "unplaceable" | "failed" | "too-large" | "unsaved" | "restored" | null>(kept === null ? null : "restored");
+const notice = ref<"changed" | "from-changed" | "links-changed" | "unplaceable" | "failed" | "too-large" | "unsaved" | "restored" | null>(
+  kept === null ? null : "restored",
+);
 /** A merge's links to the memory merged in, said before saving: how many will point here, and the
  *  memories whose links could not be rewritten (which stop the merge). */
 const mergeLinks = ref<{ count: number; unplaceable: string[] } | null>(null);
@@ -148,7 +150,7 @@ async function merge(text: string, merging: NonNullable<typeof props.merging>): 
     return;
   }
   if (result.kind === "unplaceable") mergeLinks.value = { count: 0, unplaceable: result.files };
-  notice.value = result.kind === "changed" && result.file === "from" ? "from-changed" : result.kind;
+  notice.value = result.kind === "changed" && result.file !== "into" ? `${result.file}-changed` : result.kind;
 }
 
 /** ⌘Enter (Ctrl+Enter elsewhere) saves; Esc stops editing, not the Library. */

@@ -82,6 +82,7 @@ export const libraryViewEn = {
         failed: "Could not save. Try again in a moment.",
         "too-large": "Too large to save here.",
         "from-changed": "The memory being merged in changed since you opened it, so nothing was merged. Copy your edit, then",
+        "links-changed": "A memory whose links this merge rewrites changed meanwhile, so nothing was merged. Save again to try once more.",
         unplaceable: "Links in {files} could not be rewritten exactly, so nothing was merged.",
       },
       healthFailed: "Could not check what can be tidied.",

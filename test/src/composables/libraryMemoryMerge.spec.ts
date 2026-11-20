@@ -24,6 +24,8 @@ describe("mergeLibraryMemoryFiles", () => {
     expect(await mergeLibraryMemoryFiles(REQUEST)).toEqual({ kind: "changed", file: "from" });
     answer(409, { file: "into" });
     expect(await mergeLibraryMemoryFiles(REQUEST)).toEqual({ kind: "changed", file: "into" });
+    answer(409, { file: "links" });
+    expect(await mergeLibraryMemoryFiles(REQUEST)).toEqual({ kind: "changed", file: "links" });
     answer(409, {});
     expect(await mergeLibraryMemoryFiles(REQUEST)).toEqual({ kind: "changed", file: "into" });
   });

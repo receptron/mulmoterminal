@@ -82,6 +82,7 @@ export const libraryViewZhCN = {
         failed: "无法保存。请稍后再试。",
         "too-large": "太大，无法在此保存。",
         "from-changed": "要合并进来的记忆在打开后已改动，因此没有合并。请先复制你的编辑，然后",
+        "links-changed": "此次合并要改写链接的某条记忆在途中被改动，因此没有合并。再次保存即可重试。",
         unplaceable: "{files} 中的链接无法准确改写，因此没有合并。",
       },
       healthFailed: "无法检查可以整理的记忆。",

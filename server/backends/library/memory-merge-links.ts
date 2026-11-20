@@ -16,11 +16,19 @@ export interface LinkRewrite {
   count: number;
 }
 
-/** `files` (memories of `folder`) with their links to `names` pointed at `to`, those with none left out;
- *  and the ones holding such links that cannot be rewritten exactly — code the rules cannot place, or a
- *  text that is not the file's own bytes. A memory too large or unreadable is not looked into. */
-export async function linkRewrites(folder: string, files: readonly string[], names: ReadonlySet<string>, to: string) {
-  const read = await inBatches(files, MEMORY_FILES_AT_ONCE, async (file) => ({ file, text: (await readBoundedText(path.join(folder, file))).text }));
+/** A memory as read: null when it could not be (too large, gone, unreadable). */
+interface MemoryText {
+  file: string;
+  text: string | null;
+}
+
+const readTexts = (folder: string, files: readonly string[]): Promise<MemoryText[]> =>
+  inBatches(files, MEMORY_FILES_AT_ONCE, async (file) => ({ file, text: (await readBoundedText(path.join(folder, file))).text }));
+
+/** These memories with their links to `names` pointed at `to`, those with none left out; and the ones
+ *  holding such links that cannot be rewritten exactly — code the rules cannot place, or a text that is
+ *  not the file's own bytes. A memory that could not be read is not looked into. */
+function linkRewrites(read: readonly MemoryText[], names: ReadonlySet<string>, to: string) {
   const rewrites: LinkRewrite[] = [];
   const unplaceable: string[] = [];
   read.forEach(({ file, text }) => {
@@ -31,6 +39,13 @@ export async function linkRewrites(folder: string, files: readonly string[], nam
     } else if (rewritten.count > 0) rewrites.push({ file, before: text, ...rewritten });
   });
   return { rewrites, unplaceable };
+}
+
+/** The names a link reaches `from` by and no other memory of the folder: a name another memory has too
+ *  (the one kept included) is not `from`'s alone, and a link by it is left to mean what it means. */
+function namesOnlyOf(fromName: string, from: string, others: readonly MemoryText[]): Set<string> {
+  const taken = new Set(others.flatMap(({ file, text }) => [...namesOf(file, text ?? "")]));
+  return new Set([...namesOf(fromName, from)].filter((name) => !taken.has(name)));
 }
 
 /** What merging `fromFile` into `intoFile` as it is now would rewrite, said before it does: how many
@@ -52,12 +67,14 @@ export async function linkPlan(fromFile: string, intoFile: string, text: string,
   if (from === null || !isFaithfulText(from)) return { text, count: 0, rewrites: [] };
   const [fromName, intoName] = [path.basename(fromFile), path.basename(intoFile)];
   const to = linkNameOf(intoName, text);
-  // A name the two share already reaches `into`: rewriting it would change nothing.
-  const names = new Set([...namesOf(fromName, from)].filter((name) => name !== to));
+  const read = await readTexts(
+    path.dirname(fromFile),
+    others.filter((file) => file !== fromName && file !== intoName),
+  );
+  const names = namesOnlyOf(fromName, from, [{ file: intoName, text }, ...read]);
   const own = rewriteLinks(text, names, to);
   const ownLinked = linkNames(parseMemoryFrontmatter(text).body).some((name) => names.has(name));
-  const candidates = others.filter((file) => file !== fromName && file !== intoName);
-  const { rewrites, unplaceable } = await linkRewrites(path.dirname(fromFile), candidates, names, to);
+  const { rewrites, unplaceable } = linkRewrites(read, names, to);
   const files = [...(own === null && ownLinked ? [intoName] : []), ...unplaceable];
   if (files.length > 0) return { kind: "links-unplaceable", files };
   const count = (own?.count ?? 0) + rewrites.reduce((sum, rewrite) => sum + rewrite.count, 0);

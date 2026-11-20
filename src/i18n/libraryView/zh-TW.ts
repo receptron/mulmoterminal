@@ -82,6 +82,7 @@ export const libraryViewZhTW = {
         failed: "無法儲存。請稍後再試。",
         "too-large": "太大，無法在此儲存。",
         "from-changed": "要合併進來的記憶在開啟後已變更，因此沒有合併。請先複製你的編輯，然後",
+        "links-changed": "此次合併要改寫連結的某條記憶在途中被變更，因此沒有合併。再次儲存即可重試。",
         unplaceable: "{files} 中的連結無法準確改寫，因此沒有合併。",
       },
       healthFailed: "無法檢查可以整理的記憶。",

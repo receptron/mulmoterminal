@@ -82,6 +82,7 @@ export const libraryViewKo = {
         failed: "저장하지 못했습니다. 잠시 후 다시 시도하세요.",
         "too-large": "너무 커서 여기서 저장할 수 없습니다.",
         "from-changed": "합칠 기억이 연 뒤에 바뀌어 합치지 않았습니다. 편집 내용을 복사한 뒤",
+        "links-changed": "이 합치기에서 링크를 바꾸는 기억이 도중에 바뀌어 합치지 않았습니다. 다시 저장하면 한 번 더 시도합니다.",
         unplaceable: "{files}의 링크를 정확히 바꿀 수 없어 합치지 않았습니다.",
       },
       healthFailed: "정리할 수 있는 기억을 확인하지 못했습니다.",
