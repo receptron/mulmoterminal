@@ -44,6 +44,7 @@ export const libraryViewJa = {
       folded: "変更のない {count} 行",
     },
     memory: {
+      search: "記憶を探す",
       shortcuts: "/ 検索 · ↑↓ 移動 · Esc 閉じる",
       kind: "記憶",
       loadFailed: "記憶のフォルダを読めませんでした。",

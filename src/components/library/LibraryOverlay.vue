@@ -34,6 +34,7 @@ const { projects: memoryProjects, loaded: memoryLoaded, failed: memoryFailed } =
 const memoryCount = computed(() => filterMemory(memoryProjects.value, query.value).reduce((sum, project) => sum + project.files.length, 0));
 /** Which kind the list shows: the conversations, or Claude Code's memory. */
 const kind = ref<"conversations" | "memory">("conversations");
+const searchLabel = computed(() => (kind.value === "memory" ? t("libraryView.memory.search") : t("libraryView.search")));
 const memoryView = useTemplateRef<{ move(by: number): Promise<void> }>("memoryView");
 const { marks, pinned, saveFailedFor, loadFailed: marksFailed, change: changeMark } = useLibraryMarks(isOpen);
 
@@ -262,8 +263,8 @@ onBeforeUnmount(() => {
             v-model="query"
             type="search"
             data-testid="library-search"
-            :placeholder="t('libraryView.search')"
-            :aria-label="t('libraryView.search')"
+            :placeholder="searchLabel"
+            :aria-label="searchLabel"
             class="min-w-0 flex-1 border-0 bg-transparent font-sans text-[14px] text-fg outline-none"
           />
           <kbd class="rounded border border-border px-1 font-sans text-[11px] text-dim">/</kbd>

@@ -44,6 +44,7 @@ export const libraryViewZhCN = {
       folded: "{count} 行未更改",
     },
     memory: {
+      search: "搜索记忆",
       shortcuts: "/ 搜索 · ↑↓ 移动 · Esc 关闭",
       kind: "记忆",
       loadFailed: "无法读取记忆文件夹。",

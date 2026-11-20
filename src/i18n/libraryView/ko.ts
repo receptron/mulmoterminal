@@ -44,6 +44,7 @@ export const libraryViewKo = {
       folded: "변경 없는 {count}줄",
     },
     memory: {
+      search: "기억 검색",
       shortcuts: "/ 검색 · ↑↓ 이동 · Esc 닫기",
       kind: "기억",
       loadFailed: "기억 폴더를 읽을 수 없었습니다.",

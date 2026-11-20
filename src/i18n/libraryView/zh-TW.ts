@@ -44,6 +44,7 @@ export const libraryViewZhTW = {
       folded: "{count} 行未變更",
     },
     memory: {
+      search: "搜尋記憶",
       shortcuts: "/ 搜尋 · ↑↓ 移動 · Esc 關閉",
       kind: "記憶",
       loadFailed: "無法讀取記憶資料夾。",

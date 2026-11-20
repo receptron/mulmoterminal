@@ -44,6 +44,7 @@ export const libraryViewEn = {
       folded: "{count} unchanged lines",
     },
     memory: {
+      search: "Search memory",
       shortcuts: "/ search · ↑↓ move · Esc close",
       kind: "Memory",
       loadFailed: "Your memory folders could not be read.",

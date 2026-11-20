@@ -535,6 +535,7 @@ describe("LibraryOverlay", () => {
     await flushPromises();
     expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("one");
     expect(wrapper.text()).not.toContain("Enter resume"); // Enter does nothing in memory yet
+    expect(wrapper.find("[data-testid=library-search]").attributes("aria-label")).toBe("Search memory");
     await press("ArrowDown");
     await flushPromises();
     expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("two");
