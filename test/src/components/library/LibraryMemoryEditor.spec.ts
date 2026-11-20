@@ -166,4 +166,30 @@ describe("LibraryMemoryEditor", () => {
     expect(wrapper.emitted("cancel")).toHaveLength(1);
     expect(library).not.toHaveBeenCalled();
   });
+
+  it("cannot be cancelled while a save is on its way", async () => {
+    let finish: (value: MemorySaveResult) => void = () => {};
+    const wrapper = await mountEditor();
+    const api = await import("../../../../src/composables/libraryApi");
+    const slow = vi.spyOn(api, "saveLibraryMemoryFile").mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    await wrapper.find("[data-testid=memory-editor-save]").trigger("click");
+    expect(wrapper.find("[data-testid=memory-editor-cancel]").attributes("disabled")).toBeDefined();
+    await wrapper.find("[data-testid=memory-editor-field]").trigger("keydown", { key: "Escape" });
+    expect(wrapper.emitted("cancel")).toBeUndefined();
+    finish({ kind: "saved", version: "v2" });
+    await flushPromises();
+    expect(wrapper.emitted("saved")).toHaveLength(1);
+    slow.mockRestore();
+  });
+
+  it("gives the draft up when told to read the file again after a conflict", async () => {
+    result = { kind: "changed" };
+    const wrapper = await mountEditor();
+    await wrapper.find("[data-testid=memory-editor-field]").setValue("a draft given up");
+    await wrapper.find("[data-testid=memory-editor-save]").trigger("click");
+    await flushPromises();
+    await wrapper.find("[data-testid=memory-editor-notice] button").trigger("click");
+    wrapper.unmount();
+    expect(((await mountEditor()).find("[data-testid=memory-editor-field]").element as HTMLTextAreaElement).value).not.toBe("a draft given up");
+  });
 });

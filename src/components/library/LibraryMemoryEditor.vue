@@ -56,7 +56,16 @@ onBeforeUnmount(() => {
   if (!settled && dirty.value) keepMemoryDraft(draftKey, { version: props.version, text: asWritten(draft.value) });
 });
 
+/** Read the file again after a conflict: the draft is given up, as the notice said. */
+function reload(): void {
+  settled = true;
+  dropMemoryDraft(draftKey);
+  emit("reload");
+}
+
 function cancel(): void {
+  // Not while a save is on its way: it would land with no one left to say so.
+  if (saving.value) return;
   settled = true;
   dropMemoryDraft(draftKey);
   emit("cancel");
@@ -126,7 +135,7 @@ function onKey(event: KeyboardEvent): void {
           v-if="notice === 'changed'"
           type="button"
           class="ml-1 cursor-pointer border-0 bg-transparent p-0 font-sans text-[12px] text-accent hover:underline"
-          @click="emit('reload')"
+          @click="reload"
         >
           {{ t("libraryView.memory.edit.reload") }}
         </button>
@@ -135,6 +144,7 @@ function onKey(event: KeyboardEvent): void {
         type="button"
         class="cursor-pointer rounded border border-border bg-transparent px-3 py-1.5 font-sans text-[13px] text-secondary hover:text-fg"
         data-testid="memory-editor-cancel"
+        :disabled="saving"
         @click="cancel"
       >
         {{ t("libraryView.memory.edit.cancel") }} <kbd class="font-sans text-[11px] text-dim">Esc</kbd>
