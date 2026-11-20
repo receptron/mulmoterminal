@@ -1,7 +1,7 @@
 // Claude Code's memory as the Library reads it (#3331): the frontmatter, and the folder a directory's
 // memory is kept in.
 import { describe, it, expect } from "vitest";
-import { frontmatterStillOpen, isLibraryMemoryProject, parseMemoryFrontmatter, projectSlug } from "../../common/libraryMemory";
+import { frontmatterStillOpen, isLibraryMemoryProject, memoryType, parseMemoryFrontmatter, projectSlug } from "../../common/libraryMemory";
 
 describe("parseMemoryFrontmatter", () => {
   it("reads the flat keys and the metadata block apart from the body, keeping keys it does not know", () => {
@@ -82,5 +82,17 @@ describe("isLibraryMemoryProject", () => {
     expect(isLibraryMemoryProject({ slug: "s", cwd: null, index: null, files: [file] })).toBe(true);
     expect(isLibraryMemoryProject({ slug: "s", cwd: null, index: { lines: 1 }, files: [] })).toBe(false);
     expect(isLibraryMemoryProject({ slug: "s", cwd: null, index: null, files: [{ ...file, updatedAt: "1" }] })).toBe(false);
+  });
+});
+
+describe("memoryType", () => {
+  it.each([
+    [{ metadata: { type: "feedback" }, fields: {} }, "feedback"],
+    [{ metadata: {}, fields: { type: "user" } }, "user"],
+    [{ metadata: { type: "  " }, fields: { type: "user" } }, "user"],
+    [{ metadata: { type: "project" }, fields: { type: "user" } }, "project"],
+    [{ metadata: {}, fields: {} }, null],
+  ])("%j → %s", (frontmatter, type) => {
+    expect(memoryType(frontmatter)).toBe(type);
   });
 });

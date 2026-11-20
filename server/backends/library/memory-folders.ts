@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   frontmatterStillOpen,
   MEMORY_INDEX_FILE,
+  memoryType,
   parseMemoryFrontmatter,
   projectSlug,
   type LibraryMemoryFile,
@@ -89,7 +90,7 @@ async function memoryFileOf(folder: string, file: string): Promise<LibraryMemory
       file,
       name: fields.name ?? null,
       description: fields.description ?? null,
-      type: metadata.type ?? fields.type ?? null,
+      type: memoryType({ fields, metadata }),
       updatedAt: opened.mtimeMs,
     };
   } finally {

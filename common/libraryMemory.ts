@@ -116,6 +116,11 @@ export const isLibraryMemoryProject = (value: unknown): value is LibraryMemoryPr
   Array.isArray(value.files) &&
   value.files.every(isMemoryFile);
 
+/** A memory's type: `metadata.type`, or a top-level `type` as some memory files write it — an empty one
+ *  falls through. The list and the health check both decide it here. */
+export const memoryType = (frontmatter: Pick<MemoryFrontmatter, "fields" | "metadata">): string | null =>
+  frontmatter.metadata.type?.trim() || frontmatter.fields.type?.trim() || null;
+
 /** What can be tidied in one memory file (#3331). */
 export type MemoryFileIssue =
   | { kind: "not-in-index" }

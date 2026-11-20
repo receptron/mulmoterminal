@@ -5,6 +5,7 @@ import { Lexer } from "marked";
 import {
   MEMORY_INDEX_BYTES_MAX,
   MEMORY_INDEX_LINES_MAX,
+  memoryType,
   parseMemoryFrontmatter,
   type LibraryMemoryHealth,
   type MemoryFileIssue,
@@ -94,7 +95,7 @@ function fileIssues(
   if (listed !== null && !listed.has(file.file)) issues.push({ kind: "not-in-index" });
   if (file.text === null) return issues;
   const { fields, metadata, body } = parseMemoryFrontmatter(file.text);
-  const present: Record<string, string | undefined> = { ...fields, type: metadata.type?.trim() || fields.type };
+  const present: Record<string, string | undefined> = { ...fields, type: memoryType({ fields, metadata }) ?? undefined };
   const missing = REQUIRED_FIELDS.filter((field) => (present[field] ?? "").trim() === "");
   if (missing.length > 0) issues.push({ kind: "no-frontmatter", missing });
   const broken = [...new Set(linkNames(body))].filter((name) => !names.has(name));
