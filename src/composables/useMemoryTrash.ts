@@ -8,7 +8,7 @@ import { trashLibraryMemoryFile, undoLibraryMemoryTrash, type MemoryTrashResult 
 export const MEMORY_TRASH_NOTICE_MS = 10_000;
 
 export type MemoryTrashNotice =
-  { kind: "trashed"; title: string; key: string; undo: string; running: boolean } | { kind: "changed" | "failed" | "taken" | "gone" | "undo-failed" };
+  { kind: "trashed"; title: string; key: string; undo: string; running: boolean; undoFailed?: boolean } | { kind: "changed" | "failed" | "taken" | "gone" };
 
 export interface MemoryTrashTarget {
   slug: string;
@@ -49,10 +49,10 @@ export function useMemoryTrash(changed: () => void) {
     const shown = notice.value;
     if (shown?.kind !== "trashed") return null;
     const result = await undoLibraryMemoryTrash(shown.undo);
-    if (result !== "restored") {
-      show({ kind: result === "failed" ? "undo-failed" : result });
-      return null;
-    }
+    // The server keeps the undo when it could not finish one, so the notice keeps its Undo to try again.
+    if (result === "failed") show({ ...shown, undoFailed: true });
+    if (result === "taken" || result === "gone") show({ kind: result });
+    if (result !== "restored") return null;
     show(null);
     changed();
     return shown.key;

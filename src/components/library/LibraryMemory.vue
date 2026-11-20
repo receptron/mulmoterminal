@@ -215,6 +215,7 @@ function trashNoticeText(): string {
   const shown = trashNotice.value;
   if (shown === null) return "";
   if (shown.kind !== "trashed") return t(`libraryView.memory.trash.${shown.kind}`);
+  if (shown.undoFailed === true) return t("libraryView.memory.trash.undo-failed");
   const done = t("libraryView.memory.trash.trashed", { title: shown.title });
   return shown.running ? `${done} ${t("libraryView.memory.trash.running")}` : done;
 }

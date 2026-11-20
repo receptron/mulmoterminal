@@ -54,7 +54,7 @@ export const libraryViewZhCN = {
         failed: "无法将记忆移到废纸篓。",
         taken: "之后出现了同名的记忆，因此移走的那条留在废纸篓中。",
         gone: "这里已无法撤销。记忆在废纸篓中。",
-        "undo-failed": "无法放回记忆。",
+        "undo-failed": "无法放回记忆。点撤销再试一次。",
       },
       edit: {
         staleDraft: "有一份在旧版本上开始、未保存的编辑；文件此后已改动。",

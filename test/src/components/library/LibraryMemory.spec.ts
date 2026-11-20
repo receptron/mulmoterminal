@@ -302,6 +302,20 @@ describe("LibraryMemory", () => {
       expect(title(wrapper)).toBe("codex-sandbox");
     });
 
+    it("keeps Undo after an undo that failed, and puts it back on a second try", async () => {
+      undoAnswer = "failed";
+      const wrapper = await mountMemory();
+      await trashFirst(wrapper);
+      await wrapper.find("[data-testid=memory-trash-undo]").trigger("click");
+      await flushPromises();
+      expect(wrapper.find("[data-testid=memory-trash-notice]").text()).toContain("could not be put back");
+      undoAnswer = "restored";
+      await wrapper.find("[data-testid=memory-trash-undo]").trigger("click");
+      await flushPromises();
+      expect(undoCalls).toEqual(["u-1", "u-1"]);
+      expect(title(wrapper)).toBe("reply-in-japanese");
+    });
+
     it("lets the notice go after a while", async () => {
       const wrapper = await mountMemory();
       vi.useFakeTimers();

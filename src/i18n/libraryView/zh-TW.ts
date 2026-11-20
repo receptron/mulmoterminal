@@ -54,7 +54,7 @@ export const libraryViewZhTW = {
         failed: "無法將記憶移到垃圾桶。",
         taken: "之後出現了同名的記憶，因此移走的那條留在垃圾桶中。",
         gone: "這裡已無法復原。記憶在垃圾桶中。",
-        "undo-failed": "無法放回記憶。",
+        "undo-failed": "無法放回記憶。按復原再試一次。",
       },
       edit: {
         staleDraft: "有一份在舊版本上開始、未儲存的編輯；檔案此後已改動。",

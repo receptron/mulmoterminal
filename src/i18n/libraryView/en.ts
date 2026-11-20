@@ -54,7 +54,7 @@ export const libraryViewEn = {
         failed: "The memory could not be moved to the Trash.",
         taken: "A memory of that name was made since, so the deleted one stays in the Trash.",
         gone: "This can no longer be undone here. The memory is in the Trash.",
-        "undo-failed": "The memory could not be put back.",
+        "undo-failed": "The memory could not be put back. Undo tries again.",
       },
       edit: {
         staleDraft: "An unsaved edit of yours was begun on an earlier version; the file has changed since.",
