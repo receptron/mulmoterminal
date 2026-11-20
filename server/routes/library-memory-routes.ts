@@ -67,7 +67,9 @@ export function mountMemoryRoutes(app: Express, call: LibraryCaller, projectsRoo
     else res.json(read.text === null || !isFaithfulText(read.text) ? read : { ...read, version: memoryVersion(read.text) });
   });
   app.put("/api/library/memory/:slug/:file", async (req, res) => {
-    const target = memoryFileOf(projectsRoot, req.params.slug, req.params.file);
+    // A memory, never the index: the index is kept in step with the files by the operations that
+    // change which files there are, not edited by hand here.
+    const target = req.params.file === MEMORY_INDEX_FILE ? null : memoryFileOf(projectsRoot, req.params.slug, req.params.file);
     const edit = memoryEditOf(requestBody(req.body));
     if (target === null || edit === null) {
       res.status(400).json({ error: `expected { text, version } for a memory file, the text at most ${String(MEMORY_EDIT_MAX_BYTES)} bytes` });

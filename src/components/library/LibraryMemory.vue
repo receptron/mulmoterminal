@@ -16,6 +16,7 @@ import {
 } from "../../../common/libraryMemory";
 import { renderWikiHtml } from "../../wikiMarkdown";
 import LibraryMemoryEditor from "./LibraryMemoryEditor.vue";
+import { memoryDraftFor, memoryDraftKey } from "./memoryDrafts";
 import type { LibraryFileText } from "../../../common/libraryFiles";
 import { loadLibraryMemoryFile } from "../../composables/libraryApi";
 import { projectName, whenLabel } from "./libraryRows";
@@ -309,7 +310,14 @@ defineExpose({ move, startEdit });
           <!-- eslint-disable-next-line vue/no-v-html -- markdown in, sanitized in renderWikiHtml -->
           <div v-else :class="BODY_CLASS" data-testid="memory-body" v-html="bodyHtml"></div>
         </div>
-        <footer v-if="text?.version" class="flex items-center justify-end border-t border-border px-4 py-2">
+        <footer v-if="text?.version" class="flex items-center justify-end gap-3 border-t border-border px-4 py-2">
+          <span
+            v-if="memoryDraftFor(memoryDraftKey(selected.project.slug, selected.memory.file), text.version)"
+            class="mr-auto font-sans text-[12px] text-secondary"
+            data-testid="memory-draft-kept"
+          >
+            {{ t("libraryView.memory.edit.draftKept") }}
+          </span>
           <button
             type="button"
             data-testid="memory-edit"

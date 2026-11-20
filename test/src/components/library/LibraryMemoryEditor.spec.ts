@@ -15,8 +15,10 @@ vi.mock("../../../../src/composables/useDirLists", () => ({
 }));
 
 const LibraryMemoryEditor = (await import("../../../../src/components/library/LibraryMemoryEditor.vue")).default;
+const { dropMemoryDraft } = await import("../../../../src/components/library/memoryDrafts");
 
 beforeEach(() => {
+  dropMemoryDraft("-w-app/a.md"); // drafts outlive an editor, by design: not a test
   result = { kind: "saved", version: "v2" };
   saves.length = 0;
   running = false;
@@ -94,5 +96,28 @@ describe("LibraryMemoryEditor", () => {
     await wrapper.find("[data-testid=memory-editor-save]").trigger("click");
     await flushPromises();
     expect(saves[0]?.[2]).toBe("---\r\nname: a\r\n---\r\nbody\r\n");
+  });
+
+  it("keeps an unsaved draft when the editor goes away, offers it back on the same version only, and drops it on cancel", async () => {
+    const first = await mountEditor();
+    await first.find("[data-testid=memory-editor-field]").setValue("half-written");
+    first.unmount(); // the Library closed, or the kind switched
+    const again = await mountEditor();
+    expect((again.find("[data-testid=memory-editor-field]").element as HTMLTextAreaElement).value).toBe("half-written");
+    expect(again.find("[data-testid=memory-editor-notice]").text()).toContain("unsaved edit was kept");
+    again.unmount();
+    const changed = mount(LibraryMemoryEditor, { props: { slug: "-w-app", file: "a.md", text: "newer on disk", version: "v9", cwd: null } });
+    expect((changed.find("[data-testid=memory-editor-field]").element as HTMLTextAreaElement).value).toBe("newer on disk");
+    changed.unmount();
+    const last = await mountEditor();
+    await last.find("[data-testid=memory-editor-cancel]").trigger("click");
+    last.unmount();
+    expect(((await mountEditor()).find("[data-testid=memory-editor-field]").element as HTMLTextAreaElement).value).not.toBe("half-written");
+  });
+
+  it("leaves Esc to an IME composition", async () => {
+    const wrapper = await mountEditor();
+    await wrapper.find("[data-testid=memory-editor-field]").trigger("keydown", { key: "Escape", isComposing: true });
+    expect(wrapper.emitted("cancel")).toBeUndefined();
   });
 });

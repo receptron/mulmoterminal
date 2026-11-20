@@ -45,6 +45,8 @@ export const libraryViewEn = {
     },
     memory: {
       edit: {
+        restored: "Your unsaved edit was kept; it is back in the editor.",
+        draftKept: "An unsaved edit is waiting; Edit to continue it.",
         unsaved: "Save or cancel this edit first.",
         edit: "Edit",
         label: "Memory text",

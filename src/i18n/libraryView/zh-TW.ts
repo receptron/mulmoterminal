@@ -45,6 +45,8 @@ export const libraryViewZhTW = {
     },
     memory: {
       edit: {
+        restored: "保留了你未儲存的編輯，已放回編輯器。",
+        draftKept: "有未儲存的編輯。點「編輯」繼續。",
         unsaved: "請先儲存或取消這次編輯。",
         edit: "編輯",
         label: "記憶內文",

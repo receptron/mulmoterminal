@@ -2,7 +2,8 @@
 // Editing one memory in place (#3331): its whole text, frontmatter and all, so nothing the file holds is
 // lost on the way back. Saved only over the text it was opened on — the agent writes memory as it
 // works, and a save over its change would lose it without a word.
-import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
+import { dropMemoryDraft, keepMemoryDraft, memoryDraftFor, memoryDraftKey } from "./memoryDrafts";
 import { useI18n } from "vue-i18n";
 import { saveLibraryMemoryFile } from "../../composables/libraryApi";
 import { readResumableList } from "../../composables/useDirLists";
@@ -23,13 +24,15 @@ const { t } = useI18n();
 /** A textarea gives every line break as `\n`: a file written with `\r\n` is saved with them again,
  *  so opening and saving it unchanged changes nothing. */
 const crlf = props.text.includes("\r\n");
-const draft = ref(props.text.replace(/\r\n/g, "\n"));
+const draftKey = memoryDraftKey(props.slug, props.file);
+const kept = memoryDraftFor(draftKey, props.version);
+const draft = ref((kept?.text ?? props.text).replace(/\r\n/g, "\n"));
 const asWritten = (text: string): string => (crlf ? text.replace(/\n/g, "\r\n") : text);
 /** The draft differs from what was opened: leaving would lose it. */
 const dirty = computed(() => asWritten(draft.value) !== props.text);
 defineExpose({ dirty });
 const saving = ref(false);
-const notice = ref<"changed" | "failed" | "too-large" | "unsaved" | null>(null);
+const notice = ref<"changed" | "failed" | "too-large" | "unsaved" | "restored" | null>(kept === null ? null : "restored");
 watch(
   () => props.leaveRefused,
   () => (notice.value = "unsaved"),
@@ -37,6 +40,20 @@ watch(
 /** A session is running in this project: it may write this memory while it is edited. */
 const sessionRunning = ref(false);
 const field = useTemplateRef<HTMLTextAreaElement>("field");
+
+/** Saved or cancelled: the draft has been dealt with, and leaving keeps nothing. */
+let settled = false;
+
+// Gone with an unsaved draft (the Library closed, the kind switched): kept for next time.
+onBeforeUnmount(() => {
+  if (!settled && dirty.value) keepMemoryDraft(draftKey, { version: props.version, text: asWritten(draft.value) });
+});
+
+function cancel(): void {
+  settled = true;
+  dropMemoryDraft(draftKey);
+  emit("cancel");
+}
 
 onMounted(async () => {
   await nextTick();
@@ -55,16 +72,21 @@ async function save(): Promise<void> {
   const text = asWritten(draft.value);
   const result = await saveLibraryMemoryFile(props.slug, props.file, text, props.version);
   saving.value = false;
-  if (result.kind === "saved") emit("saved", text, result.version);
-  else notice.value = result.kind;
+  if (result.kind === "saved") {
+    settled = true;
+    dropMemoryDraft(draftKey);
+    emit("saved", text, result.version);
+  } else notice.value = result.kind;
 }
 
 /** ⌘Enter (Ctrl+Enter elsewhere) saves; Esc stops editing, not the Library. */
 function onKey(event: KeyboardEvent): void {
   if (event.key === "Escape") {
+    // Esc while composing (Japanese input) cancels the composition, not the edit.
+    if (event.isComposing) return;
     event.preventDefault();
     event.stopPropagation();
-    emit("cancel");
+    cancel();
   } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !event.isComposing) {
     event.preventDefault();
     event.stopPropagation();
@@ -103,7 +125,7 @@ function onKey(event: KeyboardEvent): void {
         type="button"
         class="cursor-pointer rounded border border-border bg-transparent px-3 py-1.5 font-sans text-[13px] text-secondary hover:text-fg"
         data-testid="memory-editor-cancel"
-        @click="emit('cancel')"
+        @click="cancel"
       >
         {{ t("libraryView.memory.edit.cancel") }} <kbd class="font-sans text-[11px] text-dim">Esc</kbd>
       </button>

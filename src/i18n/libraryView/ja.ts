@@ -45,6 +45,8 @@ export const libraryViewJa = {
     },
     memory: {
       edit: {
+        restored: "保存していなかった編集を残してあり、エディタに戻しました。",
+        draftKept: "保存していない編集があります。「編集」で続けられます。",
         unsaved: "先にこの編集を保存するか、やめてください。",
         edit: "編集",
         label: "記憶の本文",

@@ -2,7 +2,7 @@
 // Writing a memory from the Library (#3331): only over the text the editor opened, never through a link,
 // never creating a file.
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, existsSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { memoryVersion, writeMemory } from "../../../../server/backends/library/memory-write";
@@ -50,5 +50,13 @@ describe("writeMemory", () => {
     const [first, second] = await Promise.all([writeMemory(file, "one", memoryVersion("opened")), writeMemory(file, "two", memoryVersion("opened"))]);
     expect([first.kind, second.kind].sort()).toEqual(["conflict", "written"]);
     expect(["one", "two"]).toContain(readFileSync(file, "utf8"));
+  });
+
+  it.skipIf(process.platform === "win32")("keeps the file's mode", async () => {
+    const file = path.join(scratch(), "private.md");
+    writeFileSync(file, "kept private", { mode: 0o600 });
+    chmodSync(file, 0o600);
+    await writeMemory(file, "edited", memoryVersion("kept private"));
+    expect(statSync(file).mode & 0o777).toBe(0o600);
   });
 });

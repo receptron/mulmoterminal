@@ -45,6 +45,8 @@ export const libraryViewKo = {
     },
     memory: {
       edit: {
+        restored: "저장하지 않은 편집을 남겨 두었고, 편집기에 되돌렸습니다.",
+        draftKept: "저장하지 않은 편집이 있습니다. 「편집」으로 이어서 할 수 있습니다.",
         unsaved: "먼저 이 편집을 저장하거나 취소하세요.",
         edit: "편집",
         label: "기억 본문",
