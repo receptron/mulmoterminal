@@ -3,6 +3,7 @@
 // reader in place of the body. Esc goes back to reading, not out of the Library.
 import { nextTick, onMounted, useTemplateRef } from "vue";
 import { useI18n } from "vue-i18n";
+import { movedIndex } from "./libraryKeys";
 
 defineProps<{ title: string; choices: { key: string; title: string; file: string }[] }>();
 const emit = defineEmits<{ (e: "pick", key: string): void; (e: "cancel"): void }>();
@@ -14,11 +15,19 @@ onMounted(async () => {
   list.value?.querySelector("button")?.focus();
 });
 
+/** The arrows move between the choices, held at either end, as they move through the list. */
+function moveFocus(by: number): void {
+  const choices = [...(list.value?.querySelectorAll<HTMLButtonElement>("[data-testid=memory-merge-choice]") ?? [])];
+  const at = choices.findIndex((choice) => choice === document.activeElement);
+  choices[movedIndex(at, by, choices.length)]?.focus();
+}
+
 function onKey(event: KeyboardEvent): void {
-  if (event.key !== "Escape") return;
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") moveFocus(event.key === "ArrowDown" ? 1 : -1);
+  else if (event.key === "Escape") emit("cancel");
+  else return;
   event.stopPropagation();
   event.preventDefault();
-  emit("cancel");
 }
 </script>
 

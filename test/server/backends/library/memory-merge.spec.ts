@@ -73,6 +73,29 @@ describe("mergeMemory", () => {
     expect([read("a.md"), read("b.md"), read("MEMORY.md")]).toEqual(["alpha", "beta", INDEX]);
     expect(trashed()).toEqual([]);
   });
+  it("writes nothing over the memory kept when it changed while the other was moved, and puts that one back", async () => {
+    const { layout, read, trashed, merge, memory } = setup();
+    const writingB: typeof trashEntry = (...args) => {
+      const landed = trashEntry(...args);
+      writeFileSync(path.join(memory, "b.md"), "the agent's newer text");
+      return landed;
+    };
+    expect(await mergeMemory(merge(), layout, NOW, { replace: replaceKeepingMode, move: writingB })).toEqual({ kind: "conflict", file: "into" });
+    expect([read("a.md"), read("b.md"), read("MEMORY.md")]).toEqual(["alpha", "the agent's newer text", INDEX]);
+    expect(trashed()).toEqual([]);
+  });
+  it("keeps the Undo when the memory kept cannot be put back, and a retry puts it back", async () => {
+    const { layout, read, merge, trashed } = setup();
+    const undo = undoOf(await mergeMemory(merge(), layout, NOW));
+    const failingOnB = (file: string, text: string, mode: number) =>
+      file.endsWith("b.md") ? Promise.reject(new Error("disk full")) : replaceKeepingMode(file, text, mode);
+    await expect(restoreMemory(undo, NOW, failingOnB)).rejects.toThrow("disk full");
+    expect([read("a.md"), read("b.md"), read("MEMORY.md")]).toEqual(["alpha", MERGED, INDEX]);
+    expect(trashed()).toEqual([]);
+    expect(await restoreMemory(undo, NOW)).toBe("restored");
+    expect([read("a.md"), read("b.md"), read("MEMORY.md")]).toEqual(["alpha", "beta", INDEX]);
+    expect(await restoreMemory(undo, NOW)).toBe("gone");
+  });
   it("on Undo, keeps a text written over the merge since, and still puts the other memory back", async () => {
     const { layout, read, merge, memory } = setup();
     const undo = undoOf(await mergeMemory(merge(), layout, NOW));

@@ -34,6 +34,8 @@ interface Undo extends Moved {
   entry: { dev: number; ino: number };
   /** A merge's other memory, which took this one's text: put back as it was when nothing has changed it since. */
   merged: { into: string; before: string; written: string } | null;
+  /** The deleted file is back already: a retry after the merged memory could not be put back does only that. */
+  fileBack: boolean;
   at_ms: number;
 }
 
@@ -105,7 +107,7 @@ async function trashChecked({ file, index, expected, layout, now, steps }: Trash
   forget(now.getTime());
   const id = randomUUID();
   const { dev, ino } = await lstat(moved.trashed);
-  undos.set(id, { ...moved, index: kept, entry: { dev, ino }, merged: null, at_ms: now.getTime() });
+  undos.set(id, { ...moved, index: kept, entry: { dev, ino }, merged: null, fileBack: false, at_ms: now.getTime() });
   return { kind: "trashed", undo: id };
 }
 
@@ -196,10 +198,22 @@ function inTurn<T>(files: string[], task: () => Promise<T>): Promise<T> {
     )();
 }
 
-/** The file first, then its lines; when the lines cannot be written the file goes out again and the
- *  undo stays, so it can be tried again. A second undo of the same delete, queued behind the first,
- *  finds the Trash entry gone. */
+/** The file first, then its lines, then a merged memory. When the lines cannot be written the file
+ *  goes out again; when the merged memory cannot, the file stays back. Either way the undo stays, so
+ *  it can be tried again. */
 async function restoreChecked(id: string, undo: Undo, replace: Replace): Promise<MemoryRestoreResult> {
+  if (undos.get(id) !== undo) return "gone"; // an undo queued behind another of the same delete
+  if (!undo.fileBack) {
+    const outcome = await fileBack(id, undo, replace);
+    if (outcome !== "restored") return outcome;
+  }
+  // Kept until the merged memory is back too: when that write fails, a retry does it again.
+  if (undo.merged !== null) await mergedBack(replace, undo.merged);
+  undos.delete(id);
+  return "restored";
+}
+
+async function fileBack(id: string, undo: Undo, replace: Replace): Promise<MemoryRestoreResult> {
   const index = path.join(path.dirname(undo.file), MEMORY_INDEX_FILE);
   const entry = await lstat(undo.trashed).catch(() => null);
   const outcome = entry !== null && isSameFile(entry, undo.entry) ? await linkBack(undo) : "gone";
@@ -212,8 +226,7 @@ async function restoreChecked(id: string, undo: Undo, replace: Replace): Promise
     throw err;
   }
   await dropTrashed(undo);
-  undos.delete(id);
-  if (undo.merged !== null) await mergedBack(replace, undo.merged);
+  undo.fileBack = true;
   return "restored";
 }
 
@@ -253,6 +266,11 @@ async function mergeChecked(merge: MemoryMerge, layout: NonNullable<TrashLayout>
   if (trashed.kind !== "trashed") return trashed.kind === "conflict" ? { kind: "conflict", file: "from" } : trashed;
   const undo = undos.get(trashed.undo);
   if (undo === undefined) throw new Error("the merge's undo was not kept");
+  // Checked again after the delete, which takes a while: a change to it meanwhile is not written over.
+  if ((await versionOf(merge.into)) !== merge.intoVersion) {
+    await restoreChecked(trashed.undo, undo, steps.replace);
+    return { kind: "conflict", file: "into" };
+  }
   try {
     await steps.replace(merge.into, merge.text, await modeOf(merge.into));
   } catch (err) {
