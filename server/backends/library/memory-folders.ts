@@ -15,7 +15,7 @@ import {
 const FOLDERS_AT_ONCE = 64;
 
 /** A memory file's name as the folder holds it: a plain `.md` name, never a path. */
-export const isMemoryFileName = (name: string): boolean => /^\w[\w.-]{0,199}\.md$/.test(name) && !name.includes("..");
+export const isMemoryFileName = (name: string): boolean => /^\w[\w.-]{0,199}\.md$/.test(name);
 /** A project folder's name as Claude Code makes them (`projectSlug`). */
 export const isProjectSlug = (slug: string): boolean => /^[A-Za-z0-9_-]{1,255}$/.test(slug);
 
@@ -27,9 +27,15 @@ async function entriesOf(dir: string): Promise<Dirent[]> {
   }
 }
 
-/** The index under any spelling of its name: on a case-insensitive disk (macOS, Windows) `memory.md` IS
- *  the index Claude Code opens, and must not show a second time as a memory. */
-const isIndexName = (name: string): boolean => name.toLowerCase() === MEMORY_INDEX_FILE.toLowerCase();
+/** Whether a file IS the index Claude Code opens as `MEMORY.md`: the same file on disk, so `memory.md`
+ *  is the index on a case-insensitive disk (macOS, Windows) and a memory of its own beside it on a
+ *  case-sensitive one (Linux). */
+async function isTheIndex(folder: string, name: string): Promise<boolean> {
+  if (name.toLowerCase() !== MEMORY_INDEX_FILE.toLowerCase()) return false;
+  const statOf = (file: string) => fs.lstat(path.join(folder, file)).catch(() => null);
+  const [file, index] = await Promise.all([statOf(name), statOf(MEMORY_INDEX_FILE)]);
+  return file !== null && index !== null && file.dev === index.dev && file.ino === index.ino;
+}
 
 /** What the list reads of each memory: its frontmatter, which opens the file — read in steps until its
  *  closing line, up to a bound. The whole of a memory is read only when one is opened, so a folder of
@@ -101,7 +107,9 @@ async function indexOf(folder: string): Promise<LibraryMemoryProject["index"]> {
 
 async function projectOf(projectsRoot: string, slug: string, cwds: ReadonlyMap<string, string>): Promise<LibraryMemoryProject | null> {
   const folder = path.join(projectsRoot, slug, "memory");
-  const names = (await entriesOf(folder)).filter((entry) => entry.isFile() && !isIndexName(entry.name) && isMemoryFileName(entry.name));
+  const candidates = (await entriesOf(folder)).filter((entry) => entry.isFile() && isMemoryFileName(entry.name));
+  const indexes = await Promise.all(candidates.map((entry) => isTheIndex(folder, entry.name)));
+  const names = candidates.filter((_, place) => !indexes[place]);
   const index = await indexOf(folder);
   if (names.length === 0 && index === null) return null;
   const files = (await Promise.all(names.map((entry) => memoryFileOf(folder, entry.name)))).filter((file): file is LibraryMemoryFile => file !== null);

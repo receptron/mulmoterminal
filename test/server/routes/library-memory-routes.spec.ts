@@ -3,7 +3,7 @@
 // memory file in a memory folder.
 import { describe, it, expect, afterEach } from "vitest";
 import express from "express";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { routeCall } from "../../helpers/routeCall";
@@ -123,12 +123,16 @@ describe("a frontmatter longer than one read", () => {
 });
 
 describe("the index under another spelling", () => {
-  it("is never listed as a memory", async () => {
+  it("is not listed as a memory when it is the file Claude Code opens as MEMORY.md, and is one when it is not", async () => {
     const { root } = setup();
-    rmSync(path.join(root, "-w-other", "memory", "MEMORY.md"));
-    writeFileSync(path.join(root, "-w-other", "memory", "memory.md"), "- lower-case index\n");
-    const other = (await listMemoryProjects(root, [], 0)).find((project) => project.slug === "-w-other");
-    expect(other?.files.map((file) => file.file) ?? []).not.toContain("memory.md");
+    const folder = path.join(root, "-w-other", "memory");
+    rmSync(path.join(folder, "MEMORY.md"));
+    writeFileSync(path.join(folder, "memory.md"), "- lower-case\n");
+    writeFileSync(path.join(folder, "api..cache.md"), "two dots inside a name");
+    const sameFile = existsSync(path.join(folder, "MEMORY.md")); // a case-insensitive disk opens memory.md by that name
+    const files = (await listMemoryProjects(root, [], 0)).find((project) => project.slug === "-w-other")?.files.map((file) => file.file) ?? [];
+    expect(files.includes("memory.md")).toBe(!sameFile);
+    expect(files).toContain("api..cache.md");
   });
 });
 
