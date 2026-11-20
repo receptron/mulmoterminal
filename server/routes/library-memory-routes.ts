@@ -1,7 +1,9 @@
 // The Library's memory (#3331): every project's memory folder, and one memory file. Read only here.
 //
 // No route takes a path. A folder is named by its project slug and a file by its name, each checked
-// against the shape Claude Code gives them, then joined under the agent's own projects root.
+// against the shape Claude Code gives them, then joined under the agent's own projects root. A
+// linked memory FOLDER is followed: Claude Code reads memory through the link too, so this shows
+// what the agent loads. A file that is itself a link is not read (readBoundedText).
 import path from "node:path";
 import type { Express } from "express";
 import { MEMORY_INDEX_FILE } from "../../common/libraryMemory.js";

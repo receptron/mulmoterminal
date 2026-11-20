@@ -536,6 +536,13 @@ describe("LibraryOverlay", () => {
     await press("ArrowDown");
     await flushPromises();
     expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("two");
+    // From a memory row that has focus too: the rows are buttons, and the arrows must still move.
+    const first = wrapper.findAll("[data-testid=memory-row]")[0];
+    await first?.trigger("click");
+    (first?.element as HTMLElement | undefined)?.focus();
+    first?.element.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("two");
     await wrapper.find("[data-testid=library-kind-conversations]").trigger("click");
     expect(wrapper.find("[data-testid=library-memory]").exists()).toBe(false);
     expect(wrapper.find("[data-testid=library-reader]").exists()).toBe(true);

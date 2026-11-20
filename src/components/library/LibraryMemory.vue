@@ -116,6 +116,7 @@ defineExpose({ move });
           :key="memory.file"
           type="button"
           data-memory-row
+          data-library-row
           data-testid="memory-row"
           class="block w-full cursor-pointer border-0 px-4 py-1.5 text-left font-sans"
           :class="selected?.key === memoryKey(project.slug, memory.file) ? 'bg-selected' : 'bg-transparent hover:bg-hover'"
