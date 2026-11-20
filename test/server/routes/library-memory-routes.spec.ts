@@ -63,6 +63,20 @@ describe("/api/library/memory", () => {
   });
 });
 
+describe("the index gauge", () => {
+  it("counts an index far past what is read whole, and one with no final newline", async () => {
+    const { call, root } = setup();
+    const huge = "- [x](x.md) — a line well past the cap\n".repeat(30_000);
+    writeFileSync(path.join(root, "-w-app", "memory", "MEMORY.md"), huge);
+    writeFileSync(path.join(root, "-w-other", "memory", "MEMORY.md"), "one\ntwo");
+    const projects = (await call("/api/library/memory")).body.projects;
+    expect(projects).toEqual([
+      expect.objectContaining({ slug: "-w-app", index: { lines: 30_000, bytes: Buffer.byteLength(huge) } }),
+      expect.objectContaining({ slug: "-w-other", index: { lines: 2, bytes: 7 } }),
+    ]);
+  });
+});
+
 describe("/api/library/memory/:slug/:file", () => {
   it("answers a memory file and the index", async () => {
     const { call } = setup();

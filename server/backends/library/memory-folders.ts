@@ -1,6 +1,6 @@
 // Reading Claude Code's memory folders for the Library (#3331): `<projects>/<slug>/memory/`, each
 // with its `MEMORY.md` index and its memory files. Read only.
-import { promises as fs, type Dirent } from "node:fs";
+import { createReadStream, promises as fs, type Dirent } from "node:fs";
 import path from "node:path";
 import { MEMORY_INDEX_FILE, parseMemoryFrontmatter, projectSlug, type LibraryMemoryFile, type LibraryMemoryProject } from "../../../common/libraryMemory.js";
 import { readBoundedText } from "./file-history-read.js";
@@ -29,11 +29,29 @@ async function memoryFileOf(folder: string, file: string): Promise<LibraryMemory
   return { file, name: fields.name ?? null, description: fields.description ?? null, type: metadata.type ?? null, updatedAt: info?.mtimeMs ?? 0 };
 }
 
+const NEWLINE = 0x0a;
+
+/** Lines and bytes of the index, streamed: only the counts are wanted, and an index far past what
+ *  Claude Code loads is exactly the one the gauge must show, not leave out. A last line without a
+ *  newline counts. Not through a link, like every read here. */
 async function indexOf(folder: string): Promise<LibraryMemoryProject["index"]> {
-  const read = await readBoundedText(path.join(folder, MEMORY_INDEX_FILE));
-  if (read.text === null) return null;
-  const lines = read.text === "" ? 0 : read.text.replace(/\n$/, "").split("\n").length;
-  return { lines, bytes: Buffer.byteLength(read.text) };
+  const file = path.join(folder, MEMORY_INDEX_FILE);
+  const info = await fs.lstat(file).catch(() => null);
+  if (info === null || !info.isFile()) return null;
+  let newlines = 0;
+  let bytes = 0;
+  let last = NEWLINE;
+  try {
+    for await (const chunk of createReadStream(file)) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
+      for (const byte of buffer) if (byte === NEWLINE) newlines += 1;
+      bytes += buffer.length;
+      last = buffer.at(-1) ?? last;
+    }
+  } catch {
+    return null;
+  }
+  return { lines: newlines + (last === NEWLINE ? 0 : 1), bytes };
 }
 
 async function projectOf(projectsRoot: string, slug: string, cwds: ReadonlyMap<string, string>): Promise<LibraryMemoryProject | null> {
