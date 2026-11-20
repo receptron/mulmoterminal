@@ -31,8 +31,11 @@ describe("indexEntries, linkNames, pathReferences", () => {
     expect(indexEntries("- [A](a.md)\n- [B](sub/b.md) [site](https://x.dev/c.md) [C](c.md) [D](./d.md)")).toEqual(["a.md", "c.md", "d.md"]);
   });
 
-  it("reads [[links]] outside code only", () => {
+  it("reads [[links]] outside code only, as Markdown decides what code is", () => {
     expect(linkNames("see [[a]] and `[[inline]]`\n```\n[[fenced]]\n```\n[[ b ]]")).toEqual(["a", "b"]);
+    expect(linkNames("a ``[[double]]`` span\n\n~~~\n[[tilde fence]]\n~~~\n\n    [[indented code]]\n\n- [[in a list]]\n- `[[code in a list]]`")).toEqual([
+      "in a list",
+    ]);
   });
 
   it.each([
@@ -45,6 +48,8 @@ describe("indexEntries, linkNames, pathReferences", () => {
     ["plain server/foo.ts outside a span", []],
     ["```\n`in/a/fence.ts`\n```", []],
     ["`a/b.ts` twice `a/b.ts`", ["a/b.ts"]],
+    ["``src/double.ts`` in a double span", ["src/double.ts"]],
+    ["~~~\n`in/tilde/fence.ts`\n~~~", []],
   ])("%s → %j", (body, references) => {
     expect(pathReferences(body)).toEqual(references);
   });

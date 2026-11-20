@@ -1,6 +1,7 @@
 // Which memory can be tidied (#3331), decided by rule alone — nothing here reads a disk. The reader
 // (memory-health-read.ts) hands in the texts and which named paths exist.
 import path from "node:path";
+import { Lexer } from "marked";
 import {
   MEMORY_INDEX_BYTES_MAX,
   MEMORY_INDEX_LINES_MAX,
@@ -23,7 +24,33 @@ const REQUIRED_FIELDS = ["name", "description", "type"] as const;
 
 /** Text with code taken out: a `[[name]]` or a path inside a code span or block is an example, not a
  *  reference (the renderer leaves those inert too). */
-const withoutCode = (body: string): string => body.replace(/```[\s\S]*?(```|$)/g, " ").replace(/`[^`\n]*`/g, " ");
+interface MarkdownToken {
+  type: string;
+  raw: string;
+  text?: string;
+  tokens?: MarkdownToken[];
+  items?: MarkdownToken[];
+}
+
+const isToken = (value: unknown): value is MarkdownToken =>
+  typeof value === "object" && value !== null && "type" in value && "raw" in value && typeof value.type === "string" && typeof value.raw === "string";
+
+/** A body split as Markdown reads it — by marked's own lexer, so a code span of any number of backticks
+ *  and a fenced block are code exactly where the renderer makes them code: `prose` is the text with all
+ *  code left out, `spans` the inline code spans' contents. */
+export function splitCode(body: string): { prose: string; spans: string[] } {
+  const prose: string[] = [];
+  const spans: string[] = [];
+  const walk = (tokens: readonly unknown[]): void =>
+    tokens.filter(isToken).forEach((token) => {
+      if (token.type === "code") return;
+      if (token.type === "codespan") spans.push(token.text ?? "");
+      else if (token.tokens !== undefined || token.items !== undefined) walk([...(token.tokens ?? []), ...(token.items ?? [])]);
+      else prose.push(token.raw);
+    });
+  walk(new Lexer().lex(body));
+  return { prose: prose.join(" "), spans };
+}
 
 /** The memory files `MEMORY.md` points at: the targets of its Markdown links that name a file here. */
 export function indexEntries(indexText: string): string[] {
@@ -31,13 +58,15 @@ export function indexEntries(indexText: string): string[] {
 }
 
 /** The `[[name]]` links in a body, outside code. */
-export const linkNames = (body: string): string[] => [...withoutCode(body).matchAll(/\[\[([^\]\n]{1,200})\]\]/g)].map((match) => (match[1] ?? "").trim());
+export const linkNames = (body: string): string[] => [...splitCode(body).prose.matchAll(/\[\[([^\]\n]{1,200})\]\]/g)].map((match) => (match[1] ?? "").trim());
 
 /** Paths a body names in code spans — `server/foo.ts`, `~/.codex/config.toml` — the way memory points at
  *  files: a slash and an extension, no scheme, no wildcard or placeholder. It cannot start with `@`, so
  *  a package (`@scope/name@1.2.3`, a slash and a dot too) is not one. */
 export function pathReferences(body: string): string[] {
-  const spans = [...body.replace(/```[\s\S]*?(```|$)/g, " ").matchAll(/`([^`\n]{3,300})`/g)].map((match) => (match[1] ?? "").trim());
+  const spans = splitCode(body)
+    .spans.map((span) => span.trim())
+    .filter((span) => span.length >= 3 && span.length <= 300);
   const looksLikePath = (span: string): boolean =>
     /^(?:[A-Za-z]:)?[~./\\\w-][\w.@~/\\-]*\.[A-Za-z0-9]{1,8}$/.test(span) && /[/\\]/.test(span) && !span.includes("//");
   return [...new Set(spans.filter(looksLikePath))];
