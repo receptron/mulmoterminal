@@ -14,6 +14,7 @@ import { libraryRequested, useLibraryView } from "../../composables/useLibraryVi
 import { loadLibraryConversation } from "../../composables/libraryApi";
 import { router } from "../../router";
 import { useEscapeToClose } from "../../composables/useEscapeToClose";
+import { isImeConfirming } from "../../composables/imeComposition";
 import { useLibraryData } from "../../composables/useLibraryData";
 import { readResumableList } from "../../composables/useDirLists";
 import { openCellAt } from "../../composables/useNewTerminal";
@@ -36,12 +37,13 @@ const {
   failed: memoryFailed,
   health: memoryHealth,
   healthFailed: memoryHealthFailed,
+  refresh: refreshMemory,
 } = useLibraryMemory(isOpen);
 const memoryCount = computed(() => filterMemory(memoryProjects.value, query.value).reduce((sum, project) => sum + project.files.length, 0));
 /** Which kind the list shows: the conversations, or Claude Code's memory. */
 const kind = ref<"conversations" | "memory">("conversations");
 const searchLabel = computed(() => (kind.value === "memory" ? t("libraryView.memory.search") : t("libraryView.search")));
-const memoryView = useTemplateRef<{ move(by: number): Promise<void> }>("memoryView");
+const memoryView = useTemplateRef<{ move(by: number): Promise<void>; startEdit(): void }>("memoryView");
 const { marks, pinned, saveFailedFor, loadFailed: marksFailed, change: changeMark } = useLibraryMarks(isOpen);
 
 const searchField = ref<HTMLInputElement | null>(null);
@@ -230,9 +232,17 @@ function onKey(event: KeyboardEvent): void {
   const editable = target !== null && isEditableTarget(target.tagName, [...target.classList]);
   const modified = event.metaKey || event.ctrlKey || event.altKey;
   const onOtherControl = target?.closest(OTHER_CONTROLS) != null && target.closest("[data-library-row]") === null;
-  const action = libraryKeyAction({ key: event.key, inSearch, inOtherField: editable && !inSearch, onOtherControl, composing: event.isComposing, modified });
-  // Enter does nothing of the Library's own in Memory yet: left to the focused control (a row presses).
-  if (action === null || (action === "primary" && kind.value === "memory")) return;
+  const action = libraryKeyAction({
+    key: event.key,
+    inSearch,
+    inOtherField: editable && !inSearch,
+    onOtherControl,
+    composing: isImeConfirming(event),
+    modified,
+  });
+  // In Memory, Enter on a focused row is the row's own (it presses); elsewhere it edits.
+  const onMemoryRow = target?.closest("[data-memory-row]") != null;
+  if (action === null || (action === "primary" && kind.value === "memory" && onMemoryRow)) return;
   event.preventDefault();
   runKeyAction(action);
 }
@@ -240,8 +250,10 @@ function onKey(event: KeyboardEvent): void {
 function runKeyAction(action: NonNullable<ReturnType<typeof libraryKeyAction>>): void {
   const by = action === "up" ? -1 : 1;
   if (action === "focus-search") searchField.value?.focus();
-  else if (kind.value === "memory") void memoryView.value?.move(by);
-  else if (action === "primary") void resume();
+  else if (kind.value === "memory") {
+    if (action === "primary") memoryView.value?.startEdit();
+    else void memoryView.value?.move(by);
+  } else if (action === "primary") void resume();
   else void move(by);
 }
 window.addEventListener("keydown", onKey);
@@ -313,6 +325,7 @@ onBeforeUnmount(() => {
         :now="now"
         :health="memoryHealth"
         :health-failed="memoryHealthFailed"
+        @changed="refreshMemory"
       />
       <p v-else-if="loadFailed" class="m-0 px-4 py-6 font-sans text-[13px] text-err-text">{{ t("libraryView.loadFailed") }}</p>
       <p v-else-if="!loaded" class="m-0 px-4 py-6 font-sans text-[13px] text-dim">{{ t("libraryView.loading") }}</p>

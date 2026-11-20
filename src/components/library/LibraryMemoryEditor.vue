@@ -1,0 +1,185 @@
+<script setup lang="ts">
+// Editing one memory in place (#3331): its whole text, frontmatter and all, so nothing the file holds is
+// lost on the way back. Saved only over the text it was opened on — the agent writes memory as it
+// works, and a save over its change would lose it without a word.
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
+import { dropMemoryDraft, keepMemoryDraft, memoryDraftFor, memoryDraftKey, staleMemoryDraftFor } from "./memoryDrafts";
+import { isImeConfirming } from "../../composables/imeComposition";
+import { useI18n } from "vue-i18n";
+import { saveLibraryMemoryFile } from "../../composables/libraryApi";
+import { readResumableList } from "../../composables/useDirLists";
+import { MEMORY_EDIT_MAX_BYTES } from "../../../common/libraryMemory";
+
+const props = defineProps<{
+  slug: string;
+  file: string;
+  text: string;
+  version: string;
+  cwd: string | null;
+  /** Bumped when moving to another memory was refused because of this draft. */
+  leaveRefused?: number;
+}>();
+const emit = defineEmits<{ (e: "saved", text: string, version: string): void; (e: "cancel" | "reload"): void }>();
+const { t } = useI18n();
+
+/** A textarea gives every line break as `\n`: a file written with `\r\n` is saved with them again,
+ *  so opening and saving it unchanged changes nothing. */
+const crlf = props.text.includes("\r\n");
+const draftKey = memoryDraftKey(props.slug, props.file);
+const kept = memoryDraftFor(draftKey, props.version);
+/** A draft begun on a version the file has since left: offered, not applied. */
+const stale = ref(staleMemoryDraftFor(draftKey, props.version));
+/** Whether the draft kept for this memory is the one in this editor: only then is it ours to drop. */
+let holdsKept = kept !== null;
+function useStaleDraft(): void {
+  if (stale.value === null) return;
+  holdsKept = true;
+  draft.value = stale.value.text.replace(/\r\n?/g, "\n");
+  stale.value = null;
+  notice.value = null;
+}
+const draft = ref((kept?.text ?? props.text).replace(/\r\n?/g, "\n"));
+const opened = props.text.replace(/\r\n?/g, "\n");
+/** The draft as it goes to disk: an untouched draft is the file exactly as it was (mixed line endings
+ *  included); an edited one takes CRLF throughout when the file had any. */
+const asWritten = (text: string): string => {
+  if (text === opened) return props.text;
+  return crlf ? text.replace(/\n/g, "\r\n") : text;
+};
+/** The draft differs from what was opened: leaving would lose it. */
+const dirty = computed(() => asWritten(draft.value) !== props.text);
+defineExpose({ dirty });
+const saving = ref(false);
+const notice = ref<"changed" | "failed" | "too-large" | "unsaved" | "restored" | null>(kept === null ? null : "restored");
+watch(
+  () => props.leaveRefused,
+  () => (notice.value = "unsaved"),
+);
+/** A session is running in this project: it may write this memory while it is edited. */
+const sessionRunning = ref(false);
+const field = useTemplateRef<HTMLTextAreaElement>("field");
+
+/** Saved or cancelled: the draft has been dealt with, and leaving keeps nothing. */
+let settled = false;
+
+// Gone with an unsaved draft (the Library closed, the kind switched): kept for next time.
+onBeforeUnmount(() => {
+  if (!settled && dirty.value) keepMemoryDraft(draftKey, { version: props.version, text: asWritten(draft.value) });
+});
+
+/** Read the file again after a conflict: the draft is given up, as the notice said. */
+function reload(): void {
+  settled = true;
+  if (holdsKept) dropMemoryDraft(draftKey);
+  emit("reload");
+}
+
+function cancel(): void {
+  // Not while a save is on its way: it would land with no one left to say so.
+  if (saving.value) return;
+  settled = true;
+  if (holdsKept) dropMemoryDraft(draftKey);
+  emit("cancel");
+}
+
+onMounted(async () => {
+  await nextTick();
+  field.value?.focus();
+  const list = props.cwd === null ? null : await readResumableList(props.cwd, "claude");
+  sessionRunning.value = (list?.sessions ?? []).some((session) => (session.runningKey ?? null) !== null);
+});
+
+async function save(): Promise<void> {
+  if (saving.value) return;
+  if (new TextEncoder().encode(asWritten(draft.value)).length > MEMORY_EDIT_MAX_BYTES) {
+    notice.value = "too-large";
+    return;
+  }
+  saving.value = true;
+  const text = asWritten(draft.value);
+  const result = await saveLibraryMemoryFile(props.slug, props.file, text, props.version);
+  saving.value = false;
+  if (result.kind === "saved") {
+    settled = true;
+    if (holdsKept) dropMemoryDraft(draftKey);
+    emit("saved", text, result.version);
+  } else notice.value = result.kind;
+}
+
+/** ⌘Enter (Ctrl+Enter elsewhere) saves; Esc stops editing, not the Library. */
+function onKey(event: KeyboardEvent): void {
+  if (event.key === "Escape") {
+    // Never the Library's: it would close it with the edit open.
+    event.stopPropagation();
+    // Esc while composing (Japanese input) cancels the composition, not the edit — Safari's
+    // compositionend-before-keydown included.
+    if (isImeConfirming(event)) return;
+    event.preventDefault();
+    cancel();
+  } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !isImeConfirming(event)) {
+    event.preventDefault();
+    event.stopPropagation();
+    void save();
+  }
+}
+</script>
+
+<template>
+  <!-- Keys on the whole editor, so Esc from a button ends the edit too, not the Library. -->
+  <div class="flex min-h-0 flex-1 flex-col" data-testid="memory-editor" @keydown="onKey">
+    <p v-if="stale" class="m-0 px-4 pt-3 font-sans text-[12px] text-secondary" role="status" data-testid="memory-editor-stale">
+      {{ t("libraryView.memory.edit.staleDraft") }}
+      <button
+        type="button"
+        class="ml-1 cursor-pointer border-0 bg-transparent p-0 font-sans text-[12px] text-accent hover:underline"
+        data-testid="memory-editor-use-stale"
+        @click="useStaleDraft"
+      >
+        {{ t("libraryView.memory.edit.useStale") }}
+      </button>
+    </p>
+    <p v-if="sessionRunning" class="m-0 px-4 pt-3 font-sans text-[12px] text-warn" role="status" data-testid="memory-editor-running">
+      {{ t("libraryView.memory.edit.running") }}
+    </p>
+    <textarea
+      ref="field"
+      v-model="draft"
+      class="m-4 min-h-0 flex-1 resize-none rounded border border-border bg-transparent p-3 font-mono text-[13px] leading-[1.6] text-fg outline-none focus:border-accent"
+      :aria-label="t('libraryView.memory.edit.label')"
+      spellcheck="false"
+      data-testid="memory-editor-field"
+      :readonly="saving"
+    ></textarea>
+    <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-border px-4 py-2">
+      <p v-if="notice" class="m-0 mr-auto font-sans text-[12px] text-err-text" role="status" data-testid="memory-editor-notice">
+        {{ t(`libraryView.memory.edit.${notice}`) }}
+        <button
+          v-if="notice === 'changed'"
+          type="button"
+          class="ml-1 cursor-pointer border-0 bg-transparent p-0 font-sans text-[12px] text-accent hover:underline"
+          @click="reload"
+        >
+          {{ t("libraryView.memory.edit.reload") }}
+        </button>
+      </p>
+      <button
+        type="button"
+        class="cursor-pointer rounded border border-border bg-transparent px-3 py-1.5 font-sans text-[13px] text-secondary hover:text-fg"
+        data-testid="memory-editor-cancel"
+        :disabled="saving"
+        @click="cancel"
+      >
+        {{ t("libraryView.memory.edit.cancel") }} <kbd class="font-sans text-[11px] text-dim">Esc</kbd>
+      </button>
+      <button
+        type="button"
+        class="flex cursor-pointer items-center gap-2 rounded-[6px] border-0 bg-accent px-4 py-2 font-sans text-[13px] font-semibold text-on-accent disabled:opacity-60"
+        :disabled="saving"
+        data-testid="memory-editor-save"
+        @click="save"
+      >
+        {{ t("libraryView.memory.edit.save") }} <kbd class="font-sans text-[11px] opacity-80">⌘Enter</kbd>
+      </button>
+    </footer>
+  </div>
+</template>

@@ -42,7 +42,11 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
   loadLibraryFileText: () => Promise.resolve(null),
   loadLibraryMemory: () => Promise.resolve(memoryProjects),
   loadLibraryMemoryHealth: () => Promise.resolve([]),
-  loadLibraryMemoryFile: (slug: string, file: string) => Promise.resolve(memoryTexts[`${slug}/${file}`] ?? null),
+  loadLibraryMemoryFile: (slug: string, file: string) => {
+    const read = memoryTexts[`${slug}/${file}`];
+    return Promise.resolve(read === undefined ? null : { ...read, version: "v1" });
+  },
+  saveLibraryMemoryFile: () => Promise.resolve({ kind: "saved", version: "v2" }),
   loadLibraryPage: (offset: number) => {
     if (offset === 0 && pageFailures > 0) {
       pageFailures--;

@@ -39,7 +39,11 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
   loadLibraryFileText: () => Promise.resolve(null),
   loadLibraryMemory: () => Promise.resolve(memoryProjects),
   loadLibraryMemoryHealth: () => Promise.resolve([]),
-  loadLibraryMemoryFile: (slug: string, file: string) => Promise.resolve(memoryTexts[`${slug}/${file}`] ?? null),
+  loadLibraryMemoryFile: (slug: string, file: string) => {
+    const read = memoryTexts[`${slug}/${file}`];
+    return Promise.resolve(read === undefined ? null : { ...read, version: "v1" });
+  },
+  saveLibraryMemoryFile: () => Promise.resolve({ kind: "saved", version: "v2" }),
   loadLibraryPage: (offset: number) => {
     if (offset === 0 && pageFailures > 0) {
       pageFailures--;
@@ -90,6 +94,7 @@ vi.mock("../../../../src/composables/useDirLists", () => ({
 const openIds: string[] = [];
 vi.mock("../../../../src/composables/commandPalette", () => ({ paletteTerminals: { value: { openSessionIds: () => openIds } } }));
 
+const { resetImeComposition } = await import("../../../../src/composables/imeComposition");
 const LibraryOverlay = (await import("../../../../src/components/library/LibraryOverlay.vue")).default;
 const { LIBRARY_STATUS_POLL_MS } = await import("../../../../src/composables/useLibraryData");
 
@@ -551,6 +556,21 @@ describe("LibraryOverlay", () => {
     const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
     wrapper.findAll("[data-testid=memory-row]")[0]?.element.dispatchEvent(enter);
     expect(enter.defaultPrevented).toBe(false);
+    // Not the Enter that confirms an IME candidate, Safari's late compositionend included.
+    window.dispatchEvent(new CompositionEvent("compositionstart"));
+    window.dispatchEvent(new CompositionEvent("compositionend"));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 229 }));
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-editor]").exists()).toBe(false);
+    resetImeComposition();
+    // Enter elsewhere in Memory is the primary action: editing.
+    await press("Enter");
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-editor]").exists()).toBe(true);
+    wrapper.find("[data-testid=memory-editor-field]").element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-editor]").exists()).toBe(false);
+    expect(closeLibrary).not.toHaveBeenCalled(); // Esc ended the edit, not the Library
     // On a link in the body, the arrows are the link's, not the list's.
     const link = wrapper.find("[data-testid=memory-body] span[data-page]");
     link.element.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
