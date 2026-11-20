@@ -27,7 +27,7 @@ const json = (body: unknown) => ({ method: "PUT" as const, headers: { "content-t
 
 const INDEX = "- [A](a.md) — one\n- [B](b.md) — two\n";
 
-function setup(directories: string[] = ["/w/app"]) {
+function setup(directories: string[] = ["/w/app"], trash: "here" | "none" = "here") {
   const root = mkdtempSync(path.join(tmpdir(), "mt-memory-routes-"));
   dirs.push(root);
   const write = (relative: string, text: string, mtime_s = 1_700_000_000): void => {
@@ -46,8 +46,13 @@ function setup(directories: string[] = ["/w/app"]) {
   write("-w-app/secret.md", "outside the memory folder");
   const app = express();
   app.use(express.json({ limit: "25mb" })); // as the server's app does
-  mountLibraryRoutes(app, { call: () => Promise.resolve(directories), projectsRoot: root });
-  return { call: routeCall(app), root };
+  const trashFiles = path.join(root, "Trash");
+  mountLibraryRoutes(app, {
+    call: () => Promise.resolve(directories),
+    projectsRoot: root,
+    trash: () => (trash === "here" ? { kind: "mac", files: trashFiles } : null),
+  });
+  return { call: routeCall(app), root, trashFiles };
 }
 
 describe("/api/library/memory", () => {
@@ -281,5 +286,60 @@ describe("editing a memory", () => {
     const forced = await call("/api/library/memory/-w-app/latin1.md", json({ text: "café", version: memoryVersion(String(read.text)) }));
     expect(forced.status).toBe(400);
     expect(readFileSync(path.join(root, "-w-app", "memory", "latin1.md"))).toEqual(Buffer.from([0x63, 0x61, 0x66, 0xe9]));
+  });
+});
+
+describe("deleting a memory to the Trash and undoing it", () => {
+  const post = (body: unknown) => ({ ...json(body), method: "POST" as const });
+  const versionOf = (text: string) => ({ version: memoryVersion(text) });
+  const A_TEXT = "---\nname: alpha\ndescription: first\nmetadata:\n  type: feedback\n---\nBody [[beta]].";
+
+  it("moves the memory and its index line, and puts both back", async () => {
+    const { call, root, trashFiles } = setup();
+    const memory = path.join(root, "-w-app", "memory");
+    const trashed = await call("/api/library/memory/-w-app/a.md/trash", post(versionOf(A_TEXT)));
+    expect(trashed.status).toBe(200);
+    expect(existsSync(path.join(memory, "a.md"))).toBe(false);
+    expect(existsSync(path.join(trashFiles, "a.md"))).toBe(true);
+    expect(readFileSync(path.join(memory, "MEMORY.md"), "utf8")).toBe("- [B](b.md) — two\n");
+    const undone = await call("/api/library/memory-undo", post({ undo: trashed.body.undo }));
+    expect(undone.status).toBe(200);
+    expect(readFileSync(path.join(memory, "a.md"), "utf8")).toBe(A_TEXT);
+    expect(readFileSync(path.join(memory, "MEMORY.md"), "utf8")).toBe(INDEX);
+    expect((await call("/api/library/memory-undo", post({ undo: trashed.body.undo }))).status).toBe(410);
+  });
+  it("answers 409 with the current version when the memory changed since it was opened", async () => {
+    const { call } = setup();
+    const answer = await call("/api/library/memory/-w-app/b.md/trash", post(versionOf("older")));
+    expect(answer.status).toBe(409);
+    expect(answer.body.version).toBe(memoryVersion("plain, no frontmatter"));
+  });
+  it("answers 409 on undo when a file of that name was made since", async () => {
+    const { call, root } = setup();
+    const trashed = await call("/api/library/memory/-w-app/b.md/trash", post(versionOf("plain, no frontmatter")));
+    writeFileSync(path.join(root, "-w-app", "memory", "b.md"), "new");
+    expect((await call("/api/library/memory-undo", post({ undo: trashed.body.undo }))).status).toBe(409);
+  });
+  it("never deletes the index, outside the memory folder, or without a version", async () => {
+    const { call, root } = setup();
+    const index = readFileSync(path.join(root, "-w-app", "memory", "MEMORY.md"), "utf8");
+    for (const url of ["/api/library/memory/-w-app/MEMORY.md/trash", "/api/library/memory/-w-app/notes.txt/trash", "/api/library/memory/..%2Fx/a.md/trash"]) {
+      expect((await call(url, post(versionOf(index)))).status).toBe(400);
+    }
+    // On a case-insensitive disk `memory.md` IS the index; elsewhere it is a memory that is not there.
+    const lower = (await call("/api/library/memory/-w-app/memory.md/trash", post(versionOf(index)))).status;
+    expect(lower).toBe(existsSync(path.join(root, "-w-app", "memory", "memory.md")) ? 400 : 409);
+    expect((await call("/api/library/memory/-w-app/a.md/trash", post({ version: "nope" }))).status).toBe(400);
+    expect(readFileSync(path.join(root, "-w-app", "memory", "MEMORY.md"), "utf8")).toBe(index);
+  });
+  it("answers 501 when this system has no Trash, leaving the memory", async () => {
+    const { call, root } = setup(["/w/app"], "none");
+    expect((await call("/api/library/memory/-w-app/b.md/trash", post(versionOf("plain, no frontmatter")))).status).toBe(501);
+    expect(existsSync(path.join(root, "-w-app", "memory", "b.md"))).toBe(true);
+  });
+  it("answers 400 for an undo that is not an id", async () => {
+    const { call } = setup();
+    expect((await call("/api/library/memory-undo", post({ undo: "../x" }))).status).toBe(400);
+    expect((await call("/api/library/memory-undo", post({}))).status).toBe(400);
   });
 });

@@ -7,9 +7,9 @@ import { renameWithRetry } from "../../files/atomic-write.js";
 import { readBoundedText } from "./file-history-read.js";
 import { createKeySerializer } from "../../infra/async/serialize-per-key.js";
 
-/** One save at a time per file in this server, so two saves naming one version cannot both pass the
- *  check: the second sees the first's text. */
-const serialize = createKeySerializer();
+/** One change at a time per file in this server, so two naming one version cannot both pass the
+ *  check: the second sees the first's text. Saves, deletes and their undoing all take their turn here. */
+export const serialize = createKeySerializer();
 
 /** A text's version: its SHA-256. The editor sends back the one it read; a different one on disk is a
  *  change made since. */
@@ -22,7 +22,7 @@ export const isFaithfulText = (text: string): boolean => !text.includes("�");
 
 export type MemoryWriteResult = { kind: "written"; version: string } | { kind: "conflict"; version: string | null } | { kind: "refused" };
 
-type Replace = (file: string, text: string, mode: number) => Promise<void>;
+export type Replace = (file: string, text: string, mode: number) => Promise<void>;
 
 /** The new text written beside the file — created anew (`wx`), so it is ours — with the file's mode set
  *  on it, then renamed over the file. Nothing is done to the path after the rename: a link swapped in
