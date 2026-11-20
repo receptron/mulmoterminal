@@ -15,6 +15,7 @@ import {
   type MemoryProjectIssue,
 } from "../../../common/libraryMemory";
 import { renderWikiHtml } from "../../wikiMarkdown";
+import LibraryMemoryEditor from "./LibraryMemoryEditor.vue";
 import type { LibraryFileText } from "../../../common/libraryFiles";
 import { loadLibraryMemoryFile } from "../../composables/libraryApi";
 import { projectName, whenLabel } from "./libraryRows";
@@ -32,6 +33,7 @@ const props = defineProps<{
   /** The check itself failed: say so, rather than look as if all were tidy. */
   healthFailed?: boolean;
 }>();
+const emit = defineEmits<{ (e: "changed"): void }>();
 const { t, locale } = useI18n();
 
 /** Only what can be tidied, when "Show" was pressed on the line above the list. */
@@ -68,13 +70,15 @@ const rows = computed(() => shown.value.flatMap((project) => project.files.map((
 const chosenKey = ref<string | null>(null);
 const readerShown = ref(false);
 const selected = computed(() => rows.value.find((row) => row.key === chosenKey.value) ?? rows.value[0] ?? null);
-const text = ref<LibraryFileText | null>(null);
+const text = ref<(LibraryFileText & { version?: string }) | null>(null);
+/** Bumped to read the memory again (after a conflict). */
+const rereads = ref(0);
 let reads = 0;
 
 // Read again when another memory is chosen, when it changed on disk, and when the list is read again
 // (each time the Library opens), so a memory written while it was closed never shows its old text.
 watch(
-  () => [selected.value?.key ?? null, selected.value?.memory.updatedAt ?? null, props.projects] as const,
+  () => [selected.value?.key ?? null, selected.value?.memory.updatedAt ?? null, props.projects, rereads.value] as const,
   async () => {
     const row = selected.value;
     const mine = ++reads;
@@ -146,7 +150,30 @@ async function move(by: number): Promise<void> {
   await nextTick();
   document.querySelector("[data-memory-row][aria-current=true]")?.scrollIntoView?.({ block: "nearest" });
 }
-defineExpose({ move });
+/** Editing the memory being read, in place of its body. */
+const editing = ref(false);
+watch(
+  () => selected.value?.key ?? null,
+  () => (editing.value = false),
+);
+
+/** Enter, from the overlay: the primary action, editing. */
+function startEdit(): void {
+  if (selected.value !== null && typeof text.value?.version === "string") editing.value = true;
+}
+
+function onSaved(saved: string, version: string): void {
+  text.value = { text: saved, version };
+  editing.value = false;
+  emit("changed");
+}
+
+function onReload(): void {
+  editing.value = false;
+  rereads.value += 1;
+}
+
+defineExpose({ move, startEdit });
 </script>
 
 <template>
@@ -249,11 +276,37 @@ defineExpose({ move });
         </p>
         <p v-if="selected.memory.description" class="m-0 mt-2 font-sans text-[13px] text-secondary">{{ selected.memory.description }}</p>
       </header>
-      <div class="min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-3" @click="onBodyActivate" @keydown="onBodyActivate">
-        <p v-if="text && text.text === null" class="m-0 font-sans text-[13px] text-err-text">{{ t("libraryView.memory.unreadable") }}</p>
-        <!-- eslint-disable-next-line vue/no-v-html -- markdown in, sanitized in renderWikiHtml -->
-        <div v-else :class="BODY_CLASS" data-testid="memory-body" v-html="bodyHtml"></div>
-      </div>
+      <LibraryMemoryEditor
+        v-if="editing && text?.text != null && text.version"
+        :key="selected.key"
+        :slug="selected.project.slug"
+        :file="selected.memory.file"
+        :text="text.text"
+        :version="text.version"
+        :cwd="selected.project.cwd"
+        @saved="onSaved"
+        @cancel="editing = false"
+        @reload="onReload"
+      />
+      <template v-else>
+        <div class="min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-3" @click="onBodyActivate" @keydown="onBodyActivate">
+          <p v-if="text && text.text === null" class="m-0 font-sans text-[13px] text-err-text">{{ t("libraryView.memory.unreadable") }}</p>
+          <!-- eslint-disable-next-line vue/no-v-html -- markdown in, sanitized in renderWikiHtml -->
+          <div v-else :class="BODY_CLASS" data-testid="memory-body" v-html="bodyHtml"></div>
+        </div>
+        <footer v-if="text?.version" class="flex items-center justify-end border-t border-border px-4 py-2">
+          <button
+            type="button"
+            data-testid="memory-edit"
+            class="flex flex-none cursor-pointer items-center gap-2 rounded-[6px] border-0 bg-accent px-4 py-2 font-sans text-[13px] font-semibold text-on-accent"
+            @click="startEdit"
+          >
+            <span class="material-symbols-outlined text-[18px]">edit</span>
+            {{ t("libraryView.memory.edit.edit") }}
+            <kbd class="rounded border border-on-accent/40 px-1 font-sans text-[11px] font-normal">Enter</kbd>
+          </button>
+        </footer>
+      </template>
     </article>
   </div>
 </template>

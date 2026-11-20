@@ -13,6 +13,22 @@ export function useLibraryMemory(isOpen: Ref<boolean>) {
   /** The health check could not be read: not the same as nothing to tidy. */
   const healthFailed = ref(false);
   let reads = 0;
+
+  /** The list and its health, read again; the last answer to a newer read wins. */
+  async function read(mine: number): Promise<void> {
+    void (async () => {
+      const judged = await loadLibraryMemoryHealth();
+      if (mine !== reads) return;
+      healthFailed.value = judged === null;
+      health.value = new Map((judged ?? []).map((project) => [project.slug, project]));
+    })();
+    const found = await loadLibraryMemory();
+    if (mine !== reads) return;
+    failed.value = found === null;
+    projects.value = found ?? [];
+    loaded.value = true;
+  }
+
   watch(
     isOpen,
     async (open) => {
@@ -24,19 +40,13 @@ export function useLibraryMemory(isOpen: Ref<boolean>) {
       projects.value = [];
       health.value = new Map();
       healthFailed.value = false;
-      void (async () => {
-        const judged = await loadLibraryMemoryHealth();
-        if (mine !== reads) return;
-        healthFailed.value = judged === null;
-        health.value = new Map((judged ?? []).map((project) => [project.slug, project]));
-      })();
-      const found = await loadLibraryMemory();
-      if (mine !== reads) return;
-      failed.value = found === null;
-      projects.value = found ?? [];
-      loaded.value = true;
+      await read(mine);
     },
     { immediate: true },
   );
-  return { projects, loaded, failed, health, healthFailed };
+
+  /** After a change made here (an edit): read again, keeping what is shown until the answer comes. */
+  const refresh = (): Promise<void> => read(++reads);
+
+  return { projects, loaded, failed, health, healthFailed, refresh };
 }

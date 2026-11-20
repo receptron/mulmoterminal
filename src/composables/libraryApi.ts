@@ -85,10 +85,32 @@ export async function loadLibraryMemoryHealth(): Promise<LibraryMemoryHealth[] |
   return body !== null && isUnknownArray(body.projects) ? body.projects.filter(isLibraryMemoryHealth) : null;
 }
 
-/** One memory file's text (or the index's). */
-export async function loadLibraryMemoryFile(slug: string, file: string): Promise<LibraryFileText | null> {
-  const body = await readJson(`/api/library/memory/${encodeURIComponent(slug)}/${encodeURIComponent(file)}`);
-  return isLibraryFileText(body) ? body : null;
+const memoryFileUrl = (slug: string, file: string): string => `/api/library/memory/${encodeURIComponent(slug)}/${encodeURIComponent(file)}`;
+
+/** One memory file's text (or the index's), with the version an edit must name. */
+export async function loadLibraryMemoryFile(slug: string, file: string): Promise<(LibraryFileText & { version?: string }) | null> {
+  const body = await readJson(memoryFileUrl(slug, file));
+  if (!isLibraryFileText(body)) return null;
+  return typeof body.version === "string" ? { ...body, version: body.version } : body;
+}
+
+/** The outcome of saving a memory: its new version, a change made on disk since it was opened, or a
+ *  failure (a refusal, or no answer). */
+export type MemorySaveResult = { kind: "saved"; version: string } | { kind: "changed" } | { kind: "failed" };
+
+export async function saveLibraryMemoryFile(slug: string, file: string, text: string, version: string): Promise<MemorySaveResult> {
+  try {
+    const response = await fetchWithTimeout(
+      memoryFileUrl(slug, file),
+      { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, version }) },
+      LIBRARY_READ_TIMEOUT_MS,
+    );
+    if (response.status === 409) return { kind: "changed" };
+    const body = response.ok ? await jsonBody(response) : null;
+    return body !== null && typeof body.version === "string" ? { kind: "saved", version: body.version } : { kind: "failed" };
+  } catch {
+    return { kind: "failed" };
+  }
 }
 
 /** The conversation that made each of these PRs in `repository`, for those the Library knows. */

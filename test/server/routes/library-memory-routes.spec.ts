@@ -3,11 +3,13 @@
 // memory file in a memory folder.
 import { describe, it, expect, afterEach } from "vitest";
 import express from "express";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { routeCall } from "../../helpers/routeCall";
 import { mountLibraryRoutes } from "../../../server/routes/library-routes";
+import { MEMORY_EDIT_MAX_BYTES } from "../../../common/libraryMemory";
+import { memoryVersion } from "../../../server/backends/library/memory-write";
 import {
   inBatches,
   isSameFile,
@@ -20,6 +22,8 @@ import {
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+
+const json = (body: unknown) => ({ method: "PUT" as const, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
 const INDEX = "- [A](a.md) — one\n- [B](b.md) — two\n";
 
@@ -41,6 +45,7 @@ function setup(directories: string[] = ["/w/app"]) {
   mkdirSync(path.join(root, "-w-empty", "memory"), { recursive: true });
   write("-w-app/secret.md", "outside the memory folder");
   const app = express();
+  app.use(express.json({ limit: "25mb" })); // as the server's app does
   mountLibraryRoutes(app, { call: () => Promise.resolve(directories), projectsRoot: root });
   return { call: routeCall(app), root };
 }
@@ -219,7 +224,7 @@ describe("finding the folders that hold memory", () => {
 describe("/api/library/memory/:slug/:file", () => {
   it("answers a memory file and the index", async () => {
     const { call } = setup();
-    expect((await call("/api/library/memory/-w-app/b.md")).body).toEqual({ text: "plain, no frontmatter" });
+    expect((await call("/api/library/memory/-w-app/b.md")).body).toEqual({ text: "plain, no frontmatter", version: memoryVersion("plain, no frontmatter") });
     expect((await call("/api/library/memory/-w-app/MEMORY.md")).body.text).toContain("[A](a.md)");
   });
 
@@ -231,5 +236,31 @@ describe("/api/library/memory/:slug/:file", () => {
     expect(await status("/api/library/memory/-w-app/..%2Fsecret.md")).toBe(400);
     expect(await status("/api/library/memory/..%2F-w-app/a.md")).toBe(400);
     expect(await status("/api/library/memory/-w-app/.hidden.md")).toBe(400);
+  });
+});
+
+describe("editing a memory", () => {
+  it("answers the version with the text, and writes only over that version", async () => {
+    const { call, root } = setup();
+    const opened = (await call("/api/library/memory/-w-app/b.md")).body;
+    expect(opened.version).toMatch(/^[0-9a-f]{64}$/);
+    const put = (version: unknown, text: unknown = "edited") => call("/api/library/memory/-w-app/b.md", json({ text, version }));
+    const saved = await put(opened.version);
+    expect(saved.status).toBe(200);
+    expect(readFileSync(path.join(root, "-w-app", "memory", "b.md"), "utf8")).toBe("edited");
+    const stale = await put(opened.version, "over a change");
+    expect(stale.status).toBe(409);
+    expect(stale.body.version).toBe(saved.body.version);
+  });
+
+  it("refuses a malformed edit, an oversized one, and a name that is not a memory file", async () => {
+    const { call } = setup();
+    const version = "0".repeat(64);
+    const status = async (url: string, body: unknown) => (await call(url, json(body))).status;
+    expect(await status("/api/library/memory/-w-app/b.md", { text: "x" })).toBe(400);
+    expect(await status("/api/library/memory/-w-app/b.md", { text: 1, version })).toBe(400);
+    expect(await status("/api/library/memory/-w-app/b.md", { text: "x".repeat(MEMORY_EDIT_MAX_BYTES + 1), version })).toBe(400);
+    expect(await status("/api/library/memory/-w-app/notes.txt", { text: "x", version })).toBe(400);
+    expect(await status("/api/library/memory/..%2F-w-app/b.md", { text: "x", version })).toBe(400);
   });
 });

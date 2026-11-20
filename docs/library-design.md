@@ -48,8 +48,14 @@ follows is a refusal to add one of those, and the reason sits next to it.
 - **Containment**: the index (#3328) reads only the agent's own data root, which the server
   resolves; no route takes a path, and a conversation is asked for by its id, which is looked up
   in the index rather than joined onto a directory. So the index opens no surface in the sense of
-  [`file-surfaces.md`](file-surfaces.md). The first route that writes (memory, #3331) is where a
-  path arrives from a client, and that is argued against that page when it lands.
+  [`file-surfaces.md`](file-surfaces.md). The first route that writes is memory's (#3331), and it
+  still takes no path: a client names a project folder by its slug and a memory by its file name,
+  each checked against the shape Claude Code gives it, and the server joins them under the agent's
+  own projects root. Measured against `file-surfaces.md`, it is the narrowest surface there: it
+  reaches only `<projects>/<slug>/memory/<name>.md`; it writes only over a regular file (never a
+  link, never creating one); and it writes only over the text the editor opened, by its SHA-256, so
+  a change the agent made meanwhile is refused rather than lost. The window between that check
+  and the atomic rename is the one gap, and it is stated where the write is.
 - **The index**: `~/.mulmoterminal/library/index.db`, shared by every server under the same HOME
   and built by one of them at a time. It is a copy of the agent's files and is rebuilt if deleted.
   It is opened only on a worker thread, which both builds and queries it: SQLite in Node is

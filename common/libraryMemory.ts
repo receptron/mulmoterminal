@@ -6,6 +6,9 @@ import { isRecord } from "./isRecord.js";
  *  bytes). Past either, the rest of the index is not in the agent's context. */
 export const MEMORY_INDEX_LINES_MAX = 200;
 export const MEMORY_INDEX_BYTES_MAX = 25_000;
+/** The most a memory edit may write: far past any real memory, and what the editor refuses to send. */
+export const MEMORY_EDIT_MAX_BYTES = 256 * 1024;
+
 /** The index's own name in a memory folder. */
 export const MEMORY_INDEX_FILE = "MEMORY.md";
 

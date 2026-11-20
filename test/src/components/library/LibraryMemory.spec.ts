@@ -8,9 +8,11 @@ let texts: Record<string, string | null> = {};
 vi.mock("../../../../src/composables/libraryApi", () => ({
   loadLibraryMemoryFile: (slug: string, file: string) => {
     const text = texts[`${slug}/${file}`];
-    return Promise.resolve(text === undefined ? null : { text });
+    return Promise.resolve(text === undefined ? null : { text, ...(text === null ? {} : { version: "v1" }) });
   },
+  saveLibraryMemoryFile: () => Promise.resolve({ kind: "saved", version: "v2" }),
 }));
+vi.mock("../../../../src/composables/useDirLists", () => ({ readResumableList: () => Promise.resolve(null) }));
 
 const LibraryMemory = (await import("../../../../src/components/library/LibraryMemory.vue")).default;
 
@@ -184,5 +186,23 @@ describe("LibraryMemory", () => {
     expect(wrapper.findAll("[data-testid=memory-row]")).toHaveLength(1);
     await wrapper.setProps({ projects: projects.map((project) => ({ ...project })) });
     expect(wrapper.findAll("[data-testid=memory-row]")).toHaveLength(3);
+  });
+
+  it("edits in place: Edit opens the editor, a save shows the new text and says the list changed", async () => {
+    const wrapper = await mountMemory();
+    await wrapper.find("[data-testid=memory-edit]").trigger("click");
+    await flushPromises();
+    await wrapper.find("[data-testid=memory-editor-field]").setValue("---\nname: reply-in-japanese\n---\nEdited here.");
+    await wrapper.find("[data-testid=memory-editor-save]").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-editor]").exists()).toBe(false);
+    expect(wrapper.find("[data-testid=memory-body]").text()).toBe("Edited here.");
+    expect(wrapper.emitted("changed")).toHaveLength(1);
+  });
+
+  it("offers no editing for a memory that could not be read", async () => {
+    texts["-w-app/reply.md"] = null;
+    const wrapper = await mountMemory();
+    expect(wrapper.find("[data-testid=memory-edit]").exists()).toBe(false);
   });
 });
