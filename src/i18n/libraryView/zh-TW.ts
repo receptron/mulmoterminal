@@ -45,6 +45,8 @@ export const libraryViewZhTW = {
     },
     memory: {
       edit: {
+        staleDraft: "有一份在舊版本上開始、未儲存的編輯；檔案此後已改動。",
+        useStale: "使用它",
         restored: "保留了你未儲存的編輯，已放回編輯器。",
         draftKept: "有未儲存的編輯。點「編輯」繼續。",
         unsaved: "請先儲存或取消這次編輯。",

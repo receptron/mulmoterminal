@@ -45,6 +45,8 @@ export const libraryViewJa = {
     },
     memory: {
       edit: {
+        staleDraft: "以前の版で始めた保存していない編集があります。そのあとファイルは変わっています。",
+        useStale: "それを使う",
         restored: "保存していなかった編集を残してあり、エディタに戻しました。",
         draftKept: "保存していない編集があります。「編集」で続けられます。",
         unsaved: "先にこの編集を保存するか、やめてください。",

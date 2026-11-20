@@ -45,6 +45,8 @@ export const libraryViewKo = {
     },
     memory: {
       edit: {
+        staleDraft: "이전 버전에서 시작한 저장하지 않은 편집이 있습니다. 그 뒤 파일이 바뀌었습니다.",
+        useStale: "그것 사용",
         restored: "저장하지 않은 편집을 남겨 두었고, 편집기에 되돌렸습니다.",
         draftKept: "저장하지 않은 편집이 있습니다. 「편집」으로 이어서 할 수 있습니다.",
         unsaved: "먼저 이 편집을 저장하거나 취소하세요.",

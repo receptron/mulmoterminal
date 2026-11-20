@@ -192,4 +192,21 @@ describe("LibraryMemoryEditor", () => {
     wrapper.unmount();
     expect(((await mountEditor()).find("[data-testid=memory-editor-field]").element as HTMLTextAreaElement).value).not.toBe("a draft given up");
   });
+
+  it("offers a draft begun on an older version rather than applying or losing it", async () => {
+    const first = await mountEditor();
+    await first.find("[data-testid=memory-editor-field]").setValue("written against v1");
+    first.unmount();
+    const changed = mount(LibraryMemoryEditor, { props: { slug: "-w-app", file: "a.md", text: "the agent's newer text", version: "v9", cwd: null } });
+    await flushPromises();
+    const field = () => changed.find("[data-testid=memory-editor-field]").element as HTMLTextAreaElement;
+    expect(field().value).toBe("the agent's newer text");
+    expect(changed.find("[data-testid=memory-editor-stale]").exists()).toBe(true);
+    await changed.find("[data-testid=memory-editor-cancel]").trigger("click"); // not taken up: still kept
+    changed.unmount();
+    const again = mount(LibraryMemoryEditor, { props: { slug: "-w-app", file: "a.md", text: "the agent's newer text", version: "v9", cwd: null } });
+    await flushPromises();
+    await again.find("[data-testid=memory-editor-use-stale]").trigger("click");
+    expect((again.find("[data-testid=memory-editor-field]").element as HTMLTextAreaElement).value).toBe("written against v1");
+  });
 });

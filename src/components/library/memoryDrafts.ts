@@ -22,3 +22,14 @@ export const memoryDraftFor = (key: string, version: string | undefined): Memory
   const kept = drafts.get(key);
   return kept !== undefined && kept.version === version ? kept : null;
 };
+
+/** A draft kept for this memory on another version: the file changed since it was begun, so it is not
+ *  put back by itself — it is offered, and using it is the person's choice to write it over what is
+ *  there now. Never lost either way. */
+export const staleMemoryDraftFor = (key: string, version: string | undefined): MemoryDraft | null => {
+  const kept = drafts.get(key);
+  return kept !== undefined && kept.version !== version ? kept : null;
+};
+
+/** Whether any draft is kept for this memory, on whatever version. */
+export const hasMemoryDraft = (key: string): boolean => drafts.has(key);

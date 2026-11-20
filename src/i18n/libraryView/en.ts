@@ -45,6 +45,8 @@ export const libraryViewEn = {
     },
     memory: {
       edit: {
+        staleDraft: "An unsaved edit of yours was begun on an earlier version; the file has changed since.",
+        useStale: "Use it",
         restored: "Your unsaved edit was kept; it is back in the editor.",
         draftKept: "An unsaved edit is waiting; Edit to continue it.",
         unsaved: "Save or cancel this edit first.",

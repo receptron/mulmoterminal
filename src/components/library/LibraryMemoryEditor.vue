@@ -3,7 +3,7 @@
 // lost on the way back. Saved only over the text it was opened on — the agent writes memory as it
 // works, and a save over its change would lose it without a word.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
-import { dropMemoryDraft, keepMemoryDraft, memoryDraftFor, memoryDraftKey } from "./memoryDrafts";
+import { dropMemoryDraft, keepMemoryDraft, memoryDraftFor, memoryDraftKey, staleMemoryDraftFor } from "./memoryDrafts";
 import { isImeConfirming } from "../../composables/imeComposition";
 import { useI18n } from "vue-i18n";
 import { saveLibraryMemoryFile } from "../../composables/libraryApi";
@@ -27,6 +27,17 @@ const { t } = useI18n();
 const crlf = props.text.includes("\r\n");
 const draftKey = memoryDraftKey(props.slug, props.file);
 const kept = memoryDraftFor(draftKey, props.version);
+/** A draft begun on a version the file has since left: offered, not applied. */
+const stale = ref(staleMemoryDraftFor(draftKey, props.version));
+/** Whether the draft kept for this memory is the one in this editor: only then is it ours to drop. */
+let holdsKept = kept !== null;
+function useStaleDraft(): void {
+  if (stale.value === null) return;
+  holdsKept = true;
+  draft.value = stale.value.text.replace(/\r\n?/g, "\n");
+  stale.value = null;
+  notice.value = null;
+}
 const draft = ref((kept?.text ?? props.text).replace(/\r\n?/g, "\n"));
 const opened = props.text.replace(/\r\n?/g, "\n");
 /** The draft as it goes to disk: an untouched draft is the file exactly as it was (mixed line endings
@@ -59,7 +70,7 @@ onBeforeUnmount(() => {
 /** Read the file again after a conflict: the draft is given up, as the notice said. */
 function reload(): void {
   settled = true;
-  dropMemoryDraft(draftKey);
+  if (holdsKept) dropMemoryDraft(draftKey);
   emit("reload");
 }
 
@@ -67,7 +78,7 @@ function cancel(): void {
   // Not while a save is on its way: it would land with no one left to say so.
   if (saving.value) return;
   settled = true;
-  dropMemoryDraft(draftKey);
+  if (holdsKept) dropMemoryDraft(draftKey);
   emit("cancel");
 }
 
@@ -90,7 +101,7 @@ async function save(): Promise<void> {
   saving.value = false;
   if (result.kind === "saved") {
     settled = true;
-    dropMemoryDraft(draftKey);
+    if (holdsKept) dropMemoryDraft(draftKey);
     emit("saved", text, result.version);
   } else notice.value = result.kind;
 }
@@ -116,6 +127,17 @@ function onKey(event: KeyboardEvent): void {
 <template>
   <!-- Keys on the whole editor, so Esc from a button ends the edit too, not the Library. -->
   <div class="flex min-h-0 flex-1 flex-col" data-testid="memory-editor" @keydown="onKey">
+    <p v-if="stale" class="m-0 px-4 pt-3 font-sans text-[12px] text-secondary" role="status" data-testid="memory-editor-stale">
+      {{ t("libraryView.memory.edit.staleDraft") }}
+      <button
+        type="button"
+        class="ml-1 cursor-pointer border-0 bg-transparent p-0 font-sans text-[12px] text-accent hover:underline"
+        data-testid="memory-editor-use-stale"
+        @click="useStaleDraft"
+      >
+        {{ t("libraryView.memory.edit.useStale") }}
+      </button>
+    </p>
     <p v-if="sessionRunning" class="m-0 px-4 pt-3 font-sans text-[12px] text-warn" role="status" data-testid="memory-editor-running">
       {{ t("libraryView.memory.edit.running") }}
     </p>
