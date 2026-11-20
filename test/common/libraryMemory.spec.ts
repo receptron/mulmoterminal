@@ -35,6 +35,11 @@ describe("parseMemoryFrontmatter", () => {
     expect(parsed.fields).toEqual({ other: "" });
   });
 
+  it("ends the frontmatter only at a line of exactly ---, which may be the last line", () => {
+    expect(parseMemoryFrontmatter("---\nname: a\n---draft: x\n---\nbody")).toEqual({ fields: { name: "a" }, metadata: {}, body: "body" });
+    expect(parseMemoryFrontmatter("---\nname: last\n---")).toEqual({ fields: { name: "last" }, metadata: {}, body: "" });
+  });
+
   it("reads frontmatter behind a byte-order mark", () => {
     expect(parseMemoryFrontmatter("\uFEFF---\nname: marked\n---\nbody")).toEqual({ fields: { name: "marked" }, metadata: {}, body: "body" });
   });

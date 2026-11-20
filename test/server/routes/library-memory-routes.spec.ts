@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { routeCall } from "../../helpers/routeCall";
 import { mountLibraryRoutes } from "../../../server/routes/library-routes";
+import { listMemoryProjects, MEMORY_FOLDERS_REUSE_MS } from "../../../server/backends/library/memory-folders";
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
@@ -74,6 +75,21 @@ describe("the index gauge", () => {
       expect.objectContaining({ slug: "-w-app", index: { lines: 30_000, bytes: Buffer.byteLength(huge) } }),
       expect.objectContaining({ slug: "-w-other", index: { lines: 2, bytes: 7 } }),
     ]);
+  });
+});
+
+describe("finding the folders that hold memory", () => {
+  it("looks for them again only after the reuse time, while reading the memory in them fresh", async () => {
+    const { root } = setup();
+    const slugs = async (now_ms: number) => (await listMemoryProjects(root, [], now_ms)).map((project) => project.slug);
+    expect(await slugs(1_000)).toEqual(["-w-app", "-w-other"]);
+    mkdirSync(path.join(root, "-w-new", "memory"), { recursive: true });
+    writeFileSync(path.join(root, "-w-new", "memory", "n.md"), "new");
+    writeFileSync(path.join(root, "-w-app", "memory", "c.md"), "added to a known folder");
+    expect(await slugs(1_000 + MEMORY_FOLDERS_REUSE_MS - 1)).toEqual(["-w-app", "-w-other"]);
+    const app = (await listMemoryProjects(root, [], 1_000 + MEMORY_FOLDERS_REUSE_MS - 1)).find((project) => project.slug === "-w-app");
+    expect(app?.files.map((file) => file.file)).toContain("c.md");
+    expect(await slugs(1_000 + MEMORY_FOLDERS_REUSE_MS)).toContain("-w-new");
   });
 });
 

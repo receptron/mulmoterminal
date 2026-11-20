@@ -214,7 +214,7 @@ async function resumeConversation(conversation: LibraryConversation): Promise<vo
   openCellAt(cellForPanelResume({ id: decision.id, cwd: decision.cwd, agent: "claude", account: decision.account }), null);
 }
 
-const OTHER_CONTROLS = "button, a[href], summary, [role=button], [contenteditable=true]";
+const OTHER_CONTROLS = "button, a[href], summary, [role=button], [role=link], [contenteditable=true]";
 
 function onKey(event: KeyboardEvent): void {
   if (!isOpen.value) return;

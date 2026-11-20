@@ -527,7 +527,7 @@ describe("LibraryOverlay", () => {
   it("switches to memory and back, the arrows moving through the memories there", async () => {
     const memory = (file: string) => ({ file, name: file.replace(".md", ""), description: null, type: null, updatedAt: NOW });
     memoryProjects = [{ slug: "-w-app", cwd: "/w/app", index: null, files: [memory("one.md"), memory("two.md")] }];
-    memoryTexts = { "-w-app/one.md": { text: "first" }, "-w-app/two.md": { text: "second" } };
+    memoryTexts = { "-w-app/one.md": { text: "first" }, "-w-app/two.md": { text: "second, see [[one]]" } };
     const wrapper = await mountLibrary();
     expect(wrapper.find("[data-testid=library-kind-memory]").text()).toContain("2");
     expect(wrapper.text()).toContain("Enter resume");
@@ -543,6 +543,11 @@ describe("LibraryOverlay", () => {
     await first?.trigger("click");
     (first?.element as HTMLElement | undefined)?.focus();
     first?.element.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("two");
+    // On a link in the body, the arrows are the link's, not the list's.
+    const link = wrapper.find("[data-testid=memory-body] span[data-page]");
+    link.element.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
     await flushPromises();
     expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("two");
     await wrapper.find("[data-testid=library-kind-conversations]").trigger("click");

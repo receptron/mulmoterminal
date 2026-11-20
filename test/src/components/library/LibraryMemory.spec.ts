@@ -76,6 +76,12 @@ describe("LibraryMemory", () => {
     expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("codex-sandbox");
   });
 
+  it("leaves the frontmatter out of the body when the file ends at its closing line", async () => {
+    texts["-w-app/reply.md"] = "---\nname: reply-in-japanese\ndescription: hidden\n---";
+    const wrapper = await mountMemory();
+    expect(wrapper.find("[data-testid=memory-body]").text()).toBe("");
+  });
+
   it("shows an image in a memory as its alt text, fetching nothing", async () => {
     texts["-w-app/reply.md"] = "---\nname: reply-in-japanese\n---\nsee ![the secret](/.env) here";
     const wrapper = await mountMemory();

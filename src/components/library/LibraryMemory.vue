@@ -4,7 +4,7 @@
 // `[[name]]` links followed. Read only here; editing is a later step.
 import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { MEMORY_INDEX_LINES_MAX, type LibraryMemoryFile, type LibraryMemoryProject } from "../../../common/libraryMemory";
+import { MEMORY_INDEX_LINES_MAX, parseMemoryFrontmatter, type LibraryMemoryFile, type LibraryMemoryProject } from "../../../common/libraryMemory";
 import { renderWikiHtml } from "../../wikiMarkdown";
 import type { LibraryFileText } from "../../../common/libraryFiles";
 import { loadLibraryMemoryFile } from "../../composables/libraryApi";
@@ -41,7 +41,8 @@ watch(
 const bodyHtml = computed((): string => {
   const row = selected.value;
   if (row === null || text.value?.text == null) return "";
-  const doc = new DOMParser().parseFromString(renderWikiHtml(text.value.text), "text/html");
+  // The body as this file's own parser cut it, so the renderer never decides frontmatter differently.
+  const doc = new DOMParser().parseFromString(renderWikiHtml(parseMemoryFrontmatter(text.value.text).body), "text/html");
   // The wiki points an image at the workspace's file route; a memory has no files of its own to show,
   // so an image is its alt text and nothing is fetched.
   doc.querySelectorAll("img").forEach((image) => image.replaceWith(doc.createTextNode(image.getAttribute("alt") ?? "")));

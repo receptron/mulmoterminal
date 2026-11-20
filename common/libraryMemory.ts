@@ -61,7 +61,10 @@ const KEY_VALUE = /^([A-Za-z_][\w-]*):(.*)$/;
 export function parseMemoryFrontmatter(text: string): MemoryFrontmatter {
   // A byte-order mark (a file saved by some Windows editors) would hide the opening `---`.
   const normalized = text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
-  const end = normalized.startsWith("---\n") ? normalized.indexOf("\n---", 3) : -1;
+  // The closing delimiter is a line of exactly `---` (a `---draft` line inside is not one), at the
+  // end of the file or followed by a newline.
+  const close = normalized.startsWith("---\n") ? /\n---(?:\n|$)/.exec(normalized.slice(3)) : null;
+  const end = close === null ? -1 : close.index + 3;
   if (end === -1) return { fields: {}, metadata: {}, body: text };
   const fields: Record<string, string> = {};
   const metadata: Record<string, string> = {};
@@ -78,8 +81,7 @@ export function parseMemoryFrontmatter(text: string): MemoryFrontmatter {
       if (nested && inMetadata) metadata[key] = unquote(value);
       else if (!nested && !inMetadata) fields[key] = unquote(value);
     });
-  const afterClose = normalized.indexOf("\n", end + 4);
-  return { fields, metadata, body: afterClose === -1 ? "" : normalized.slice(afterClose + 1) };
+  return { fields, metadata, body: normalized.slice(end + 5) };
 }
 
 const isNullableString = (value: unknown): boolean => value === null || typeof value === "string";

@@ -64,11 +64,39 @@ async function projectOf(projectsRoot: string, slug: string, cwds: ReadonlyMap<s
   return { slug, cwd: cwds.get(slug) ?? null, index, files };
 }
 
+/** How long the list of folders holding memory is reused. Finding them means looking into every
+ *  project folder — over ten thousand on a long-used machine — while the memory inside the few that
+ *  have it is read fresh every time; a folder that gains memory shows up within this. */
+export const MEMORY_FOLDERS_REUSE_MS = 30_000;
+
+const folderLists = new Map<string, { at: number; slugs: Promise<string[]> }>();
+
+async function slugsWithMemory(projectsRoot: string): Promise<string[]> {
+  const slugs = (await entriesOf(projectsRoot)).filter((entry) => entry.isDirectory() && isProjectSlug(entry.name)).map((entry) => entry.name);
+  const kept: string[] = [];
+  for (let start = 0; start < slugs.length; start += FOLDERS_AT_ONCE) {
+    const batch = slugs.slice(start, start + FOLDERS_AT_ONCE);
+    const has = await Promise.all(batch.map(async (slug) => (await entriesOf(path.join(projectsRoot, slug, "memory"))).length > 0));
+    kept.push(...batch.filter((_, index) => has[index]));
+  }
+  return kept;
+}
+
+/** The folders holding memory, looked for again once the last look is older than the reuse time. */
+function memorySlugs(projectsRoot: string, now_ms: number): Promise<string[]> {
+  const known = folderLists.get(projectsRoot);
+  if (known !== undefined && now_ms - known.at < MEMORY_FOLDERS_REUSE_MS) return known.slugs;
+  const slugs = slugsWithMemory(projectsRoot);
+  folderLists.set(projectsRoot, { at: now_ms, slugs });
+  slugs.catch(() => folderLists.delete(projectsRoot));
+  return slugs;
+}
+
 /** Every project folder that holds memory, the most recently written first, each named by the
  *  directory a conversation there ran in (`cwds`, from the index) when one is known. */
-export async function listMemoryProjects(projectsRoot: string, cwds: readonly string[]): Promise<LibraryMemoryProject[]> {
+export async function listMemoryProjects(projectsRoot: string, cwds: readonly string[], now_ms: number = Date.now()): Promise<LibraryMemoryProject[]> {
   const bySlug = new Map(cwds.map((cwd) => [projectSlug(cwd), cwd] as const));
-  const slugs = (await entriesOf(projectsRoot)).filter((entry) => entry.isDirectory() && isProjectSlug(entry.name)).map((entry) => entry.name);
+  const slugs = await memorySlugs(projectsRoot, now_ms);
   const projects: LibraryMemoryProject[] = [];
   for (let start = 0; start < slugs.length; start += FOLDERS_AT_ONCE) {
     const batch = await Promise.all(slugs.slice(start, start + FOLDERS_AT_ONCE).map((slug) => projectOf(projectsRoot, slug, bySlug)));
