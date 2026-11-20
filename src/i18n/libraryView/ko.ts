@@ -44,6 +44,18 @@ export const libraryViewKo = {
       folded: "변경 없는 {count}줄",
     },
     memory: {
+      tidy: "{count}건을 정리할 수 있습니다",
+      tidyShow: "보기",
+      tidyAll: "모두 보기",
+      issues: {
+        "not-in-index": "MEMORY.md에 없어서 Claude Code는 이 기억이 있는 것을 모릅니다.",
+        "no-frontmatter": "frontmatter에 {fields}이(가) 없습니다.",
+        "broken-link": "{names}(으)로 링크하지만, 이 프로젝트에 그 이름의 기억은 없습니다.",
+        "missing-path": "{paths}을(를) 가리키지만, 더 이상 없습니다.",
+        "index-over-limit": "MEMORY.md가 Claude Code가 읽어 들이는 범위보다 길어서 뒷부분은 읽히지 않습니다.",
+        "no-index": "MEMORY.md가 없어서 Claude Code는 이 기억들을 알지 못합니다.",
+        "dead-index-entry": "MEMORY.md가 {files}을(를) 가리키지만 여기에 없습니다.",
+      },
       indexBytes: "MEMORY.md {size} / {max} KB",
       search: "기억 검색",
       shortcuts: "/ 검색 · ↑↓ 이동 · Esc 닫기",

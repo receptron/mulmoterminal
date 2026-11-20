@@ -44,6 +44,18 @@ export const libraryViewJa = {
       folded: "変更のない {count} 行",
     },
     memory: {
+      tidy: "{count} 件を整えられます",
+      tidyShow: "見る",
+      tidyAll: "すべて表示",
+      issues: {
+        "not-in-index": "MEMORY.md に載っていないので、Claude Code はこの記憶があることを知りません。",
+        "no-frontmatter": "frontmatter に {fields} がありません。",
+        "broken-link": "{names} へリンクしていますが、このプロジェクトにその名前の記憶はありません。",
+        "missing-path": "{paths} を挙げていますが、もうありません。",
+        "index-over-limit": "MEMORY.md が Claude Code の読み込む範囲より長く、後ろの部分は読まれません。",
+        "no-index": "MEMORY.md がないので、Claude Code はこれらの記憶を知らされません。",
+        "dead-index-entry": "MEMORY.md が {files} を挙げていますが、ここにはありません。",
+      },
       indexBytes: "MEMORY.md {size} / {max} KB",
       search: "記憶を探す",
       shortcuts: "/ 検索 · ↑↓ 移動 · Esc 閉じる",

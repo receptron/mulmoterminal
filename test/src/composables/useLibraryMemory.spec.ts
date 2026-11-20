@@ -2,11 +2,18 @@
 import { describe, it, expect, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { ref } from "vue";
-import type { LibraryMemoryProject } from "../../../common/libraryMemory";
+import type { LibraryMemoryHealth, LibraryMemoryProject } from "../../../common/libraryMemory";
 
 let answer: LibraryMemoryProject[] | null = [];
 let gate: Promise<void> = Promise.resolve();
+let healthAnswer: LibraryMemoryHealth[] | null = [];
+let healthGate: Promise<void> = Promise.resolve();
 vi.mock("../../../src/composables/libraryApi", () => ({
+  loadLibraryMemoryHealth: async () => {
+    const reply = healthAnswer;
+    await healthGate;
+    return reply;
+  },
   loadLibraryMemory: async () => {
     const reply = answer;
     await gate;
@@ -44,5 +51,25 @@ describe("useLibraryMemory", () => {
     isOpen.value = true;
     await flushPromises();
     expect([memory.loaded.value, memory.failed.value]).toEqual([false, false]);
+  });
+
+  it("drops a health answer that arrives after the Library was opened again", async () => {
+    answer = [project("p")];
+    gate = Promise.resolve();
+    let releaseOld: () => void = () => {};
+    healthGate = new Promise((resolve) => (releaseOld = resolve));
+    healthAnswer = [{ slug: "p", issues: [{ kind: "no-index" }], files: {} }];
+    const isOpen = ref(true);
+    const memory = useLibraryMemory(isOpen);
+    await flushPromises();
+    isOpen.value = false;
+    await flushPromises();
+    healthGate = Promise.resolve();
+    healthAnswer = [];
+    isOpen.value = true;
+    await flushPromises();
+    releaseOld(); // the first open's answer, late
+    await flushPromises();
+    expect(memory.health.value.size).toBe(0);
   });
 });

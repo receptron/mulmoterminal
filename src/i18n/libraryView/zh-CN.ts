@@ -44,6 +44,18 @@ export const libraryViewZhCN = {
       folded: "{count} 行未更改",
     },
     memory: {
+      tidy: "有 {count} 项可以整理",
+      tidyShow: "查看",
+      tidyAll: "显示全部",
+      issues: {
+        "not-in-index": "未列在 MEMORY.md 中，Claude Code 不知道有这条记忆。",
+        "no-frontmatter": "frontmatter 中没有 {fields}。",
+        "broken-link": "它链接到 {names}，但此项目中没有这个名字的记忆。",
+        "missing-path": "它提到的 {paths} 已经不存在。",
+        "index-over-limit": "MEMORY.md 超出了 Claude Code 读入的范围，后面的部分不会被读到。",
+        "no-index": "没有 MEMORY.md，Claude Code 不会被告知这些记忆。",
+        "dead-index-entry": "MEMORY.md 列出了 {files}，但这里没有。",
+      },
       indexBytes: "MEMORY.md {size} / {max} KB",
       search: "搜索记忆",
       shortcuts: "/ 搜索 · ↑↓ 移动 · Esc 关闭",

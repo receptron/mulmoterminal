@@ -10,18 +10,46 @@ import {
   parseMemoryFrontmatter,
   type LibraryMemoryFile,
   type LibraryMemoryProject,
+  type LibraryMemoryHealth,
+  type MemoryFileIssue,
+  type MemoryProjectIssue,
 } from "../../../common/libraryMemory";
 import { renderWikiHtml } from "../../wikiMarkdown";
 import type { LibraryFileText } from "../../../common/libraryFiles";
 import { loadLibraryMemoryFile } from "../../composables/libraryApi";
 import { projectName, whenLabel } from "./libraryRows";
 import { movedIndex } from "./libraryKeys";
-import { filterMemory, indexFill, linkTarget, memoryKey, memoryTitle } from "./memoryRows";
+import { fileIssues, filterMemory, filterTidy, indexFill, linkTarget, memoryKey, memoryTitle, tidyCount } from "./memoryRows";
 
-const props = defineProps<{ projects: LibraryMemoryProject[]; loaded: boolean; failed: boolean; query: string; now: number }>();
+const props = defineProps<{
+  projects: LibraryMemoryProject[];
+  loaded: boolean;
+  failed: boolean;
+  query: string;
+  now: number;
+  /** What can be tidied, by project slug; empty until judged. */
+  health: ReadonlyMap<string, LibraryMemoryHealth>;
+}>();
 const { t, locale } = useI18n();
 
-const shown = computed(() => filterMemory(props.projects, props.query));
+/** Only what can be tidied, when "Show" was pressed on the line above the list. */
+const tidyOnly = ref(false);
+const tidy = computed(() => tidyCount(props.health));
+const shown = computed(() => {
+  const matching = filterMemory(props.projects, props.query);
+  return tidyOnly.value ? filterTidy(matching, props.health) : matching;
+});
+
+/** One sentence per issue, in the reader's language. */
+function issueSentence(issue: MemoryFileIssue | MemoryProjectIssue): string {
+  const list = (items: string[]): string => items.join(", ");
+  const key = `libraryView.memory.issues.${issue.kind}`;
+  if (issue.kind === "no-frontmatter") return t(key, { fields: list(issue.missing) });
+  if (issue.kind === "broken-link") return t(key, { names: list(issue.names.map((name) => `[[${name}]]`)) });
+  if (issue.kind === "missing-path") return t(key, { paths: list(issue.paths) });
+  if (issue.kind === "dead-index-entry") return t(key, { files: list(issue.files) });
+  return t(key);
+}
 const rows = computed(() => shown.value.flatMap((project) => project.files.map((memory) => ({ project, memory, key: memoryKey(project.slug, memory.file) }))));
 const chosenKey = ref<string | null>(null);
 const readerShown = ref(false);
@@ -119,6 +147,19 @@ defineExpose({ move });
       class="min-h-0 w-[360px] flex-none overflow-y-auto border-r border-border py-2 max-[760px]:w-full max-[760px]:border-r-0"
       :class="readerShown ? 'max-[760px]:hidden' : ''"
     >
+      <p v-if="tidy > 0" class="m-0 flex items-center gap-2 px-4 pb-1 font-sans text-[12px] text-secondary" data-testid="memory-tidy">
+        <span class="h-[6px] w-[6px] flex-none rounded-full bg-warn" aria-hidden="true"></span>
+        {{ t("libraryView.memory.tidy", { count: tidy }) }}
+        <button
+          type="button"
+          class="cursor-pointer border-0 bg-transparent p-0 font-sans text-[12px] text-accent hover:underline"
+          :aria-pressed="tidyOnly"
+          data-testid="memory-tidy-toggle"
+          @click="tidyOnly = !tidyOnly"
+        >
+          {{ tidyOnly ? t("libraryView.memory.tidyAll") : t("libraryView.memory.tidyShow") }}
+        </button>
+      </p>
       <section v-for="project in shown" :key="project.slug" class="mb-2">
         <h3 class="m-0 flex items-center gap-2 px-4 pb-1 pt-2 font-sans text-[11px] font-[650] uppercase tracking-[0.04em] text-dim">
           <span class="min-w-0 truncate" :data-tip="project.cwd ?? project.slug">{{ projectLabel(project) }}</span>
@@ -132,6 +173,14 @@ defineExpose({ move });
             {{ gaugeLabel(project) }}
           </span>
         </h3>
+        <p
+          v-for="issue in health.get(project.slug)?.issues ?? []"
+          :key="issue.kind"
+          class="m-0 px-4 pb-1 font-sans text-[12px] text-warn"
+          data-testid="memory-project-issue"
+        >
+          {{ issueSentence(issue) }}
+        </p>
         <button
           v-for="memory in project.files"
           :key="memory.file"
@@ -144,7 +193,16 @@ defineExpose({ move });
           :aria-current="selected?.key === memoryKey(project.slug, memory.file)"
           @click="choose(memoryKey(project.slug, memory.file))"
         >
-          <span class="block truncate text-[13px] text-fg">{{ memoryTitle(memory) }}</span>
+          <span class="flex items-center gap-1.5 truncate text-[13px] text-fg">
+            <span
+              v-if="fileIssues(health, project.slug, memory.file).length > 0"
+              class="h-[6px] w-[6px] flex-none rounded-full bg-warn"
+              data-testid="memory-row-dot"
+              :aria-label="t('libraryView.memory.tidy', { count: 1 })"
+              role="img"
+            ></span>
+            <span class="truncate">{{ memoryTitle(memory) }}</span>
+          </span>
           <span class="block truncate text-[12px] text-dim">{{ meta(memory) }}</span>
         </button>
       </section>
@@ -163,6 +221,14 @@ defineExpose({ move });
           <span class="font-mono">{{ selected.memory.file }}</span>
           <span>{{ projectLabel(selected.project) }}</span>
           <span v-if="meta(selected.memory)">{{ meta(selected.memory) }}</span>
+        </p>
+        <p
+          v-for="issue in fileIssues(health, selected.project.slug, selected.memory.file)"
+          :key="issue.kind"
+          class="m-0 mt-2 font-sans text-[13px] text-warn"
+          data-testid="memory-issue"
+        >
+          {{ issueSentence(issue) }}
         </p>
         <p v-if="selected.memory.description" class="m-0 mt-2 font-sans text-[13px] text-secondary">{{ selected.memory.description }}</p>
       </header>

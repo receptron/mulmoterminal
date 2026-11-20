@@ -2,7 +2,7 @@
 // a 503 while the index cannot be opened, a timeout, or a body that is not the wire shape.
 import { isUnknownArray } from "../../common/isUnknownArray";
 import { isLibraryFileText, isLibraryTrackedFile, type LibraryFileText, type LibraryTrackedFile } from "../../common/libraryFiles";
-import { isLibraryMemoryProject, type LibraryMemoryProject } from "../../common/libraryMemory";
+import { isLibraryMemoryHealth, isLibraryMemoryProject, type LibraryMemoryHealth, type LibraryMemoryProject } from "../../common/libraryMemory";
 import {
   isLibraryConversation,
   isLibraryPrCreator,
@@ -77,6 +77,12 @@ export async function loadLibraryFileText(id: string, cwd: string | null, tracki
 export async function loadLibraryMemory(): Promise<LibraryMemoryProject[] | null> {
   const body = await readJson("/api/library/memory");
   return body !== null && isUnknownArray(body.projects) ? body.projects.filter(isLibraryMemoryProject) : null;
+}
+
+/** What can be tidied in every project's memory, by rule. */
+export async function loadLibraryMemoryHealth(): Promise<LibraryMemoryHealth[] | null> {
+  const body = await readJson("/api/library/memory-health");
+  return body !== null && isUnknownArray(body.projects) ? body.projects.filter(isLibraryMemoryHealth) : null;
 }
 
 /** One memory file's text (or the index's). */

@@ -1,6 +1,13 @@
 // How the Library lists memory (#3331): which memories a search keeps, how full an index is, and
 // where a `[[name]]` link goes. Pure.
-import { MEMORY_INDEX_BYTES_MAX, MEMORY_INDEX_LINES_MAX, type LibraryMemoryFile, type LibraryMemoryProject } from "../../../common/libraryMemory";
+import {
+  MEMORY_INDEX_BYTES_MAX,
+  MEMORY_INDEX_LINES_MAX,
+  type LibraryMemoryFile,
+  type LibraryMemoryHealth,
+  type LibraryMemoryProject,
+  type MemoryFileIssue,
+} from "../../../common/libraryMemory";
 
 /** Past this share of either limit the gauge warns: the next few lines may fall out of what loads. */
 export const MEMORY_INDEX_WARN_RATIO = 0.9;
@@ -42,3 +49,19 @@ export const linkTarget = (project: LibraryMemoryProject, name: string): Library
 
 /** A memory's place across projects, as one identity: the slug and the file. */
 export const memoryKey = (slug: string, file: string): string => `${slug}/${file}`;
+
+/** A memory's issues, none when its project has nothing to tidy. */
+export const fileIssues = (health: ReadonlyMap<string, LibraryMemoryHealth>, slug: string, file: string): MemoryFileIssue[] =>
+  health.get(slug)?.files[file] ?? [];
+
+/** How many things can be tidied: each memory with an issue, and each project whose index has one. */
+export const tidyCount = (health: ReadonlyMap<string, LibraryMemoryHealth>): number =>
+  [...health.values()].reduce((sum, project) => sum + Object.keys(project.files).length + (project.issues.length > 0 ? 1 : 0), 0);
+
+/** Only what can be tidied: the memories with an issue, and every project whose index has one (shown
+ *  for its heading even with no memory to list). */
+export function filterTidy(projects: readonly LibraryMemoryProject[], health: ReadonlyMap<string, LibraryMemoryHealth>): LibraryMemoryProject[] {
+  return projects
+    .map((project) => ({ ...project, files: project.files.filter((memory) => fileIssues(health, project.slug, memory.file).length > 0) }))
+    .filter((project) => project.files.length > 0 || (health.get(project.slug)?.issues.length ?? 0) > 0);
+}

@@ -2,7 +2,7 @@
 // followed, and a missing link shown as one.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
-import type { LibraryMemoryFile, LibraryMemoryProject } from "../../../../common/libraryMemory";
+import type { LibraryMemoryFile, LibraryMemoryHealth, LibraryMemoryProject } from "../../../../common/libraryMemory";
 
 let texts: Record<string, string | null> = {};
 vi.mock("../../../../src/composables/libraryApi", () => ({
@@ -35,8 +35,8 @@ beforeEach(() => {
   };
 });
 
-const mountMemory = async (query = "") => {
-  const wrapper = mount(LibraryMemory, { props: { projects, loaded: true, failed: false, query, now: NOW }, attachTo: document.body });
+const mountMemory = async (query = "", health: ReadonlyMap<string, LibraryMemoryHealth> = new Map()) => {
+  const wrapper = mount(LibraryMemory, { props: { projects, loaded: true, failed: false, query, now: NOW, health }, attachTo: document.body });
   await flushPromises();
   return wrapper;
 };
@@ -50,7 +50,7 @@ describe("LibraryMemory", () => {
 
   it("names the byte limit when an index is nearer to it than to the line limit", async () => {
     const heavy: LibraryMemoryProject[] = [{ slug: "-w-heavy", cwd: "/w/heavy", index: { lines: 10, bytes: 30_000 }, files: [memory("h.md", "h")] }];
-    const wrapper = mount(LibraryMemory, { props: { projects: heavy, loaded: true, failed: false, query: "", now: NOW } });
+    const wrapper = mount(LibraryMemory, { props: { projects: heavy, loaded: true, failed: false, query: "", now: NOW, health: new Map() } });
     await flushPromises();
     const gauge = wrapper.find("[data-testid=memory-index-fill]");
     expect(gauge.text()).toBe("MEMORY.md 30.0 / 25.0 KB");
@@ -127,5 +127,26 @@ describe("LibraryMemory", () => {
     const wrapper = await mountMemory();
     expect(wrapper.find("[data-testid=memory-body]").exists()).toBe(false);
     expect(wrapper.find("[data-testid=memory-reader]").text()).toContain("This memory could not be read.");
+  });
+
+  it("says how much can be tidied, marks those rows, and narrows to them on Show", async () => {
+    const health = new Map<string, LibraryMemoryHealth>([
+      ["-w-app", { slug: "-w-app", issues: [], files: { "codex.md": [{ kind: "broken-link", names: ["gone"] }] } }],
+      ["-w-lib", { slug: "-w-lib", issues: [{ kind: "no-index" }], files: {} }],
+    ]);
+    const wrapper = await mountMemory("", health);
+    expect(wrapper.find("[data-testid=memory-tidy]").text()).toContain("2 can be tidied");
+    expect(wrapper.findAll("[data-testid=memory-row]").map((row) => row.find("[data-testid=memory-row-dot]").exists())).toEqual([false, true, false]);
+    expect(wrapper.find("[data-testid=memory-project-issue]").text()).toBe("No MEMORY.md, so Claude Code is not told about these memories.");
+    await wrapper.find("[data-testid=memory-tidy-toggle]").trigger("click");
+    expect(wrapper.findAll("[data-testid=memory-row]").map((row) => row.text())).toEqual([expect.stringContaining("codex-sandbox")]);
+    expect(wrapper.findAll("h3")).toHaveLength(2); // the project with an index issue keeps its heading
+    await wrapper.find("[data-testid=memory-row]").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-issue]").text()).toBe("It links to [[gone]], but no memory here has that name.");
+  });
+
+  it("shows no tidy line when there is nothing to tidy", async () => {
+    expect((await mountMemory()).find("[data-testid=memory-tidy]").exists()).toBe(false);
   });
 });

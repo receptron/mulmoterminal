@@ -44,6 +44,18 @@ export const libraryViewEn = {
       folded: "{count} unchanged lines",
     },
     memory: {
+      tidy: "{count} can be tidied",
+      tidyShow: "Show",
+      tidyAll: "Show all",
+      issues: {
+        "not-in-index": "Not listed in MEMORY.md, so Claude Code is not told it exists.",
+        "no-frontmatter": "Its frontmatter has no {fields}.",
+        "broken-link": "It links to {names}, but no memory here has that name.",
+        "missing-path": "It names {paths}, which is no longer there.",
+        "index-over-limit": "MEMORY.md is longer than Claude Code loads: the end of it is never read.",
+        "no-index": "No MEMORY.md, so Claude Code is not told about these memories.",
+        "dead-index-entry": "MEMORY.md lists {files}, which is not here.",
+      },
       indexBytes: "MEMORY.md {size} / {max} KB",
       search: "Search memory",
       shortcuts: "/ search · ↑↓ move · Esc close",

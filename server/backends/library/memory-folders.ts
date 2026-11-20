@@ -102,7 +102,7 @@ const NEWLINE = 0x0a;
 /** Lines and bytes of the index, streamed: only the counts are wanted, and an index far past what
  *  Claude Code loads is exactly the one the gauge must show, not leave out. A last line without a
  *  newline counts. Not through a link, like every read here. */
-async function indexOf(folder: string): Promise<LibraryMemoryProject["index"]> {
+export async function indexOf(folder: string): Promise<LibraryMemoryProject["index"]> {
   const opened = await openRegularFile(path.join(folder, MEMORY_INDEX_FILE));
   if (opened === null) return null;
   let newlines = 0;
@@ -123,14 +123,19 @@ async function indexOf(folder: string): Promise<LibraryMemoryProject["index"]> {
   return { lines: newlines + (last === NEWLINE ? 0 : 1), bytes };
 }
 
+/** The memory files in a folder by name: regular files of the memory shape, the index left out. */
+export async function memoryFileNames(folder: string): Promise<string[]> {
+  const candidates = (await entriesOf(folder)).filter((entry) => entry.isFile() && isMemoryFileName(entry.name)).map((entry) => entry.name);
+  const indexes = await Promise.all(candidates.map((name) => isTheIndex(folder, name)));
+  return candidates.filter((_, place) => !indexes[place]);
+}
+
 async function projectOf(projectsRoot: string, slug: string, cwds: ReadonlyMap<string, string>): Promise<LibraryMemoryProject | null> {
   const folder = path.join(projectsRoot, slug, "memory");
-  const candidates = (await entriesOf(folder)).filter((entry) => entry.isFile() && isMemoryFileName(entry.name));
-  const indexes = await Promise.all(candidates.map((entry) => isTheIndex(folder, entry.name)));
-  const names = candidates.filter((_, place) => !indexes[place]);
+  const names = await memoryFileNames(folder);
   const index = await indexOf(folder);
   if (names.length === 0 && index === null) return null;
-  const files = (await Promise.all(names.map((entry) => memoryFileOf(folder, entry.name)))).filter((file): file is LibraryMemoryFile => file !== null);
+  const files = (await Promise.all(names.map((name) => memoryFileOf(folder, name)))).filter((file): file is LibraryMemoryFile => file !== null);
   files.sort((a, b) => b.updatedAt - a.updatedAt);
   return { slug, cwd: cwds.get(slug) ?? null, index, files };
 }
@@ -158,7 +163,7 @@ async function slugsWithMemory(projectsRoot: string): Promise<string[]> {
 }
 
 /** The folders holding memory, looked for again once the last look is older than the reuse time. */
-function memorySlugs(projectsRoot: string, now_ms: number): Promise<string[]> {
+export function memorySlugs(projectsRoot: string, now_ms: number): Promise<string[]> {
   const known = folderLists.get(projectsRoot);
   if (known !== undefined && now_ms - known.at < MEMORY_FOLDERS_REUSE_MS) return known.slugs;
   const slugs = slugsWithMemory(projectsRoot);
