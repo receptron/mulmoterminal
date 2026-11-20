@@ -12,6 +12,7 @@ import path from "node:path";
 import { MEMORY_INDEX_FILE } from "../../../common/libraryMemory.js";
 import { trashEntry, type TrashLayout } from "../../files/tree-ops.js";
 import { readBoundedText } from "./file-history-read.js";
+import { isSameFile } from "./memory-folders.js";
 import { withEntryBack, withoutEntry, type RemovedIndexLine } from "./memory-index-lines.js";
 import { isFaithfulText, memoryVersion, replaceKeepingMode, serialize, type Replace } from "./memory-write.js";
 
@@ -26,6 +27,8 @@ export type MemoryRestoreResult = "restored" | "taken" | "gone";
 interface Undo extends Moved {
   /** The index as it was, and the version this delete left it at: unchanged since, it is put back whole. */
   index: { before: string; written: string; removed: RemovedIndexLine[] } | null;
+  /** The Trash entry this delete made: the Trash may be emptied and the name taken by another file. */
+  entry: { dev: number; ino: number };
   at_ms: number;
 }
 
@@ -96,7 +99,8 @@ async function trashChecked({ file, index, expected, layout, now, steps }: Trash
   const kept = await takeOutOfIndex(steps.replace, index, moved);
   forget(now.getTime());
   const id = randomUUID();
-  undos.set(id, { ...moved, index: kept, at_ms: now.getTime() });
+  const { dev, ino } = await lstat(moved.trashed);
+  undos.set(id, { ...moved, index: kept, entry: { dev, ino }, at_ms: now.getTime() });
   return { kind: "trashed", undo: id };
 }
 
@@ -179,7 +183,8 @@ export function restoreMemory(id: string, now: Date, replace: Replace = replaceK
  *  undo stays, so it can be tried again. A second undo of the same delete, queued behind the first,
  *  finds the Trash entry gone. */
 async function restoreChecked(id: string, undo: Undo, index: string, replace: Replace): Promise<MemoryRestoreResult> {
-  const outcome = await linkBack(undo);
+  const entry = await lstat(undo.trashed).catch(() => null);
+  const outcome = entry !== null && isSameFile(entry, undo.entry) ? await linkBack(undo) : "gone";
   if (outcome === "gone") undos.delete(id);
   if (outcome !== "restored") return outcome;
   try {

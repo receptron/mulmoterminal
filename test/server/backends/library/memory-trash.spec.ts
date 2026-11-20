@@ -223,6 +223,16 @@ describe("restoreMemory", () => {
     expect(await restoreMemory(undo, NOW)).toBe("gone");
     expect(await restoreMemory(undo, NOW)).toBe("gone");
   });
+  it("is gone, and puts nothing back, when the Trash was emptied and its name taken by another file", async () => {
+    const { file, layout, read } = setup();
+    const undo = undoOf(await trashMemory(file, memoryVersion("alpha"), layout, NOW));
+    rmSync(path.join(layout.files, "a.md"));
+    writeFileSync(path.join(layout.files, "a.md"), "another a.md, deleted since");
+    expect(await restoreMemory(undo, NOW)).toBe("gone");
+    expect(existsSync(file)).toBe(false);
+    expect(read("MEMORY.md")).toBe("# Memory\n- [B](b.md) — two\n");
+    expect(readFileSync(path.join(layout.files, "a.md"), "utf8")).toBe("another a.md, deleted since");
+  });
   it("takes two deletes of one memory in turn: the second finds it gone", async () => {
     const { file, layout, read } = setup();
     const results = await Promise.all([trashMemory(file, memoryVersion("alpha"), layout, NOW), trashMemory(file, memoryVersion("alpha"), layout, NOW)]);
