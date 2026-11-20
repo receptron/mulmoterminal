@@ -94,6 +94,7 @@ vi.mock("../../../../src/composables/useDirLists", () => ({
 const openIds: string[] = [];
 vi.mock("../../../../src/composables/commandPalette", () => ({ paletteTerminals: { value: { openSessionIds: () => openIds } } }));
 
+const { resetImeComposition } = await import("../../../../src/composables/imeComposition");
 const LibraryOverlay = (await import("../../../../src/components/library/LibraryOverlay.vue")).default;
 const { LIBRARY_STATUS_POLL_MS } = await import("../../../../src/composables/useLibraryData");
 
@@ -555,6 +556,13 @@ describe("LibraryOverlay", () => {
     const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
     wrapper.findAll("[data-testid=memory-row]")[0]?.element.dispatchEvent(enter);
     expect(enter.defaultPrevented).toBe(false);
+    // Not the Enter that confirms an IME candidate, Safari's late compositionend included.
+    window.dispatchEvent(new CompositionEvent("compositionstart"));
+    window.dispatchEvent(new CompositionEvent("compositionend"));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 229 }));
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-editor]").exists()).toBe(false);
+    resetImeComposition();
     // Enter elsewhere in Memory is the primary action: editing.
     await press("Enter");
     await flushPromises();

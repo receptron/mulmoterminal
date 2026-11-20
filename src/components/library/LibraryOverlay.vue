@@ -14,6 +14,7 @@ import { libraryRequested, useLibraryView } from "../../composables/useLibraryVi
 import { loadLibraryConversation } from "../../composables/libraryApi";
 import { router } from "../../router";
 import { useEscapeToClose } from "../../composables/useEscapeToClose";
+import { isImeConfirming } from "../../composables/imeComposition";
 import { useLibraryData } from "../../composables/useLibraryData";
 import { readResumableList } from "../../composables/useDirLists";
 import { openCellAt } from "../../composables/useNewTerminal";
@@ -231,7 +232,14 @@ function onKey(event: KeyboardEvent): void {
   const editable = target !== null && isEditableTarget(target.tagName, [...target.classList]);
   const modified = event.metaKey || event.ctrlKey || event.altKey;
   const onOtherControl = target?.closest(OTHER_CONTROLS) != null && target.closest("[data-library-row]") === null;
-  const action = libraryKeyAction({ key: event.key, inSearch, inOtherField: editable && !inSearch, onOtherControl, composing: event.isComposing, modified });
+  const action = libraryKeyAction({
+    key: event.key,
+    inSearch,
+    inOtherField: editable && !inSearch,
+    onOtherControl,
+    composing: isImeConfirming(event),
+    modified,
+  });
   // In Memory, Enter on a focused row is the row's own (it presses); elsewhere it edits.
   const onMemoryRow = target?.closest("[data-memory-row]") != null;
   if (action === null || (action === "primary" && kind.value === "memory" && onMemoryRow)) return;
