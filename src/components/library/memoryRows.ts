@@ -54,9 +54,14 @@ export const memoryKey = (slug: string, file: string): string => `${slug}/${file
 export const fileIssues = (health: ReadonlyMap<string, LibraryMemoryHealth>, slug: string, file: string): MemoryFileIssue[] =>
   health.get(slug)?.files[file] ?? [];
 
-/** How many things can be tidied: each memory with an issue, and each project whose index has one. */
-export const tidyCount = (health: ReadonlyMap<string, LibraryMemoryHealth>): number =>
-  [...health.values()].reduce((sum, project) => sum + Object.keys(project.files).length + (project.issues.length > 0 ? 1 : 0), 0);
+/** How many things can be tidied: each listed memory with an issue, and each listed project whose index
+ *  has one. Counted over the list, not the health answer: the two are read apart, and a file one saw and
+ *  the other did not must not be counted where it cannot be shown. */
+export const tidyCount = (projects: readonly LibraryMemoryProject[], health: ReadonlyMap<string, LibraryMemoryHealth>): number =>
+  projects.reduce((sum, project) => {
+    const flagged = project.files.filter((memory) => fileIssues(health, project.slug, memory.file).length > 0).length;
+    return sum + flagged + ((health.get(project.slug)?.issues.length ?? 0) > 0 ? 1 : 0);
+  }, 0);
 
 /** Only what can be tidied: the memories with an issue, and every project whose index has one (shown
  *  for its heading even with no memory to list). */

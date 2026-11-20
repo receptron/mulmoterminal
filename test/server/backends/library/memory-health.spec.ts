@@ -14,7 +14,7 @@ import {
   topFolder,
   type MemoryHealthInput,
 } from "../../../../server/backends/library/memory-health";
-import { readMemoryHealth } from "../../../../server/backends/library/memory-health-read";
+import { MEMORY_CHECK_MAX_BYTES, readMemoryHealth } from "../../../../server/backends/library/memory-health-read";
 import { MEMORY_INDEX_BYTES_MAX, MEMORY_INDEX_LINES_MAX } from "../../../../common/libraryMemory";
 
 const memory = (name: string, body = "", extra = ""): string =>
@@ -197,5 +197,19 @@ describe("readMemoryHealth", () => {
     } finally {
       chmodSync(path.join(folder, "MEMORY.md"), 0o600);
     }
+  });
+
+  it("reads a changed memory again, and judges one past the size bound on its listing alone", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "mt-memory-health-"));
+    dirs.push(root);
+    const folder = path.join(root, "projects", "-p", "memory");
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(path.join(folder, "MEMORY.md"), "- [A](a.md)\n- [B](b.md)\n");
+    writeFileSync(path.join(folder, "a.md"), memory("a", "[[gone]]"));
+    writeFileSync(path.join(folder, "b.md"), memory("b", `[[also-gone]] ${"x".repeat(MEMORY_CHECK_MAX_BYTES)}`));
+    const read = async () => (await readMemoryHealth(path.join(root, "projects"), [], 0))[0]?.files ?? {};
+    expect(await read()).toEqual({ "a.md": [{ kind: "broken-link", names: ["gone"] }] });
+    writeFileSync(path.join(folder, "a.md"), memory("a", "now tidy, and a longer body than before"));
+    expect(await read()).toEqual({});
   });
 });

@@ -24,10 +24,30 @@ const exists = (file: string): Promise<boolean> =>
     () => false,
   );
 
+/** The most of one memory the checks read: real memories are a few kilobytes; a larger one is judged
+ *  on its listing alone (its links and paths are not looked for). */
+export const MEMORY_CHECK_MAX_BYTES = 256 * 1024;
+const CACHED_TEXTS = 4096;
+
+/** Texts by file and stamp, so opening the Library again reads only what changed since. */
+const texts = new Map<string, string | null>();
+
+async function memoryText(file: string): Promise<string | null> {
+  const info = await fs.lstat(file).catch(() => null);
+  if (info === null || !info.isFile() || info.size > MEMORY_CHECK_MAX_BYTES) return null;
+  const key = `${file}\u0000${String(info.size)}\u0000${String(info.mtimeMs)}`;
+  const known = texts.get(key);
+  if (known !== undefined) return known;
+  const text = (await readBoundedText(file)).text;
+  texts.set(key, text);
+  if (texts.size > CACHED_TEXTS) texts.delete(texts.keys().next().value ?? "");
+  return text;
+}
+
 async function inputOf(projectsRoot: string, slug: string): Promise<MemoryHealthInput> {
   const folder = path.join(projectsRoot, slug, "memory");
   const names = await memoryFileNames(folder);
-  const files = await inBatches(names, FILES_AT_ONCE, async (file) => ({ file, text: (await readBoundedText(path.join(folder, file))).text }));
+  const files = await inBatches(names, FILES_AT_ONCE, async (file) => ({ file, text: await memoryText(path.join(folder, file)) }));
   // An index that is there but cannot be read is not "no index": it is judged as unknown.
   const there = await fs.lstat(path.join(folder, MEMORY_INDEX_FILE)).then(
     () => true,

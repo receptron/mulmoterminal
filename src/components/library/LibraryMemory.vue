@@ -36,7 +36,7 @@ const { t, locale } = useI18n();
 
 /** Only what can be tidied, when "Show" was pressed on the line above the list. */
 const tidyOnly = ref(false);
-const tidy = computed(() => tidyCount(props.health));
+const tidy = computed(() => tidyCount(props.projects, props.health));
 const shown = computed(() => {
   const matching = filterMemory(props.projects, props.query);
   return tidyOnly.value ? filterTidy(matching, props.health) : matching;

@@ -1,7 +1,13 @@
 // How the Library lists memory (#3331): the index gauge, the search, and where a link goes.
 import { describe, it, expect } from "vitest";
-import { filterMemory, indexFill, linkTarget, memoryTitle } from "../../../../src/components/library/memoryRows";
-import { MEMORY_INDEX_BYTES_MAX, MEMORY_INDEX_LINES_MAX, type LibraryMemoryFile, type LibraryMemoryProject } from "../../../../common/libraryMemory";
+import { filterMemory, indexFill, linkTarget, memoryTitle, tidyCount } from "../../../../src/components/library/memoryRows";
+import {
+  MEMORY_INDEX_BYTES_MAX,
+  MEMORY_INDEX_LINES_MAX,
+  type LibraryMemoryFile,
+  type LibraryMemoryHealth,
+  type LibraryMemoryProject,
+} from "../../../../common/libraryMemory";
 
 const memory = (file: string, over: Partial<LibraryMemoryFile> = {}): LibraryMemoryFile => ({
   file,
@@ -53,5 +59,17 @@ describe("linkTarget and memoryTitle", () => {
   it("titles a memory by its name, else its file without .md", () => {
     expect(memoryTitle(memory("a.md", { name: "Named" }))).toBe("Named");
     expect(memoryTitle(memory("plain.md"))).toBe("plain");
+  });
+});
+
+describe("tidyCount", () => {
+  it("counts only what the list shows: a memory or a project the list does not have is left out", () => {
+    const listed = [project("a", [memory("x.md"), memory("y.md")])];
+    const health = new Map<string, LibraryMemoryHealth>([
+      ["a", { slug: "a", issues: [{ kind: "no-index" }], files: { "x.md": [{ kind: "not-in-index" }], "gone.md": [{ kind: "not-in-index" }] } }],
+      ["unlisted", { slug: "unlisted", issues: [{ kind: "no-index" }], files: { "z.md": [{ kind: "not-in-index" }] } }],
+    ]);
+    expect(tidyCount(listed, health)).toBe(2); // x.md, and a's index
+    expect(tidyCount(listed, new Map())).toBe(0);
   });
 });
