@@ -127,8 +127,16 @@ export async function trashLibraryMemoryFile(slug: string, file: string, version
   }
 }
 
-/** "changed" names the memory that changed since it was opened: the one kept, or the one merged into it. */
-export type MemoryMergeResult = { kind: "merged"; version: string; undo: string } | { kind: "changed"; file: "into" | "from" } | { kind: "failed" };
+/** "changed" names the memory that changed since it was opened: the one kept, or the one merged into it.
+ *  "merged" carries the text as written — its own links to the merged memory point at it now — and how
+ *  many links were; "unplaceable" names the memories whose links could not be rewritten exactly. */
+export type MemoryMergeResult =
+  | { kind: "merged"; version: string; undo: string; text: string; links: number }
+  | { kind: "changed"; file: "into" | "from" }
+  | { kind: "unplaceable"; files: string[] }
+  | { kind: "failed" };
+
+const stringsIn = (value: unknown): string[] => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
 
 export interface MemoryMergeRequest {
   slug: string;
@@ -145,11 +153,20 @@ export async function mergeLibraryMemoryFiles({ slug, into, text, version, from,
     const response = await fetchWithTimeout(`${memoryFileUrl(slug, into)}/merge`, postJson({ text, version, from, fromVersion }), LIBRARY_READ_TIMEOUT_MS);
     const body = await jsonBody(response);
     if (response.status === 409) return { kind: "changed", file: body.file === "from" ? "from" : "into" };
-    if (!response.ok || typeof body.version !== "string" || typeof body.undo !== "string") return { kind: "failed" };
-    return { kind: "merged", version: body.version, undo: body.undo };
+    if (response.status === 422) return { kind: "unplaceable", files: stringsIn(body.files) };
+    const { version: written, undo, text: writtenText, links } = body;
+    if (!response.ok || typeof written !== "string" || typeof undo !== "string" || typeof writtenText !== "string" || typeof links !== "number")
+      return { kind: "failed" };
+    return { kind: "merged", version: written, undo, text: writtenText, links };
   } catch {
     return { kind: "failed" };
   }
+}
+
+/** How many links merging `from` into `into` would point at `into`, or which memories' links could not be. */
+export async function loadLibraryMemoryLinks(slug: string, into: string, from: string): Promise<{ count: number; unplaceable: string[] } | null> {
+  const body = await readJson(`${memoryFileUrl(slug, into)}/links?from=${encodeURIComponent(from)}`);
+  return body !== null && typeof body.count === "number" ? { count: body.count, unplaceable: stringsIn(body.unplaceable) } : null;
 }
 
 /** "taken": a file of that name was made since; "gone": too late to undo here (it is in the Trash). */

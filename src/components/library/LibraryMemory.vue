@@ -233,11 +233,11 @@ watch(text, (read) => {
   else if (typeof read?.version === "string") editing.value = true;
 });
 
-function onMerged(saved: string, version: string, undoId: string): void {
+function onMerged(saved: string, version: string, undoId: string, links: number): void {
   const done = merging.value;
   text.value = { text: saved, version };
   stopEditing();
-  if (done !== null && selected.value !== null) mergedNotice(done, memoryTitle(selected.value.memory), undoId);
+  if (done !== null && selected.value !== null) mergedNotice(done, memoryTitle(selected.value.memory), undoId, links);
 }
 
 const moreMenu = useTemplateRef<{ close: () => void }>("moreMenu");
@@ -267,7 +267,10 @@ function trashNoticeText(): string {
   if (shown === null) return "";
   if (shown.kind !== "trashed") return t(`libraryView.memory.trash.${shown.kind}`);
   if (shown.undoFailed === true) return t("libraryView.memory.trash.undo-failed");
-  if (shown.into !== undefined) return t("libraryView.memory.trash.merged", { title: shown.title, into: shown.into });
+  if (shown.into !== undefined) {
+    const merged = t("libraryView.memory.trash.merged", { title: shown.title, into: shown.into });
+    return shown.links ? `${merged} ${t("libraryView.memory.trash.mergedLinks", { count: shown.links })}` : merged;
+  }
   const done = t("libraryView.memory.trash.trashed", { title: shown.title });
   return shown.running ? `${done} ${t("libraryView.memory.trash.running")}` : done;
 }

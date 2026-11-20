@@ -25,7 +25,7 @@ const REQUIRED_FIELDS = ["name", "description", "type"] as const;
 
 /** Text with code taken out: a `[[name]]` or a path inside a code span or block is an example, not a
  *  reference (the renderer leaves those inert too). */
-interface MarkdownToken {
+export interface MarkdownToken {
   type: string;
   raw: string;
   text?: string;
@@ -33,7 +33,7 @@ interface MarkdownToken {
   items?: MarkdownToken[];
 }
 
-const isToken = (value: unknown): value is MarkdownToken =>
+export const isToken = (value: unknown): value is MarkdownToken =>
   typeof value === "object" && value !== null && "type" in value && "raw" in value && typeof value.type === "string" && typeof value.raw === "string";
 
 /** A body split as Markdown reads it — by marked's own lexer, so a code span of any number of backticks
@@ -58,8 +58,11 @@ export function indexEntries(indexText: string): string[] {
   return [...indexText.matchAll(/\]\(([^)\s]+\.md)\)/g)].map((match) => (match[1] ?? "").replace(/^\.\//, "")).filter((target) => !target.includes("/"));
 }
 
+/** A `[[name]]` link, the name captured. */
+export const MEMORY_LINK = /\[\[([^\]\n]{1,200})\]\]/g;
+
 /** The `[[name]]` links in a body, outside code. */
-export const linkNames = (body: string): string[] => [...splitCode(body).prose.matchAll(/\[\[([^\]\n]{1,200})\]\]/g)].map((match) => (match[1] ?? "").trim());
+export const linkNames = (body: string): string[] => [...splitCode(body).prose.matchAll(MEMORY_LINK)].map((match) => (match[1] ?? "").trim());
 
 /** Paths a body names in code spans — `server/foo.ts`, `~/.codex/config.toml` — the way memory points at
  *  files: a slash and an extension, no scheme, no wildcard or placeholder. It cannot start with `@`, so
