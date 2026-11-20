@@ -79,6 +79,16 @@ export function frontmatterStillOpen(text: string): boolean {
   return normalized.startsWith("---\n") && frontmatterEnd(normalized) === -1;
 }
 
+/** Where a memory's body starts in its text as written — after the frontmatter's closing line, or 0 when
+ *  there is none — found as `parseMemoryFrontmatter` finds it, but on the text itself rather than its
+ *  normalised copy, so the body can be edited and the frontmatter left byte for byte. */
+export function memoryBodyStart(text: string): number {
+  const open = /^\uFEFF?---\r?\n/.exec(text);
+  if (open === null) return 0;
+  const close = /\r?\n---(?:\r?\n|$)/.exec(text.slice(open[0].length - 1));
+  return close === null ? 0 : open[0].length - 1 + close.index + close[0].length;
+}
+
 /** Whether a `[[link]]` names a memory: by its file name without `.md`, or by its frontmatter `name`,
  *  either side's surrounding spaces aside (a link's own are, and a quoted value can carry some). The one
  *  rule the reader, the health check and a merge's rewrite all decide a link's memory by. */

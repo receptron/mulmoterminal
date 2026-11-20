@@ -6,11 +6,13 @@ import {
   isLibraryMemoryHealth,
   isLibraryMemoryProject,
   linkNamesMemory,
+  memoryBodyStart,
   memoryLinkNames,
   memoryType,
   parseMemoryFrontmatter,
   projectSlug,
 } from "../../common/libraryMemory";
+import { seededRandom } from "../helpers/seededRandom";
 
 describe("parseMemoryFrontmatter", () => {
   it("reads the flat keys and the metadata block apart from the body, keeping keys it does not know", () => {
@@ -70,6 +72,29 @@ describe("frontmatterStillOpen", () => {
     ["", false],
   ])("%j → %s", (text, open) => {
     expect(frontmatterStillOpen(text)).toBe(open);
+  });
+});
+
+describe("memoryBodyStart", () => {
+  it("is where the parser's body starts, in the text as written", () => {
+    expect(memoryBodyStart("---\nname: a\n---\nbody")).toBe(16);
+    expect(memoryBodyStart("---\r\nname: a\r\n---\r\nbody")).toBe(19);
+    expect(memoryBodyStart("\uFEFF---\nx: y\n---\n")).toBe(14);
+    expect(memoryBodyStart("---\n---\nbody")).toBe(8);
+    expect(memoryBodyStart("---\nname: a\n---")).toBe(15);
+    expect(["no frontmatter", "---\nnever closed\n", "---draft\n---\n", "\n---\nx\n---\n", "---\rx\r---\r"].map(memoryBodyStart)).toEqual([0, 0, 0, 0, 0]);
+  });
+
+  it("agrees with parseMemoryFrontmatter over generated texts (seed 3334)", () => {
+    const random = seededRandom(3334);
+    const PIECES = ["---", "--- ", "---x", "name: a", "", "body [[a]]", "\uFEFF", "`c`"];
+    const ENDS = ["\n", "\r\n", "\r"];
+    Array.from({ length: 3000 }).forEach(() => {
+      const text = Array.from({ length: random.below(7) }, () => random.pick(PIECES) + random.pick(ENDS)).join("") + random.pick(["", "tail"]);
+      const start = memoryBodyStart(text);
+      const body = start === 0 ? text : text.slice(start).replace(/\r\n/g, "\n");
+      expect(body, JSON.stringify(text)).toBe(parseMemoryFrontmatter(text).body);
+    });
   });
 });
 

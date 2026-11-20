@@ -1,6 +1,6 @@
 // The `[[links]]` a merge of memory points elsewhere (#3331), decided on texts alone — nothing here reads a disk.
 import { Lexer } from "marked";
-import { memoryLinkNames, parseMemoryFrontmatter } from "../../../common/libraryMemory.js";
+import { memoryBodyStart, memoryLinkNames, parseMemoryFrontmatter } from "../../../common/libraryMemory.js";
 import { isToken, MEMORY_LINK, type MarkdownToken } from "./memory-health.js";
 
 interface TextRange {
@@ -70,11 +70,9 @@ export function rewriteLinks(text: string, from: ReadonlySet<string>, to: string
     const rewritten = rewriteLinks(text.replace(/\r\n/g, "\n"), from, to);
     return rewritten === null ? null : { ...rewritten, text: rewritten.text.replace(/\n/g, "\r\n") };
   }
-  const { body } = parseMemoryFrontmatter(text);
-  // The parser reads a normalised copy; a body that is not the text's own end cannot be put back exactly.
-  if (!text.endsWith(body)) return null;
-  const rewritten = rewriteBodyLinks(body, from, to);
-  return rewritten === null ? null : { ...rewritten, text: `${text.slice(0, text.length - body.length)}${rewritten.text}` };
+  const start = memoryBodyStart(text);
+  const rewritten = rewriteBodyLinks(text.slice(start), from, to);
+  return rewritten === null ? null : { ...rewritten, text: `${text.slice(0, start)}${rewritten.text}` };
 }
 
 function rewriteBodyLinks(body: string, from: ReadonlySet<string>, to: string): { text: string; count: number } | null {

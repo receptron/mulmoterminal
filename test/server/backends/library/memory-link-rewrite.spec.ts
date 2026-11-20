@@ -74,6 +74,9 @@ describe("rewriteLinks", () => {
     const crlf = "---\r\ndescription: [[alpha]]\r\n---\r\n[[alpha]]\r\n";
     expect(rewriteLinks(crlf, A, "beta")).toEqual({ text: "---\r\ndescription: [[alpha]]\r\n---\r\n[[beta]]\r\n", count: 1 });
     expect(rewriteLinks(`\uFEFF${fm}[[a]]`, A, "beta")).toEqual({ text: `\uFEFF${fm}[[beta]]`, count: 1 });
+    // Mixed line ends with no code: every line end is kept, the frontmatter's included.
+    const mixed = "---\r\ndescription: [[alpha]]\r\n---\r\nSee [[alpha]].\nMore [[a]].\r\n";
+    expect(rewriteLinks(mixed, A, "beta")).toEqual({ text: "---\r\ndescription: [[alpha]]\r\n---\r\nSee [[beta]].\nMore [[beta]].\r\n", count: 2 });
   });
 
   it("rewrites a memory with frontmatter as it rewrites its body alone (seed 3333)", () => {
