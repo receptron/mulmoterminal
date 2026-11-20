@@ -6,13 +6,13 @@
 // linked memory FOLDER is followed: Claude Code reads memory through the link too, so this shows
 // what the agent loads. A file that is itself a link is not read (readBoundedText).
 import path from "node:path";
-import type { Express } from "express";
+import type { Express, Response } from "express";
 import { MEMORY_EDIT_MAX_BYTES, MEMORY_INDEX_FILE } from "../../common/libraryMemory.js";
 import { isMemoryFileName, isProjectSlug, isSpeltAsOnDisk, isTheIndex, listMemoryProjects } from "../backends/library/memory-folders.js";
 import { readBoundedText } from "../backends/library/file-history-read.js";
 import { readMemoryHealth } from "../backends/library/memory-health-read.js";
 import { isFaithfulText, memoryVersion, writeMemory } from "../backends/library/memory-write.js";
-import { restoreMemory, trashMemory } from "../backends/library/memory-trash.js";
+import { mergeMemory, restoreMemory, trashMemory, type MemoryMergeResult } from "../backends/library/memory-trash.js";
 import { systemTrash, type TrashLayout } from "../files/tree-ops.js";
 import { requestBody } from "./requestBody.js";
 import type { LibraryCaller } from "../backends/library/library-service.js";
@@ -43,6 +43,7 @@ export function mountMemoryRoutes(app: Express, call: LibraryCaller, projectsRoo
   mountMemoryReads(app, call, projectsRoot);
   mountMemoryEdit(app, projectsRoot);
   mountMemoryTrash(app, projectsRoot, trash);
+  mountMemoryMerge(app, projectsRoot, trash);
 }
 
 /** A memory file a change may act on: one a route names, and never the index — by identity, not name:
@@ -145,6 +146,45 @@ function mountMemoryTrash(app: Express, projectsRoot: string, trash: () => Trash
       else res.status(410).json({ error: "this can no longer be undone here; the memory is in the Trash" });
     } catch {
       res.status(500).json({ error: "the memory could not be put back" });
+    }
+  });
+}
+
+/** Both memories of a merge as the request names them, or null: two different files of one folder,
+ *  each named as spelt on disk (a case-insensitive disk would otherwise let one file be both). */
+async function mergedPair(projectsRoot: string, slug: unknown, into: unknown, from: unknown): Promise<{ into: string; from: string } | null> {
+  const [kept, merged] = await Promise.all([changeableMemory(projectsRoot, slug, into), changeableMemory(projectsRoot, slug, from)]);
+  if (kept === null || merged === null || kept === merged) return null;
+  const spelt = await Promise.all([kept, merged].map((file) => isSpeltAsOnDisk(path.dirname(file), path.basename(file))));
+  return spelt.every(Boolean) ? { into: kept, from: merged } : null;
+}
+
+function answerMerge(res: Response, merged: MemoryMergeResult): void {
+  if (merged.kind === "merged") res.json({ version: merged.version, undo: merged.undo });
+  else if (merged.kind === "conflict") res.status(409).json({ error: "a memory changed since it was opened", file: merged.file });
+  else if (merged.kind === "other-volume") res.status(400).json({ error: "the memory is on another volume than the Trash, so nothing was merged" });
+  else res.status(400).json({ error: "these memories cannot be merged here, as the index could not be kept in step" });
+}
+
+function mountMemoryMerge(app: Express, projectsRoot: string, trash: () => TrashLayout): void {
+  app.post("/api/library/memory/:slug/:file/merge", async (req, res) => {
+    const body = requestBody(req.body);
+    const edit = memoryEditOf(body);
+    const pair = await mergedPair(projectsRoot, req.params.slug, req.params.file, body.from);
+    if (edit === null || pair === null || typeof body.fromVersion !== "string" || !VERSION.test(body.fromVersion)) {
+      res.status(400).json({ error: "expected { text, version, from, fromVersion } for two memory files of one project" });
+      return;
+    }
+    const layout = trash();
+    if (layout === null) {
+      res.status(501).json({ error: "no Trash on this system" });
+      return;
+    }
+    try {
+      const merge = { into: pair.into, text: edit.text, intoVersion: edit.version, from: pair.from, fromVersion: body.fromVersion };
+      answerMerge(res, await mergeMemory(merge, layout, new Date()));
+    } catch {
+      res.status(500).json({ error: "the memories could not be merged" });
     }
   });
 }
