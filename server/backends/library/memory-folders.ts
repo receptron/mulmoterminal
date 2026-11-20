@@ -124,10 +124,20 @@ export async function indexOf(folder: string): Promise<LibraryMemoryProject["ind
   return { lines: newlines + (last === NEWLINE ? 0 : 1), bytes };
 }
 
+/** Files read at once within one folder: a folder can hold thousands of memories. */
+export const MEMORY_FILES_AT_ONCE = 16;
+
+/** `work` over `items`, at most `size` at a time, the results in order. */
+export async function inBatches<T, R>(items: readonly T[], size: number, work: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = [];
+  for (let start = 0; start < items.length; start += size) results.push(...(await Promise.all(items.slice(start, start + size).map(work))));
+  return results;
+}
+
 /** The memory files in a folder by name: regular files of the memory shape, the index left out. */
 export async function memoryFileNames(folder: string): Promise<string[]> {
   const candidates = (await entriesOf(folder)).filter((entry) => entry.isFile() && isMemoryFileName(entry.name)).map((entry) => entry.name);
-  const indexes = await Promise.all(candidates.map((name) => isTheIndex(folder, name)));
+  const indexes = await inBatches(candidates, MEMORY_FILES_AT_ONCE, (name) => isTheIndex(folder, name));
   return candidates.filter((_, place) => !indexes[place]);
 }
 
@@ -136,7 +146,7 @@ async function projectOf(projectsRoot: string, slug: string, cwds: ReadonlyMap<s
   const names = await memoryFileNames(folder);
   const index = await indexOf(folder);
   if (names.length === 0 && index === null) return null;
-  const files = (await Promise.all(names.map((name) => memoryFileOf(folder, name)))).filter((file): file is LibraryMemoryFile => file !== null);
+  const files = (await inBatches(names, MEMORY_FILES_AT_ONCE, (name) => memoryFileOf(folder, name))).filter((file): file is LibraryMemoryFile => file !== null);
   files.sort((a, b) => b.updatedAt - a.updatedAt);
   return { slug, cwd: cwds.get(slug) ?? null, index, files };
 }

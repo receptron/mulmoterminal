@@ -5,18 +5,11 @@ import os from "node:os";
 import path from "node:path";
 import { MEMORY_INDEX_FILE, projectSlug, type LibraryMemoryHealth } from "../../../common/libraryMemory.js";
 import { readBoundedText } from "./file-history-read.js";
-import { indexOf, memoryFileNames, memorySlugs } from "./memory-folders.js";
+import { inBatches, indexOf, MEMORY_FILES_AT_ONCE, memoryFileNames, memorySlugs } from "./memory-folders.js";
 import { memoryHealth, pathReferences, resolveReference, topFolder, type MemoryHealthInput } from "./memory-health.js";
 
-/** Projects judged at once, and memory files read at once within one: a folder can hold thousands. */
+/** Projects judged at once; files within one are read MEMORY_FILES_AT_ONCE at a time. */
 const PROJECTS_AT_ONCE = 8;
-const FILES_AT_ONCE = 16;
-
-async function inBatches<T, R>(items: readonly T[], size: number, work: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = [];
-  for (let start = 0; start < items.length; start += size) results.push(...(await Promise.all(items.slice(start, start + size).map(work))));
-  return results;
-}
 
 const exists = (file: string): Promise<boolean> =>
   fs.stat(file).then(
@@ -58,7 +51,7 @@ async function memoryText(file: string): Promise<string | null> {
 async function inputOf(projectsRoot: string, slug: string): Promise<MemoryHealthInput> {
   const folder = path.join(projectsRoot, slug, "memory");
   const names = await memoryFileNames(folder);
-  const files = await inBatches(names, FILES_AT_ONCE, async (file) => ({ file, text: await memoryText(path.join(folder, file)) }));
+  const files = await inBatches(names, MEMORY_FILES_AT_ONCE, async (file) => ({ file, text: await memoryText(path.join(folder, file)) }));
   // An index that is there but cannot be read is not "no index": it is judged as unknown.
   const there = await fs.lstat(path.join(folder, MEMORY_INDEX_FILE)).then(
     () => true,
@@ -82,7 +75,7 @@ async function missingReferences(input: MemoryHealthInput, cwd: string | null): 
   // A path under the project is judged only when the project is here; one elsewhere only when its top
   // folder is (a site's `/x.cgi` is not this disk's).
   const projectHere = cwd !== null && (await exists(cwd));
-  const checked = await inBatches(references, FILES_AT_ONCE, async (reference) => {
+  const checked = await inBatches(references, MEMORY_FILES_AT_ONCE, async (reference) => {
     const resolved = resolveReference(reference, cwd, os.homedir(), process.platform === "win32");
     if (resolved === null) return null;
     const underProject = cwd !== null && !path.isAbsolute(reference) && !reference.startsWith("~");
