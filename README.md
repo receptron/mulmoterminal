@@ -852,6 +852,15 @@ The one exception is the **managed** workspace named by `MULMOCLAUDE_WORKSPACE_P
 (`~/mulmoclaude` by default), where that state stays in the workspace — MulmoClaude reads the
 same files there, and splitting them would give the two apps different answers.
 
+**Run one version per home.** Every server started with the same `HOME` shares `~/.mulmoterminal`,
+including the record of which sessions a `/clear` or an in-session `/resume` moved to another
+conversation (`cleared-transcripts/`). A release from before #3340 deletes that record whenever it
+ends a session, so a newer server sharing the home then reopens the conversation the cell had left
+(#3325, #3348). Running two versions side by side — an `npx mulmoterminal@<older>` next to a checkout,
+say — is therefore not supported; give one of them its own `HOME` (it then gets its own tmux server
+too). Rolling back to an older release brings back that release's behaviour and damages nothing on
+disk.
+
 If you ran an older version in a project directory, what it left behind is inert and nothing
 recreates it — but delete the generated files, **not** the whole directory:
 `config/scheduler/state.json`, `data/scheduler/`, `data/notifier/`. Leave
