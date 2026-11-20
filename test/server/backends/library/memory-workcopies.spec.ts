@@ -99,4 +99,21 @@ describe("readMemoryHealth across work copies", () => {
       "a.md": [{ kind: "in-work-copies", copies: [{ slug: slugOf(app3), same: true }] }],
     });
   });
+
+  it("never calls two files the same when their bytes are not text, though they read alike", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "mt-memory-copies-"));
+    dirs.push(root);
+    const cwds = ["app2", "app3"].map((name) => path.join(root, name));
+    cwds.forEach((cwd, at) => {
+      const folder = path.join(root, "projects", cwd.replace(/[^a-zA-Z0-9\-_]/g, "-"), "memory");
+      mkdirSync(folder, { recursive: true });
+      writeFileSync(path.join(folder, "MEMORY.md"), "- [A](a.md)\n");
+      writeFileSync(path.join(folder, "a.md"), Buffer.concat([Buffer.from(MEMORY("a", "x")), Buffer.from([0xff - at])]));
+    });
+    const health = await readMemoryHealth(path.join(root, "projects"), cwds, 0, () => Promise.resolve("github.com/o/app"));
+    expect(health.flatMap((project) => project.files["a.md"] ?? []).flatMap((issue) => (issue.kind === "in-work-copies" ? issue.copies : []))).toEqual([
+      { slug: expect.any(String), same: false },
+      { slug: expect.any(String), same: false },
+    ]);
+  });
 });

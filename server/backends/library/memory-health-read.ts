@@ -8,7 +8,7 @@ import { readBoundedText } from "./file-history-read.js";
 import { inBatches, indexOf, MEMORY_FILES_AT_ONCE, memoryFileNames, memorySlugs } from "./memory-folders.js";
 import { memoryHealth, pathReferences, resolveReference, topFolder, type MemoryHealthInput } from "./memory-health.js";
 import { repoKey, withWorkCopies, workCopyIssues } from "./memory-workcopies.js";
-import { memoryVersion } from "./memory-write.js";
+import { isFaithfulText, memoryVersion } from "./memory-write.js";
 import { resolveRemoteForge } from "../../git/gitRemote.js";
 import { createTtlCache } from "../../git/ttl-cache.js";
 
@@ -129,8 +129,9 @@ export async function readMemoryHealth(
     const cwd = bySlug.get(slug) ?? null;
     const input = await inputOf(projectsRoot, slug);
     const [missing, repo] = await Promise.all([missingReferences(input, cwd), cwd === null ? null : repoOf(cwd)]);
-    // Only a version of each text is kept past here: every folder is held until all are read.
-    const files = input.files.map(({ file, text }) => ({ file, version: text === null ? null : memoryVersion(text) }));
+    // Only a version of each text is kept past here: every folder is held until all are read. A text
+    // that is not the file's own bytes (invalid UTF-8 reads as U+FFFD) has none, and is never the same.
+    const files = input.files.map(({ file, text }) => ({ file, version: text !== null && isFaithfulText(text) ? memoryVersion(text) : null }));
     return { slug, repo, files, health: memoryHealth(input, missing) };
   });
   const copies = workCopyIssues(judged);
