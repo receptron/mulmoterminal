@@ -89,11 +89,12 @@ async function save(): Promise<void> {
 /** ⌘Enter (Ctrl+Enter elsewhere) saves; Esc stops editing, not the Library. */
 function onKey(event: KeyboardEvent): void {
   if (event.key === "Escape") {
+    // Never the Library's: it would close it with the edit open.
+    event.stopPropagation();
     // Esc while composing (Japanese input) cancels the composition, not the edit — Safari's
     // compositionend-before-keydown included.
     if (isImeConfirming(event)) return;
     event.preventDefault();
-    event.stopPropagation();
     cancel();
   } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !isImeConfirming(event)) {
     event.preventDefault();

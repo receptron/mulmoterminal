@@ -119,7 +119,11 @@ describe("LibraryMemoryEditor", () => {
   it("leaves Esc and ⌘Enter to an IME composition, Safari's late compositionend included", async () => {
     const wrapper = await mountEditor();
     const field = wrapper.find("[data-testid=memory-editor-field]");
+    const library = vi.fn();
+    window.addEventListener("keydown", library);
     await field.trigger("keydown", { key: "Escape", isComposing: true });
+    window.removeEventListener("keydown", library);
+    expect(library).not.toHaveBeenCalled(); // nor does that Esc reach the Library
     // Safari: compositionend first, then the confirming keydown with isComposing already false.
     window.dispatchEvent(new CompositionEvent("compositionstart"));
     window.dispatchEvent(new CompositionEvent("compositionend"));
