@@ -13,7 +13,7 @@ import {
   TRACKED_VERSIONS_MAX,
   VERSIONS_PER_FILE_MAX,
 } from "../../../../server/backends/library/file-history";
-import { readBoundedText, readFileHistory, readKeptCopy } from "../../../../server/backends/library/file-history-read";
+import { FILE_HISTORY_LINE_MAX, readBoundedText, readFileHistory, readKeptCopy } from "../../../../server/backends/library/file-history-read";
 import { LIBRARY_FILE_TEXT_MAX } from "../../../../common/libraryFiles";
 
 const backup = (name: string | null, version: number, time = "2026-11-19T05:00:00.000Z", dir = "/w/app/src") => ({
@@ -86,9 +86,13 @@ describe("foldFileHistory", () => {
   it("keeps at most the cap of versions in all, however they spread over files", () => {
     const perFile = 100;
     const fileCount = Math.ceil(TRACKED_VERSIONS_MAX / perFile) + 3;
-    const records = Array.from({ length: fileCount * perFile }, (_, i) => delta(`f${String(i % fileCount)}.ts`, backup(null, Math.floor(i / fileCount) + 1)));
-    const kept = foldFileHistory(records).reduce((sum, file) => sum + file.backups.length, 0);
-    expect(kept).toBe(TRACKED_VERSIONS_MAX);
+    const records = [
+      ...Array.from({ length: fileCount * perFile }, (_, i) => delta(`f${String(i % fileCount)}.ts`, backup(null, Math.floor(i / fileCount) + 1))),
+      delta("after-the-budget.ts", backup(null, 1)), // first seen once nothing more is kept
+    ];
+    const files = foldFileHistory(records);
+    expect(files.reduce((sum, file) => sum + file.backups.length, 0)).toBe(TRACKED_VERSIONS_MAX);
+    expect(files.every((file) => file.backups.length > 0)).toBe(true); // no file listed bare
   });
 
   it("has no disk path for a relative file whose directory was not recorded, and no time for an unreadable one", () => {
@@ -168,6 +172,15 @@ describe("reading", () => {
     expect(await readKeptCopy(root, "s1", "../secret")).toEqual({ text: null, reason: "unreadable" });
     // Named but gone (cleaned up): not "the file did not exist", which would draw it all as created.
     expect(await readKeptCopy(root, "s1", "bbbbbbbbbbbbbbbb@v1")).toEqual({ text: null, reason: "unreadable" });
+  });
+
+  it("parses only lines that are a record, and skips one past the line limit", async () => {
+    const dir = scratch();
+    const transcript = path.join(dir, "s4.jsonl");
+    const mention = { type: "user", message: { content: '{"type":"file-history-delta" in a prompt' } };
+    const huge = { type: "assistant", text: "y".repeat(FILE_HISTORY_LINE_MAX) };
+    writeFileSync(transcript, [mention, huge, delta("kept.ts", backup(null, 1))].map((record) => JSON.stringify(record)).join("\n"));
+    expect((await readFileHistory(transcript)).map((file) => file.trackingPath)).toEqual(["kept.ts"]);
   });
 
   it("shares one read between requests that arrive together, and keeps no failed one", async () => {

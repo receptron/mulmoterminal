@@ -79,7 +79,8 @@ export function createFileHistoryFold(cwd: string | null = null): { add(record: 
     add(record) {
       for (const [trackingPath, backup] of backupsIn(record)) {
         const known = files.get(trackingPath);
-        if (known === undefined && files.size >= TRACKED_FILES_MAX) continue;
+        // A file is kept only with a version: once the budget is spent, a new one would be listed bare.
+        if (known === undefined && (files.size >= TRACKED_FILES_MAX || versionsKept >= TRACKED_VERSIONS_MAX)) continue;
         const file = known ?? { realParentDir: null, versions: new Map<number, Backup>() };
         const room = file.versions.size < VERSIONS_PER_FILE_MAX && versionsKept < TRACKED_VERSIONS_MAX;
         if (!file.versions.has(backup.version) && room) {

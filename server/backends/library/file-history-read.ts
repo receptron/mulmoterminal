@@ -2,12 +2,15 @@
 // one kept copy or of the file as it is now — bounded, and never a binary file.
 import { createReadStream, promises as fs } from "node:fs";
 import path from "node:path";
-import { createInterface } from "node:readline";
+import { boundedLines } from "./bounded-lines.js";
 import { LIBRARY_FILE_TEXT_MAX, type LibraryFileText } from "../../../common/libraryFiles.js";
 import { createFileHistoryFold, isBackupFileName, type FileHistoryEntry } from "./file-history.js";
 
-/** Only these lines are parsed: a transcript is mostly turns, and parsing every one is the cost. */
-const FILE_HISTORY_MARK = '"file-history-';
+/** Only lines that ARE a file-history record are parsed — they begin so — and a turn that merely
+ *  mentions one is not. A record is a few kilobytes even for many files; past the limit a line is a
+ *  turn, and it is dropped without being gathered. */
+const FILE_HISTORY_PREFIX = '{"type":"file-history-';
+export const FILE_HISTORY_LINE_MAX = 4 * 1024 * 1024;
 const CACHED_TRANSCRIPTS = 8;
 
 /** Folded results by transcript (small: files and their versions), and the reads under way, so a
@@ -15,9 +18,8 @@ const CACHED_TRANSCRIPTS = 8;
 const cache = new Map<string, { stamp: string; files: Promise<FileHistoryEntry[]> }>();
 
 async function* fileHistoryRecords(transcript: string): AsyncGenerator<unknown> {
-  const lines = createInterface({ input: createReadStream(transcript, { encoding: "utf8" }), crlfDelay: Infinity });
-  for await (const line of lines) {
-    if (!line.includes(FILE_HISTORY_MARK)) continue;
+  for await (const line of boundedLines(createReadStream(transcript), FILE_HISTORY_LINE_MAX)) {
+    if (!line.startsWith(FILE_HISTORY_PREFIX)) continue;
     try {
       yield JSON.parse(line);
     } catch {
