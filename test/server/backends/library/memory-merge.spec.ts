@@ -193,6 +193,36 @@ describe("the links a merge points at the memory that stays", () => {
     expect([read("a.md"), read("b.md"), read("c.md"), read("d.md"), read("MEMORY.md"), trashed()]).toEqual([A, B, C, D, INDEX, []]);
   });
 
+  it("puts everything back only once no rewrite is still being written", async () => {
+    const { layout, read, trashed, merge } = linked();
+    const slowCFailingD = async (target: string, text: string, mode: number): Promise<void> => {
+      if (path.basename(target) === "d.md") throw new Error(`no write: ${target}`);
+      if (path.basename(target) === "c.md") await new Promise((resolve) => setTimeout(resolve, 200));
+      await replaceKeepingMode(target, text, mode);
+    };
+    await expect(mergeMemory(merge(), layout, NOW, { replace: slowCFailingD, move: trashEntry })).rejects.toThrow("no write");
+    await new Promise((resolve) => setTimeout(resolve, 300)); // a write still under way would land by now
+    expect([read("a.md"), read("b.md"), read("c.md"), read("d.md"), read("MEMORY.md"), trashed()]).toEqual([A, B, C, D, INDEX, []]);
+  });
+
+  it("leaves a memory made after it listed the folder as it is: its turn is not held", async () => {
+    const { layout, read, merge, memory } = linked();
+    const gate: { open: () => void } = { open: () => undefined };
+    const held = new Promise<void>((resolve) => (gate.open = resolve));
+    const slow = async (target: string, text: string, mode: number): Promise<void> => {
+      await held;
+      await replaceKeepingMode(target, text, mode);
+    };
+    const save = writeMemory(path.join(memory, "c.md"), "C again [[alpha]]\n", memoryVersion(C), slow);
+    const merged = mergeMemory(merge(), layout, NOW); // lists the folder, then waits for c.md
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    writeFileSync(path.join(memory, "x.md"), "Made since [[alpha]].\n");
+    gate.open();
+    expect([(await save).kind, (await merged).kind]).toEqual(["written", "merged"]);
+    expect(read("x.md")).toBe("Made since [[alpha]].\n");
+    expect(read("c.md")).toBe("C again [[beta]]\n");
+  });
+
   it("does not count a link by a name the two memories share, which already reaches the one that stays", async () => {
     const { layout, read, merge } = linked({ "b.md": "---\nname: alpha\n---\nB.\n" });
     const result = await mergeMemory({ ...merge("---\nname: alpha\n---\nB.\n"), intoVersion: memoryVersion("---\nname: alpha\n---\nB.\n") }, layout, NOW);

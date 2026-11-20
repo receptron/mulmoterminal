@@ -225,7 +225,11 @@ async function restoreChecked(id: string, undo: Undo, replace: Replace): Promise
   }
   // Kept until the merged memory is back too: when that write fails, a retry does it again.
   if (undo.merged !== null) await mergedBack(replace, undo.merged);
-  await Promise.all(undo.links.map((link) => writtenBack(replace, link)));
+  // One at a time, as they were written: a failure leaves none still being written behind a retry.
+  await undo.links.reduce(async (before, link) => {
+    await before;
+    await writtenBack(replace, link);
+  }, Promise.resolve());
   undos.delete(id);
   return "restored";
 }
@@ -276,18 +280,26 @@ export interface MemoryMerge {
 
 /** Writes the merged text over `into` and moves `from` to the Trash with its index lines, as one change
  *  that one Undo reverses: both are checked against the versions they were opened on first. The links
- *  to `from` — in the merged text and in the folder's other memories — are pointed at `into`, so every
- *  memory of the folder takes its turn. */
+ *  to `from` — in the merged text and in the folder's other memories as listed when it starts — are
+ *  pointed at `into`, and each of those memories' turns is held while it does. */
 export async function mergeMemory(merge: MemoryMerge, layout: NonNullable<TrashLayout>, now: Date, steps: MemoryTrashSteps = DISK): Promise<MemoryMergeResult> {
   const folder = path.dirname(merge.into);
-  const others = (await memoryFileNames(folder)).map((file) => path.join(folder, file));
-  return inTurn([merge.into, merge.from, ...others], () => mergeChecked(merge, layout, now, steps));
+  // Only these are rewritten: a memory made after this listing has no turn held here, so its links
+  // stay as they are (the health check then reports them) rather than being written over unguarded.
+  const others = await memoryFileNames(folder);
+  return inTurn([merge.into, merge.from, ...others.map((file) => path.join(folder, file))], () => mergeChecked(merge, layout, now, { steps, others }));
 }
 
-async function mergeChecked(merge: MemoryMerge, layout: NonNullable<TrashLayout>, now: Date, steps: MemoryTrashSteps): Promise<MemoryMergeResult> {
+/** The disk steps, and the folder's memories whose turns the merge holds (all it may rewrite). */
+interface MergeHeld {
+  steps: MemoryTrashSteps;
+  others: readonly string[];
+}
+
+async function mergeChecked(merge: MemoryMerge, layout: NonNullable<TrashLayout>, now: Date, { steps, others }: MergeHeld): Promise<MemoryMergeResult> {
   const before = await readBoundedText(merge.into);
   if (before.text === null || !isFaithfulText(before.text) || memoryVersion(before.text) !== merge.intoVersion) return { kind: "conflict", file: "into" };
-  const plan = await linkPlan(merge.from, merge.into, merge.text);
+  const plan = await linkPlan(merge.from, merge.into, merge.text, others);
   if ("kind" in plan) return plan;
   const index = path.join(path.dirname(merge.from), MEMORY_INDEX_FILE);
   const trashed = await trashChecked({ file: merge.from, index, expected: merge.fromVersion, layout, now, steps });
@@ -310,14 +322,14 @@ async function mergeChecked(merge: MemoryMerge, layout: NonNullable<TrashLayout>
   return { kind: "merged", version: memoryVersion(plan.text), undo: trashed.undo, links: plan.count, text: plan.text };
 }
 
-/** The other memories written with their links rewritten, each recorded before it is written: a write
- *  that fails leaves its file at the text it had, which putting back then leaves alone. */
+/** The other memories written with their links rewritten, one after another and each recorded before
+ *  it is written: when one fails, none is still being written while the merge is put back, and the one
+ *  that failed is at the text it had, which putting back leaves alone. */
 async function rewriteLinksIn(replace: Replace, rewrites: readonly LinkRewrite[], undo: Undo, folder: string): Promise<void> {
-  await Promise.all(
-    rewrites.map(async (rewrite) => {
-      const file = path.join(folder, rewrite.file);
-      undo.links.push({ file, before: rewrite.before, written: memoryVersion(rewrite.text) });
-      await replace(file, rewrite.text, await modeOf(file));
-    }),
-  );
+  await rewrites.reduce(async (before, rewrite) => {
+    await before;
+    const file = path.join(folder, rewrite.file);
+    undo.links.push({ file, before: rewrite.before, written: memoryVersion(rewrite.text) });
+    await replace(file, rewrite.text, await modeOf(file));
+  }, Promise.resolve());
 }

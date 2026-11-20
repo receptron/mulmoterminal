@@ -65,8 +65,8 @@ follows is a refusal to add one of those, and the reason sits next to it.
   the cost of such a race is an index line (which the health check then reports), never a memory's text.
   Merging two memories is that delete plus a save over the other, under the same checks, and its one
   Undo reverses both; every change takes its files in name order, then the index. A merge also points
-  the `[[links]]` to the merged memory at the one kept, in every memory of the folder, so it takes the
-  turns of all of them; where code is in each is decided by the same lexer as the health check, and a
+  the `[[links]]` to the merged memory at the one kept, in every memory of the folder as listed when
+  it starts, and holds all of their turns (one made after that is left as it is); where code is in each is decided by the same lexer as the health check, and a
   link it cannot place exactly stops the merge before anything is written. The save in a merge,
   and putting that memory back on Undo, keep the save's own gap: a change landing between the check
   and the rename is written over.
