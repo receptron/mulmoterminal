@@ -67,6 +67,29 @@ describe("rewriteLinks", () => {
     expect(rewriteLinks("[[a]]\r\nmore\n", A, "beta")).toEqual({ text: "[[beta]]\r\nmore\n", count: 1 });
   });
 
+  it("leaves the frontmatter byte for byte: a link is the body's, as the health check reads it", () => {
+    const fm = '---\nname: alpha\ndescription: "see [[alpha]]"\n---\n';
+    expect(rewriteLinks(`${fm}Body [[a]].\n`, A, "beta")).toEqual({ text: `${fm}Body [[beta]].\n`, count: 1 });
+    expect(rewriteLinks(`${fm}No link.\n`, A, "beta")).toEqual({ text: `${fm}No link.\n`, count: 0 });
+    const crlf = "---\r\ndescription: [[alpha]]\r\n---\r\n[[alpha]]\r\n";
+    expect(rewriteLinks(crlf, A, "beta")).toEqual({ text: "---\r\ndescription: [[alpha]]\r\n---\r\n[[beta]]\r\n", count: 1 });
+    expect(rewriteLinks(`\uFEFF${fm}[[a]]`, A, "beta")).toEqual({ text: `\uFEFF${fm}[[beta]]`, count: 1 });
+  });
+
+  it("rewrites a memory with frontmatter as it rewrites its body alone (seed 3333)", () => {
+    const random = seededRandom(3333);
+    const BODY = ["[[a]]", "[[alpha]]", "`[[a]]`", "\n\n```\n[[a]]\n```\n\n", "text ", "\n", "\n---\n"];
+    const HEADS = ["", "---\nname: alpha\n---\n", "---\ndescription: [[alpha]] and `x`\n---\n", "---\nname: x\nmetadata:\n  type: note [[a]]\n---\n"];
+    Array.from({ length: 1000 }).forEach(() => {
+      const head = random.pick(HEADS);
+      const body = Array.from({ length: random.below(8) }, () => random.pick(BODY)).join("");
+      const alone = rewriteLinks(body, A, "beta");
+      const whole = rewriteLinks(`${head}${body}`, A, "beta");
+      // Only where the head parses as frontmatter is it set apart; a body opening with `---` is still the body.
+      if (head !== "" && !body.startsWith("\n---")) expect(whole).toEqual(alone === null ? null : { ...alone, text: `${head}${alone.text}` });
+    });
+  });
+
   it("leaves no named link outside code, and code as it was, over generated memories (seed 3331)", () => {
     const random = seededRandom(3331);
     const PIECES = [

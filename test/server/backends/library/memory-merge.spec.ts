@@ -223,6 +223,13 @@ describe("the links a merge points at the memory that stays", () => {
     expect(read("c.md")).toBe("C again [[beta]]\n");
   });
 
+  it("leaves a link in a frontmatter value as it is, and does not count it", async () => {
+    const withFrontmatter = "---\nname: gamma\ndescription: grew out of [[alpha]]\n---\nSee [[alpha]].\n";
+    const { layout, read, merge } = linked({ "c.md": withFrontmatter });
+    expect(await mergeMemory(merge(), layout, NOW)).toMatchObject({ kind: "merged", links: 2 });
+    expect(read("c.md")).toBe("---\nname: gamma\ndescription: grew out of [[alpha]]\n---\nSee [[beta]].\n");
+  });
+
   it("leaves a link by a name another memory has too: it still means that one", async () => {
     const { layout, read, merge } = linked({ "z.md": "---\nname: alpha\n---\nAnother alpha.\n" });
     expect(await mergeMemory(merge(), layout, NOW)).toMatchObject({ kind: "merged", links: 1 });

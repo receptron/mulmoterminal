@@ -59,8 +59,10 @@ export function codeRanges(text: string): TextRange[] | null {
 /** A line end other than `\r\n`: a lone `\r`, or a `\n` with no `\r` before it. */
 const MIXED_LINE_ENDS = /\r(?!\n)|(?<!\r)\n/;
 
-/** `text` with every `[[name]]` outside code that names one of `from` pointed at `to` instead, and how
- *  many were. Null when where the code is cannot be told, so nothing is rewritten blind. */
+/** A memory's text with every `[[name]]` in its body, outside code, that names one of `from` pointed at
+ *  `to` instead, and how many were. The frontmatter is left byte for byte: a link is the body's, as the
+ *  health check and the reader take it. Null when where the code is cannot be told, so nothing is
+ *  rewritten blind. */
 export function rewriteLinks(text: string, from: ReadonlySet<string>, to: string): { text: string; count: number } | null {
   // The lexer reads `\r\n` as `\n`, so code in a CRLF text is found in its `\n` form and the line ends
   // put back after; a text that mixes line ends could not be put back exactly, and is looked at as it is.
@@ -68,11 +70,19 @@ export function rewriteLinks(text: string, from: ReadonlySet<string>, to: string
     const rewritten = rewriteLinks(text.replace(/\r\n/g, "\n"), from, to);
     return rewritten === null ? null : { ...rewritten, text: rewritten.text.replace(/\n/g, "\r\n") };
   }
-  const ranges = codeRanges(text);
+  const { body } = parseMemoryFrontmatter(text);
+  // The parser reads a normalised copy; a body that is not the text's own end cannot be put back exactly.
+  if (!text.endsWith(body)) return null;
+  const rewritten = rewriteBodyLinks(body, from, to);
+  return rewritten === null ? null : { ...rewritten, text: `${text.slice(0, text.length - body.length)}${rewritten.text}` };
+}
+
+function rewriteBodyLinks(body: string, from: ReadonlySet<string>, to: string): { text: string; count: number } | null {
+  const ranges = codeRanges(body);
   if (ranges === null) return null;
   const inCode = (offset: number): boolean => ranges.some((range) => offset >= range.start && offset < range.end);
   const rewritten = { count: 0 };
-  const result = text.replace(MEMORY_LINK, (whole: string, name: string, offset: number) => {
+  const result = body.replace(MEMORY_LINK, (whole: string, name: string, offset: number) => {
     if (inCode(offset) || !from.has(name.trim())) return whole;
     rewritten.count += 1;
     return `[[${to}]]`;
