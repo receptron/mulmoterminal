@@ -8,8 +8,8 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **13.0.0 is out.** It needs Node.js 24.15 or later, and voice input can now skip silence and
-> noise. [Setup guide](v13.0.0.html)
+> **13.1.0 is out.** The new Library lists every Claude conversation on this machine, searchable
+> and resumable, and Restart now keeps the conversation you moved to. [Setup guide](v13.1.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 

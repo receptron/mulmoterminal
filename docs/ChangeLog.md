@@ -8,6 +8,41 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@13.1.0 — 2026-11-20
+
+> **Setup guide:** [13.1.0 — The Library, and Restart keeps your conversation](https://receptron.github.io/mulmoterminal/guide/en/v13.1.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.1.0.html))
+
+### The Library: browse, search, read and resume every Claude conversation (#3337, #3338, #3341, #3344, #3345, #3346)
+
+A new overlay, **More features → Library** (`/library`), for parent #3327.
+
+- **Design (#3337)**: the decided layout lives in `docs/library-design.md`, with the prototype and screenshots; later tasks reference it.
+- **Index (#3338)**: `~/.claude/projects/**/*.jsonl` (subagents included) and `~/.claude/history.jsonl` are indexed into `~/.mulmoterminal/library/index.db` (`node:sqlite`, FTS5 `trigram`). One summary row per conversation (title, cwd, branch, PRs, cost, lines, times, skills, hook errors) plus full-text search over prompts, replies, prompt history and titles. Reads are incremental per file (offset, fold state and hashes of the head and the bytes before the offset), and a shrunk or rewritten file is read again. All DB work runs in a dedicated worker thread, woken on the first API call; servers sharing a `HOME` share one DB and only the holder of its `lease` row writes. Read-only API: `/api/library/status`, `/conversations`, `/conversations/:id`, `/search`.
+- **Screen (#3341)**: search box, the list (title plus project · branch · PR · when, grouped Today / This week / Earlier) and a reader that embeds the existing transcript pane. **Resume** (`Enter`) opens the conversation in a cell in its own directory through the existing resume path, and refuses one already open or held by another client. `claude -p` and SDK runs (`entrypoint` `sdk-cli`) are left out by default, which changed the index shape and rebuilds an existing index once.
+- **Pin and rename (#3344)**: the reader's ⋯ menu pins a conversation to the top or renames it. Kept in `~/.mulmoterminal/library/marks.json` (`GET /api/library/marks`, `PUT /api/library/marks/:id`), written under a cross-process lock; a corrupt file is refused rather than read as empty. Names are not searchable (they are outside the index).
+- **From a cell (#3345)**: a Claude cell's History menu ends with **Open in Library**, which opens `/library?session=<id>&cwd=<dir>` on that conversation, read by id when it is not on the loaded pages.
+- **PRs (#3346)**: the GitHub view puts a Library button beside a PR a conversation made (the earliest-started conversation that recorded it), via `GET /api/library/pr-creators`; the PR numbers in the reader open the PR. Lookups use a partial index over the rows that recorded a PR.
+
+### Restart continues the conversation a /clear or in-cell /resume moved to (#3340)
+
+Fixes #3325. Restart (and an idle reap, `/exit` then reopen, or a server restart that takes tmux down) brought back the conversation the user had left. Three causes: `reap()` dropped the cleared mark; an in-cell `/resume` never wrote one; and the mark recorded the transcript size at hook time while Claude Code appends a `cost-state` line to the left transcript after the hook, so every mark expired on the next boot. Now `conversationMove` (pure) marks on `/clear` and on a `/resume` to another id, unmarks on a `/resume` back to the own id, and leaves the recorded successor alone; `resolveSession` resumes the mark's successor under the cell's own id; reap keeps the mark; and boot prunes a mark only when every transcript it names is confirmed missing (`mark-prune.ts`, ENOENT/ENOTDIR only). The mark still records a `size`, now `MARK_SIZE_NEVER_REACHED`, so an older server's size check keeps it, and one id's mark writes and removals run in call order.
+
+### Readers follow the conversation the cell moved to (#3349)
+
+Fixes #3347. After a `/clear` or an in-cell `/resume`, every reader of the mark showed the cell as blank instead of reading the successor. `currentTranscriptId` (pure) decides which transcript holds the cell's current conversation, and the transcript view, title, push reply, reply refresh, `/api/session` (including the usage and context badges), header prompt seed, prompt-list fallback, remote session list, `/api/transcript/timeline` and `/api/transcript/last-turn` all read it. The header is set from the successor's last exchange when the mark is written (empty after a `/clear`), and re-read from the own transcript on a `/resume` back. A `SessionStart` runs one at a time per session, and a title, reply or prompt read before a move is not stored after it.
+
+### One version per home (#3351)
+
+Closes #3348. A release from before #3340 deletes the marks on reap, so a newer server sharing the home reopens the conversation a cell left. README and the FAQ (en/ja, `#two-versions`) now say mixed versions on one home are not supported and to give the other version its own `HOME`.
+
+### Windows: the drops-folder trust entry is keyed with forward slashes (#3323)
+
+Fixes #3322. The trust entry #3315 writes for the drops root (and the usage probe's folder, #3206) was keyed `C:\Users\…` while Claude Code keys `projects` as `C:/…`, so the "Adding a new directory … trust?" prompt kept appearing. `claudeConfigProjectKey` (pure) rewrites `\` to `/` only where `\` is the separator. The stale backslash entry earlier versions wrote is left in place; it is inert.
+
+### Dependency updates (#3326)
+
+`@google/genai` ^3.6.1 (image generation keeps its `apiVersion: "v1beta"` pin), `@mulmoclaude/core` ^7.2.1 and the plugins' patch releases, `@mulmoclaude/markdown-utils` ^3.0.3, `@mulmoclaude/x-plugin` ^1.0.5, `content-disposition` ^3.1.0, `puppeteer` ^25.18.1, `vue-i18n` ^11.4.22; dev: `knip` 6.46.1, `vitest` ^5.1.1. `yarn.lock` deduplicated.
+
 ## mulmoterminal@13.0.0 — 2026-11-18
 
 > **Setup guide:** [13.0.0 — Node 24.15, and quieter voice input](https://receptron.github.io/mulmoterminal/guide/en/v13.0.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.0.0.html))

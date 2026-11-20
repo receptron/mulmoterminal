@@ -4,7 +4,7 @@ nav_title: Feature list
 layout: default
 parent: English
 nav_order: 6.5
-as_of: 13.0.0
+as_of: 13.1.0
 description: "Every capability MulmoTerminal has today, one line each with the release it arrived in, grouped by area (as of 9.1.0)."
 ---
 
@@ -106,6 +106,10 @@ More: [Agents](agents.html)
 
 More: [Conversations](conversation.html)
 
+- The Library (More features → Library) lists every Claude conversation on this machine, newest first, with full-text search over what was said; pick one to read it, and Resume opens it in a terminal where it ran (v13.1.0)
+- Library conversations can be pinned to the top and renamed, kept beside the index rather than in the conversation's file (v13.1.0)
+- A Claude cell's History menu opens its conversation in the Library (v13.1.0)
+- The GitHub view puts a Library button beside each PR a conversation made, and the PR numbers in the Library open the PR (v13.1.0)
 - Every code block in rendered markdown (conversation pane, wiki, skills, What's new, release notes, blueprints, canvas) has a copy button that copies it as written (v10.0.0)
 - A conversation pane shows the session transcript as rendered markdown, back to the first turn (v5.0.0)
 - A prompts pane lists the prompts you sent this session, newest first (v4.9.0)
