@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { routeCall } from "../../helpers/routeCall";
 import { mountLibraryRoutes } from "../../../server/routes/library-routes";
-import { listMemoryProjects, MEMORY_FOLDERS_REUSE_MS } from "../../../server/backends/library/memory-folders";
+import { listMemoryProjects, MEMORY_FOLDERS_REUSE_MS, MEMORY_HEAD_BYTES } from "../../../server/backends/library/memory-folders";
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
@@ -95,6 +95,16 @@ describe("a memory that cannot be read", () => {
       ]),
     );
     expect((await call("/api/library/memory/-w-other/huge.md")).body).toEqual({ text: null, reason: "too-large" });
+  });
+});
+
+describe("what the list reads of a memory", () => {
+  it("reads the frontmatter from the start of a large memory, not the whole of it", async () => {
+    const { root } = setup();
+    const head = "---\nname: large\ndescription: big body\n---\n";
+    writeFileSync(path.join(root, "-w-other", "memory", "large.md"), head + "x".repeat(MEMORY_HEAD_BYTES * 50) + "\nname: not-frontmatter\n");
+    const other = (await listMemoryProjects(root, [], 0)).find((project) => project.slug === "-w-other");
+    expect(other?.files.find((file) => file.file === "large.md")).toEqual(expect.objectContaining({ name: "large", description: "big body" }));
   });
 });
 

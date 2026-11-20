@@ -48,6 +48,15 @@ describe("LibraryMemory", () => {
     expect(wrapper.findAll("[data-testid=memory-index-fill]").map((gauge) => gauge.classes().includes("text-warn"))).toEqual([true, false]);
   });
 
+  it("names the byte limit when an index is nearer to it than to the line limit", async () => {
+    const heavy: LibraryMemoryProject[] = [{ slug: "-w-heavy", cwd: "/w/heavy", index: { lines: 10, bytes: 30_000 }, files: [memory("h.md", "h")] }];
+    const wrapper = mount(LibraryMemory, { props: { projects: heavy, loaded: true, failed: false, query: "", now: NOW } });
+    await flushPromises();
+    const gauge = wrapper.find("[data-testid=memory-index-fill]");
+    expect(gauge.text()).toBe("MEMORY.md 30.0 / 25.0 KB");
+    expect(gauge.classes()).toContain("text-warn");
+  });
+
   it("reads the first memory's body, follows a link to another, and shows a missing one as unusable", async () => {
     const wrapper = await mountMemory();
     expect(wrapper.find("[data-testid=memory-body]").text()).toContain("Always Japanese.");

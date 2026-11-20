@@ -7,6 +7,9 @@ export const MEMORY_INDEX_WARN_RATIO = 0.9;
 
 export interface IndexFill {
   lines: number;
+  bytes: number;
+  /** Which limit is the nearer, and so the one the gauge names. */
+  by: "lines" | "bytes";
   /** The fuller of lines and bytes, as a share of what Claude Code loads. */
   ratio: number;
   warn: boolean;
@@ -14,8 +17,10 @@ export interface IndexFill {
 
 export function indexFill(index: LibraryMemoryProject["index"]): IndexFill | null {
   if (index === null) return null;
-  const ratio = Math.max(index.lines / MEMORY_INDEX_LINES_MAX, index.bytes / MEMORY_INDEX_BYTES_MAX);
-  return { lines: index.lines, ratio, warn: ratio > MEMORY_INDEX_WARN_RATIO };
+  const byLines = index.lines / MEMORY_INDEX_LINES_MAX;
+  const byBytes = index.bytes / MEMORY_INDEX_BYTES_MAX;
+  const ratio = Math.max(byLines, byBytes);
+  return { lines: index.lines, bytes: index.bytes, by: byBytes > byLines ? "bytes" : "lines", ratio, warn: ratio > MEMORY_INDEX_WARN_RATIO };
 }
 
 /** A memory's title: its frontmatter name, else its file name without `.md`. */

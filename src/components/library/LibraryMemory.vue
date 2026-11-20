@@ -4,7 +4,13 @@
 // `[[name]]` links followed. Read only here; editing is a later step.
 import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { MEMORY_INDEX_LINES_MAX, parseMemoryFrontmatter, type LibraryMemoryFile, type LibraryMemoryProject } from "../../../common/libraryMemory";
+import {
+  MEMORY_INDEX_BYTES_MAX,
+  MEMORY_INDEX_LINES_MAX,
+  parseMemoryFrontmatter,
+  type LibraryMemoryFile,
+  type LibraryMemoryProject,
+} from "../../../common/libraryMemory";
 import { renderWikiHtml } from "../../wikiMarkdown";
 import type { LibraryFileText } from "../../../common/libraryFiles";
 import { loadLibraryMemoryFile } from "../../composables/libraryApi";
@@ -68,6 +74,15 @@ function onBodyActivate(event: Event): void {
   follow(link.getAttribute("data-page") ?? "");
 }
 
+/** The index against the limit nearer to full: lines, or kilobytes when the bytes are nearer. */
+function gaugeLabel(project: LibraryMemoryProject): string {
+  const fill = indexFill(project.index);
+  if (fill === null) return "";
+  if (fill.by === "lines") return t("libraryView.memory.indexLines", { lines: fill.lines, max: MEMORY_INDEX_LINES_MAX });
+  const kilobytes = (bytes: number): string => (bytes / 1000).toFixed(1);
+  return t("libraryView.memory.indexBytes", { size: kilobytes(fill.bytes), max: kilobytes(MEMORY_INDEX_BYTES_MAX) });
+}
+
 const projectLabel = (project: LibraryMemoryProject): string => projectName(project.cwd) ?? project.slug;
 const meta = (memory: LibraryMemoryFile): string =>
   [memory.type, whenLabel(memory.updatedAt, props.now, locale.value)].filter((part): part is string => part !== null && part !== "").join(" · ");
@@ -114,7 +129,7 @@ defineExpose({ move });
             data-testid="memory-index-fill"
             :data-tip="t('libraryView.memory.indexTip')"
           >
-            {{ t("libraryView.memory.indexLines", { lines: indexFill(project.index)?.lines, max: MEMORY_INDEX_LINES_MAX }) }}
+            {{ gaugeLabel(project) }}
           </span>
         </h3>
         <button

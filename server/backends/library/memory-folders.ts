@@ -3,7 +3,6 @@
 import { createReadStream, promises as fs, type Dirent } from "node:fs";
 import path from "node:path";
 import { MEMORY_INDEX_FILE, parseMemoryFrontmatter, projectSlug, type LibraryMemoryFile, type LibraryMemoryProject } from "../../../common/libraryMemory.js";
-import { readBoundedText } from "./file-history-read.js";
 
 /** Folders read at once: a machine has thousands of project folders, most with no memory at all. */
 const FOLDERS_AT_ONCE = 64;
@@ -21,13 +20,30 @@ async function entriesOf(dir: string): Promise<Dirent[]> {
   }
 }
 
+/** What the list reads of each memory: its frontmatter, which opens the file. The whole of it is read
+ *  only when one is opened, so a folder of large memories costs this much each. */
+export const MEMORY_HEAD_BYTES = 8 * 1024;
+
+async function headOf(file: string): Promise<string> {
+  const handle = await fs.open(file, "r").catch(() => null);
+  if (handle === null) return "";
+  try {
+    const buffer = Buffer.alloc(MEMORY_HEAD_BYTES);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    return buffer.subarray(0, bytesRead).toString("utf8");
+  } catch {
+    return "";
+  } finally {
+    await handle.close();
+  }
+}
+
 /** A memory file as the list shows it. Only a regular file is one — a link is left out — and one that
  *  cannot be read (too large, not text) is still listed by its file name, for the reader to say so. */
 async function memoryFileOf(folder: string, file: string): Promise<LibraryMemoryFile | null> {
   const info = await fs.lstat(path.join(folder, file)).catch(() => null);
   if (info === null || !info.isFile()) return null;
-  const read = await readBoundedText(path.join(folder, file));
-  const { fields, metadata } = parseMemoryFrontmatter(read.text ?? "");
+  const { fields, metadata } = parseMemoryFrontmatter(await headOf(path.join(folder, file)));
   return {
     file,
     name: fields.name ?? null,

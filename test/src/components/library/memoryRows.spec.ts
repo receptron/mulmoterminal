@@ -17,7 +17,8 @@ describe("indexFill", () => {
   it("warns past nine tenths of either limit, and not at it", () => {
     expect(indexFill({ lines: 180, bytes: 0 })?.warn).toBe(false);
     expect(indexFill({ lines: 181, bytes: 0 })?.warn).toBe(true);
-    expect(indexFill({ lines: 1, bytes: MEMORY_INDEX_BYTES_MAX })).toEqual({ lines: 1, ratio: 1, warn: true });
+    expect(indexFill({ lines: 1, bytes: MEMORY_INDEX_BYTES_MAX })).toEqual({ lines: 1, bytes: MEMORY_INDEX_BYTES_MAX, by: "bytes", ratio: 1, warn: true });
+    expect(indexFill({ lines: 100, bytes: 10 })?.by).toBe("lines");
     expect(indexFill({ lines: MEMORY_INDEX_LINES_MAX * 2, bytes: 0 })?.ratio).toBe(2);
     expect(indexFill(null)).toBeNull();
   });
