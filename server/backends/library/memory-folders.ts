@@ -43,10 +43,14 @@ async function isTheIndex(folder: string, name: string): Promise<boolean> {
 export const MEMORY_HEAD_STEP_BYTES = 8 * 1024;
 export const MEMORY_HEAD_MAX_BYTES = 64 * 1024;
 
-async function headOf(file: string): Promise<string> {
+/** `seen` is the file as it was checked (a regular file, not a link): what is opened must be that file,
+ *  or a link swapped in between would be read through. */
+export async function headOf(file: string, seen: { dev: number; ino: number }): Promise<string> {
   const handle = await fs.open(file, "r").catch(() => null);
   if (handle === null) return "";
   try {
+    const opened = await handle.stat();
+    if (opened.dev !== seen.dev || opened.ino !== seen.ino) return "";
     const chunks: Buffer[] = [];
     let read = 0;
     while (read < MEMORY_HEAD_MAX_BYTES) {
@@ -70,7 +74,7 @@ async function headOf(file: string): Promise<string> {
 async function memoryFileOf(folder: string, file: string): Promise<LibraryMemoryFile | null> {
   const info = await fs.lstat(path.join(folder, file)).catch(() => null);
   if (info === null || !info.isFile()) return null;
-  const { fields, metadata } = parseMemoryFrontmatter(await headOf(path.join(folder, file)));
+  const { fields, metadata } = parseMemoryFrontmatter(await headOf(path.join(folder, file), info));
   return {
     file,
     name: fields.name ?? null,

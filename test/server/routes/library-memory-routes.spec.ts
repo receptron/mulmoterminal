@@ -3,12 +3,18 @@
 // memory file in a memory folder.
 import { describe, it, expect, afterEach } from "vitest";
 import express from "express";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { routeCall } from "../../helpers/routeCall";
 import { mountLibraryRoutes } from "../../../server/routes/library-routes";
-import { listMemoryProjects, MEMORY_FOLDERS_REUSE_MS, MEMORY_HEAD_MAX_BYTES, MEMORY_HEAD_STEP_BYTES } from "../../../server/backends/library/memory-folders";
+import {
+  headOf,
+  listMemoryProjects,
+  MEMORY_FOLDERS_REUSE_MS,
+  MEMORY_HEAD_MAX_BYTES,
+  MEMORY_HEAD_STEP_BYTES,
+} from "../../../server/backends/library/memory-folders";
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
@@ -119,6 +125,16 @@ describe("a frontmatter longer than one read", () => {
     expect(files.find((file) => file.file === "long.md")).toEqual(expect.objectContaining({ name: "found", type: "project" }));
     expect(files.find((file) => file.file === "too-long.md")).toEqual(expect.objectContaining({ name: null }));
     expect(files.find((file) => file.file === "marked.md")).toEqual(expect.objectContaining({ name: "found" })); // behind a byte-order mark
+  });
+});
+
+describe("reading a memory's head", () => {
+  it("reads nothing when the file opened is not the one checked (a swap in between)", async () => {
+    const { root } = setup();
+    const file = path.join(root, "-w-app", "memory", "a.md");
+    const checked = lstatSync(file);
+    expect(await headOf(file, checked)).toContain("name: alpha");
+    expect(await headOf(file, { dev: checked.dev, ino: checked.ino + 1 })).toBe("");
   });
 });
 
