@@ -60,6 +60,13 @@ watch(tidyOnly, () => {
   if (selected.value !== null && chosenKey.value !== selected.value.key) chosenKey.value = selected.value.key;
 });
 
+/** Another work copy as the reader names it: its directory's name, and whether its memory is the same. */
+function copyLabel(copy: { slug: string; same: boolean }): string {
+  const project = props.projects.find((candidate) => candidate.slug === copy.slug);
+  const name = (project ? projectName(project.cwd) : null) ?? copy.slug;
+  return t(copy.same ? "libraryView.memory.copySame" : "libraryView.memory.copyDiffers", { name });
+}
+
 /** One sentence per issue, in the reader's language. */
 function issueSentence(issue: MemoryFileIssue | MemoryProjectIssue): string {
   const list = (items: string[]): string => items.join(", ");
@@ -68,6 +75,7 @@ function issueSentence(issue: MemoryFileIssue | MemoryProjectIssue): string {
   if (issue.kind === "broken-link") return t(key, { names: list(issue.names.map((name) => `[[${name}]]`)) });
   if (issue.kind === "missing-path") return t(key, { paths: list(issue.paths) });
   if (issue.kind === "dead-index-entry") return t(key, { files: list(issue.files) });
+  if (issue.kind === "in-work-copies") return t(key, { copies: list(issue.copies.map(copyLabel)) });
   return t(key);
 }
 const rows = computed(() => shown.value.flatMap((project) => project.files.map((memory) => ({ project, memory, key: memoryKey(project.slug, memory.file) }))));

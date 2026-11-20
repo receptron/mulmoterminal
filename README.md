@@ -1895,7 +1895,9 @@ narrow and tall for one record you are discussing — and each position keeps it
   reads as Markdown and its `[[name]]` links open the memory they name (read only for now).
   Memory that can be tidied is marked with a dot and counted above the list (**Show** narrows to
   it): a memory missing from `MEMORY.md`, missing frontmatter, a `[[link]]` to no memory, a file it
-  names that is gone, or an index that is missing, overfull or pointing at a file that is gone.
+  names that is gone, a memory of the same name in another work copy of the repository (a directory
+  whose `origin` is the same remote; the reader says which copies hold the same text), or an index
+  that is missing, overfull or pointing at a file that is gone.
   **Edit** (`Enter`) changes a memory's whole text in place (`⌘Enter` saves, `Esc` cancels); a save
   is refused when the file changed on disk since it was opened, and a running session there is warned of.
   **⋯** → **Move to Trash** moves a memory to the system Trash with its lines in `MEMORY.md`, and
