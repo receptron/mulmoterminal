@@ -20,6 +20,10 @@ async function entriesOf(dir: string): Promise<Dirent[]> {
   }
 }
 
+/** The index under any spelling of its name: on a case-insensitive disk (macOS, Windows) `memory.md` IS
+ *  the index Claude Code opens, and must not show a second time as a memory. */
+const isIndexName = (name: string): boolean => name.toLowerCase() === MEMORY_INDEX_FILE.toLowerCase();
+
 /** What the list reads of each memory: its frontmatter, which opens the file. The whole of it is read
  *  only when one is opened, so a folder of large memories costs this much each. */
 export const MEMORY_HEAD_BYTES = 8 * 1024;
@@ -80,7 +84,7 @@ async function indexOf(folder: string): Promise<LibraryMemoryProject["index"]> {
 
 async function projectOf(projectsRoot: string, slug: string, cwds: ReadonlyMap<string, string>): Promise<LibraryMemoryProject | null> {
   const folder = path.join(projectsRoot, slug, "memory");
-  const names = (await entriesOf(folder)).filter((entry) => entry.isFile() && entry.name !== MEMORY_INDEX_FILE && isMemoryFileName(entry.name));
+  const names = (await entriesOf(folder)).filter((entry) => entry.isFile() && !isIndexName(entry.name) && isMemoryFileName(entry.name));
   const index = await indexOf(folder);
   if (names.length === 0 && index === null) return null;
   const files = (await Promise.all(names.map((entry) => memoryFileOf(folder, entry.name)))).filter((file): file is LibraryMemoryFile => file !== null);

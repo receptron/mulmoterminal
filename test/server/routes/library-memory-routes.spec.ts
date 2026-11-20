@@ -108,6 +108,16 @@ describe("what the list reads of a memory", () => {
   });
 });
 
+describe("the index under another spelling", () => {
+  it("is never listed as a memory", async () => {
+    const { root } = setup();
+    rmSync(path.join(root, "-w-other", "memory", "MEMORY.md"));
+    writeFileSync(path.join(root, "-w-other", "memory", "memory.md"), "- lower-case index\n");
+    const other = (await listMemoryProjects(root, [], 0)).find((project) => project.slug === "-w-other");
+    expect(other?.files.map((file) => file.file) ?? []).not.toContain("memory.md");
+  });
+});
+
 describe("finding the folders that hold memory", () => {
   it("looks for them again only after the reuse time, while reading the memory in them fresh", async () => {
     const { root } = setup();
