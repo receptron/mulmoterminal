@@ -274,5 +274,9 @@ describe("editing a memory", () => {
     const read = (await call("/api/library/memory/-w-app/latin1.md")).body;
     expect(read.text).toContain("\uFFFD");
     expect(read.version).toBeUndefined();
+    // …and a request naming the version of the replaced text is refused too: the rule is the write's.
+    const forced = await call("/api/library/memory/-w-app/latin1.md", json({ text: "café", version: memoryVersion(String(read.text)) }));
+    expect(forced.status).toBe(400);
+    expect(readFileSync(path.join(root, "-w-app", "memory", "latin1.md"))).toEqual(Buffer.from([0x63, 0x61, 0x66, 0xe9]));
   });
 });

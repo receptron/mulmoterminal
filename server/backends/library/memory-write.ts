@@ -15,6 +15,11 @@ const serialize = createKeySerializer();
  *  change made since. */
 export const memoryVersion = (text: string): string => createHash("sha256").update(text).digest("hex");
 
+/** Whether a text read from disk is the file's own bytes: an invalid byte reads as U+FFFD, and writing
+ *  that back would change the file without anyone having edited it — so such a file gets no version,
+ *  and is never written here, whatever version a request names. */
+export const isFaithfulText = (text: string): boolean => !text.includes("\uFFFD");
+
 export type MemoryWriteResult = { kind: "written"; version: string } | { kind: "conflict"; version: string | null } | { kind: "refused" };
 
 /** Writes `text` over `file` when its current text is still `expected`. A file that is gone is a
@@ -38,6 +43,7 @@ async function writeChecked(
 ): Promise<MemoryWriteResult> {
   const current = await readBoundedText(file);
   if (current.text === null) return current.reason === "absent" ? { kind: "conflict", version: null } : { kind: "refused" };
+  if (!isFaithfulText(current.text)) return { kind: "refused" };
   const now = memoryVersion(current.text);
   if (now !== expected) return { kind: "conflict", version: now };
   // The replacement is a new file: it would take the default mode, widening a memory kept private.

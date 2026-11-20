@@ -10,7 +10,7 @@ import { MEMORY_EDIT_MAX_BYTES, MEMORY_INDEX_FILE } from "../../common/libraryMe
 import { isMemoryFileName, isProjectSlug, isTheIndex, listMemoryProjects } from "../backends/library/memory-folders.js";
 import { readBoundedText } from "../backends/library/file-history-read.js";
 import { readMemoryHealth } from "../backends/library/memory-health-read.js";
-import { memoryVersion, writeMemory } from "../backends/library/memory-write.js";
+import { isFaithfulText, memoryVersion, writeMemory } from "../backends/library/memory-write.js";
 import { requestBody } from "./requestBody.js";
 import type { LibraryCaller } from "../backends/library/library-service.js";
 import { answer } from "./library-routes.js";
@@ -21,11 +21,6 @@ function memoryFileOf(projectsRoot: string, slug: unknown, file: unknown): strin
   if (!(file === MEMORY_INDEX_FILE || isMemoryFileName(file))) return null;
   return path.join(projectsRoot, slug, "memory", file);
 }
-
-/** Whether a text read from disk is the file's own bytes: an invalid byte reads as U+FFFD, and writing
- *  that back would change the file without anyone having edited it — so such a file gets no version,
- *  and cannot be edited here. */
-export const isFaithfulText = (text: string): boolean => !text.includes("\uFFFD");
 
 /** `{ text, version }` from an edit's body, or null: the whole new text, at most the cap, and the
  *  version of the text the editor was opened on. */
