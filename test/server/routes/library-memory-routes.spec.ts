@@ -261,6 +261,8 @@ describe("editing a memory", () => {
     expect(await status("/api/library/memory/-w-app/b.md", { text: 1, version })).toBe(400);
     expect(await status("/api/library/memory/-w-app/b.md", { text: "x".repeat(MEMORY_EDIT_MAX_BYTES + 1), version })).toBe(400);
     expect(await status("/api/library/memory/-w-app/notes.txt", { text: "x", version })).toBe(400);
+    expect(await status("/api/library/memory/-w-app/b.md", { text: "nul \u0000 inside", version })).toBe(400);
+    expect(await status("/api/library/memory/-w-app/b.md", { text: "replacement \uFFFD inside", version })).toBe(400);
     expect(await status("/api/library/memory/-w-app/MEMORY.md", { text: "x", version })).toBe(400); // the index is not edited by hand
     // …nor under another spelling, where the disk makes that the same file.
     const lower = (await call("/api/library/memory/-w-app/memory.md", json({ text: "x", version }))).status;

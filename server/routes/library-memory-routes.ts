@@ -27,6 +27,9 @@ function memoryFileOf(projectsRoot: string, slug: unknown, file: unknown): strin
 export function memoryEditOf(body: Record<string, unknown>): { text: string; version: string } | null {
   const { text, version } = body;
   if (typeof text !== "string" || typeof version !== "string" || !/^[0-9a-f]{64}$/.test(version)) return null;
+  // Only a text this Library could read back and edit again: no NUL (it would read as binary) and no
+  // U+FFFD (it would read as not the file's own bytes).
+  if (text.includes("\u0000") || !isFaithfulText(text)) return null;
   return Buffer.byteLength(text) <= MEMORY_EDIT_MAX_BYTES ? { text, version } : null;
 }
 
