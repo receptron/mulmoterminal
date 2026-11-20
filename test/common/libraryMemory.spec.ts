@@ -1,7 +1,14 @@
 // Claude Code's memory as the Library reads it (#3331): the frontmatter, and the folder a directory's
 // memory is kept in.
 import { describe, it, expect } from "vitest";
-import { frontmatterStillOpen, isLibraryMemoryProject, memoryType, parseMemoryFrontmatter, projectSlug } from "../../common/libraryMemory";
+import {
+  frontmatterStillOpen,
+  isLibraryMemoryHealth,
+  isLibraryMemoryProject,
+  memoryType,
+  parseMemoryFrontmatter,
+  projectSlug,
+} from "../../common/libraryMemory";
 
 describe("parseMemoryFrontmatter", () => {
   it("reads the flat keys and the metadata block apart from the body, keeping keys it does not know", () => {
@@ -94,5 +101,20 @@ describe("memoryType", () => {
     [{ metadata: {}, fields: {} }, null],
   ])("%j → %s", (frontmatter, type) => {
     expect(memoryType(frontmatter)).toBe(type);
+  });
+});
+
+describe("isLibraryMemoryHealth", () => {
+  const withIssue = (issue: unknown) => ({ slug: "-w", issues: [], files: { "a.md": [issue] } });
+  it("accepts a work-copies issue naming at least one copy", () => {
+    expect(isLibraryMemoryHealth(withIssue({ kind: "in-work-copies", copies: [{ slug: "-w2", same: true }] }))).toBe(true);
+  });
+  it.each([
+    { kind: "in-work-copies", copies: [] },
+    { kind: "in-work-copies" },
+    { kind: "in-work-copies", copies: [{ slug: "-w2" }] },
+    { kind: "in-work-copies", copies: [{ slug: 2, same: true }] },
+  ])("refuses %j", (issue) => {
+    expect(isLibraryMemoryHealth(withIssue(issue))).toBe(false);
   });
 });

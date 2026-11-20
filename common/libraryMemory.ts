@@ -129,7 +129,9 @@ export type MemoryFileIssue =
   | { kind: "not-in-index" }
   | { kind: "no-frontmatter"; missing: string[] }
   | { kind: "broken-link"; names: string[] }
-  | { kind: "missing-path"; paths: string[] };
+  | { kind: "missing-path"; paths: string[] }
+  /** A memory of the same name in other work copies of the repository, each the same text or not. */
+  | { kind: "in-work-copies"; copies: { slug: string; same: boolean }[] };
 
 /** What can be tidied in a project's memory as a whole: its index. */
 export type MemoryProjectIssue = { kind: "index-over-limit" } | { kind: "no-index" } | { kind: "dead-index-entry"; files: string[] };
@@ -148,8 +150,12 @@ const isFileIssue = (value: unknown): value is MemoryFileIssue => {
   if (value.kind === "not-in-index") return true;
   if (value.kind === "no-frontmatter") return isStringList(value.missing);
   if (value.kind === "broken-link") return isStringList(value.names);
+  if (value.kind === "in-work-copies") return Array.isArray(value.copies) && value.copies.length > 0 && value.copies.every(isWorkCopy);
   return value.kind === "missing-path" && isStringList(value.paths);
 };
+
+const isWorkCopy = (value: unknown): value is { slug: string; same: boolean } =>
+  isRecord(value) && typeof value.slug === "string" && typeof value.same === "boolean";
 
 const isProjectIssue = (value: unknown): value is MemoryProjectIssue =>
   isRecord(value) && (value.kind === "index-over-limit" || value.kind === "no-index" || (value.kind === "dead-index-entry" && isStringList(value.files)));

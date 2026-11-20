@@ -1,5 +1,6 @@
 // Reading what the memory health rules judge (#3331): every memory folder's texts, and which paths
 // the memories name are not on disk. The judging itself is memory-health.ts.
+import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +8,10 @@ import { MEMORY_INDEX_FILE, projectSlug, type LibraryMemoryHealth } from "../../
 import { readBoundedText } from "./file-history-read.js";
 import { inBatches, indexOf, MEMORY_FILES_AT_ONCE, memoryFileNames, memorySlugs } from "./memory-folders.js";
 import { memoryHealth, pathReferences, resolveReference, topFolder, type MemoryHealthInput } from "./memory-health.js";
+import { repoKey, withWorkCopies, workCopyIssues } from "./memory-workcopies.js";
+import { isFaithfulText, memoryVersion } from "./memory-write.js";
+import { resolveRemoteForge } from "../../git/gitRemote.js";
+import { createTtlCache } from "../../git/ttl-cache.js";
 
 /** Projects judged at once; files within one are read MEMORY_FILES_AT_ONCE at a time. */
 const PROJECTS_AT_ONCE = 8;
@@ -94,20 +99,65 @@ export function directoriesBySlug(cwds: readonly string[]): Map<string, string> 
   return new Map([...found].flatMap(([slug, dirs]) => (dirs.size === 1 ? [[slug, [...dirs][0] ?? ""] as const] : [])));
 }
 
+/** What two memories are compared by: the text's version, or — when the text read is not the file's
+ *  own bytes (invalid UTF-8 reads as U+FFFD, as does a U+FFFD written there) — the bytes' hash, so
+ *  neither two different files nor two equal ones are misjudged. Null when it cannot be read. */
+async function comparable(file: string, text: string | null): Promise<string | null> {
+  if (text === null) return null;
+  if (isFaithfulText(text)) return memoryVersion(text);
+  const bytes = await readBoundedBytes(file);
+  return bytes === null ? null : `bytes:${createHash("sha256").update(bytes).digest("hex")}`;
+}
+
+/** A file's bytes, when it is no larger than the checks read. */
+async function readBoundedBytes(file: string): Promise<Buffer | null> {
+  const info = await fs.lstat(file).catch(() => null);
+  if (info === null || !info.isFile() || info.size > MEMORY_CHECK_MAX_BYTES) return null;
+  const bytes = await fs.readFile(file).catch(() => null);
+  return bytes !== null && bytes.length <= MEMORY_CHECK_MAX_BYTES ? bytes : null;
+}
+
+/** The repository a directory is a copy of: where its `origin` points, whatever the forge. */
+export type RepoOf = (dir: string) => Promise<string | null>;
+
+/** A clone's remote effectively never changes, and every opening of the Library asks for each folder. */
+const REPO_CACHE_MS = 60_000;
+const repos = createTtlCache<string | null>();
+
+const originOf: RepoOf = async (dir) => {
+  const known = repos.get(dir, Date.now, REPO_CACHE_MS);
+  if (known !== undefined) return known;
+  const forge = await resolveRemoteForge(dir).catch(() => null);
+  const repo = forge === null ? null : repoKey(forge);
+  repos.set(dir, repo, Date.now);
+  return repo;
+};
+
 /** Every project with something to tidy, judged by rule. `cwds` name the projects' directories, which
- *  relative paths in their memory are taken against. */
-export async function readMemoryHealth(projectsRoot: string, cwds: readonly string[], now_ms: number = Date.now()): Promise<LibraryMemoryHealth[]> {
+ *  relative paths in their memory are taken against, and whose repository says which are work copies
+ *  of one another. */
+export async function readMemoryHealth(
+  projectsRoot: string,
+  cwds: readonly string[],
+  now_ms: number = Date.now(),
+  repoOf: RepoOf = originOf,
+): Promise<LibraryMemoryHealth[]> {
   const bySlug = directoriesBySlug(cwds);
   const slugs = await memorySlugs(projectsRoot, now_ms);
-  const results: LibraryMemoryHealth[] = [];
-  for (let start = 0; start < slugs.length; start += PROJECTS_AT_ONCE) {
-    const batch = await Promise.all(
-      slugs.slice(start, start + PROJECTS_AT_ONCE).map(async (slug) => {
-        const input = await inputOf(projectsRoot, slug);
-        return memoryHealth(input, await missingReferences(input, bySlug.get(slug) ?? null));
-      }),
-    );
-    results.push(...batch.filter((health) => health.issues.length > 0 || Object.keys(health.files).length > 0));
-  }
-  return results;
+  const judged = await inBatches(slugs, PROJECTS_AT_ONCE, async (slug) => {
+    const cwd = bySlug.get(slug) ?? null;
+    const input = await inputOf(projectsRoot, slug);
+    const [missing, repo] = await Promise.all([missingReferences(input, cwd), cwd === null ? null : repoOf(cwd)]);
+    // Only a version of each text is kept past here: every folder is held until all are read.
+    const folder = path.join(projectsRoot, slug, "memory");
+    const files = await inBatches(input.files, MEMORY_FILES_AT_ONCE, async ({ file, text }) => ({
+      file,
+      version: await comparable(path.join(folder, file), text),
+    }));
+    return { slug, repo, files, health: memoryHealth(input, missing) };
+  });
+  const copies = workCopyIssues(judged);
+  return judged
+    .map(({ health }) => withWorkCopies(health, copies.get(health.slug)))
+    .filter((health) => health.issues.length > 0 || Object.keys(health.files).length > 0);
 }

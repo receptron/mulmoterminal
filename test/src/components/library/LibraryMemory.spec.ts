@@ -172,6 +172,21 @@ describe("LibraryMemory", () => {
     expect(wrapper.find("[data-testid=memory-issue]").text()).toBe("It links to [[gone]], but no memory here has that name.");
   });
 
+  it("names the other work copies holding the memory by their directory, saying which hold the same text", async () => {
+    const copies = [
+      { slug: "-w-lib", same: true },
+      { slug: "-w-gone", same: false },
+    ];
+    const health = new Map<string, LibraryMemoryHealth>([
+      ["-w-app", { slug: "-w-app", issues: [], files: { "reply.md": [{ kind: "in-work-copies", copies }] } }],
+    ]);
+    const wrapper = await mountMemory("", health);
+    expect(wrapper.find("[data-testid=memory-issue]").text()).toBe(
+      "Also kept in other work copies of this repository: -w-lib (the same), -w-gone (different).",
+    );
+    expect(wrapper.find("[data-testid=memory-tidy]").text()).toContain("1 can be tidied");
+  });
+
   it("keeps a project whose only issue is its index when narrowed, rather than saying nothing matches", async () => {
     const health = new Map<string, LibraryMemoryHealth>([["-w-lib", { slug: "-w-lib", issues: [{ kind: "index-over-limit" }], files: {} }]]);
     const wrapper = await mountMemory("", health);
