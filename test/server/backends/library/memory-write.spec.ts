@@ -43,4 +43,12 @@ describe("writeMemory", () => {
       expect(readFileSync(outside, "utf8")).toBe("untouched");
     }
   });
+
+  it("lets only one of two saves naming the same version through", async () => {
+    const file = path.join(scratch(), "a.md");
+    writeFileSync(file, "opened");
+    const [first, second] = await Promise.all([writeMemory(file, "one", memoryVersion("opened")), writeMemory(file, "two", memoryVersion("opened"))]);
+    expect([first.kind, second.kind].sort()).toEqual(["conflict", "written"]);
+    expect(["one", "two"]).toContain(readFileSync(file, "utf8"));
+  });
 });

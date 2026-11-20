@@ -45,6 +45,7 @@ export const libraryViewEn = {
     },
     memory: {
       edit: {
+        unsaved: "Save or cancel this edit first.",
         edit: "Edit",
         label: "Memory text",
         save: "Save",

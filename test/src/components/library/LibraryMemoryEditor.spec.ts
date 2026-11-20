@@ -84,4 +84,15 @@ describe("LibraryMemoryEditor", () => {
     running = true;
     expect((await mountEditor()).find("[data-testid=memory-editor-running]").exists()).toBe(true);
   });
+
+  it("saves a file written with CRLF with CRLF again, so saving it unchanged changes nothing", async () => {
+    const wrapper = mount(LibraryMemoryEditor, {
+      props: { slug: "-w-app", file: "a.md", text: "---\r\nname: a\r\n---\r\nbody\r\n", version: "v1", cwd: null },
+    });
+    await flushPromises();
+    expect((wrapper.vm as unknown as { dirty: boolean }).dirty).toBe(false);
+    await wrapper.find("[data-testid=memory-editor-save]").trigger("click");
+    await flushPromises();
+    expect(saves[0]?.[2]).toBe("---\r\nname: a\r\n---\r\nbody\r\n");
+  });
 });

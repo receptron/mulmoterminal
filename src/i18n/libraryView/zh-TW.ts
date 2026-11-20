@@ -45,6 +45,7 @@ export const libraryViewZhTW = {
     },
     memory: {
       edit: {
+        unsaved: "請先儲存或取消這次編輯。",
         edit: "編輯",
         label: "記憶內文",
         save: "儲存",

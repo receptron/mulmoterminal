@@ -205,4 +205,20 @@ describe("LibraryMemory", () => {
     const wrapper = await mountMemory();
     expect(wrapper.find("[data-testid=memory-edit]").exists()).toBe(false);
   });
+
+  it("keeps an unsaved edit: another memory is not chosen until it is saved or cancelled", async () => {
+    const wrapper = await mountMemory();
+    await wrapper.find("[data-testid=memory-edit]").trigger("click");
+    await flushPromises();
+    await wrapper.find("[data-testid=memory-editor-field]").setValue("a draft I have not saved");
+    await wrapper.findAll("[data-testid=memory-row]")[1]?.trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("reply-in-japanese");
+    expect((wrapper.find("[data-testid=memory-editor-field]").element as HTMLTextAreaElement).value).toBe("a draft I have not saved");
+    expect(wrapper.find("[data-testid=memory-editor-notice]").text()).toBe("Save or cancel this edit first.");
+    await wrapper.find("[data-testid=memory-editor-cancel]").trigger("click");
+    await wrapper.findAll("[data-testid=memory-row]")[1]?.trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("codex-sandbox");
+  });
 });

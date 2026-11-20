@@ -45,6 +45,7 @@ export const libraryViewKo = {
     },
     memory: {
       edit: {
+        unsaved: "먼저 이 편집을 저장하거나 취소하세요.",
         edit: "편집",
         label: "기억 본문",
         save: "저장",

@@ -2,7 +2,7 @@
 // The Library's memory kind (#3331): every project's memory, grouped by project with how full its
 // MEMORY.md is, and one memory read beside the list — its frontmatter apart from its body, and its
 // `[[name]]` links followed. Read only here; editing is a later step.
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, ref, useTemplateRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   MEMORY_INDEX_BYTES_MAX,
@@ -133,7 +133,19 @@ const projectLabel = (project: LibraryMemoryProject): string => projectName(proj
 const meta = (memory: LibraryMemoryFile): string =>
   [memory.type, whenLabel(memory.updatedAt, props.now, locale.value)].filter((part): part is string => part !== null && part !== "").join(" · ");
 
+const editor = useTemplateRef<{ dirty: boolean }>("editor");
+/** Bumped when leaving was refused, for the editor to say why. */
+const leaveRefused = ref(0);
+
+/** Whether an unsaved edit holds the selection: leaving it would lose the draft without a word. */
+function holdsDraft(): boolean {
+  if (!editing.value || editor.value?.dirty !== true) return false;
+  leaveRefused.value += 1;
+  return true;
+}
+
 function choose(key: string): void {
+  if (key !== selected.value?.key && holdsDraft()) return;
   chosenKey.value = key;
   readerShown.value = true;
 }
@@ -145,6 +157,7 @@ function follow(name: string): void {
 
 /** The arrow keys, from the overlay: the next memory in the order the list shows them. */
 async function move(by: number): Promise<void> {
+  if (holdsDraft()) return;
   const index = selected.value ? rows.value.indexOf(selected.value) : -1;
   chosenKey.value = rows.value[movedIndex(index, by, rows.value.length)]?.key ?? null;
   await nextTick();
@@ -278,7 +291,9 @@ defineExpose({ move, startEdit });
       </header>
       <LibraryMemoryEditor
         v-if="editing && text?.text != null && text.version"
+        ref="editor"
         :key="selected.key"
+        :leave-refused="leaveRefused"
         :slug="selected.project.slug"
         :file="selected.memory.file"
         :text="text.text"

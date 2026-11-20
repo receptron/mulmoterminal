@@ -2,19 +2,38 @@
 // Editing one memory in place (#3331): its whole text, frontmatter and all, so nothing the file holds is
 // lost on the way back. Saved only over the text it was opened on — the agent writes memory as it
 // works, and a save over its change would lose it without a word.
-import { nextTick, onMounted, ref, useTemplateRef } from "vue";
+import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { saveLibraryMemoryFile } from "../../composables/libraryApi";
 import { readResumableList } from "../../composables/useDirLists";
 import { MEMORY_EDIT_MAX_BYTES } from "../../../common/libraryMemory";
 
-const props = defineProps<{ slug: string; file: string; text: string; version: string; cwd: string | null }>();
+const props = defineProps<{
+  slug: string;
+  file: string;
+  text: string;
+  version: string;
+  cwd: string | null;
+  /** Bumped when moving to another memory was refused because of this draft. */
+  leaveRefused?: number;
+}>();
 const emit = defineEmits<{ (e: "saved", text: string, version: string): void; (e: "cancel" | "reload"): void }>();
 const { t } = useI18n();
 
-const draft = ref(props.text);
+/** A textarea gives every line break as `\n`: a file written with `\r\n` is saved with them again,
+ *  so opening and saving it unchanged changes nothing. */
+const crlf = props.text.includes("\r\n");
+const draft = ref(props.text.replace(/\r\n/g, "\n"));
+const asWritten = (text: string): string => (crlf ? text.replace(/\n/g, "\r\n") : text);
+/** The draft differs from what was opened: leaving would lose it. */
+const dirty = computed(() => asWritten(draft.value) !== props.text);
+defineExpose({ dirty });
 const saving = ref(false);
-const notice = ref<"changed" | "failed" | "too-large" | null>(null);
+const notice = ref<"changed" | "failed" | "too-large" | "unsaved" | null>(null);
+watch(
+  () => props.leaveRefused,
+  () => (notice.value = "unsaved"),
+);
 /** A session is running in this project: it may write this memory while it is edited. */
 const sessionRunning = ref(false);
 const field = useTemplateRef<HTMLTextAreaElement>("field");
@@ -28,14 +47,15 @@ onMounted(async () => {
 
 async function save(): Promise<void> {
   if (saving.value) return;
-  if (new TextEncoder().encode(draft.value).length > MEMORY_EDIT_MAX_BYTES) {
+  if (new TextEncoder().encode(asWritten(draft.value)).length > MEMORY_EDIT_MAX_BYTES) {
     notice.value = "too-large";
     return;
   }
   saving.value = true;
-  const result = await saveLibraryMemoryFile(props.slug, props.file, draft.value, props.version);
+  const text = asWritten(draft.value);
+  const result = await saveLibraryMemoryFile(props.slug, props.file, text, props.version);
   saving.value = false;
-  if (result.kind === "saved") emit("saved", draft.value, result.version);
+  if (result.kind === "saved") emit("saved", text, result.version);
   else notice.value = result.kind;
 }
 

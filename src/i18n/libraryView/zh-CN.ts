@@ -45,6 +45,7 @@ export const libraryViewZhCN = {
     },
     memory: {
       edit: {
+        unsaved: "请先保存或取消这次编辑。",
         edit: "编辑",
         label: "记忆正文",
         save: "保存",

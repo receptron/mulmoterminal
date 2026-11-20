@@ -263,4 +263,12 @@ describe("editing a memory", () => {
     expect(await status("/api/library/memory/-w-app/notes.txt", { text: "x", version })).toBe(400);
     expect(await status("/api/library/memory/..%2F-w-app/b.md", { text: "x", version })).toBe(400);
   });
+
+  it("gives no version to a file whose bytes are not text it could write back unchanged", async () => {
+    const { call, root } = setup();
+    writeFileSync(path.join(root, "-w-app", "memory", "latin1.md"), Buffer.from([0x63, 0x61, 0x66, 0xe9])); // "café" in Latin-1
+    const read = (await call("/api/library/memory/-w-app/latin1.md")).body;
+    expect(read.text).toContain("\uFFFD");
+    expect(read.version).toBeUndefined();
+  });
 });

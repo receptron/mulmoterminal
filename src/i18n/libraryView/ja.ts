@@ -45,6 +45,7 @@ export const libraryViewJa = {
     },
     memory: {
       edit: {
+        unsaved: "先にこの編集を保存するか、やめてください。",
         edit: "編集",
         label: "記憶の本文",
         save: "保存",

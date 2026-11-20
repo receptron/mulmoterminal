@@ -22,6 +22,11 @@ function memoryFileOf(projectsRoot: string, slug: unknown, file: unknown): strin
   return path.join(projectsRoot, slug, "memory", file);
 }
 
+/** Whether a text read from disk is the file's own bytes: an invalid byte reads as U+FFFD, and writing
+ *  that back would change the file without anyone having edited it — so such a file gets no version,
+ *  and cannot be edited here. */
+export const isFaithfulText = (text: string): boolean => !text.includes("\uFFFD");
+
 /** `{ text, version }` from an edit's body, or null: the whole new text, at most the cap, and the
  *  version of the text the editor was opened on. */
 export function memoryEditOf(body: Record<string, unknown>): { text: string; version: string } | null {
@@ -59,7 +64,7 @@ export function mountMemoryRoutes(app: Express, call: LibraryCaller, projectsRoo
     }
     const read = await readBoundedText(target);
     if (read.reason === "absent") res.status(404).json({ error: "no such memory" });
-    else res.json(read.text === null ? read : { ...read, version: memoryVersion(read.text) });
+    else res.json(read.text === null || !isFaithfulText(read.text) ? read : { ...read, version: memoryVersion(read.text) });
   });
   app.put("/api/library/memory/:slug/:file", async (req, res) => {
     const target = memoryFileOf(projectsRoot, req.params.slug, req.params.file);
