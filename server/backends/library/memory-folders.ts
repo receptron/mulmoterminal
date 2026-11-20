@@ -28,6 +28,10 @@ async function entriesOf(dir: string): Promise<Dirent[]> {
   }
 }
 
+/** Whether the folder holds an entry by exactly this name: a case-insensitive disk opens `A.md` as
+ *  `a.md`, and the index links to the name as it is spelt on disk. */
+export const isSpeltAsOnDisk = async (folder: string, name: string): Promise<boolean> => (await entriesOf(folder)).some((entry) => entry.name === name);
+
 /** Whether a file IS the index Claude Code opens as `MEMORY.md`: the same file on disk, so `memory.md`
  *  is the index on a case-insensitive disk (macOS, Windows) and a memory of its own beside it on a
  *  case-sensitive one (Linux). */

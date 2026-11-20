@@ -69,13 +69,13 @@ describe("trashMemory", () => {
     expect(read("MEMORY.md")).toBe("- [B](b.md)\r\n");
     expect(statSync(path.join(memory, "MEMORY.md")).ino).toBe(before);
   });
-  it("keeps the index's mode", async () => {
+  it.skipIf(process.platform === "win32")("keeps the index's mode", async () => {
     const { file, layout, memory } = setup();
     chmodSync(path.join(memory, "MEMORY.md"), 0o600);
     await trashMemory(file, memoryVersion("alpha"), layout, NOW);
     expect(statSync(path.join(memory, "MEMORY.md")).mode & 0o777).toBe(0o600);
   });
-  it("writes the freedesktop info file that lets a file manager put it back", async () => {
+  it.skipIf(process.platform === "win32")("writes the freedesktop info file that lets a file manager put it back", async () => {
     const { file, layout } = setup("freedesktop");
     await trashMemory(file, memoryVersion("alpha"), layout, NOW);
     if (layout.kind !== "freedesktop") throw new Error("layout");

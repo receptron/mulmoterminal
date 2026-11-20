@@ -314,6 +314,15 @@ describe("deleting a memory to the Trash and undoing it", () => {
     expect(answer.status).toBe(409);
     expect(answer.body.version).toBe(memoryVersion("plain, no frontmatter"));
   });
+  it("deletes a memory only by its name as spelt on disk, which is what the index links to", async () => {
+    const { call, root } = setup();
+    const memory = path.join(root, "-w-app", "memory");
+    const answer = await call("/api/library/memory/-w-app/A.md/trash", post(versionOf(A_TEXT)));
+    expect(answer.status).toBe(409);
+    expect(answer.body.version).toBeNull();
+    expect(readFileSync(path.join(memory, "a.md"), "utf8")).toBe(A_TEXT);
+    expect(readFileSync(path.join(memory, "MEMORY.md"), "utf8")).toBe(INDEX);
+  });
   it("answers 409 on undo when a file of that name was made since", async () => {
     const { call, root } = setup();
     const trashed = await call("/api/library/memory/-w-app/b.md/trash", post(versionOf("plain, no frontmatter")));

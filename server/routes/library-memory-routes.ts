@@ -8,7 +8,7 @@
 import path from "node:path";
 import type { Express } from "express";
 import { MEMORY_EDIT_MAX_BYTES, MEMORY_INDEX_FILE } from "../../common/libraryMemory.js";
-import { isMemoryFileName, isProjectSlug, isTheIndex, listMemoryProjects } from "../backends/library/memory-folders.js";
+import { isMemoryFileName, isProjectSlug, isSpeltAsOnDisk, isTheIndex, listMemoryProjects } from "../backends/library/memory-folders.js";
 import { readBoundedText } from "../backends/library/file-history-read.js";
 import { readMemoryHealth } from "../backends/library/memory-health-read.js";
 import { isFaithfulText, memoryVersion, writeMemory } from "../backends/library/memory-write.js";
@@ -119,6 +119,10 @@ function mountMemoryTrash(app: Express, projectsRoot: string, trash: () => Trash
       return;
     }
     try {
+      if (!(await isSpeltAsOnDisk(path.dirname(target), path.basename(target)))) {
+        res.status(409).json({ error: "the memory changed since it was opened", version: null });
+        return;
+      }
       const trashed = await trashMemory(target, version, layout, new Date());
       if (trashed.kind === "trashed") res.json({ undo: trashed.undo });
       else if (trashed.kind === "conflict") res.status(409).json({ error: "the memory changed since it was opened", version: trashed.version });
