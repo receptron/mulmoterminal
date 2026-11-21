@@ -29,6 +29,8 @@ import type { PromoteTarget } from "../../../common/libraryPromote";
 import { conversationKey, groupConversations, listedInOrder } from "./libraryRows";
 import { useLibraryMarks } from "../../composables/useLibraryMarks";
 import type { LibraryConversation } from "../../../common/library";
+import LibraryStorage from "./LibraryStorage.vue";
+import { useLibraryStorage } from "../../composables/useLibraryStorage";
 
 const { t } = useI18n();
 const { isOpen, close } = useLibraryView();
@@ -43,13 +45,28 @@ const {
   refresh: refreshMemory,
 } = useLibraryMemory(isOpen);
 const memoryCount = computed(() => filterMemory(memoryProjects.value, query.value).reduce((sum, project) => sum + project.files.length, 0));
-/** Which kind the list shows: the conversations, or Claude Code's memory. */
-const kind = ref<"conversations" | "memory" | "tools">("conversations");
-const SHORTCUTS = { conversations: "libraryView.shortcuts", memory: "libraryView.memory.shortcuts", tools: "libraryView.tools.shortcuts" } as const;
-const SEARCH_LABELS = { conversations: "libraryView.search", memory: "libraryView.memory.search", tools: "libraryView.tools.search" } as const;
+/** Which kind the list shows: the conversations, Claude Code's memory, its tools, or what its home takes. */
+const kind = ref<"conversations" | "memory" | "tools" | "storage">("conversations");
+const SHORTCUTS = {
+  conversations: "libraryView.shortcuts",
+  memory: "libraryView.memory.shortcuts",
+  tools: "libraryView.tools.shortcuts",
+  storage: "libraryView.storage.shortcuts",
+} as const;
+const SEARCH_LABELS = {
+  conversations: "libraryView.search",
+  memory: "libraryView.memory.search",
+  tools: "libraryView.tools.search",
+  storage: "libraryView.storage.search",
+} as const;
 const searchLabel = computed(() => t(SEARCH_LABELS[kind.value]));
 const memoryView = useTemplateRef<{ move(by: number): Promise<void>; startEdit(): void }>("memoryView");
 const toolsView = useTemplateRef<{ move(by: number): Promise<void> }>("toolsView");
+const storageView = useTemplateRef<{ move(by: number): Promise<void> }>("storageView");
+const storage = useLibraryStorage(
+  computed(() => isOpen.value && kind.value === "storage"),
+  query,
+);
 const { marks, pinned, saveFailedFor, loadFailed: marksFailed, change: changeMark } = useLibraryMarks(isOpen);
 
 const searchField = ref<HTMLInputElement | null>(null);
@@ -271,8 +288,8 @@ function onKey(event: KeyboardEvent): void {
   });
   // In Memory, Enter on a focused row is the row's own (it presses); elsewhere it edits.
   const onMemoryRow = target?.closest("[data-memory-row]") != null;
-  // Tools has no primary action: Enter stays the focused control's own.
-  if (action === null || (action === "primary" && ((kind.value === "memory" && onMemoryRow) || kind.value === "tools"))) return;
+  // Tools and Storage have no primary action: Enter stays the focused control's own.
+  if (action === null || (action === "primary" && ((kind.value === "memory" && onMemoryRow) || kind.value === "tools" || kind.value === "storage"))) return;
   event.preventDefault();
   runKeyAction(action);
 }
@@ -280,7 +297,9 @@ function onKey(event: KeyboardEvent): void {
 function runKeyAction(action: NonNullable<ReturnType<typeof libraryKeyAction>>): void {
   const by = action === "up" ? -1 : 1;
   if (action === "focus-search") searchField.value?.focus();
-  else if (kind.value === "memory") {
+  else if (kind.value === "storage") {
+    if (action !== "primary") void storageView.value?.move(by);
+  } else if (kind.value === "memory") {
     if (action === "primary") memoryView.value?.startEdit();
     else void memoryView.value?.move(by);
   } else if (kind.value === "tools") {
@@ -350,12 +369,32 @@ onBeforeUnmount(() => {
           >
             {{ t("libraryView.tools.kind") }}
           </button>
+          <button
+            type="button"
+            data-testid="library-kind-storage"
+            class="cursor-pointer rounded border-0 px-2 py-1"
+            :class="kind === 'storage' ? 'bg-hover text-fg' : 'bg-transparent text-secondary hover:text-fg'"
+            :aria-pressed="kind === 'storage'"
+            @click="kind = 'storage'"
+          >
+            {{ t("libraryView.storage.kind") }}
+          </button>
           <span v-if="progress" class="text-dim" role="status" data-testid="library-progress">{{ progress }}</span>
           <span v-else-if="searching" class="text-dim">{{ t("libraryView.searching") }}</span>
         </div>
       </div>
 
       <LibraryTools v-if="kind === 'tools'" ref="toolsView" :query="query" :initial-cwd="selected?.cwd ?? null" />
+      <LibraryStorage
+        v-else-if="kind === 'storage'"
+        ref="storageView"
+        :answer="storage.answer.value"
+        :loaded="storage.loaded.value"
+        :failed="storage.failed.value"
+        :start-refused="storage.startRefused.value"
+        :now="now"
+        @remeasure="storage.remeasure"
+      />
       <LibraryMemory
         v-else-if="kind === 'memory'"
         ref="memoryView"

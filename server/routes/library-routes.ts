@@ -13,6 +13,7 @@ import { claudeFileHistoryRoot, mountFileRoutes } from "./library-file-routes.js
 import { mountMemoryRoutes } from "./library-memory-routes.js";
 import { mountToolsRoutes, type ToolsRouteDeps } from "./library-tools-routes.js";
 import { mountLibraryPromoteRoute, type LibraryPromoteDeps } from "./library-promote-routes.js";
+import { mountStorageRoutes, type LibraryStorageDeps } from "./library-storage-routes.js";
 import { claudeProjectsRoot } from "../session/project-dir.js";
 import type { TrashLayout } from "../files/tree-ops.js";
 
@@ -38,6 +39,8 @@ export interface LibraryRouteDeps {
   tools?: ToolsRouteDeps;
   /** Starting a session to promote a conversation; the route is left unmounted without it. */
   promote?: LibraryPromoteDeps;
+  /** Override Claude Code's home and the measurement, for tests. */
+  storage?: LibraryStorageDeps;
 }
 
 const flag = (value: unknown): boolean => value === "1" || value === "true";
@@ -92,6 +95,7 @@ export function mountLibraryRoutes(app: Express, deps: LibraryRouteDeps = {}): v
   mountMemoryRoutes(app, call, deps.projectsRoot ?? claudeProjectsRoot(), deps.trash);
   mountToolsRoutes(app, call, deps.tools);
   if (deps.promote !== undefined) mountLibraryPromoteRoute(app, call, deps.promote);
+  mountStorageRoutes(app, call, deps.storage);
   app.get("/api/library/search", async (req, res) => {
     const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
     if (query === "" || query.length > MAX_QUERY_CHARS) {
