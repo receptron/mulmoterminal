@@ -63,6 +63,8 @@ import { partitionPending } from "./partitionPending.js";
 import { codexRolloutPath } from "../agents/codex/codex-sessions.js";
 import { cursorTranscriptPath } from "../agents/cursor/cursor-sessions.js";
 import { cursorLastTurnFromRecords } from "../agents/cursor/cursor-last-turn.js";
+import { copilotEventsPath, copilotSessionExistsForCwd } from "../agents/copilot/copilot-sessions.js";
+import { copilotCurrentTurnReplyFromEvents, copilotLastTurnFromEvents } from "../agents/copilot/copilot-last-turn.js";
 import { grokSessionsRoot, isGrokConversationId } from "../agents/grok/grok-session.js";
 import { grokChatHistoryPath } from "../agents/grok/grok-sessions.js";
 import { grokLastTurnFromMessages } from "../agents/grok/grok-last-turn.js";
@@ -301,6 +303,19 @@ async function cursorLastTurn(cwd: string, id: string): Promise<LastTurn> {
   }
 }
 
+/** A copilot session's records, from its live event log (copilot-last-turn.ts says why not the
+ *  `turns` table). Bound to the directory first, as the resume probe is (#2132): the id comes off a
+ *  request, and a session from another project must not be readable by naming it here. */
+async function copilotEventRecords(cwd: string, id: string): Promise<Record<string, unknown>[]> {
+  if (!(await copilotSessionExistsForCwd(id, cwd))) return [];
+  return readTailRecords(copilotEventsPath(id));
+}
+
+/** The reply to the turn that just ended, for the push — never an older one (#1650). */
+export async function copilotCurrentTurnReply(cwd: string, id: string): Promise<string | null> {
+  return copilotCurrentTurnReplyFromEvents(await copilotEventRecords(cwd, id));
+}
+
 /** A grok conversation's last complete exchange. The id is the one this server handed grok with
  *  `--session-id`, and the conversation lives under its cwd, so the path itself binds the read to
  *  the directory; the id is checked for shape first because it is joined into that path. */
@@ -322,10 +337,11 @@ function grokLastTurn(cwd: string, id: string): LastTurn {
 export async function sessionLastTurn(cwd: string, id: string, agent: TerminalAgent): Promise<LastTurn> {
   if (agent === "codex") return codexLastTurn(id);
   if (agent === "cursor") return cursorLastTurn(cwd, id);
+  if (agent === "copilot") return copilotLastTurnFromEvents(await copilotEventRecords(cwd, id));
   if (agent === "grok") return grokLastTurn(cwd, id);
   // Everything that is not claude answers EMPTY_TURN, rather than the three agents that were true
-  // when this was written. Each of them HAS a log — agy's brain directory, muse's `session.jsonl`,
-  // copilot's `turns` table — and none is parsed yet;
+  // when this was written. Each of them HAS a log — agy's brain directory, muse's `session.jsonl` —
+  // and none is parsed yet;
   // EMPTY_TURN is the honest answer until one is, because every caller handles it (a push says
   // nothing rather than something wrong, a handoff carries no reply) and a wrong guess at a format
   // would be worse than silence.
