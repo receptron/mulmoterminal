@@ -55,6 +55,31 @@ export const libraryViewZhCN = {
       folded: "{count} 行未更改",
     },
     tools: {
+      settings: {
+        row: "设置（叠加结果）",
+        rowNote: "权限、环境变量、钩子，以及各自由哪个文件决定",
+        order: "Claude Code 按此顺序读取，后面的文件覆盖前面的；列表会累加。",
+        failed: "无法读取设置文件。",
+        none: "无",
+        env: "环境变量",
+        hooks: "钩子",
+        other: "其他设置",
+        source: {
+          user: "自己的",
+          project: "项目",
+          local: "自己的·仅此处",
+          managed: "组织",
+        },
+        state: {
+          absent: "无",
+          invalid: "不是 JSON，不会读取",
+        },
+        permissions: {
+          allow: "无需询问即允许",
+          ask: "总是询问",
+          deny: "拒绝",
+        },
+      },
       shortcuts: "/ 搜索 · ↑↓ 移动 · Esc 关闭",
       kind: "工具",
       search: "搜索指令文件",

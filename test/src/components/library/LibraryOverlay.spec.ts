@@ -35,6 +35,7 @@ let firstHasMore = false;
 let memorySourceAnswer: unknown = null;
 vi.mock("../../../../src/composables/libraryApi", () => ({
   loadToolDirectories: () => Promise.resolve(["/w/app"]),
+  loadToolSettings: () => Promise.resolve(null),
   loadInstructions: () => Promise.resolve({ cwd: "/w/app", files: [], agentsMd: false, truncated: false }),
   loadInstruction: () => Promise.resolve({ text: "" }),
   loadLibraryMemorySource: () => Promise.resolve(memorySourceAnswer),

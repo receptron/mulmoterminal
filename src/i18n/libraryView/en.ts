@@ -55,6 +55,31 @@ export const libraryViewEn = {
       folded: "{count} unchanged lines",
     },
     tools: {
+      settings: {
+        row: "Settings, laid over each other",
+        rowNote: "permissions, variables, hooks — and which file set each",
+        order: "Claude Code reads these, each over the one above it: a key in a later file wins, and a list adds to the ones above.",
+        failed: "Could not read the settings files.",
+        none: "none",
+        env: "Environment variables",
+        hooks: "Hooks",
+        other: "Other settings",
+        source: {
+          user: "yours",
+          project: "project",
+          local: "yours, here",
+          managed: "organization",
+        },
+        state: {
+          absent: "none",
+          invalid: "not JSON, skipped",
+        },
+        permissions: {
+          allow: "Allowed without asking",
+          ask: "Always asked",
+          deny: "Denied",
+        },
+      },
       shortcuts: "/ search · ↑↓ move · Esc close",
       kind: "Tools",
       search: "Search instruction files",
