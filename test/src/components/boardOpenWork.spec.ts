@@ -15,6 +15,11 @@ describe("openWorkOnly", () => {
     expect(openWorkOnly([{ repo: "o/idle", cards: [card("a", "todo", false)] }, { repo: "o/empty", cards: [] }, { repo: "o/none" }])).toEqual([]);
   });
 
+  it("keeps a repo whose only open terminal is on its default branch", () => {
+    const repos: RepoBoard[] = [{ repo: "o/main-only", cards: [card("a", "todo", false)], mainlineCells: [{ ...cell, branch: "main" }] }];
+    expect(openWorkOnly(repos)).toEqual([{ repo: "o/main-only", cards: [], mainlineCells: [{ ...cell, branch: "main" }] }]);
+  });
+
   it("keeps a repo carrying an error as it is", () => {
     const broken: RepoBoard = { repo: "o/broken", error: "gh failed" };
     expect(openWorkOnly([broken])).toEqual([broken]);

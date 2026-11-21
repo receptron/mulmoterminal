@@ -18,6 +18,8 @@ export const githubBoardZhTW = {
     showAll: "顯示全部",
     unregistered: "未登記",
     unregisteredTip: "不在 Pull request repos 中；因為有終端機在其中開啟而顯示",
+    onBranch: "在 {branch} 上開啟的終端機",
+    noBranch: "無分支",
     draft: "草稿",
     ci: { passing: "CI 通過", failing: "CI 失敗", pending: "CI 執行中", none: "無 CI" },
     changesRequested: "要求修改",

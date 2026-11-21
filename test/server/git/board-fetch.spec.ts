@@ -22,13 +22,23 @@ const runGh = vi.hoisted(() =>
   }),
 );
 vi.mock("../../../server/git/gh.js", () => ({ runGh }));
-vi.mock("../../../server/git/git-status.js", () => ({ currentBranch: vi.fn(async () => ({ branch: "feat/x", detached: false })) }));
+// A directory's HEAD by its path: `/w/main/...` on main, `/w/detached/...` detached, `/w/unborn/...`
+// with no HEAD at all, anything else on feat/x.
+const currentBranch = vi.hoisted(() =>
+  vi.fn(async (dir: string) => {
+    if (dir.startsWith("/w/main/")) return { branch: "main", detached: false };
+    if (dir.startsWith("/w/detached/")) return { branch: null, detached: true };
+    if (dir.startsWith("/w/unborn/")) return { branch: null, detached: false };
+    return { branch: "feat/x", detached: false };
+  }),
+);
+vi.mock("../../../server/git/git-status.js", () => ({ currentBranch }));
 // A directory's repo by its path: `/w/<owner>/<repo>`, on the host `/w/gitlab/...` names, else GitHub.
 const repoForDir = vi.hoisted(() =>
   vi.fn(async (dir: string) => {
     if (dir === "/w/a") return { forge: { kind: "github", host: "github.com", path: "o/r" }, repo: "o/r" };
     if (dir.startsWith("/w/gitlab/")) return { forge: { kind: "gitlab", host: "gitlab.com", path: "g/p" }, repo: "gitlab.com/g/p" };
-    const repo = dir.replace(/^\/w\//, "");
+    const repo = dir.replace(/^\/w\/((main|detached|unborn)\/)?/, "");
     return { forge: { kind: "github", host: "github.com", path: repo }, repo };
   }),
 );
@@ -101,6 +111,35 @@ describe("boardAcrossRepos with a cell in a repo that is not configured", () => 
 
   it("does not read a repo off GitHub that no one configured", async () => {
     expect(await boardAcrossRepos([], [{ ...elsewhere, cwd: "/w/gitlab/g/p" }])).toEqual([]);
+  });
+});
+
+describe("boardAcrossRepos with cells on the default branch or on no branch", () => {
+  const at = (session: string, cwd: string) => ({ session, cwd, working: false, waiting: false });
+
+  it("puts them on the repo's mainline row, not on a card", async () => {
+    const [board] = await boardAcrossRepos(["o/r2"], [at("m", "/w/main/o/r2"), at("d", "/w/detached/o/r2"), at("b", "/w/o/r2")]);
+    expect(board?.mainlineCells?.map((c) => [c.session, c.branch])).toEqual([
+      ["m", "main"],
+      ["d", null],
+    ]);
+    expect(board?.cards?.flatMap((card) => card.cells.map((c) => c.session))).toEqual(["b"]);
+  });
+
+  it("leaves the row out when no cell is on it", async () => {
+    const [board] = await boardAcrossRepos(["o/r2"], [at("b", "/w/o/r2")]);
+    expect(board).not.toHaveProperty("mainlineCells");
+  });
+
+  it("does not place a cell in a directory with no HEAD", async () => {
+    const [board] = await boardAcrossRepos(["o/r2"], [at("u", "/w/unborn/o/r2")]);
+    expect(board).not.toHaveProperty("mainlineCells");
+    expect(board?.cards?.flatMap((card) => card.cells)).toEqual([]);
+  });
+
+  it("reads an unregistered repo whose only terminal is on its default branch", async () => {
+    const boards = await boardAcrossRepos([], [at("m", "/w/main/x/only-main")]);
+    expect(boards.map((board) => [board.repo, board.unregistered, board.mainlineCells?.length])).toEqual([["x/only-main", true, 1]]);
   });
 });
 

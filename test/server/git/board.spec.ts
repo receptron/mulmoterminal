@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { buildRepoBoard, openPrColumn, parseBoardPr, type BoardPrRow, type RepoBoardInput } from "../../../server/git/board";
+import { buildRepoBoard, mainlineCells, openPrColumn, parseBoardPr, type BoardPrRow, type RepoBoardInput } from "../../../server/git/board";
 import type { BoardPr } from "../../../common/githubBoard";
 
 const REPO = "o/r";
@@ -192,5 +192,28 @@ describe("buildRepoBoard", () => {
 
   it("is empty for an empty repo", () => {
     expect(buildRepoBoard(input({}))).toEqual([]);
+  });
+});
+
+describe("mainlineCells", () => {
+  const cell = (session: string, branch: string | null) => ({ session, cwd: `/w/${session}`, working: false, waiting: false, branch });
+
+  it("keeps the cells on the default branch and on no branch, in order", () => {
+    const cells = [cell("s1", "main"), cell("s2", "feat/x"), cell("s3", null), cell("s4", "main")];
+    expect(mainlineCells(cells, "main").map((c) => c.session)).toEqual(["s1", "s3", "s4"]);
+  });
+
+  it("keeps only the cells on no branch when the default branch is unknown", () => {
+    expect(mainlineCells([cell("s1", "main"), cell("s2", null)], null).map((c) => c.session)).toEqual(["s2"]);
+  });
+
+  it("is empty with no cells, or none on the default branch", () => {
+    expect(mainlineCells([], "main")).toEqual([]);
+    expect(mainlineCells([cell("s1", "feat/x")], "main")).toEqual([]);
+  });
+
+  it("gives a cell on no branch no card, whatever the default branch", () => {
+    expect(buildRepoBoard(input({ cells: [cell("s1", null)] }))).toEqual([]);
+    expect(buildRepoBoard(input({ defaultBranch: null, cells: [cell("s1", null)] }))).toEqual([]);
   });
 });

@@ -18,6 +18,8 @@ export const githubBoardEn = {
     showAll: "Show everything",
     unregistered: "not registered",
     unregisteredTip: "Not in Pull request repos; shown because a terminal is open in it",
+    onBranch: "On {branch}",
+    noBranch: "On no branch",
     draft: "Draft",
     ci: { passing: "CI passed", failing: "CI failed", pending: "CI running", none: "No CI" },
     changesRequested: "Changes requested",

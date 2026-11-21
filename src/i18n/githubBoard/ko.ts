@@ -18,6 +18,8 @@ export const githubBoardKo = {
     showAll: "모두 표시",
     unregistered: "미등록",
     unregisteredTip: "Pull request repos 에 없는 저장소입니다. 터미널이 열려 있어 표시합니다",
+    onBranch: "{branch} 에서 열린 터미널",
+    noBranch: "브랜치 없음",
     draft: "초안",
     ci: { passing: "CI 통과", failing: "CI 실패", pending: "CI 실행 중", none: "CI 없음" },
     changesRequested: "수정 요청됨",

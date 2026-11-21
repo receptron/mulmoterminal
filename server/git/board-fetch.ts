@@ -3,7 +3,7 @@
 // are in board.ts; this file only gathers.
 import type { BoardCell, BoardDetailResponse, BoardIssue, RepoBoard } from "../../common/githubBoard.js";
 import { runGh } from "./gh.js";
-import { buildRepoBoard, parseBoardPr, type BoardPrRow, type CellOnBranch } from "./board.js";
+import { buildRepoBoard, mainlineCells, parseBoardPr, type BoardPrRow, type CellOnBranch } from "./board.js";
 import { ISSUE_DETAIL_FIELDS, PR_DETAIL_FIELDS, parseIssueDetail, parsePrDetail } from "./board-detail.js";
 import { currentBranch } from "./git-status.js";
 import { isSupported, repoForDir, repoSupport } from "./forge-support.js";
@@ -67,13 +67,17 @@ interface PlacedCells {
 
 interface CellPlace {
   repo: string;
-  branch: string;
+  /** Null when HEAD is detached. */
+  branch: string | null;
   github: boolean;
 }
 
+const NO_HEAD = { branch: null, detached: false };
+
+// A detached HEAD still places the cell, on no branch; a directory git cannot read a HEAD in does not.
 const placeOf = async (cwd: string): Promise<CellPlace | null> => {
-  const [dirRepo, head] = await Promise.all([repoForDir(cwd).catch(() => null), currentBranch(cwd).catch(() => ({ branch: null }))]);
-  if (!dirRepo?.repo || !head.branch) return null;
+  const [dirRepo, head] = await Promise.all([repoForDir(cwd).catch(() => null), currentBranch(cwd).catch(() => NO_HEAD)]);
+  if (!dirRepo?.repo || (!head.branch && !head.detached)) return null;
   return { repo: dirRepo.repo, branch: head.branch, github: dirRepo.forge.kind === "github" };
 };
 
@@ -101,7 +105,9 @@ async function repoBoard(repo: string, cells: readonly CellOnBranch[]): Promise<
       listIssues(repo),
       defaultBranchOf(repo),
     ]);
-    return { repo, cards: buildRepoBoard({ repo, defaultBranch, openPrs, mergedPrs, openIssues, cells }) };
+    const cards = buildRepoBoard({ repo, defaultBranch, openPrs, mergedPrs, openIssues, cells });
+    const mainline = mainlineCells(cells, defaultBranch);
+    return mainline.length > 0 ? { repo, cards, mainlineCells: mainline } : { repo, cards };
   } catch (err) {
     return { repo, error: errorText(err) };
   }
