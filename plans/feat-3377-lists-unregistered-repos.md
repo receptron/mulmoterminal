@@ -10,6 +10,7 @@ alone, so a repo on the board was missing from the lists beside it.
   error and marking them `unregistered: true`. The list function is injected, so it is pure.
 - Both routes take the unregistered repos from the same place the board does:
   `unconfiguredRepos(getPrRepos(), await liveCellRepos(liveBoardCells()))` — any branch, GitHub only.
+  When finding them fails, the configured rows are still answered, with no unregistered ones.
 - `RepoPrs` / `RepoIssues` gain `unregistered?`.
 
 ## Client

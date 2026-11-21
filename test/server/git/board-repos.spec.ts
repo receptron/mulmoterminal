@@ -31,11 +31,15 @@ const fakeList = async (repos: string[]): Promise<Row[]> => repos.map((repo) => 
 
 describe("withUnregisteredLists", () => {
   it("is the configured rows, then the unregistered ones marked", async () => {
-    expect(await withUnregisteredLists(["o/a", "o/b"], ["x/c"], fakeList)).toEqual([{ repo: "o/a" }, { repo: "o/b" }, { repo: "x/c", unregistered: true }]);
+    expect(await withUnregisteredLists(["o/a", "o/b"], async () => ["x/c"], fakeList)).toEqual([
+      { repo: "o/a" },
+      { repo: "o/b" },
+      { repo: "x/c", unregistered: true },
+    ]);
   });
 
   it("keeps a configured repo's error and drops an unregistered one's", async () => {
-    expect(await withUnregisteredLists(["bad/a"], ["bad/b", "x/c"], fakeList)).toEqual([
+    expect(await withUnregisteredLists(["bad/a"], async () => ["bad/b", "x/c"], fakeList)).toEqual([
       { repo: "bad/a", error: "no access" },
       { repo: "x/c", unregistered: true },
     ]);
@@ -47,7 +51,14 @@ describe("withUnregisteredLists", () => {
       calls.push(repos);
       return fakeList(repos);
     };
-    expect(await withUnregisteredLists(["o/a"], [], list)).toEqual([{ repo: "o/a" }]);
+    expect(await withUnregisteredLists(["o/a"], async () => [], list)).toEqual([{ repo: "o/a" }]);
     expect(calls).toEqual([["o/a"], []]);
+  });
+
+  it("still answers the configured rows when the unregistered repos cannot be found", async () => {
+    const lost = async (): Promise<string[]> => {
+      throw new Error("git failed");
+    };
+    expect(await withUnregisteredLists(["o/a"], lost, fakeList)).toEqual([{ repo: "o/a" }]);
   });
 });

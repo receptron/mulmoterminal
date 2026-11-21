@@ -28,7 +28,7 @@ export function mountRepoRoutes(app: Express): void {
   // repos a live cell is in (#3377), via the server's `gh` login. Repos never come from the request.
   app.get("/api/prs", async (_req, res) => {
     try {
-      res.json({ repos: await withUnregisteredLists(getPrRepos(), await unregisteredRepos(), listPrsAcrossRepos) });
+      res.json({ repos: await withUnregisteredLists(getPrRepos(), unregisteredRepos, listPrsAcrossRepos) });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
@@ -37,7 +37,7 @@ export function mountRepoRoutes(app: Express): void {
   // Sibling of /api/prs: the same repos' open issues (capped per repo).
   app.get("/api/issues", async (_req, res) => {
     try {
-      res.json({ repos: await withUnregisteredLists(getPrRepos(), await unregisteredRepos(), listIssuesAcrossRepos) });
+      res.json({ repos: await withUnregisteredLists(getPrRepos(), unregisteredRepos, listIssuesAcrossRepos) });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }

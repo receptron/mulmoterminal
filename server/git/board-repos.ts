@@ -12,13 +12,23 @@ export const unconfiguredRepos = (configured: readonly string[], cellRepos: read
   return [...byIdentity.values()].sort((a, b) => a.localeCompare(b));
 };
 
+const orNone = async (find: () => Promise<string[]>): Promise<string[]> => {
+  try {
+    return await find();
+  } catch {
+    return [];
+  }
+};
+
 /** The configured repos' rows, then the unregistered ones' marked as such. An unregistered repo is one
- *  the user never asked for, so when it cannot be read it is left out rather than shown as an error. */
+ *  the user never asked for, so when it cannot be read — or cannot even be found — it is left out
+ *  rather than costing the configured rows. */
 export const withUnregisteredLists = async <Row extends { error?: string; unregistered?: boolean }>(
   configured: readonly string[],
-  unregistered: readonly string[],
+  findUnregistered: () => Promise<string[]>,
   list: (repos: string[]) => Promise<Row[]>,
 ): Promise<Row[]> => {
-  const [configuredRows, unregisteredRows] = await Promise.all([list([...configured]), list([...unregistered])]);
+  const listUnregistered = async (): Promise<Row[]> => list(await orNone(findUnregistered));
+  const [configuredRows, unregisteredRows] = await Promise.all([list([...configured]), listUnregistered()]);
   return [...configuredRows, ...unregisteredRows.flatMap((row): Row[] => (row.error === undefined ? [{ ...row, unregistered: true }] : []))];
 };
