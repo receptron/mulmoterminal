@@ -11,6 +11,7 @@ import {
   memorySource,
   prCreators,
   retrospectiveRows,
+  retrospectiveSpends,
   type ConversationFilter,
 } from "./index-queries.js";
 import type { LibraryIndex } from "./library-index.js";
@@ -96,7 +97,7 @@ export function createLocalLibraryService(index: LibraryIndex, options: LibraryS
     retrospective: (now_ms) =>
       answer(() => {
         const since_ms = weekStart(now_ms) - (RETROSPECTIVE_WEEKS - 1) * WEEK_MS - DAY_MS;
-        return retrospective(retrospectiveRows(index.db, since_ms), now_ms);
+        return retrospective(retrospectiveRows(index.db, since_ms), retrospectiveSpends(index.db, since_ms), now_ms);
       }),
     memorySource: (file) =>
       answer(() => {

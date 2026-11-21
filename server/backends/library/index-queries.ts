@@ -1,6 +1,6 @@
 // Reading the Library's index (#3328): the list, one conversation, and search. The tables are
 // index-store.ts's; this file only selects from them, and reads every column back through a guard.
-import type { RetrospectiveRow } from "./retrospective.js";
+import type { RetrospectiveRow, RetrospectiveSpend } from "./retrospective.js";
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import { isRecord } from "../../../common/isRecord.js";
 import { readString } from "../../../common/readString.js";
@@ -78,11 +78,11 @@ export function memorySourceQuery(file: string): { sql: string; params: SQLInput
   return { sql, params: [file, ...where.params] };
 }
 
-/** What the retrospective adds up for each conversation the Library lists that started at or after
- *  `since_ms`: its directory, agent, start, cost and how many PRs it recorded. */
+/** What the retrospective counts for each conversation the Library lists that started at or after
+ *  `since_ms`: its directory, agent, start and how many PRs it recorded. */
 export function retrospectiveRows(db: DatabaseSync, since_ms: number): RetrospectiveRow[] {
   const where = filterClause({});
-  const sql = `select c.cwd, c.agent, c.started_at, c.cost_usd, json_array_length(c.prs) as pr_count from conversations c
+  const sql = `select c.cwd, c.agent, c.started_at, json_array_length(c.prs) as pr_count from conversations c
     where c.started_at >= ? and ${where.sql}`;
   return db
     .prepare(sql)
@@ -91,8 +91,26 @@ export function retrospectiveRows(db: DatabaseSync, since_ms: number): Retrospec
       cwd: typeof row.cwd === "string" ? row.cwd : null,
       agent: typeof row.agent === "string" ? row.agent : "",
       startedAt: typeof row.started_at === "number" ? row.started_at : null,
-      costUsd: typeof row.cost_usd === "number" ? row.cost_usd : null,
       prs: typeof row.pr_count === "number" ? row.pr_count : 0,
+    }));
+}
+
+/** What the conversations the Library lists spent at or after `since_ms`, slot by slot and model by model. */
+export function retrospectiveSpends(db: DatabaseSync, since_ms: number): RetrospectiveSpend[] {
+  const where = filterClause({});
+  const sql = `select c.cwd, c.agent, s.at, s.model, s.cost_usd, s.input, s.output, s.cache_read, s.cache_write
+    from spend s join conversations c on c.path = s.path where s.at >= ? and ${where.sql}`;
+  const number = (value: unknown): number => (typeof value === "number" ? value : 0);
+  return db
+    .prepare(sql)
+    .all(since_ms, ...where.params)
+    .map((row) => ({
+      cwd: typeof row.cwd === "string" ? row.cwd : null,
+      agent: typeof row.agent === "string" ? row.agent : "",
+      at_ms: number(row.at),
+      model: typeof row.model === "string" ? row.model : "",
+      costUsd: number(row.cost_usd),
+      ...{ input: number(row.input), output: number(row.output), cacheRead: number(row.cache_read), cacheWrite: number(row.cache_write) },
     }));
 }
 

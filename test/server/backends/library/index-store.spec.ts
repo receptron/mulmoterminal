@@ -49,6 +49,7 @@ const scanOf = (id: string, overrides: ScanOverrides = {}): TranscriptScan => ({
   ...overrides,
   state: { ...emptyConversationState(), ...overrides.state },
   turns: overrides.turns ?? [],
+  spent: overrides.spent ?? [],
 });
 
 /** A scan that read the file where the index left it, unless the case says otherwise. */
@@ -142,14 +143,21 @@ describe("applyTranscriptScan", () => {
 });
 
 describe("removeMissingTranscripts", () => {
-  it("drops the rows and text of every file the walk did not see", () => {
+  it("drops the rows, text and spending of every file the walk did not see", () => {
     const db = freshDb();
-    commit(db, "kept", { turns: [turn("kept text")] });
-    commit(db, "gone", { turns: [turn("gone text")] });
+    const spent = [{ at_ms: 0, model: "m", costUsd: 1, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }];
+    commit(db, "kept", { turns: [turn("kept text")], spent });
+    commit(db, "gone", { turns: [turn("gone text")], spent });
     expect(removeMissingTranscripts(db, OWNER, new Set(["/p/kept.jsonl"]))).toBe(1);
     expect(listConversations(db, {}, 0, 10).map((row) => row.id)).toEqual(["kept"]);
     expect(readFileMark(db, "/p/gone.jsonl")).toBeNull();
     expect(turnCount(db)).toBe(1);
+    expect(
+      db
+        .prepare("select path from spend")
+        .all()
+        .map((row) => row.path),
+    ).toEqual(["/p/kept.jsonl"]);
   });
 });
 

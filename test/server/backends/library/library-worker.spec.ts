@@ -121,7 +121,13 @@ describe("dispatchLibraryRequest", () => {
     repeat: (...args) => (calls.push(["repeat", ...args]), Promise.resolve(null)),
     retrospective: (...args) => (
       calls.push(["retrospective", ...args]),
-      Promise.resolve({ weeks: [], projects: [], agents: [], total: { costUsd: 0, conversations: 0, prs: 0 } })
+      Promise.resolve({
+        weeks: [],
+        projects: [],
+        agents: [],
+        models: [],
+        total: { costUsd: 0, conversations: 0, prs: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } },
+      })
     ),
   };
 
