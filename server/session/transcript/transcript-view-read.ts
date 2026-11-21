@@ -27,7 +27,9 @@ import {
   museConversations,
   museConversationsHydrated,
 } from "../registry.js";
-import { grokConversationExists, grokSessionsRoot } from "../../agents/grok/grok-session.js";
+import { grokSessionsRoot, isGrokConversationId } from "../../agents/grok/grok-session.js";
+import { grokChatHistoryPath } from "../../agents/grok/grok-sessions.js";
+import { createGrokFold } from "./transcript-view-grok.js";
 import { claudeTranscriptFile, codexSessionRoot } from "../session-home.js";
 import { codexRolloutPath } from "../../agents/codex/codex-sessions.js";
 import { cursorTranscriptPath } from "../../agents/cursor/cursor-sessions.js";
@@ -291,6 +293,16 @@ const cursorSource: FileTranscriptSource = {
   createFold: createCursorFold,
 };
 
+const grokSource: FileTranscriptSource = {
+  kind: "file",
+  agent: "grok",
+  // No mapping: the session key IS grok's conversation id (`--session-id`), and conversations are
+  // filed under the cwd, so the path itself binds the read to this directory. The id is checked for
+  // shape before it is joined into that path.
+  locate: (cwd, id) => Promise.resolve(isGrokConversationId(id) ? grokChatHistoryPath(grokSessionsRoot(), cwd, id) : null),
+  createFold: createGrokFold,
+};
+
 const copilotSource: QueryTranscriptSource = {
   kind: "query",
   agent: "copilot",
@@ -324,7 +336,8 @@ const copilotTurnIndex = (row: SqliteRow): number => (typeof row.turn_index === 
 
 /** In the order they are asked.
  *
- *  Claude first because it is the cheapest question and the common case. Cursor LAST OF THE FILE
+ *  Claude first because it is the cheapest question and the common case. Grok is one path join, as
+ *  claude is, so it goes before cursor. Cursor LAST OF THE FILE
  *  sources because its locate is the most expensive: a readdir of every cursor project plus a read
  *  of each one's `.workspace-trusted`, where claude joins one path and codex scans a day tree.
  *
@@ -332,7 +345,7 @@ const copilotTurnIndex = (row: SqliteRow): number => (typeof row.turn_index === 
  *  sqlite open, and `node:sqlite` is imported lazily on the first call (sqlite-read.ts). Asking it
  *  only after every file has missed keeps that import off the path the overwhelming majority of
  *  cells take. */
-const TRANSCRIPT_SOURCES: readonly TranscriptSource[] = [claudeSource, codexSource, cursorSource, copilotSource];
+const TRANSCRIPT_SOURCES: readonly TranscriptSource[] = [claudeSource, codexSource, grokSource, cursorSource, copilotSource];
 
 /** Agents with no reader here yet, for the one question the sources cannot answer: is a session
  *  that matched nothing a session with nothing written, or one this host cannot read?
@@ -355,9 +368,7 @@ export const hasReader = (agent: SessionAgent): boolean => TRANSCRIPT_SOURCES.so
  *  false sentence: their conversation exists, this host just cannot read it.
  *
  *  So the same principle the reader is built on applies here too: ASK THE STORE, NOT THE PROCESS.
- *  Two of the three answer from a map this server already hydrated off its own append log, which
- *  costs nothing; grok keeps no such log, because a grok conversation id IS the session id, so its
- *  question is one directory.
+ *  Both answer from a map this server already hydrated off its own append log, which costs nothing.
  *
  *  Asked ONLY when every reader missed AND the process could not say — a live shell cell answers
  *  `shell` from its pty and never reaches here.
@@ -385,14 +396,11 @@ export const UNREAD_SOURCES: readonly UnreadSource[] = [
       return museConversations.has(id);
     },
   },
-  // The cwd IS the question for grok: its sessions are filed per directory, and the one on screen is
-  // the only one this cell could be showing.
-  { agent: "grok", holds: (cwd, id) => Promise.resolve(grokConversationExists(grokSessionsRoot(), cwd, id)) },
 ];
 
 /** Which reader-less agent holds this session, or null when none does.
  *
- *  The sources are a PARAMETER for the same reason the byte window is one: two of the three answer
+ *  The sources are a PARAMETER for the same reason the byte window is one: they answer
  *  from a map this process hydrates from `~/.mulmoterminal`, and a spec that planted an entry there
  *  the way production does would be writing into the machine's real log — which is exactly what the
  *  first version of its spec did. Injected, the same test says the same thing and touches nothing. */

@@ -88,7 +88,7 @@ is where to go read why, not a gap nobody noticed.
 | 22 | Editable draft injection | yes (`draftReadyMarker`) | — | — | — | — | — | — |
 | 23 | One-session-per-worktree limit | yes | yes | yes | yes | yes | yes | yes |
 | 24 | Custom-agent wrapper (`customAgents`) | yes | — | — | — | — | — | — |
-| 25 | **The conversation view** — the phone's detail page and the browser's Conversation pane | yes | yes, from the rollout | — | — | — | yes, from its `turns` table — **but no tool ROWS AT ALL: copilot writes none** | yes, from the transcript `.jsonl` — **but no tool RESULTS: cursor writes none** |
+| 25 | **The conversation view** — the phone's detail page and the browser's Conversation pane | yes | yes, from the rollout | — | yes, from `chat_history.jsonl` — calls AND results | — | yes, from its `turns` table — **but no tool ROWS AT ALL: copilot writes none** | yes, from the transcript `.jsonl` — **but no tool RESULTS: cursor writes none** |
 
 ## What each row actually requires
 
@@ -308,7 +308,7 @@ first agent's implementation carries a skeleton the rest land on (`transcript-vi
 source is asked whether IT holds this session, in order, and **the agent is never asked to choose the
 reader** — a claude session that outlived a restart reports its agent as `shell`.
 
-A source is asked one of two ways. Three of the four keep a FILE, located from the session key and read
+A source is asked one of two ways. Every wired agent but copilot keeps a FILE, located from the session key and read
 as a byte window off the tail; copilot keeps a TABLE, whose window is `ORDER BY turn_index DESC LIMIT n`.
 They meet at the SCAN — both hand the same one to the same `transcriptViewOf` — so the line budget, the
 byte cap and the eviction rule are shared by construction rather than by each reader remembering them.
@@ -316,7 +316,7 @@ A query source carries one duty a file source gets for free: its store is machin
 must be scoped to the working directory inside the SQL, or a session id from another project is
 readable here by hand.
 
-What the four wired agents cost, and what the three unwired ones are waiting for:
+What the wired agents cost, and what the unwired ones are waiting for:
 
 | | |
 |---|---|
@@ -324,7 +324,8 @@ What the four wired agents cost, and what the three unwired ones are waiting for
 | codex | the rollout, via the conversation map; TWO tool families (`function_call` and `custom_tool_call` — the latter in 52% of rollouts) and an output field that is a string OR an array in both |
 | cursor | `projects/<slug>/agent-transcripts/<id>/`, slug resolved by asking each project what it stands for; **zero tool results exist in the file** |
 | copilot | its `turns` table — one row per turn, prompt and reply already separated, so the SHAPE needed no measuring: it is declared in SQL. **Zero tool rows of any kind**: `forge_trajectory_events` (`tool_call_id`, `command`, `output`, `exit_code`) is empty even for sessions that ran tools, so a copilot turn shows what was asked and what was said and nothing about what ran. Its cost is not the fold but the WIRING — it is the one source that is a query rather than a file, which is why `TranscriptSource` is a union |
-| grok / muse / antigravity | **not "impossible" but "not measurable here"** — no session of any of them exists on this machine to count record shapes from. They land on the same skeleton the day one does |
+| grok | `sessions/<encoded cwd>/<id>/chat_history.jsonl`, the session key IS the conversation id and the cwd partition binds the read (#3379). Only `user` messages with a `prompt_index` open a turn — the others are context grok injects. It writes tool calls AND what they returned |
+| muse / antigravity | **not "impossible" but "not measured"** — antigravity is #3379's next PR; muse could not be measured (a billing error stopped every turn) and waits on #3375. Both land on the same skeleton |
 
 A session whose agent has no reader answers `not-supported` rather than `none`, which is a sentence for
 the person and a to-do for the next implementation. A **shell** never gets it: it has no conversation and
