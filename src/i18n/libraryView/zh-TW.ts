@@ -89,6 +89,7 @@ export const libraryViewZhTW = {
       none: "這裡沒有會被讀取的指示檔案。",
       agentsMd: "這裡及上層都沒有 CLAUDE.md，因此 Claude Code 改為讀取 AGENTS.md。",
       onDemand: "僅在處理符合的檔案時讀取",
+      missing: "它提到的 {paths} 找不到。",
       onApproval: "在此目錄之外：核准外部匯入後才會讀取",
       tooLarge: "超過 4 MiB，Claude Code 不會讀取",
       tooLargeToShow: "太大，無法在此顯示（超過 1 MB）。Claude Code 仍會讀取。",

@@ -89,6 +89,7 @@ export const libraryViewKo = {
       none: "여기서 읽히는 지시 파일이 없습니다.",
       agentsMd: "여기와 상위에 CLAUDE.md가 없어 Claude Code가 대신 AGENTS.md를 읽습니다.",
       onDemand: "해당 파일을 다룰 때만 읽힘",
+      missing: "{paths}을(를) 가리키지만 찾을 수 없습니다.",
       onApproval: "이 디렉터리 밖: 외부 가져오기를 승인한 뒤 읽힘",
       tooLarge: "4 MiB를 넘어 Claude Code가 읽지 않음",
       tooLargeToShow: "너무 커서 여기서 표시할 수 없습니다(1 MB 초과). Claude Code는 읽습니다.",

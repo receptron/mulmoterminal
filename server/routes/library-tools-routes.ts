@@ -4,7 +4,8 @@
 import os from "node:os";
 import type { Express } from "express";
 import type { LibraryCaller } from "../backends/library/library-service.js";
-import { readInstructionText, readInstructions } from "../backends/library/instruction-files-read.js";
+import { missingPaths, readInstructionText, readInstructions } from "../backends/library/instruction-files-read.js";
+import { namedPaths } from "../backends/library/instruction-references.js";
 import { readSettings } from "../backends/library/settings-layers-read.js";
 import { agentHome } from "../agents/agent-homes.js";
 import { answer } from "./library-routes.js";
@@ -68,7 +69,10 @@ export function mountToolsRoutes(app: Express, call: LibraryCaller, deps: ToolsR
         res.status(404).json({ error: "not an instruction file loaded in that directory" });
         return;
       }
-      res.json(await readInstructionText(listed.path));
+      const read = await readInstructionText(listed.path);
+      // The paths it names that are not there: what an instruction points at and nobody can follow.
+      const named = read.text === null ? [] : namedPaths(read.text, listed.path, cwd, home(), process.platform === "win32");
+      res.json({ ...read, missing: await missingPaths(named) });
     } catch {
       res.status(500).json({ error: "the instruction file could not be read" });
     }

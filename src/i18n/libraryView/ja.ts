@@ -89,6 +89,7 @@ export const libraryViewJa = {
       none: "ここで読まれる指示ファイルはありません。",
       agentsMd: "ここにも上にも CLAUDE.md が無いので、Claude Code は代わりに AGENTS.md を読みます。",
       onDemand: "当てはまるファイルを扱うときだけ読まれる",
+      missing: "{paths} を挙げていますが、見つかりません。",
       onApproval: "このディレクトリの外にある: 外部の取り込みを承認したあとに読まれる",
       tooLarge: "4 MiB を超えるので Claude Code は読まない",
       tooLargeToShow: "大きすぎてここでは表示できません（1 MB 超）。Claude Code は読みます。",

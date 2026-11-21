@@ -49,14 +49,20 @@ describe("library tools routes", () => {
     if (!isLibraryInstructions(listed.body)) throw new Error("not instructions");
     const mine = listed.body.files.filter((file) => file.path.startsWith(app)).map((file) => `${file.scope} ${path.basename(file.path)}`);
     expect(mine).toEqual(["directory CLAUDE.md", "import notes.md", "local CLAUDE.local.md"]);
-    expect((await call(`/api/library/tools/instruction${q({ cwd: app, path: path.join(app, "CLAUDE.local.md") })}`)).body).toEqual({ text: "imported\n" });
+    expect((await call(`/api/library/tools/instruction${q({ cwd: app, path: path.join(app, "CLAUDE.local.md") })}`)).body).toEqual({
+      text: "imported\n",
+      missing: [],
+    });
   });
 
   it.skipIf(process.platform === "win32")("reads an instruction file through a link, as Claude Code does", async () => {
     const { call, app } = setup();
     writeFileSync(path.join(app, "mine.md"), "linked\n");
     symlinkSync(path.join(app, "mine.md"), path.join(app, "CLAUDE.local.md"));
-    expect((await call(`/api/library/tools/instruction${q({ cwd: app, path: path.join(app, "CLAUDE.local.md") })}`)).body).toEqual({ text: "linked\n" });
+    expect((await call(`/api/library/tools/instruction${q({ cwd: app, path: path.join(app, "CLAUDE.local.md") })}`)).body).toEqual({
+      text: "linked\n",
+      missing: [],
+    });
   });
 
   it("refuses a directory no conversation ran in, and a file the listing does not name", async () => {
@@ -77,5 +83,12 @@ describe("library tools routes", () => {
     expect(answer.body.permissions.allow).toEqual([{ value: "Bash(npm test)", source: "user" }]);
     expect(answer.body.permissions.deny).toEqual([{ value: "Read(.env)", source: "project" }]);
     expect((await call(`/api/library/tools/settings${q({ cwd: root })}`)).status).toBe(404);
+  });
+
+  it("says which paths a file names that are not there", async () => {
+    const { call, app } = setup();
+    writeFileSync(path.join(app, "CLAUDE.md"), "See `docs/gone.md` and [notes](notes.md).\n");
+    const answer = await call(`/api/library/tools/instruction${q({ cwd: app, path: path.join(app, "CLAUDE.md") })}`);
+    expect(answer.body).toMatchObject({ missing: ["docs/gone.md"] });
   });
 });
