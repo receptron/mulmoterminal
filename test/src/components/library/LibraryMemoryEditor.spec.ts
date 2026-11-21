@@ -8,6 +8,7 @@ let result: MemorySaveResult = { kind: "saved", version: "v2" };
 const saves: [string, string, string, string][] = [];
 vi.mock("../../../../src/composables/libraryApi", () => ({
   saveLibraryMemoryFile: (slug: string, file: string, text: string, version: string) => (saves.push([slug, file, text, version]), Promise.resolve(result)),
+  loadLibraryMemoryLinks: () => Promise.resolve(null),
 }));
 let running = false;
 vi.mock("../../../../src/composables/useDirLists", () => ({
