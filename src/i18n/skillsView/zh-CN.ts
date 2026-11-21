@@ -14,6 +14,15 @@ export const skillsViewZhCN = {
     noMatch: "没有与此搜索匹配的技能。",
     pick: "选择一个技能以查看其 SKILL.md。",
     docFailed: "无法读取此 SKILL.md。",
+    edit: {
+      edit: "编辑",
+      label: "SKILL.md 正文",
+      save: "保存",
+      cancel: "取消",
+      changed: "打开后 SKILL.md 已改动，因此没有保存。请先复制你的编辑，然后",
+      reload: "重新读取",
+      failed: "无法保存，请稍后再试。",
+    },
     modes: "查找位置",
     mode: { local: "本机", remote: "skills.sh" },
     remote: {
