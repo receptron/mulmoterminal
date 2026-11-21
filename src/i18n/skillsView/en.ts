@@ -14,6 +14,15 @@ export const skillsViewEn = {
     noMatch: "No skill matches this search.",
     pick: "Pick a skill to read its SKILL.md.",
     docFailed: "Could not read this SKILL.md.",
+    edit: {
+      edit: "Edit",
+      label: "SKILL.md text",
+      save: "Save",
+      cancel: "Cancel",
+      changed: "This SKILL.md changed on disk since you opened it, so it was not saved. Copy your edit, then",
+      reload: "read it again",
+      failed: "Could not save. Try again in a moment.",
+    },
     modes: "Where to look",
     mode: { local: "This machine", remote: "skills.sh" },
     remote: {

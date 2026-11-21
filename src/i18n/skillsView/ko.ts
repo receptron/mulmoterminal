@@ -14,6 +14,15 @@ export const skillsViewKo = {
     noMatch: "이 검색과 일치하는 스킬이 없습니다.",
     pick: "스킬을 선택하면 SKILL.md 를 표시합니다.",
     docFailed: "이 SKILL.md 를 읽을 수 없습니다.",
+    edit: {
+      edit: "편집",
+      label: "SKILL.md 본문",
+      save: "저장",
+      cancel: "취소",
+      changed: "연 뒤에 SKILL.md가 바뀌어 저장하지 않았습니다. 편집 내용을 복사한 뒤",
+      reload: "다시 읽기",
+      failed: "저장하지 못했습니다. 잠시 후 다시 시도하세요.",
+    },
     modes: "찾을 곳",
     mode: { local: "이 컴퓨터", remote: "skills.sh" },
     remote: {
