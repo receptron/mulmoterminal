@@ -145,6 +145,21 @@ session is still open in another terminal, nothing happens and the button says s
 > is left in the input box rather than sent: the Enter is yours. A **resumed** session gets nothing
 > typed into it — it already has a conversation of its own.
 
+## The board (experimental) {#board}
+
+**Open the board (experimental)**, above the list, opens a board with one card per piece of work in
+the columns **To do / Implementing / In review / Ready (QA) / Merged**. A card carries the issue, the
+PR that closes it, the branch, and the terminals open on that branch.
+
+**Only work with an open terminal**, in the board's header, is **on from the start**. While it is on,
+only the cards with a terminal open are shown, and columns and repositories with no card are hidden.
+A merged card still shows while a terminal is left on it, so you notice what is left to tidy. Turn it
+off to see everything, the unstarted issues included. This browser remembers the choice.
+
+- A terminal on the default branch (`main` and so on) is on no card, so it is not shown.
+- A terminal opened or closed shows on the next read: every minute, or a few seconds after a terminal finishes a turn.
+- GitHub repositories only.
+
 ## Using GitLab {#gitlab}
 
 An entry may also name its host — `"gitlab.com/group/project"`. **GitLab projects are read too**,
