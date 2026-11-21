@@ -61,20 +61,20 @@ export function prCreatorsQuery(repository: string, numbers: readonly number[]):
   return { sql: `select * from (${linked}) where rank = 1 order by pr_number`, params: [repository, JSON.stringify(numbers), ...where.params] };
 }
 
-/** The conversation that last wrote a memory (`<slug>/<file>`), of those the Library lists — the
+/** The conversation that last wrote a memory file (by its path), of those the Library lists — the
  *  link opens it there, so a `claude -p` run or a sidechain that wrote it is passed over, as for PRs. */
-export function memorySource(db: DatabaseSync, key: string): Record<string, unknown> | null {
-  const query = memorySourceQuery(key);
+export function memorySource(db: DatabaseSync, file: string): Record<string, unknown> | null {
+  const query = memorySourceQuery(file);
   return db.prepare(query.sql).get(...query.params) ?? null;
 }
 
 /** The statement `memorySource` runs, apart so its plan can be checked against the partial index. */
-export function memorySourceQuery(key: string): { sql: string; params: SQLInputValue[] } {
+export function memorySourceQuery(file: string): { sql: string; params: SQLInputValue[] } {
   const where = filterClause({});
   const sql = `select c.* from conversations c where c.memory_writes != '[]'
       and exists (select 1 from json_each(c.memory_writes) j where j.value = ?) and ${where.sql}
     order by c.ended_at desc nulls last, c.path limit 1`;
-  return { sql, params: [key, ...where.params] };
+  return { sql, params: [file, ...where.params] };
 }
 
 /** Every directory a conversation ran in — what names a project's memory folder. */

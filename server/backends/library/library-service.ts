@@ -31,8 +31,8 @@ export interface LibraryService {
   directories(): Promise<string[]>;
   /** The conversation that made each of these PRs in one repository, for those the index knows. */
   prCreators(repository: string, numbers: number[]): Promise<LibraryPrCreator[]>;
-  /** The conversation that last wrote a memory, named `<slug>/<file>`, when the index knows one. */
-  memorySource(key: string): Promise<LibraryConversation | null>;
+  /** The conversation that last wrote a memory file, by its path, when the index knows one. */
+  memorySource(file: string): Promise<LibraryConversation | null>;
 }
 
 /** Every call also asks the index to catch up — in the background, so the answer is what the
@@ -69,9 +69,9 @@ export function createLocalLibraryService(index: LibraryIndex): LibraryService {
     directories: () => answer(() => conversationDirectories(index.db)),
     prCreators: (repository, numbers) =>
       answer(() => prCreators(index.db, repository, numbers).map((row) => ({ number: Number(row.pr_number), conversation: conversationOfRow(row) }))),
-    memorySource: (key) =>
+    memorySource: (file) =>
       answer(() => {
-        const row = memorySource(index.db, key);
+        const row = memorySource(index.db, file);
         return row === null ? null : conversationOfRow(row);
       }),
   };

@@ -131,18 +131,26 @@ describe("runIndexPass", () => {
     transcript("early", opened(10) + writes("a.md"));
     const late = transcript("late", opened(12) + writes("a.md", "Edit"));
     transcript("scripted", opened(14, "sdk-cli") + writes("a.md"));
+    const elsewhere = line({
+      type: "assistant",
+      message: { content: [{ type: "tool_use", id: "t", name: "Write", input: { file_path: "/tmp/projects/-w-app/memory/c.md" } }] },
+    });
+    transcript("lookalike", opened(13) + elsewhere);
     await runIndexPass(deps);
-    const source = (key: string) => memorySource(db, key)?.id ?? null;
-    expect(source("-w-app/a.md")).toBe("late");
-    expect([source("-w-app/b.md"), source("-w-app/MEMORY.md")]).toEqual([null, null]);
+    const source = (file: string) => memorySource(db, `/h/.claude/projects/-w-app/memory/${file}`)?.id ?? null;
+    expect(source("a.md")).toBe("late");
+    expect([source("b.md"), source("MEMORY.md")]).toEqual([null, null]);
+    // A folder elsewhere that only looks like a memory folder is not this one.
+    expect(source("c.md")).toBeNull();
+    expect(memorySource(db, "/tmp/projects/-w-app/memory/c.md")?.id).toBe("lookalike");
     appendFileSync(late, writes("b.md"));
     await runIndexPass(deps);
-    expect(source("-w-app/b.md")).toBe("late");
+    expect(source("b.md")).toBe("late");
   });
 
   it("looks a memory's writer up through the partial index", () => {
     const { db } = setup();
-    const query = memorySourceQuery("-w-app/a.md");
+    const query = memorySourceQuery("/h/.claude/projects/-w-app/memory/a.md");
     const plan = db
       .prepare(`explain query plan ${query.sql}`)
       .all(...query.params)

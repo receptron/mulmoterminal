@@ -437,18 +437,21 @@ describe("GET /api/library/memory/:slug/:file/source", () => {
   const conversation = { id: "s1", title: "wrote it" };
   const app = express();
   mountLibraryRoutes(app, {
-    call: (method, args) => (asked.push([method, ...args]), Promise.resolve(args[0] === "-w-app/a.md" ? conversation : null)),
+    call: (method, args) => (
+      asked.push([method, ...args]),
+      Promise.resolve(args[0] === path.join("/nowhere", "-w-app", "memory", "a.md") ? conversation : null)
+    ),
     projectsRoot: "/nowhere",
   });
   const call = routeCall(app);
 
-  it("asks the index for the conversation that wrote the memory, by folder and name", async () => {
+  it("asks the index for the conversation that wrote the memory, by its path under the projects root", async () => {
     asked.length = 0;
     expect((await call("/api/library/memory/-w-app/a.md/source")).body).toEqual({ conversation });
     expect((await call("/api/library/memory/-w-app/b.md/source")).body).toEqual({ conversation: null });
     expect(asked).toEqual([
-      ["memorySource", "-w-app/a.md"],
-      ["memorySource", "-w-app/b.md"],
+      ["memorySource", path.join("/nowhere", "-w-app", "memory", "a.md")],
+      ["memorySource", path.join("/nowhere", "-w-app", "memory", "b.md")],
     ]);
   });
   it("refuses what is not a memory's folder and name, asking nothing", async () => {

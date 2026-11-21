@@ -33,7 +33,7 @@ export type ConversationState = Omit<LibraryConversation, "id" | "agent" | "titl
   aiTitle: string | null;
   customTitle: string | null;
   firstPrompt: string | null;
-  /** The memories this conversation wrote, `<slug>/<file>`, the most recently written last. */
+  /** The memory files this conversation wrote, by the path written, the most recently written last. */
   memoryWrites: string[];
 };
 
@@ -135,10 +135,10 @@ function foldActivity(state: ConversationState, record: Record<string, unknown>)
 
 // Written again later moves it last, so the cap drops the memories this conversation touched longest ago.
 function foldMemoryWrites(state: ConversationState, record: Record<string, unknown>): void {
-  memoryWritesOf(record).forEach((key) => {
-    const at = state.memoryWrites.indexOf(key);
+  memoryWritesOf(record).forEach((written) => {
+    const at = state.memoryWrites.indexOf(written);
     if (at >= 0) state.memoryWrites.splice(at, 1);
-    pushCapped(state.memoryWrites, key, (a, b) => a === b);
+    pushCapped(state.memoryWrites, written, (a, b) => a === b);
   });
 }
 
