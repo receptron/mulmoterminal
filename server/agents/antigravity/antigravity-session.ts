@@ -29,6 +29,9 @@ export function antigravityConversationsRoot(home: string = antigravityHome()): 
   return path.join(home, "conversations");
 }
 
+/** Is this one of agy's conversation ids? Checked before an id is joined into a path. */
+export const isAntigravityConversationId = (id: string): boolean => UUID_RE.test(id);
+
 // One directory per conversation, named by its id. Anything else in there is not a conversation.
 export function listAntigravityConversationIds(root: string): string[] {
   if (!existsSync(root)) return [];

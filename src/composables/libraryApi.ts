@@ -249,10 +249,12 @@ export async function loadToolSettings(cwd: string): Promise<LibrarySettings | n
   return isLibrarySettings(body) ? body : null;
 }
 
-/** One of those files' text. */
-export async function loadInstruction(cwd: string, file: string): Promise<LibraryFileText | null> {
+/** One of those files' text, and the paths it names that are not there. */
+export async function loadInstruction(cwd: string, file: string): Promise<(LibraryFileText & { missing: string[] }) | null> {
   const body = await readJson(`/api/library/tools/instruction?cwd=${encodeURIComponent(cwd)}&path=${encodeURIComponent(file)}`);
-  return isLibraryFileText(body) ? body : null;
+  if (!isLibraryFileText(body)) return null;
+  const missing = isUnknownArray(body.missing) ? body.missing.filter((reference): reference is string => typeof reference === "string") : [];
+  return { ...body, missing };
 }
 
 export async function loadLibraryMarks(): Promise<LibraryMarks | null> {

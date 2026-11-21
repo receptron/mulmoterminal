@@ -17,7 +17,7 @@ const file = (scope: LibraryInstructionScope, filePath: string, over: Partial<Li
 let listing: Record<string, LibraryInstructions> = {};
 const reads: string[] = [];
 let directoriesAnswer: string[] | null = ["/w/app", "/w/lib"];
-let textAnswer: { text: string | null; reason?: string } | null = null;
+let textAnswer: { text: string | null; reason?: string; missing?: string[] } | null = null;
 vi.mock("../../../../src/composables/libraryApi", () => ({
   loadToolDirectories: () => Promise.resolve(directoriesAnswer),
   loadToolSettings: (cwd: string) =>
@@ -149,5 +149,11 @@ describe("LibraryTools", () => {
     await (wrapper.vm as unknown as { move(by: number): Promise<void> }).move(1);
     await flushPromises();
     expect(wrapper.find("[data-testid=tool-reader] h2").text()).toBe("/h/.claude/CLAUDE.md");
+  });
+
+  it("says which paths the file names that are not there", async () => {
+    textAnswer = { text: "See `docs/gone.md`.", missing: ["docs/gone.md"] };
+    const wrapper = await mountTools("/w/app");
+    expect(wrapper.find("[data-testid=tool-missing]").text()).toBe("It names docs/gone.md, which is not there.");
   });
 });

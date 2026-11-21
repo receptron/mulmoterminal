@@ -1920,7 +1920,7 @@ narrow and tall for one record you are discussing — and each position keeps it
   `~/.claude/rules`, every `CLAUDE.md` / `.claude/CLAUDE.md` / `CLAUDE.local.md` from the filesystem root
   down, the project's `.claude/rules` (a rule with `paths` marked as loading only for matching files),
   and what their `@path` imports bring in — or `AGENTS.md` where no `CLAUDE.md` counts. Each is read
-  beside the list. Above them, **Settings, laid over each other** reads the user, project, local and
+  beside the list, with the paths it names (Markdown links, code-span paths) that are not there. Above them, **Settings, laid over each other** reads the user, project, local and
   managed `settings.json` files in Claude Code's order and shows the permission rules (every file's,
   added up), environment variables, hooks and other keys in effect, each naming the file that set it.
   Read only. Design: [`docs/library-design.md`](docs/library-design.md).
@@ -2009,7 +2009,7 @@ narrow and tall for one record you are discussing — and each position keeps it
   - **Tool traffic is folded away**, one line saying what ran (`Bash · Read`); click to open it.
     It is most of a turn's bulk and almost none of what you came back to read.
   - A **snapshot**, not a live tail — the terminal beside it is the live view — and the header's
-    reload fetches the newest turns again. Claude, Codex, Cursor, Copilot and Grok; an agent whose
+    reload fetches the newest turns again. Claude, Codex, Cursor, Copilot, Grok and Antigravity; an agent whose
     conversation no reader here can read yet says so rather than showing an empty pane.
 - **Notifications** (🔔) — a toolbar bell with an unread badge and a dropdown of active
   notifications; click a row to jump to its session.

@@ -88,7 +88,7 @@ is where to go read why, not a gap nobody noticed.
 | 22 | Editable draft injection | yes (`draftReadyMarker`) | — | — | — | — | — | — |
 | 23 | One-session-per-worktree limit | yes | yes | yes | yes | yes | yes | yes |
 | 24 | Custom-agent wrapper (`customAgents`) | yes | — | — | — | — | — | — |
-| 25 | **The conversation view** — the phone's detail page and the browser's Conversation pane | yes | yes, from the rollout | — | yes, from `chat_history.jsonl` — calls AND results | — | yes, from its `turns` table — **but no tool ROWS AT ALL: copilot writes none** | yes, from the transcript `.jsonl` — **but no tool RESULTS: cursor writes none** |
+| 25 | **The conversation view** — the phone's detail page and the browser's Conversation pane | yes | yes, from the rollout | yes, from the brain `transcript.jsonl` — calls AND outputs | yes, from `chat_history.jsonl` — calls AND results | — | yes, from its `turns` table — **but no tool ROWS AT ALL: copilot writes none** | yes, from the transcript `.jsonl` — **but no tool RESULTS: cursor writes none** |
 
 ## What each row actually requires
 
@@ -325,7 +325,8 @@ What the wired agents cost, and what the unwired ones are waiting for:
 | cursor | `projects/<slug>/agent-transcripts/<id>/`, slug resolved by asking each project what it stands for; **zero tool results exist in the file** |
 | copilot | its `turns` table — one row per turn, prompt and reply already separated, so the SHAPE needed no measuring: it is declared in SQL. **Zero tool rows of any kind**: `forge_trajectory_events` (`tool_call_id`, `command`, `output`, `exit_code`) is empty even for sessions that ran tools, so a copilot turn shows what was asked and what was said and nothing about what ran. Its cost is not the fold but the WIRING — it is the one source that is a query rather than a file, which is why `TranscriptSource` is a union |
 | grok | `sessions/<encoded cwd>/<id>/chat_history.jsonl`, the session key IS the conversation id and the cwd partition binds the read (#3379). Only `user` messages with a `prompt_index` open a turn — the others are context grok injects. It writes tool calls AND what they returned |
-| muse / antigravity | **not "impossible" but "not measured"** — antigravity is #3379's next PR; muse could not be measured (a billing error stopped every turn) and waits on #3375. Both land on the same skeleton |
+| antigravity | `brain/<conversationId>/.system_generated/logs/transcript.jsonl`, via the conversation map with the key as the fallback (#3379). A call's `args` values are each a JSON-encoded string, decoded one level for display; every tool output opens with `Created At:` / `Completed At:` lines, dropped so they do not spend the tool row's line cap; a tool output arrives under a type per tool, so any MODEL step with text that is not a planner response is shown as one |
+| muse | **not "impossible" but "not measured"** — a billing error stopped every turn, so no record shape was seen; waits on #3375 and lands on the same skeleton |
 
 A session whose agent has no reader answers `not-supported` rather than `none`, which is a sentence for
 the person and a to-do for the next implementation. A **shell** never gets it: it has no conversation and
