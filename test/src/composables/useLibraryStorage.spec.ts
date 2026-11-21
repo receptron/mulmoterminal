@@ -1,0 +1,95 @@
+// The Storage view's reads (#3333): nothing until it is shown; a stale or missing measurement asked for
+// again; read every poll while one runs, and no more once it is hidden.
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { effectScope, nextTick, ref } from "vue";
+import { flushPromises } from "@vue/test-utils";
+import type { LibraryStorageAnswer } from "../../../common/libraryStorage";
+
+const reads: string[] = [];
+let measures = 0;
+let answers: Array<LibraryStorageAnswer | null> = [];
+vi.mock("../../../src/composables/libraryApi", () => ({
+  loadLibraryStorage: (query: string) => {
+    reads.push(query);
+    return Promise.resolve(answers.length > 1 ? answers.shift() : answers[0]);
+  },
+  measureLibraryStorage: () => {
+    measures += 1;
+    return Promise.resolve(true);
+  },
+}));
+const { useLibraryStorage, STORAGE_POLL_MS, STORAGE_STALE_MS } = await import("../../../src/composables/useLibraryStorage");
+
+const answer = (measuredAt: number | null, measuring: LibraryStorageAnswer["measuring"] = null): LibraryStorageAnswer => ({
+  root: "/h",
+  measuring,
+  cleanup: { state: "default", days: 30 },
+  measure:
+    measuredAt === null
+      ? null
+      : { measuredAt, total: { bytes: 0, files: 0, unreadable: 0 }, entries: [], projects: [], otherProjects: { bytes: 0, files: 0, unreadable: 0, count: 0 } },
+});
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  reads.length = 0;
+  measures = 0;
+});
+afterEach(() => vi.useRealTimers());
+
+function start(shownAtFirst: boolean) {
+  const shown = ref(shownAtFirst);
+  const query = ref("");
+  const scope = effectScope();
+  const storage = scope.run(() => useLibraryStorage(shown, query));
+  if (storage === undefined) throw new Error("no scope");
+  return { shown, query, storage, scope };
+}
+
+describe("useLibraryStorage", () => {
+  it("reads nothing while hidden, and a fresh measurement once shown without measuring again", async () => {
+    answers = [answer(Date.now())];
+    const { shown, storage } = start(false);
+    await flushPromises();
+    expect(reads).toEqual([]);
+    shown.value = true;
+    await flushPromises();
+    expect(reads).toEqual([""]);
+    expect(measures).toBe(0);
+    expect(storage.loaded.value).toBe(true);
+  });
+
+  it("asks for a measurement when there is none, or the last is stale", async () => {
+    answers = [answer(null), answer(null, { done: 0, of: 0 })];
+    start(true);
+    await flushPromises();
+    expect(measures).toBe(1);
+    answers = [answer(Date.now() - STORAGE_STALE_MS - 1)];
+    start(true);
+    await flushPromises();
+    expect(measures).toBe(2);
+  });
+
+  it("reads again every poll while a measurement runs, and stops when hidden", async () => {
+    answers = [answer(Date.now(), { done: 1, of: 3 })];
+    const { shown } = start(true);
+    await flushPromises();
+    const before = reads.length;
+    await vi.advanceTimersByTimeAsync(STORAGE_POLL_MS);
+    expect(reads).toHaveLength(before + 1);
+    shown.value = false;
+    await nextTick();
+    await vi.advanceTimersByTimeAsync(STORAGE_POLL_MS * 3);
+    expect(reads).toHaveLength(before + 1);
+  });
+
+  it("reads again for a new query, once it settles", async () => {
+    answers = [answer(Date.now())];
+    const { query } = start(true);
+    await flushPromises();
+    query.value = "a";
+    query.value = "ap";
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(reads).toEqual(["", "ap"]);
+  });
+});

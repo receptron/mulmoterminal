@@ -20,6 +20,7 @@ import {
 import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
 import type { PromoteTarget } from "../../common/libraryPromote";
+import { isLibraryStorageAnswer, type LibraryStorageAnswer } from "../../common/libraryStorage";
 
 /** The index answers a page from what it holds, but a first open also starts the worker. */
 const LIBRARY_READ_TIMEOUT_MS = 15_000;
@@ -245,5 +246,20 @@ export async function saveLibraryMark(id: string, change: LibraryMarkChange): Pr
     return isLibraryMarks(body) ? body : null;
   } catch {
     return null;
+  }
+}
+
+/** The Storage view's last measurement, the one running now, and `cleanupPeriodDays` (#3333). */
+export async function loadLibraryStorage(query: string): Promise<LibraryStorageAnswer | null> {
+  const body = await readJson(`/api/library/storage?${new URLSearchParams({ q: query }).toString()}`);
+  return isLibraryStorageAnswer(body) ? body : null;
+}
+
+/** Ask for a measurement of Claude Code's home; one already running is joined. False when refused. */
+export async function measureLibraryStorage(): Promise<boolean> {
+  try {
+    return (await fetchWithTimeout("/api/library/storage/measure", postJson({}), LIBRARY_READ_TIMEOUT_MS)).ok;
+  } catch {
+    return false;
   }
 }

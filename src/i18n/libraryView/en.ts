@@ -54,6 +54,28 @@ export const libraryViewEn = {
       unreadable: "This version could not be read.",
       folded: "{count} unchanged lines",
     },
+    storage: {
+      kind: "Storage",
+      search: "Search projects",
+      shortcuts: "/ search projects · ↑↓ move · Esc close",
+      measuring: "Measuring Claude Code's folder…",
+      measuringOf: "Measuring… {done} of {of}",
+      loadFailed: "Could not read how much space Claude Code's folder takes.",
+      empty: "There is nothing in {root}.",
+      total: "{size} in all",
+      files: "{count} file | {count} files",
+      unreadable: "{count} could not be read",
+      temporary: "temp",
+      otherProjects: "{count} more projects, {size}",
+      noProject: "No project matches.",
+      cleanupSet:
+        "Claude Code deletes conversation transcripts not used for {days} days when it starts; settings.json sets this. Which other folders it clears depends on its version.",
+      cleanupDefault:
+        "Claude Code deletes conversation transcripts not used for {days} days when it starts (the default: settings.json does not set it). Which other folders it clears depends on its version.",
+      cleanupUnreadable: "Could not read cleanupPeriodDays from settings.json, so how long Claude Code keeps transcripts is not known here.",
+      measuredAt: "Measured {when}.",
+      remeasure: "Measure again",
+    },
     memory: {
       copies: {
         intro: "Also kept in other work copies of this repository:",

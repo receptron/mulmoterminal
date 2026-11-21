@@ -20,7 +20,7 @@ interface Pending {
 
 // The server runs through tsx, so the worker inherits the loader; a process started without it (a
 // spec runner) passes it explicitly.
-const workerExecArgv = (): string[] => (process.execArgv.includes("tsx") ? process.execArgv : [...process.execArgv, "--import", "tsx"]);
+export const workerExecArgv = (): string[] => (process.execArgv.includes("tsx") ? process.execArgv : [...process.execArgv, "--import", "tsx"]);
 
 const isReply = (value: unknown): value is LibraryReply => isRecord(value) && typeof value.id === "string" && typeof value.ok === "boolean";
 

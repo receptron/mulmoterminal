@@ -54,6 +54,28 @@ export const libraryViewKo = {
       unreadable: "이 버전을 읽을 수 없었습니다.",
       folded: "변경 없는 {count}줄",
     },
+    storage: {
+      kind: "용량",
+      search: "프로젝트 찾기",
+      shortcuts: "/ 프로젝트 찾기 · ↑↓ 이동 · Esc 닫기",
+      measuring: "Claude Code 폴더를 측정하는 중…",
+      measuringOf: "측정 중… {of}개 중 {done}개",
+      loadFailed: "Claude Code 폴더가 차지하는 용량을 읽지 못했습니다.",
+      empty: "{root}에는 아무것도 없습니다.",
+      total: "합계 {size}",
+      files: "파일 {count}개",
+      unreadable: "{count}개는 읽지 못했습니다",
+      temporary: "임시",
+      otherProjects: "그 밖의 프로젝트 {count}개, {size}",
+      noProject: "일치하는 프로젝트가 없습니다.",
+      cleanupSet:
+        "Claude Code는 시작할 때 {days}일 동안 사용하지 않은 대화 기록을 지웁니다(settings.json 설정). 그 밖에 어떤 폴더를 정리하는지는 버전에 따라 다릅니다.",
+      cleanupDefault:
+        "Claude Code는 시작할 때 {days}일 동안 사용하지 않은 대화 기록을 지웁니다(기본값: settings.json에 설정되어 있지 않음). 그 밖에 어떤 폴더를 정리하는지는 버전에 따라 다릅니다.",
+      cleanupUnreadable: "settings.json에서 cleanupPeriodDays를 읽지 못해, Claude Code가 대화 기록을 얼마나 보관하는지 여기서는 알 수 없습니다.",
+      measuredAt: "{when}에 측정했습니다.",
+      remeasure: "다시 측정",
+    },
     memory: {
       copies: {
         intro: "이 저장소의 다른 작업 사본에도 있습니다:",

@@ -54,6 +54,27 @@ export const libraryViewJa = {
       unreadable: "この版を読めませんでした。",
       folded: "変更のない {count} 行",
     },
+    storage: {
+      kind: "容量",
+      search: "プロジェクトを探す",
+      shortcuts: "/ でプロジェクトを探す · ↑↓ で移動 · Esc で閉じる",
+      measuring: "Claude Code のフォルダを測っています…",
+      measuringOf: "測っています… {of} 件中 {done} 件",
+      loadFailed: "Claude Code のフォルダの大きさを読めませんでした。",
+      empty: "{root} には何もありません。",
+      total: "合計 {size}",
+      files: "{count} 個のファイル",
+      unreadable: "{count} 件は読めませんでした",
+      temporary: "一時",
+      otherProjects: "ほか {count} 件のプロジェクト、{size}",
+      noProject: "当てはまるプロジェクトはありません。",
+      cleanupSet: "Claude Code は起動時に、{days} 日使われていない会話の記録を消します（settings.json の設定）。ほかにどのフォルダを片付けるかは版によります。",
+      cleanupDefault:
+        "Claude Code は起動時に、{days} 日使われていない会話の記録を消します（既定の値。settings.json には書かれていません）。ほかにどのフォルダを片付けるかは版によります。",
+      cleanupUnreadable: "settings.json から cleanupPeriodDays を読めなかったので、Claude Code が会話の記録をいつまで残すかはここでは分かりません。",
+      measuredAt: "{when}に測りました。",
+      remeasure: "測り直す",
+    },
     memory: {
       copies: {
         intro: "このリポジトリのほかの作業コピーにもあります:",
