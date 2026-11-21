@@ -8,7 +8,7 @@ const runGh = vi.hoisted(() =>
       return { ok: true, stdout: JSON.stringify({ number: Number(args[2]), url: "https://github.com/o/r/issues/4", body: "b" }), stderr: "" };
     if (args[0] === "pr" && args[1] === "view")
       return { ok: true, stdout: JSON.stringify({ number: Number(args[2]), url: "https://github.com/o/r/pull/5" }), stderr: "" };
-    if (args[0] === "repo") return { ok: true, stdout: "main\n", stderr: "" };
+    if (args[0] === "repo") return args.includes("o/no-default") ? { ok: false, stdout: "", stderr: "no access" } : { ok: true, stdout: "main\n", stderr: "" };
     if (args[0] === "pr" && args.includes("merged")) {
       const review = { authorAssociation: "OWNER", submittedAt: "2026-10-26T04:00:00Z", body: "CODEX VERDICT: LGTM (head abc1234)" };
       return { ok: true, stdout: JSON.stringify([{ number: 6, url: "https://github.com/o/r/pull/6", headRefName: "feat/y", reviews: [review] }]), stderr: "" };
@@ -22,13 +22,23 @@ const runGh = vi.hoisted(() =>
   }),
 );
 vi.mock("../../../server/git/gh.js", () => ({ runGh }));
-vi.mock("../../../server/git/git-status.js", () => ({ currentBranch: vi.fn(async () => ({ branch: "feat/x", detached: false })) }));
+// A directory's HEAD by its path: `/w/main/...` on main, `/w/detached/...` detached, `/w/unborn/...`
+// with no HEAD at all, anything else on feat/x.
+const currentBranch = vi.hoisted(() =>
+  vi.fn(async (dir: string) => {
+    if (dir.startsWith("/w/main/")) return { branch: "main", detached: false };
+    if (dir.startsWith("/w/detached/")) return { branch: null, detached: true };
+    if (dir.startsWith("/w/unborn/")) return { branch: null, detached: false };
+    return { branch: "feat/x", detached: false };
+  }),
+);
+vi.mock("../../../server/git/git-status.js", () => ({ currentBranch }));
 // A directory's repo by its path: `/w/<owner>/<repo>`, on the host `/w/gitlab/...` names, else GitHub.
 const repoForDir = vi.hoisted(() =>
   vi.fn(async (dir: string) => {
     if (dir === "/w/a") return { forge: { kind: "github", host: "github.com", path: "o/r" }, repo: "o/r" };
     if (dir.startsWith("/w/gitlab/")) return { forge: { kind: "gitlab", host: "gitlab.com", path: "g/p" }, repo: "gitlab.com/g/p" };
-    const repo = dir.replace(/^\/w\//, "");
+    const repo = dir.replace(/^\/w\/((main|detached|unborn)\/)?/, "");
     return { forge: { kind: "github", host: "github.com", path: repo }, repo };
   }),
 );
@@ -101,6 +111,41 @@ describe("boardAcrossRepos with a cell in a repo that is not configured", () => 
 
   it("does not read a repo off GitHub that no one configured", async () => {
     expect(await boardAcrossRepos([], [{ ...elsewhere, cwd: "/w/gitlab/g/p" }])).toEqual([]);
+  });
+});
+
+describe("boardAcrossRepos with cells on the default branch or on no branch", () => {
+  const at = (session: string, cwd: string) => ({ session, cwd, working: false, waiting: false });
+
+  it("puts them on the repo's mainline row, not on a card", async () => {
+    const [board] = await boardAcrossRepos(["o/r2"], [at("m", "/w/main/o/r2"), at("d", "/w/detached/o/r2"), at("b", "/w/o/r2")]);
+    expect(board?.mainlineCells?.map((c) => [c.session, c.branch])).toEqual([
+      ["m", "main"],
+      ["d", null],
+    ]);
+    expect(board?.cards?.flatMap((card) => card.cells.map((c) => c.session))).toEqual(["b"]);
+  });
+
+  it("leaves the row out when no cell is on it", async () => {
+    const [board] = await boardAcrossRepos(["o/r2"], [at("b", "/w/o/r2")]);
+    expect(board).not.toHaveProperty("mainlineCells");
+  });
+
+  it("does not place a cell in a directory with no HEAD", async () => {
+    const [board] = await boardAcrossRepos(["o/r2"], [at("u", "/w/unborn/o/r2")]);
+    expect(board).not.toHaveProperty("mainlineCells");
+    expect(board?.cards?.flatMap((card) => card.cells)).toEqual([]);
+  });
+
+  it("gives a cell on main a branch card when the default branch cannot be read, keeping detached ones on the row", async () => {
+    const [board] = await boardAcrossRepos(["o/no-default"], [at("m", "/w/main/o/no-default"), at("d", "/w/detached/o/no-default")]);
+    expect(board?.cards?.find((card) => card.key === "branch-main")?.cells.map((c) => c.session)).toEqual(["m"]);
+    expect(board?.mainlineCells?.map((c) => c.session)).toEqual(["d"]);
+  });
+
+  it("reads an unregistered repo whose only terminal is on its default branch", async () => {
+    const boards = await boardAcrossRepos([], [at("m", "/w/main/x/only-main")]);
+    expect(boards.map((board) => [board.repo, board.unregistered, board.mainlineCells?.length])).toEqual([["x/only-main", true, 1]]);
   });
 });
 

@@ -409,6 +409,25 @@ describe("GithubBoard with only the work a terminal is open on", () => {
     expect(w.find('[data-testid="board-nothing-open"]').exists()).toBe(false);
   });
 
+  it("shows the terminals on the default branch or on no branch in a row above the columns", async () => {
+    const main = { session: "m1", cwd: "/w/main", working: false, waiting: false, branch: "main" };
+    const detached = { session: "d1", cwd: "/w/detached", working: false, waiting: false, branch: null };
+    serve({ repos: [{ repo: "o/r", cards: [todo], mainlineCells: [detached, main] }] });
+    const w = mount(GithubBoard);
+    await flushPromises();
+    const groups = w.findAll('[data-testid="board-mainline-group"]');
+    expect(groups.map((group) => group.find("span").text())).toEqual(["On main", "On no branch"]);
+    expect(groups.map((group) => group.findAll('[data-testid="board-cell"]').length)).toEqual([1, 1]);
+    // With nothing else open the repo still shows, with its row and no empty columns.
+    expect(w.findAll('[data-testid="board-repo"]')).toHaveLength(1);
+    expect(w.find('[data-testid^="board-column-"]').exists()).toBe(false);
+    expect(w.find('[data-testid="board-nothing-open"]').exists()).toBe(false);
+    await w.get<HTMLInputElement>('[data-testid="board-open-work-only"]').setValue(false);
+    expect(w.find('[data-testid="board-mainline"]').exists()).toBe(true);
+    expect(w.get('[data-testid="board-column-todo"]').text()).toContain("todo thing");
+    w.unmount();
+  });
+
   it("closes the panel of a card the switch hides", async () => {
     serveBoardAndDetail({ repos: [{ repo: "o/r", cards: [todo, prCard] }] });
     setBoardOpenWorkOnly(false);

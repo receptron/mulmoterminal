@@ -18,6 +18,8 @@ export const githubBoardZhCN = {
     showAll: "显示全部",
     unregistered: "未登记",
     unregisteredTip: "不在 Pull request repos 中；因为有终端在其中打开而显示",
+    onBranch: "在 {branch} 上打开的终端",
+    noBranch: "无分支",
     draft: "草稿",
     ci: { passing: "CI 通过", failing: "CI 失败", pending: "CI 运行中", none: "无 CI" },
     changesRequested: "要求修改",

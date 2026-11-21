@@ -1,7 +1,15 @@
 // The GitHub board's decisions (#3172), pure: what a `gh pr list` row says about review progress,
 // which column a piece of work is in, and how PRs, issues and live cells fold into cards. The `gh`
 // calls and the session lookups that feed it are in board-fetch.ts.
-import { BOARD_COLUMNS, type BoardCard, type BoardCell, type BoardColumn, type BoardIssue, type BoardPr } from "../../common/githubBoard.js";
+import {
+  BOARD_COLUMNS,
+  type BoardCard,
+  type BoardCell,
+  type BoardColumn,
+  type BoardIssue,
+  type BoardMainlineCell,
+  type BoardPr,
+} from "../../common/githubBoard.js";
 import { issueCandidateFromBranch } from "../../common/prPhase.js";
 import { isRecord } from "../../common/isRecord.js";
 import { readString } from "../../common/readString.js";
@@ -14,9 +22,9 @@ export interface BoardPrRow {
   closes: BoardIssue[];
 }
 
-/** A live cell and the branch its directory is on. */
+/** A live cell and the branch its directory is on; null when HEAD is detached. */
 export interface CellOnBranch extends BoardCell {
-  branch: string;
+  branch: string | null;
 }
 
 export interface RepoBoardInput {
@@ -73,7 +81,9 @@ export function openPrColumn(pr: BoardPr): BoardColumn {
 
 const cellsByBranch = (cells: readonly CellOnBranch[]): Map<string, BoardCell[]> => {
   const out = new Map<string, BoardCell[]>();
-  cells.forEach(({ branch, ...cell }) => out.set(branch, [...(out.get(branch) ?? []), cell]));
+  cells.forEach(({ branch, ...cell }) => {
+    if (branch !== null) out.set(branch, [...(out.get(branch) ?? []), cell]);
+  });
   return out;
 };
 
@@ -139,6 +149,11 @@ const todoCards = (context: BoardContext): BoardCard[] =>
   [...context.openIssues.values()]
     .filter((issue) => !context.claims.issues.has(issue.number))
     .map((issue): BoardCard => ({ key: `issue-${issue.number}`, column: "todo", issue, pr: null, branch: null, cells: [] }));
+
+/** The cells no card can carry: on no branch, or on the default branch. With the default branch unknown
+ *  only the first, since a cell on any branch then gets a branch card. */
+export const mainlineCells = (cells: readonly CellOnBranch[], defaultBranch: string | null): BoardMainlineCell[] =>
+  cells.filter((cell) => cell.branch === null || cell.branch === defaultBranch);
 
 /** Every card for one repo, in column order. Each PR is one card, showing its issue even when another
  *  PR closes the same one; an issue or branch that a card already shows gets no card of its own. */

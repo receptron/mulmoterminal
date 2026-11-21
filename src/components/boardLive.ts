@@ -1,25 +1,30 @@
 // The board's live half (#3182), pure: the cards as the `sessions` channel says their cells are now,
 // and which cells have just finished a turn — the moment a push or a new PR is likely, so the board
 // is worth reading again.
-import type { BoardCard, RepoBoard } from "../../common/githubBoard";
+import type { BoardCard, BoardCell, RepoBoard } from "../../common/githubBoard";
 import type { CellActivity } from "../composables/sessionActivity";
 
-/** Every session id the board shows a cell for. */
-export const boardSessionIds = (repos: readonly RepoBoard[]): string[] => [
-  ...new Set(repos.flatMap((repo) => (repo.cards ?? []).flatMap((card) => card.cells.map((cell) => cell.session)))),
-];
+const repoCells = (repo: RepoBoard): BoardCell[] => [...(repo.cards ?? []).flatMap((card) => card.cells), ...(repo.mainlineCells ?? [])];
 
-const liveCard = (card: BoardCard, activity: ReadonlyMap<string, CellActivity>): BoardCard => ({
-  ...card,
-  cells: card.cells.map((cell) => {
-    const live = activity.get(cell.session);
-    return live ? { ...cell, working: live.working, waiting: live.waiting } : cell;
-  }),
-});
+/** Every session id the board shows a cell for, on a card or on the default branch. */
+export const boardSessionIds = (repos: readonly RepoBoard[]): string[] => [...new Set(repos.flatMap((repo) => repoCells(repo).map((cell) => cell.session)))];
+
+// Every cell list in a repo — each card's and the default branch's — passed through `change`.
+const withEachCellList = (repo: RepoBoard, change: <T extends BoardCell>(cells: T[]) => T[]): RepoBoard => {
+  if (!repo.cards && !repo.mainlineCells) return repo;
+  const next: RepoBoard = repo.cards ? { ...repo, cards: repo.cards.map((card: BoardCard) => ({ ...card, cells: change(card.cells) })) } : { ...repo };
+  if (repo.mainlineCells) next.mainlineCells = change(repo.mainlineCells);
+  return next;
+};
+
+const liveCell = <T extends BoardCell>(cell: T, activity: ReadonlyMap<string, CellActivity>): T => {
+  const live = activity.get(cell.session);
+  return live ? { ...cell, working: live.working, waiting: live.waiting } : cell;
+};
 
 /** The board with each cell's working / waiting taken from the live feed where it has a word. */
 export const withLiveCells = (repos: readonly RepoBoard[], activity: ReadonlyMap<string, CellActivity>): RepoBoard[] =>
-  repos.map((repo) => (repo.cards ? { ...repo, cards: repo.cards.map((card) => liveCard(card, activity)) } : repo));
+  repos.map((repo) => withEachCellList(repo, (cells) => cells.map((cell) => liveCell(cell, activity))));
 
 /** A card some cell of which is waiting for the user. */
 export const cardWaiting = (card: BoardCard): boolean => card.cells.some((cell) => cell.waiting);
@@ -32,11 +37,7 @@ export const finishedTurns = (before: ReadonlyMap<string, boolean>, now: Readonl
 /** The board without the cells whose session has closed since it was read (#3363). A cell only
  *  waiting to be reaped is not here: it is still alive and comes back on a reload. */
 export const withoutClosedCells = (repos: readonly RepoBoard[], closed: ReadonlyMap<string, number>): RepoBoard[] =>
-  closed.size === 0
-    ? [...repos]
-    : repos.map((repo) =>
-        repo.cards ? { ...repo, cards: repo.cards.map((card) => ({ ...card, cells: card.cells.filter((cell) => !closed.has(cell.session)) })) } : repo,
-      );
+  closed.size === 0 ? [...repos] : repos.map((repo) => withEachCellList(repo, (cells) => cells.filter((cell) => !closed.has(cell.session))));
 
 /** The closes a read already reflects, dropped. Each close is stamped with the event count at the
  *  moment it arrived; a read that STARTED at count `readStartedAt` has seen every close stamped

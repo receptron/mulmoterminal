@@ -13,6 +13,8 @@ import { useAppConfig } from "../composables/useAppConfig";
 import GithubBoardCard from "./GithubBoardCard.vue";
 import GithubBoardDetail from "./GithubBoardDetail.vue";
 import GithubLoading from "./GithubLoading.vue";
+import GithubBoardCells from "./GithubBoardCells.vue";
+import { mainlineGroups } from "./boardMainline";
 import IssueStartAgentPicker from "./IssueStartAgentPicker.vue";
 import { useIssueStart } from "../composables/useIssueStart";
 import { boardSelection, type BoardSelection } from "../composables/useGithubBoardView";
@@ -166,8 +168,21 @@ onBeforeUnmount(() => (boardSelection.value = null));
             >
           </h3>
           <p v-if="repo.error" class="px-1 py-3 text-[13px] text-err">{{ repo.error }}</p>
+          <div v-if="repo.mainlineCells?.length" data-testid="board-mainline" class="mb-2.5 flex flex-wrap gap-2.5">
+            <div
+              v-for="group in mainlineGroups(repo.mainlineCells)"
+              :key="group.branch ?? ''"
+              data-testid="board-mainline-group"
+              class="flex min-w-[220px] flex-col gap-1 rounded-md bg-base p-2"
+            >
+              <span class="text-[11px] font-bold tracking-[0.06em] text-muted">
+                {{ group.branch === null ? t("githubBoard.noBranch") : t("githubBoard.onBranch", { branch: group.branch }) }}
+              </span>
+              <GithubBoardCells :cells="group.cells" :home="home" />
+            </div>
+          </div>
           <!-- Five tracks whatever is shown, so a column keeps its width when the switch drops the others. -->
-          <div v-else class="grid min-w-[900px] grid-cols-5 gap-2.5">
+          <div v-if="!repo.error" class="grid min-w-[900px] grid-cols-5 gap-2.5">
             <div
               v-for="column in visibleColumns(repo, boardOpenWorkOnly)"
               :key="column"
