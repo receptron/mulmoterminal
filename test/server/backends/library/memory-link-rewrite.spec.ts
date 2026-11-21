@@ -74,6 +74,10 @@ describe("rewriteLinks", () => {
     const crlf = "---\r\ndescription: [[alpha]]\r\n---\r\n[[alpha]]\r\n";
     expect(rewriteLinks(crlf, A, "beta")).toEqual({ text: "---\r\ndescription: [[alpha]]\r\n---\r\n[[beta]]\r\n", count: 1 });
     expect(rewriteLinks(`\uFEFF${fm}[[a]]`, A, "beta")).toEqual({ text: `\uFEFF${fm}[[beta]]`, count: 1 });
+    // Mixed line ends with code: rewritten when the code can be placed back exactly (and left untouched), refused when not.
+    expect(rewriteLinks("text\r\n\n`[[a]]` [[a]]\n", A, "beta")).toEqual({ text: "text\r\n\n`[[a]]` [[beta]]\n", count: 1 });
+    expect(rewriteLinks("[[a]]\r\n`[[a]]`\n", A, "beta")).toBeNull();
+    expect(rewriteLinks("[[a]]\r\n```\r\n[[a]]\r\n```\n", A, "beta")).toBeNull();
     // Mixed line ends with no code: every line end is kept, the frontmatter's included.
     const mixed = "---\r\ndescription: [[alpha]]\r\n---\r\nSee [[alpha]].\nMore [[a]].\r\n";
     expect(rewriteLinks(mixed, A, "beta")).toEqual({ text: "---\r\ndescription: [[alpha]]\r\n---\r\nSee [[beta]].\nMore [[beta]].\r\n", count: 2 });
