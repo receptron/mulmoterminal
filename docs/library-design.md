@@ -146,7 +146,11 @@ follows is a refusal to add one of those, and the reason sits next to it.
 ## Tools and storage
 
 - Tools: pick one directory (the project filter becomes a directory picker) and list its rules,
-  permissions, hooks and skills, each row naming the file that sets it.
+  permissions, hooks and skills, each row naming the file that sets it. The first part shipped is the
+  instruction files: what Claude Code loads in that directory, in its own order (code.claude.com/docs/en/memory),
+  read only. Which files load and in what order is a pure function (`instruction-files.ts`); the
+  routes take a directory only when a conversation ran there, and a file only when that directory's
+  listing names it.
 - Storage: what can be tidied first, then the size of each location. One sentence explains what
   `cleanupPeriodDays` removes and what it leaves.
 

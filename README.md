@@ -1915,7 +1915,12 @@ narrow and tall for one record you are discussing — and each position keeps it
   and moves this one to the Trash with its lines. It also points the `[[links]]` to this memory, in
   the merged text and in the project's other memories (as listed when the merge starts), at the one kept (never one inside code or by
   a name another memory also has; how many is said before saving, and a link that cannot be rewritten exactly stops the merge). **Undo**
-  puts all of it back. Design: [`docs/library-design.md`](docs/library-design.md).
+  puts all of it back. **Tools** picks a directory a conversation ran in and lists the instruction
+  files Claude Code loads there, in the order it loads them: the managed `CLAUDE.md`, yours and your
+  `~/.claude/rules`, every `CLAUDE.md` / `.claude/CLAUDE.md` / `CLAUDE.local.md` from the filesystem root
+  down, the project's `.claude/rules` (a rule with `paths` marked as loading only for matching files),
+  and what their `@path` imports bring in — or `AGENTS.md` where no `CLAUDE.md` counts. Each is read
+  beside the list. Read only. Design: [`docs/library-design.md`](docs/library-design.md).
 - **Skills viewer** — **More features** → **Skills** lists every Claude skill on disk in three
   columns — where it lives, its skills, its `SKILL.md`. The places are your `~/.claude/skills`,
   each enabled plugin (skills shown as `plugin:skill`), and the `.claude/skills` of each folder a
