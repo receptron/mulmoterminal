@@ -408,6 +408,43 @@ describe("which source answers", () => {
     expect(await sessionTranscriptView(cwd, GROK_SESSION, { agentOf: () => null, unreadSources: [] })).toEqual({ status: "none" });
   });
 
+  // Antigravity mints its own conversation id; a key with no recorded mapping is read as that id
+  // itself, the path a session picked from the conversation list takes (#3379).
+  it("reads an antigravity conversation by its conversation id", async () => {
+    const AGY_SESSION = "77099efc-d0f0-4b6f-98cc-9a9ca4e9b50c";
+    const dir = path.join(home, ".gemini", "antigravity-cli", "brain", AGY_SESSION, ".system_generated", "logs");
+    await fs.mkdir(dir, { recursive: true });
+    const steps = [
+      {
+        step_index: 0,
+        source: "USER_EXPLICIT",
+        type: "USER_INPUT",
+        status: "DONE",
+        created_at: "2026-11-21T03:36:21Z",
+        content: "<USER_REQUEST>\nwhat is this\n</USER_REQUEST>",
+      },
+      { step_index: 1, source: "MODEL", type: "PLANNER_RESPONSE", status: "DONE", content: "an antigravity conversation" },
+    ];
+    await fs.writeFile(path.join(dir, "transcript.jsonl"), steps.map((r) => `${JSON.stringify(r)}\n`).join(""));
+    const view = await sessionTranscriptView(cwd, AGY_SESSION, {});
+    expect(view.status).toBe("ok");
+    if (view.status !== "ok") return;
+    expect(view.turns.map((turn) => turn.rows.map((row) => row.text))).toEqual([["what is this", "an antigravity conversation"]]);
+  });
+
+  // The key is joined into a path. SESSION_ID_RE refuses this one before any source is asked; the
+  // antigravity source's own shape check is the second line behind it, as claude's isInside is.
+  it("does not read a transcript a key with ../ would point at outside agy's brain directory", async () => {
+    const outside = path.join(home, ".gemini", "antigravity-cli", "evil", ".system_generated", "logs");
+    await fs.mkdir(outside, { recursive: true });
+    const steps = [
+      { type: "USER_INPUT", status: "DONE", content: "<USER_REQUEST>\nq\n</USER_REQUEST>" },
+      { source: "MODEL", type: "PLANNER_RESPONSE", status: "DONE", content: "leaked" },
+    ];
+    await fs.writeFile(path.join(outside, "transcript.jsonl"), steps.map((r) => `${JSON.stringify(r)}\n`).join(""));
+    expect(await sessionTranscriptView(cwd, "../evil", { agentOf: () => null, unreadSources: [] })).toEqual({ status: "none" });
+  });
+
   it("does not let one source's miss end the search", async () => {
     await writeRollout(CODEX_SESSION, codexRollout(codexUser("ask codex"), codexAssistant("answered")));
     const view = await sessionTranscriptView(cwd, CODEX_SESSION, { agentOf: () => "codex" });
@@ -422,13 +459,11 @@ describe("an agent whose conversation this host cannot read", () => {
   // planted in one would otherwise still be held in the next — which is how two of these first
   // asserted the answer they were written to rule out.
   const GROK_ID = "77777777-6666-4555-8444-333333330001";
-  const AGY_ID = "77777777-6666-4555-8444-333333330002";
   const MUSE_ID = "77777777-6666-4555-8444-333333330003";
   const SHELL_ID = "77777777-6666-4555-8444-333333330004";
 
   it("says not-supported for an agent with no reader here", async () => {
     expect(await sessionTranscriptView(cwd, OTHER, { agentOf: () => "muse" })).toEqual({ status: "not-supported" });
-    expect(await sessionTranscriptView(cwd, OTHER, { agentOf: () => "antigravity" })).toEqual({ status: "not-supported" });
   });
 
   // A shell has no conversation and never will, so the screen IS its content. Telling a person it
@@ -449,6 +484,7 @@ describe("an agent whose conversation this host cannot read", () => {
     expect(await sessionTranscriptView(cwd, OTHER, { agentOf: () => "copilot" })).toEqual({ status: "none" });
     // Grok moved up the same way when it got a reader (#3379).
     expect(await sessionTranscriptView(cwd, OTHER, { agentOf: () => "grok" })).toEqual({ status: "none" });
+    expect(await sessionTranscriptView(cwd, OTHER, { agentOf: () => "antigravity" })).toEqual({ status: "none" });
   });
 
   // #2116. The caller's resolver answers from the PROCESS — a live pty, or what tmux says the pane
@@ -472,12 +508,7 @@ describe("an agent whose conversation this host cannot read", () => {
   // through production's own writer.
   //
   // So the registry-backed probes are handed in.
-  const storeHolding = (agent: "antigravity" | "muse", held: string): readonly UnreadSource[] => [{ agent, holds: (_cwd, id) => Promise.resolve(id === held) }];
-
-  it("says not-supported for an antigravity session whose process is gone", async () => {
-    const view = await sessionTranscriptView(cwd, AGY_ID, { agentOf: () => null, unreadSources: storeHolding("antigravity", AGY_ID) });
-    expect(view).toEqual({ status: "not-supported" });
-  });
+  const storeHolding = (agent: "muse", held: string): readonly UnreadSource[] => [{ agent, holds: (_cwd, id) => Promise.resolve(id === held) }];
 
   it("says not-supported for a muse session whose process is gone", async () => {
     const view = await sessionTranscriptView(cwd, MUSE_ID, { agentOf: () => null, unreadSources: storeHolding("muse", MUSE_ID) });
@@ -491,20 +522,20 @@ describe("an agent whose conversation this host cannot read", () => {
     expect(view).toEqual({ status: "none" });
   });
 
-  // The default path. What remains in production's list (antigravity, muse) answers from maps hydrated
-  // off this machine's own `~/.mulmoterminal`, which a test must not write into. So production's own
-  // antigravity entry is swapped for one that holds a known id, for this test only, and the call
-  // passes no list — it is answered only if the default really is production's list.
+  // The default path. What remains in production's list (muse) answers from a map hydrated off this
+  // machine's own `~/.mulmoterminal`, which a test must not write into. So production's own muse
+  // entry is swapped for one that holds a known id, for this test only, and the call passes no list —
+  // it is answered only if the default really is production's list.
   it("uses the production store list when the caller passes none", async () => {
     const id = "77777777-6666-4555-8444-333333330006";
-    const agy = UNREAD_SOURCES.find((source) => source.agent === "antigravity");
-    if (!agy) throw new Error("antigravity is no longer in UNREAD_SOURCES; rewrite this test");
-    const original = agy.holds;
-    agy.holds = (_cwd, asked) => Promise.resolve(asked === id);
+    const muse = UNREAD_SOURCES.find((source) => source.agent === "muse");
+    if (!muse) throw new Error("muse is no longer in UNREAD_SOURCES; rewrite this test");
+    const original = muse.holds;
+    muse.holds = (_cwd, asked) => Promise.resolve(asked === id);
     try {
       expect(await sessionTranscriptView(cwd, id, { agentOf: () => null })).toEqual({ status: "not-supported" });
     } finally {
-      agy.holds = original;
+      muse.holds = original;
     }
   });
 
