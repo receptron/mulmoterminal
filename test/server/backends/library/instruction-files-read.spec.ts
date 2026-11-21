@@ -1,10 +1,10 @@
 // @vitest-environment node
 // Reading the instruction files Claude Code loads for a directory (#3332), on a real tree.
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { readInstructions } from "../../../../server/backends/library/instruction-files-read";
+import { IMPORTS_PER_FILE_MAX, readInstructions, RULES_PER_FOLDER_MAX } from "../../../../server/backends/library/instruction-files-read";
 import { INSTRUCTION_FILE_MAX_BYTES } from "../../../../common/libraryTools";
 
 const dirs: string[] = [];
@@ -85,5 +85,35 @@ describe("readInstructions", () => {
   it("does not read AGENTS.md where a CLAUDE.local.md counts", async () => {
     const { listed } = tree({ "w/CLAUDE.local.md": "mine", "w/app/AGENTS.md": "agents" });
     expect(await listed()).toEqual(["local w/CLAUDE.local.md launch"]);
+  });
+
+  it.skipIf(process.platform === "win32")("follows a linked rule and a linked rules folder, each real folder once", async () => {
+    const { at, listed } = tree({ "shared/security.md": "shared", "shared/more/api.md": "api", "w/app/.claude/rules/own.md": "own" });
+    symlinkSync(at("shared/security.md"), at("w/app/.claude/rules/security.md"));
+    symlinkSync(at("shared"), at("w/app/.claude/rules/shared"));
+    symlinkSync(at("w/app/.claude/rules"), at("shared/loop"));
+    const rules = (await listed()).filter((line) => line.startsWith("rule "));
+    expect(rules).toEqual([
+      "rule w/app/.claude/rules/own.md launch",
+      "rule w/app/.claude/rules/security.md launch",
+      "rule w/app/.claude/rules/shared/more/api.md launch",
+      "rule w/app/.claude/rules/shared/security.md launch",
+    ]);
+  });
+
+  it("follows at most so many imports from one file, and says when the listing stopped at its bound", async () => {
+    const imports = Array.from({ length: IMPORTS_PER_FILE_MAX + 20 }, (_, n) => `@i${String(n)}.md`).join("\n");
+    const files: Record<string, string> = { "w/app/CLAUDE.md": imports };
+    Array.from({ length: IMPORTS_PER_FILE_MAX + 20 }, (_, n) => (files[`w/app/i${String(n)}.md`] = "x"));
+    const { read } = tree(files);
+    const result = await read();
+    expect(result.files.filter((file) => file.scope === "import")).toHaveLength(IMPORTS_PER_FILE_MAX);
+    expect(result.truncated).toBe(false);
+    const many: Record<string, string> = {};
+    Array.from({ length: RULES_PER_FOLDER_MAX }, (_, n) => {
+      many[`h/.claude/rules/u${String(n)}.md`] = "u";
+      many[`w/app/.claude/rules/p${String(n)}.md`] = "p";
+    });
+    expect((await tree(many).read()).truncated).toBe(true);
   });
 });

@@ -17,6 +17,12 @@ import {
 
 /** Rules read from one folder at most: a folder of thousands is not instructions anyone wrote. */
 export const RULES_PER_FOLDER_MAX = 200;
+/** Entries looked at under one rules folder at most, however deep: the walk stops there. */
+export const RULE_ENTRIES_MAX = 2000;
+/** Files listed in all, and imports followed from one file: a file of thousands of `@path` lines is
+ *  not read through to the end. */
+export const INSTRUCTION_FILES_MAX = 300;
+export const IMPORTS_PER_FILE_MAX = 100;
 
 interface Read {
   file: Omit<LibraryInstructionFile, "scope" | "loads" | "importedBy">;
@@ -40,20 +46,36 @@ async function readInstruction(file: string): Promise<Read | null> {
   return { file: { path: file, lines: lineCount(text), bytes: Buffer.byteLength(text), state: "ok" }, text };
 }
 
-/** The `.md` files under a rules folder, in path order, at most the cap. */
+/** The `.md` files under a rules folder, in path order, at most the cap. Links are followed, as Claude
+ *  Code follows a shared rules folder linked in; each real folder is walked once, so a loop ends. */
 async function ruleFiles(folder: string): Promise<string[]> {
-  const entries = await fs.readdir(folder, { recursive: true, withFileTypes: true }).catch(() => []);
-  return entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-    .map((entry) => path.join(entry.parentPath, entry.name))
-    .sort((a, b) => a.localeCompare(b))
-    .slice(0, RULES_PER_FOLDER_MAX);
+  const found: string[] = [];
+  const queue = [folder];
+  const walked = new Set<string>();
+  let budget = RULE_ENTRIES_MAX;
+  while (queue.length > 0 && budget > 0) {
+    const dir = queue.shift() ?? "";
+    const real = await fs.realpath(dir).catch(() => null);
+    if (real === null || walked.has(real)) continue;
+    walked.add(real);
+    const entries = (await fs.readdir(dir, { withFileTypes: true }).catch(() => [])).slice(0, budget);
+    budget -= entries.length;
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      const info = entry.isSymbolicLink() ? await fs.stat(full).catch(() => null) : entry;
+      if (info?.isDirectory()) queue.push(full);
+      else if (info?.isFile() && entry.name.endsWith(".md")) found.push(full);
+    }
+  }
+  return found.toSorted((a, b) => a.localeCompare(b)).slice(0, RULES_PER_FOLDER_MAX);
 }
 
 interface Walk {
   home: string;
   seen: Set<string>;
   out: LibraryInstructionFile[];
+  /** Files looked for, found or not: the bound on one listing's work. */
+  looked: number;
 }
 
 /** One file and, after it, what its imports bring in — depth-first, as they are expanded in place. */
@@ -64,13 +86,14 @@ async function addFile(
   importedBy: string | null,
   depth: number,
 ): Promise<boolean> {
-  if (walk.seen.has(candidate.path)) return false;
+  if (walk.seen.has(candidate.path) || walk.looked >= INSTRUCTION_FILES_MAX) return false;
+  walk.looked += 1;
   const read = await readInstruction(candidate.path);
   if (read === null) return false;
   walk.seen.add(candidate.path);
   walk.out.push({ ...read.file, scope: candidate.scope, loads, importedBy });
   if (read.text === null || depth >= IMPORT_DEPTH_MAX) return true;
-  for (const imported of importsOf(read.text, candidate.path, walk.home)) {
+  for (const imported of importsOf(read.text, candidate.path, walk.home).slice(0, IMPORTS_PER_FILE_MAX)) {
     await addFile(walk, { scope: "import", path: imported }, loads, candidate.path, depth + 1);
   }
   return true;
@@ -91,7 +114,7 @@ export async function readInstructions(
   home: string,
   platform: NodeJS.Platform = process.platform,
 ): Promise<LibraryInstructions> {
-  const walk: Walk = { home, seen: new Set(), out: [] };
+  const walk: Walk = { home, seen: new Set(), out: [], looked: 0 };
   const candidates = launchCandidates(cwd, configDir, platform);
   const claudeMd = await Promise.all(candidates.filter(countsAsClaudeMd).map((candidate) => readInstruction(candidate.path)));
   const agentsMd = claudeMd.every((read) => read === null);
@@ -103,7 +126,7 @@ export async function readInstructions(
       for (const agents of agentsCandidates(cwd, platform)) await addFile(walk, agents, "launch", null, 0);
     }
   }
-  return { cwd, files: walk.out, agentsMd };
+  return { cwd, files: walk.out, agentsMd, truncated: walk.looked >= INSTRUCTION_FILES_MAX };
 }
 
 /** One instruction file's text to show. Through a link, on purpose: Claude Code follows one (a CLAUDE.md

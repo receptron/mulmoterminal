@@ -19,8 +19,13 @@ const failed = ref(false);
 const chosen = ref<string | null>(null);
 const text = ref<LibraryFileText | null>(null);
 
+/** The directories could not be listed (the index is unavailable): said, not shown as "none yet". */
+const directoriesFailed = ref(false);
+
 void (async () => {
-  directories.value = (await loadToolDirectories()) ?? [];
+  const listed = await loadToolDirectories();
+  directoriesFailed.value = listed === null;
+  directories.value = listed ?? [];
   const wanted = props.initialCwd;
   cwd.value = wanted !== null && directories.value.includes(wanted) ? wanted : (directories.value[0] ?? null);
 })();
@@ -88,7 +93,10 @@ defineExpose({ move });
       <option v-for="dir in directories ?? []" :key="dir" :value="dir">{{ dir }}</option>
     </select>
   </div>
-  <p v-if="directories !== null && directories.length === 0" class="m-0 px-4 py-6 font-sans text-[13px] text-dim" data-testid="library-tools-empty">
+  <p v-if="directoriesFailed" class="m-0 px-4 py-6 font-sans text-[13px] text-err-text" data-testid="library-tools-directories-failed">
+    {{ t("libraryView.tools.failed") }}
+  </p>
+  <p v-else-if="directories !== null && directories.length === 0" class="m-0 px-4 py-6 font-sans text-[13px] text-dim" data-testid="library-tools-empty">
     {{ t("libraryView.tools.noDirectories") }}
   </p>
   <p v-else-if="failed" class="m-0 px-4 py-6 font-sans text-[13px] text-err-text">{{ t("libraryView.tools.failed") }}</p>
@@ -97,6 +105,9 @@ defineExpose({ move });
     <div class="min-h-0 w-[360px] flex-none overflow-y-auto border-r border-border py-2 max-[760px]:w-full max-[760px]:border-r-0">
       <p v-if="instructions.agentsMd" class="m-0 px-4 pb-1 font-sans text-[12px] text-secondary" data-testid="library-tools-agents">
         {{ t("libraryView.tools.agentsMd") }}
+      </p>
+      <p v-if="instructions.truncated" class="m-0 px-4 pb-1 font-sans text-[12px] text-secondary" data-testid="library-tools-truncated">
+        {{ t("libraryView.tools.truncated") }}
       </p>
       <p v-if="shown.length === 0" class="m-0 px-4 py-2 font-sans text-[13px] text-dim">{{ t("libraryView.tools.none") }}</p>
       <button
@@ -123,7 +134,9 @@ defineExpose({ move });
         <p class="m-0 mt-1 font-sans text-[12px] text-dim">{{ [t(`libraryView.tools.scope.${selected.scope}`), ...notes(selected)].join(" · ") }}</p>
       </header>
       <div class="min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-3">
-        <p v-if="text && text.text === null" class="m-0 font-sans text-[13px] text-err-text">{{ t("libraryView.tools.unreadable") }}</p>
+        <p v-if="text && text.text === null" class="m-0 font-sans text-[13px] text-err-text" data-testid="tool-text-missing">
+          {{ text.reason === "too-large" ? t("libraryView.tools.tooLargeToShow") : t("libraryView.tools.unreadable") }}
+        </p>
         <pre v-else-if="text" class="m-0 whitespace-pre-wrap break-words font-mono text-[12px] leading-[1.6] text-fg" data-testid="tool-text">{{
           text.text
         }}</pre>

@@ -53,6 +53,8 @@ export const libraryViewZhTW = {
       agentsMd: "這裡及上層都沒有 CLAUDE.md，因此 Claude Code 改為讀取 AGENTS.md。",
       onDemand: "僅在處理符合的檔案時讀取",
       tooLarge: "超過 4 MiB，Claude Code 不會讀取",
+      tooLargeToShow: "太大，無法在此顯示（超過 1 MB）。Claude Code 仍會讀取。",
+      truncated: "只列出了前面的檔案：這裡讀取的檔案多到資料庫讀不完。",
       unreadable: "無法讀取",
       importedBy: "由 {name} 匯入",
       lines: "{lines} 行",

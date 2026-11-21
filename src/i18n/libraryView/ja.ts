@@ -53,6 +53,8 @@ export const libraryViewJa = {
       agentsMd: "ここにも上にも CLAUDE.md が無いので、Claude Code は代わりに AGENTS.md を読みます。",
       onDemand: "当てはまるファイルを扱うときだけ読まれる",
       tooLarge: "4 MiB を超えるので Claude Code は読まない",
+      tooLargeToShow: "大きすぎてここでは表示できません（1 MB 超）。Claude Code は読みます。",
+      truncated: "先頭のファイルだけを並べています。ここではライブラリが読み切れないほど多くのファイルが読まれます。",
       unreadable: "読めませんでした",
       importedBy: "{name} から取り込み",
       lines: "{lines} 行",

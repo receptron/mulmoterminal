@@ -2,9 +2,9 @@
 // each read beside the list.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
-import type { LibraryInstructions } from "../../../../common/libraryTools";
+import type { LibraryInstructionFile, LibraryInstructionScope, LibraryInstructions } from "../../../../common/libraryTools";
 
-const file = (scope: string, filePath: string, over: Record<string, unknown> = {}) => ({
+const file = (scope: LibraryInstructionScope, filePath: string, over: Partial<LibraryInstructionFile> = {}): LibraryInstructionFile => ({
   scope,
   path: filePath,
   loads: "launch",
@@ -16,20 +16,25 @@ const file = (scope: string, filePath: string, over: Record<string, unknown> = {
 });
 let listing: Record<string, LibraryInstructions> = {};
 const reads: string[] = [];
+let directoriesAnswer: string[] | null = ["/w/app", "/w/lib"];
+let textAnswer: { text: string | null; reason?: string } | null = null;
 vi.mock("../../../../src/composables/libraryApi", () => ({
-  loadToolDirectories: () => Promise.resolve(["/w/app", "/w/lib"]),
+  loadToolDirectories: () => Promise.resolve(directoriesAnswer),
   loadInstructions: (cwd: string) => Promise.resolve(listing[cwd] ?? null),
-  loadInstruction: (_cwd: string, filePath: string) => (reads.push(filePath), Promise.resolve({ text: `text of ${filePath}` })),
+  loadInstruction: (_cwd: string, filePath: string) => (reads.push(filePath), Promise.resolve(textAnswer ?? { text: `text of ${filePath}` })),
 }));
 
 const LibraryTools = (await import("../../../../src/components/library/LibraryTools.vue")).default;
 
 beforeEach(() => {
   reads.length = 0;
+  directoriesAnswer = ["/w/app", "/w/lib"];
+  textAnswer = null;
   listing = {
     "/w/app": {
       cwd: "/w/app",
       agentsMd: false,
+      truncated: false,
       files: [
         file("user", "/h/.claude/CLAUDE.md"),
         file("directory", "/w/app/CLAUDE.md"),
@@ -37,7 +42,7 @@ beforeEach(() => {
         file("rule", "/w/app/.claude/rules/api.md", { loads: "on-demand" }),
       ],
     },
-    "/w/lib": { cwd: "/w/lib", agentsMd: true, files: [file("agents", "/w/lib/AGENTS.md")] },
+    "/w/lib": { cwd: "/w/lib", agentsMd: true, truncated: false, files: [file("agents", "/w/lib/AGENTS.md")] },
   };
 });
 
@@ -79,5 +84,20 @@ describe("LibraryTools", () => {
     await (wrapper.vm as unknown as { move(by: number): Promise<void> }).move(1);
     await flushPromises();
     expect(wrapper.find("[data-testid=tool-reader] h2").text()).toBe("/w/app/docs/style.md");
+  });
+
+  it("says the directories could not be listed, rather than that there are none", async () => {
+    directoriesAnswer = null;
+    const wrapper = await mountTools(null);
+    expect(wrapper.find("[data-testid=library-tools-directories-failed]").exists()).toBe(true);
+    expect(wrapper.find("[data-testid=library-tools-empty]").exists()).toBe(false);
+  });
+
+  it("says a file is too large to show, and that a listing stopped at its bound", async () => {
+    textAnswer = { text: null, reason: "too-large" };
+    listing["/w/app"] = { ...(listing["/w/app"] as LibraryInstructions), truncated: true };
+    const wrapper = await mountTools("/w/app");
+    expect(wrapper.find("[data-testid=tool-text-missing]").text()).toContain("Too large to show here");
+    expect(wrapper.find("[data-testid=library-tools-truncated]").exists()).toBe(true);
   });
 });

@@ -26,6 +26,8 @@ export interface LibraryInstructions {
   files: LibraryInstructionFile[];
   /** No CLAUDE.md counts here, so Claude Code reads AGENTS.md instead (the default setting). */
   agentsMd: boolean;
+  /** The listing stopped at its bound: more files load than are listed. */
+  truncated: boolean;
 }
 
 const isScope = (value: unknown): value is LibraryInstructionScope => INSTRUCTION_SCOPES.some((scope) => scope === value);
@@ -41,4 +43,9 @@ const isInstructionFile = (value: unknown): value is LibraryInstructionFile =>
   (value.state === "ok" || value.state === "too-large" || value.state === "unreadable");
 
 export const isLibraryInstructions = (value: unknown): value is LibraryInstructions =>
-  isRecord(value) && typeof value.cwd === "string" && Array.isArray(value.files) && value.files.every(isInstructionFile) && typeof value.agentsMd === "boolean";
+  isRecord(value) &&
+  typeof value.cwd === "string" &&
+  Array.isArray(value.files) &&
+  value.files.every(isInstructionFile) &&
+  typeof value.agentsMd === "boolean" &&
+  typeof value.truncated === "boolean";
