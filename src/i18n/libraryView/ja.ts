@@ -44,6 +44,20 @@ export const libraryViewJa = {
       folded: "変更のない {count} 行",
     },
     memory: {
+      copies: {
+        intro: "このリポジトリのほかの作業コピーにもあります:",
+        add: "その本文をここに足す",
+        write: "この本文をそこへ書く",
+        written: "この記憶の本文を {name} に書きました。",
+        running: "そこで動いているセッションがあり、まだ前の本文を使うかもしれません。",
+        same: "{name} はもうこの本文です。",
+        changed: "{name} の記憶が読んだあとに変わったので、書きませんでした。",
+        failed: "{name} に書けませんでした。",
+        undone: "{name} の元の本文に戻しました。",
+        "undo-changed": "{name} の記憶がそのあと変わったので、元の本文には戻しませんでした。",
+        "undo-failed": "{name} の元の本文に戻せませんでした。取り消すともう一度試します。",
+        editing: "{name} にある本文を足しています。保存しても書くのはこの記憶だけです。",
+      },
       merge: {
         action: "ほかの記憶に統合する",
         choose: "「{title}」の統合先:",
@@ -92,7 +106,6 @@ export const libraryViewJa = {
         "no-frontmatter": "frontmatter に {fields} がありません。",
         "broken-link": "{names} へリンクしていますが、このプロジェクトにその名前の記憶はありません。",
         "missing-path": "{paths} を挙げていますが、もうありません。",
-        "in-work-copies": "このリポジトリのほかの作業コピーにもあります: {copies}。",
         "index-over-limit": "MEMORY.md が Claude Code の読み込む範囲より長く、後ろの部分は読まれません。",
         "no-index": "MEMORY.md がないので、Claude Code はこれらの記憶を知らされません。",
         "dead-index-entry": "MEMORY.md が {files} を挙げていますが、ここにはありません。",

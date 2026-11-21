@@ -44,6 +44,20 @@ export const libraryViewEn = {
       folded: "{count} unchanged lines",
     },
     memory: {
+      copies: {
+        intro: "Also kept in other work copies of this repository:",
+        add: "Add its text here",
+        write: "Write this text there",
+        written: "Wrote this memory's text in {name}.",
+        running: "A session is running there, and may still use the old text.",
+        same: "{name} already holds this text.",
+        changed: "The memory in {name} changed since it was read, so nothing was written.",
+        failed: "Could not write to {name}.",
+        undone: "Put back the text {name} had.",
+        "undo-changed": "The memory in {name} changed since, so its old text was not put back.",
+        "undo-failed": "Could not put back the text {name} had. Undo tries again.",
+        editing: "Adding the text kept in {name}: saving writes it in this memory only.",
+      },
       merge: {
         action: "Merge into another memory",
         choose: "Merge “{title}” into:",
@@ -92,7 +106,6 @@ export const libraryViewEn = {
         "no-frontmatter": "Its frontmatter has no {fields}.",
         "broken-link": "It links to {names}, but no memory here has that name.",
         "missing-path": "It names {paths}, which is no longer there.",
-        "in-work-copies": "Also kept in other work copies of this repository: {copies}.",
         "index-over-limit": "MEMORY.md is longer than Claude Code loads: the end of it is never read.",
         "no-index": "No MEMORY.md, so Claude Code is not told about these memories.",
         "dead-index-entry": "MEMORY.md lists {files}, which is not here.",

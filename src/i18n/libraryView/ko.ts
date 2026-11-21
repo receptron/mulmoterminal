@@ -44,6 +44,20 @@ export const libraryViewKo = {
       folded: "변경 없는 {count}줄",
     },
     memory: {
+      copies: {
+        intro: "이 저장소의 다른 작업 사본에도 있습니다:",
+        add: "그 본문을 여기에 더하기",
+        write: "이 본문을 거기에 쓰기",
+        written: "이 기억의 본문을 {name}에 썼습니다.",
+        running: "그곳에서 실행 중인 세션이 있어 아직 이전 본문을 쓸 수 있습니다.",
+        same: "{name}은(는) 이미 이 본문입니다.",
+        changed: "{name}의 기억이 읽은 뒤 바뀌어 쓰지 않았습니다.",
+        failed: "{name}에 쓸 수 없었습니다.",
+        undone: "{name}의 원래 본문으로 되돌렸습니다.",
+        "undo-changed": "{name}의 기억이 그 뒤 바뀌어 원래 본문으로 되돌리지 않았습니다.",
+        "undo-failed": "{name}의 원래 본문으로 되돌리지 못했습니다. 실행 취소로 다시 시도합니다.",
+        editing: "{name}에 있는 본문을 더하는 중: 저장해도 이 기억에만 씁니다.",
+      },
       merge: {
         action: "다른 기억에 합치기",
         choose: "“{title}”을(를) 합칠 곳:",
@@ -92,7 +106,6 @@ export const libraryViewKo = {
         "no-frontmatter": "frontmatter에 {fields}이(가) 없습니다.",
         "broken-link": "{names}(으)로 링크하지만, 이 프로젝트에 그 이름의 기억은 없습니다.",
         "missing-path": "{paths}을(를) 가리키지만, 더 이상 없습니다.",
-        "in-work-copies": "이 저장소의 다른 작업 사본에도 있습니다: {copies}.",
         "index-over-limit": "MEMORY.md가 Claude Code가 읽어 들이는 범위보다 길어서 뒷부분은 읽히지 않습니다.",
         "no-index": "MEMORY.md가 없어서 Claude Code는 이 기억들을 알지 못합니다.",
         "dead-index-entry": "MEMORY.md가 {files}을(를) 가리키지만 여기에 없습니다.",

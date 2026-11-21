@@ -18,6 +18,7 @@ import { renderWikiHtml } from "../../wikiMarkdown";
 import LibraryMemoryEditor from "./LibraryMemoryEditor.vue";
 import LibraryMoreMenu from "./LibraryMoreMenu.vue";
 import LibraryMemoryMergeChooser from "./LibraryMemoryMergeChooser.vue";
+import LibraryMemoryWorkCopies from "./LibraryMemoryWorkCopies.vue";
 import { useMemoryTrash } from "../../composables/useMemoryTrash";
 import { hasMemoryDraft, memoryDraftKey } from "./memoryDrafts";
 import type { LibraryFileText } from "../../../common/libraryFiles";
@@ -61,10 +62,12 @@ watch(tidyOnly, () => {
 });
 
 /** Another work copy as the reader names it: its directory's name, and whether its memory is the same. */
-function copyLabel(copy: { slug: string; same: boolean }): string {
-  const project = props.projects.find((candidate) => candidate.slug === copy.slug);
-  const name = (project ? projectName(project.cwd) : null) ?? copy.slug;
-  return t(copy.same ? "libraryView.memory.copySame" : "libraryView.memory.copyDiffers", { name });
+/** The same memory in other work copies, as the reader offers them: by their directory's name. */
+function workCopies(issue: Extract<MemoryFileIssue, { kind: "in-work-copies" }>, file: string) {
+  return issue.copies.map((copy) => {
+    const project = props.projects.find((candidate) => candidate.slug === copy.slug);
+    return { slug: copy.slug, file, same: copy.same, cwd: project?.cwd ?? null, name: (project ? projectName(project.cwd) : null) ?? copy.slug };
+  });
 }
 
 /** One sentence per issue, in the reader's language. */
@@ -75,7 +78,6 @@ function issueSentence(issue: MemoryFileIssue | MemoryProjectIssue): string {
   if (issue.kind === "broken-link") return t(key, { names: list(issue.names.map((name) => `[[${name}]]`)) });
   if (issue.kind === "missing-path") return t(key, { paths: list(issue.paths) });
   if (issue.kind === "dead-index-entry") return t(key, { files: list(issue.files) });
-  if (issue.kind === "in-work-copies") return t(key, { copies: list(issue.copies.map(copyLabel)) });
   return t(key);
 }
 const rows = computed(() => shown.value.flatMap((project) => project.files.map((memory) => ({ project, memory, key: memoryKey(project.slug, memory.file) }))));
@@ -184,6 +186,7 @@ watch(
   () => {
     editing.value = false;
     choosingMerge.value = false;
+    adding.value = null;
   },
 );
 
@@ -206,6 +209,17 @@ function onReload(): void {
 function stopEditing(): void {
   editing.value = false;
   merging.value = null;
+  adding.value = null;
+}
+
+/** Another work copy's text being taken into the memory read, in the editor. */
+const adding = ref<{ key: string; title: string; body: string } | null>(null);
+
+function startAdding(name: string, body: string): void {
+  const row = selected.value;
+  if (row === null || typeof text.value?.version !== "string" || holdsDraft()) return;
+  adding.value = { key: row.key, title: name, body };
+  editing.value = true;
 }
 
 /** A memory being merged into the one now read: chosen in the reader, then edited into it there. */
@@ -373,22 +387,26 @@ defineExpose({ move, startEdit });
           <span>{{ projectLabel(selected.project) }}</span>
           <span v-if="meta(selected.memory)">{{ meta(selected.memory) }}</span>
         </p>
-        <p
-          v-for="issue in fileIssues(health, selected.project.slug, selected.memory.file)"
-          :key="issue.kind"
-          class="m-0 mt-2 font-sans text-[13px] text-warn"
-          data-testid="memory-issue"
-        >
-          {{ issueSentence(issue) }}
-        </p>
+        <template v-for="issue in fileIssues(health, selected.project.slug, selected.memory.file)" :key="issue.kind">
+          <LibraryMemoryWorkCopies
+            v-if="issue.kind === 'in-work-copies'"
+            :key="selected.key"
+            :copies="workCopies(issue, selected.memory.file)"
+            :text="text?.text ?? null"
+            @add="startAdding"
+            @changed="emit('changed')"
+          />
+          <p v-else class="m-0 mt-2 font-sans text-[13px] text-warn" data-testid="memory-issue">{{ issueSentence(issue) }}</p>
+        </template>
         <p v-if="selected.memory.description" class="m-0 mt-2 font-sans text-[13px] text-secondary">{{ selected.memory.description }}</p>
       </header>
       <LibraryMemoryEditor
         v-if="editing && text?.text != null && text.version"
         ref="editor"
-        :key="merging ? `${selected.key}:merge` : selected.key"
+        :key="merging ? `${selected.key}:merge` : adding ? `${selected.key}:add` : selected.key"
         :leave-refused="leaveRefused"
         :merging="merging && merging.into === selected.key ? merging : null"
+        :adding="adding && adding.key === selected.key ? adding : null"
         :slug="selected.project.slug"
         :file="selected.memory.file"
         :text="text.text"
