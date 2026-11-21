@@ -28,3 +28,18 @@ export const cardWaiting = (card: BoardCard): boolean => card.cells.some((cell) 
  *  ends its turn too. */
 export const finishedTurns = (before: ReadonlyMap<string, boolean>, now: ReadonlyMap<string, boolean>): string[] =>
   [...before.entries()].filter(([session, working]) => working && now.get(session) !== true).map(([session]) => session);
+
+/** The board without the cells whose session has closed since it was read (#3363). A cell only
+ *  waiting to be reaped is not here: it is still alive and comes back on a reload. */
+export const withoutClosedCells = (repos: readonly RepoBoard[], closed: ReadonlyMap<string, number>): RepoBoard[] =>
+  closed.size === 0
+    ? [...repos]
+    : repos.map((repo) =>
+        repo.cards ? { ...repo, cards: repo.cards.map((card) => ({ ...card, cells: card.cells.filter((cell) => !closed.has(cell.session)) })) } : repo,
+      );
+
+/** The closes a read already reflects, dropped. Each close is stamped with the event count at the
+ *  moment it arrived; a read that STARTED at count `readStartedAt` has seen every close stamped
+ *  before it, while a later close must outlive that read, or the read puts its cell back. */
+export const closesAfter = (closed: ReadonlyMap<string, number>, readStartedAt: number): Map<string, number> =>
+  new Map([...closed.entries()].filter(([, stamp]) => stamp >= readStartedAt));

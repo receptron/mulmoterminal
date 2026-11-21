@@ -157,7 +157,8 @@ A merged card still shows while a terminal is left on it, so you notice what is 
 off to see everything, the unstarted issues included. This browser remembers the choice.
 
 - A terminal on the default branch (`main` and so on) is on no card, so it is not shown.
-- A terminal opened or closed shows on the next read: every minute, or a few seconds after a terminal finishes a turn.
+- A terminal you close leaves its card at once. One you open shows a few seconds later, when the board reads itself again — wherever it was opened, the phone included.
+- A terminal whose browser went away stays on its card while the server still runs it, until it is reaped.
 - GitHub repositories only.
 
 ## Using GitLab {#gitlab}
