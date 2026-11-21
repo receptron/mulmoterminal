@@ -554,6 +554,16 @@ describe("LibraryOverlay", () => {
     memorySourceAnswer = null;
   });
 
+  it("in Tools, leaves the arrows to the directory picker while it has focus", async () => {
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-kind-tools]").trigger("click");
+    await flushPromises();
+    const picker = wrapper.find("[data-testid=library-tools-cwd]").element;
+    const down = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
+    picker.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(false);
+  });
+
   it("in Tools, leaves Enter to the focused control and does not offer it in the keys line", async () => {
     const wrapper = await mountLibrary();
     await wrapper.find("[data-testid=library-kind-tools]").trigger("click");
