@@ -150,6 +150,14 @@ describe("copilotFinalAnswer", () => {
     expect(copilotFinalAnswer({ type: "assistant.message", data: { phase: "final_answer", content: "x" } })).toBe("x");
   });
 
+  it.each([
+    ["an object", {}],
+    ["a string", "view"],
+    ["null", null],
+  ])("rejects a final answer whose toolRequests is %s rather than a list", (_label, toolRequests) => {
+    expect(copilotFinalAnswer({ type: "assistant.message", data: { phase: "final_answer", content: "x", toolRequests } })).toBeNull();
+  });
+
   it("rejects an empty final answer", () => {
     expect(copilotFinalAnswer(answer("   "))).toBeNull();
   });

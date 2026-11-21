@@ -35,7 +35,10 @@ const isUserPrompt = (record: Record<string, unknown>): boolean => record.type =
 
 const promptOf = (record: Record<string, unknown>): string | null => (isRecord(record.data) ? readString(record.data.content).trim() || null : null);
 
-const hasToolRequests = (data: Record<string, unknown>): boolean => Array.isArray(data.toolRequests) && data.toolRequests.length > 0;
+// Absent or an empty list is "no tools"; any other value — including a shape that is not a list —
+// is not trusted as a turn's end, so a malformed record cannot be quoted as the answer.
+const hasToolRequests = (data: Record<string, unknown>): boolean =>
+  data.toolRequests !== undefined && !(Array.isArray(data.toolRequests) && data.toolRequests.length === 0);
 
 /** The text of an answer that ends the turn, or null for every other record. */
 export function copilotFinalAnswer(record: Record<string, unknown>): string | null {
