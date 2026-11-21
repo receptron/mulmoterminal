@@ -230,6 +230,7 @@ describe("screen rows", () => {
       "screen:worklog",
       "screen:skills",
       "screen:processes",
+      "screen:usage",
     ]);
   });
 
@@ -246,9 +247,7 @@ describe("screen rows", () => {
   });
 
   it("offers no screen for a feature that is not set up", () => {
-    const keys = paletteRows("", {}, UNZOOMED, TEXT, { ...NONE, screens: visibleScreens({ prs: false, rooms: false, worklog: false, usage: false }) }).map(
-      rowKey,
-    );
+    const keys = paletteRows("", {}, UNZOOMED, TEXT, { ...NONE, screens: visibleScreens({ prs: false, rooms: false, worklog: false }) }).map(rowKey);
     expect(keys).not.toContain("screen:prs");
     expect(keys).not.toContain("screen:rooms");
     expect(keys).not.toContain("screen:worklog");
@@ -276,7 +275,7 @@ describe("terminal rows", () => {
   it("lists them after the actions on the grid, and after the screens elsewhere", () => {
     const onGrid = paletteRows("", {}, UNZOOMED, TEXT, {
       ...NONE,
-      screens: visibleScreens({ prs: false, rooms: false, worklog: false, usage: false }),
+      screens: visibleScreens({ prs: false, rooms: false, worklog: false }),
       terminals: TERMINALS,
     }).map((row) => row.kind);
     expect(onGrid.indexOf("terminal")).toBe(PALETTE_ACTIONS.length);

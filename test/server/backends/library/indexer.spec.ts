@@ -16,7 +16,9 @@ import {
   memorySourceQuery,
   prCreators,
   prCreatorsQuery,
+  retrospectiveRows,
 } from "../../../../server/backends/library/index-queries";
+import { retrospective } from "../../../../server/backends/library/retrospective";
 import { searchLibrary } from "../../../../server/backends/library/library-search";
 import { runIndexPass, type IndexPassDeps } from "../../../../server/backends/library/indexer";
 import { HEAD_BYTES } from "../../../../server/backends/library/opened-file";
@@ -156,6 +158,17 @@ describe("runIndexPass", () => {
       .all(...query.params)
       .map((row) => String(row.detail));
     expect(plan.join("\n")).toContain("conversations_with_memory");
+  });
+
+  it("adds up the retrospective's cost as the transcripts' own cost-state records sum, the last one of each", async () => {
+    const { db, deps, transcript } = setup();
+    const opened = (iso: string): string => line({ type: "user", cwd: "/w/app", entrypoint: "cli", timestamp: iso, message: { content: "x" } });
+    const cost = (usd: number): string => line({ type: "cost-state", totalCostUSD: usd });
+    transcript("one", opened("2026-11-18T08:00:00.000Z") + cost(0.5) + cost(1.25));
+    transcript("two", opened("2026-11-19T08:00:00.000Z") + cost(2.5) + line({ type: "pr-link", prNumber: 4, prUrl: "u4", prRepository: "o/r" }));
+    await runIndexPass(deps);
+    const totals = retrospective(retrospectiveRows(db, 0), Date.parse("2026-11-21T12:00:00.000Z")).total;
+    expect(totals).toEqual({ costUsd: 1.25 + 2.5, conversations: 2, prs: 1 });
   });
 
   it("does not prefer a copy with no project recorded when no project is asked for", async () => {

@@ -102,6 +102,7 @@ describe("AppToolbar entries for optional features", () => {
       "feature-menu-blueprints",
       "feature-menu-skills",
       "feature-menu-processes",
+      "feature-menu-usage",
     ]);
   });
 
@@ -130,6 +131,7 @@ describe("AppToolbar entries for optional features", () => {
       "feature-menu-skills",
       "feature-menu-processes",
       "feature-menu-worklog",
+      "feature-menu-usage",
     ]);
   });
 
@@ -141,6 +143,7 @@ describe("AppToolbar entries for optional features", () => {
       "feature-menu-blueprints",
       "feature-menu-skills",
       "feature-menu-processes",
+      "feature-menu-usage",
     ]);
   });
 

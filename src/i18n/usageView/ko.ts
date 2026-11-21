@@ -1,8 +1,8 @@
 // The token usage screen (#2919).
 export const usageViewKo = {
-  title: "토큰 사용량",
-  region: "토큰 사용량",
-  close: "토큰 사용량 닫기",
+  title: "사용량",
+  region: "사용량",
+  close: "사용량 닫기",
   intro: "tokenRotation에 등록한 각 구독의 남은 양입니다. 새 세션은 주간 창의 남은 양을 초기화까지의 시간으로 나눈 값이 가장 큰 구독에서 시작합니다.",
   column: { subscription: "구독", fiveHour: "5시간 창", sevenDay: "주간 창" },
   left: "{percent} 남음",
@@ -13,4 +13,18 @@ export const usageViewKo = {
   },
   limitReset: "{window}: {at} 무렵 초기화 (마지막으로 확인한 값)",
   empty: "등록된 토큰이 없습니다.",
+  retro: {
+    title: "최근 몇 주",
+    loading: "라이브러리 색인을 읽는 중…",
+    failed: "라이브러리 색인을 읽지 못했습니다.",
+    total: "대화 {conversations}건에 {cost}, PR {prs}건",
+    week: "주 시작",
+    cost: "금액",
+    conversations: "대화",
+    prs: "PR",
+    project: "프로젝트",
+    agent: "에이전트",
+    noProject: "(디렉터리 없음)",
+    note: "라이브러리가 목록에 보여 주는 대화에 대해 각 대화가 기록한 금액을 더한 것입니다. 대화는 시작한 주에 셉니다.",
+  },
 };

@@ -1,8 +1,8 @@
 // The token usage screen (#2919).
 export const usageViewEn = {
-  title: "Token usage",
-  region: "Token usage",
-  close: "Close token usage",
+  title: "Usage",
+  region: "Usage",
+  close: "Close usage",
   intro: "What each subscription in tokenRotation has left. A new session starts on the one with the most weekly room per hour until its reset.",
   column: { subscription: "Subscription", fiveHour: "5-hour window", sevenDay: "Weekly window" },
   left: "{percent} left",
@@ -13,4 +13,18 @@ export const usageViewEn = {
   },
   limitReset: "{window}: resets around {at} (as last read)",
   empty: "No tokens are configured.",
+  retro: {
+    title: "The last weeks",
+    loading: "Reading the Library's index…",
+    failed: "Could not read the Library's index.",
+    total: "{cost} on {conversations} conversations, {prs} PRs",
+    week: "Week of",
+    cost: "Spent",
+    conversations: "Conversations",
+    prs: "PRs",
+    project: "Project",
+    agent: "Agent",
+    noProject: "(no directory)",
+    note: "Added up from the cost each conversation recorded, for the conversations the Library lists; a conversation counts in the week it started.",
+  },
 };

@@ -1,5 +1,7 @@
 // What the Library's routes ask of the index (#3328), as one async interface: the worker answers it
 // in production, and the specs answer it in-thread over an in-memory database.
+import { RETROSPECTIVE_WEEKS, type LibraryRetrospective } from "../../../common/libraryRetrospective.js";
+import { retrospective, weekStart } from "./retrospective.js";
 import type { LibraryConversation, LibraryConversationPage, LibraryIndexStatus, LibraryPrCreator, LibrarySearchHit } from "../../../common/library.js";
 import {
   conversationDirectories,
@@ -8,6 +10,7 @@ import {
   listConversations,
   memorySource,
   prCreators,
+  retrospectiveRows,
   type ConversationFilter,
 } from "./index-queries.js";
 import type { LibraryIndex } from "./library-index.js";
@@ -33,7 +36,12 @@ export interface LibraryService {
   prCreators(repository: string, numbers: number[]): Promise<LibraryPrCreator[]>;
   /** The conversation that last wrote a memory file, by its path, when the index knows one. */
   memorySource(file: string): Promise<LibraryConversation | null>;
+  /** The retrospective's totals for the weeks up to now. */
+  retrospective(now_ms: number): Promise<LibraryRetrospective>;
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WEEK_MS = 7 * DAY_MS;
 
 /** Every call also asks the index to catch up — in the background, so the answer is what the
  *  index holds now. */
@@ -69,6 +77,11 @@ export function createLocalLibraryService(index: LibraryIndex): LibraryService {
     directories: () => answer(() => conversationDirectories(index.db)),
     prCreators: (repository, numbers) =>
       answer(() => prCreators(index.db, repository, numbers).map((row) => ({ number: Number(row.pr_number), conversation: conversationOfRow(row) }))),
+    retrospective: (now_ms) =>
+      answer(() => {
+        const since_ms = weekStart(now_ms) - (RETROSPECTIVE_WEEKS - 1) * WEEK_MS - DAY_MS;
+        return retrospective(retrospectiveRows(index.db, since_ms), now_ms);
+      }),
     memorySource: (file) =>
       answer(() => {
         const row = memorySource(index.db, file);

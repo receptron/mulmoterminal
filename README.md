@@ -1923,7 +1923,9 @@ narrow and tall for one record you are discussing — and each position keeps it
   beside the list, with the paths it names (Markdown links, code-span paths) that are not there. Above them, **Settings, laid over each other** reads the user, project, local and
   managed `settings.json` files in Claude Code's order and shows the permission rules (every file's,
   added up), environment variables, hooks and other keys in effect, each naming the file that set it.
-  Read only. Design: [`docs/library-design.md`](docs/library-design.md).
+  Read only. **More features** → **Usage** adds a retrospective of the last twelve weeks from the
+  same index: money, conversations and the PRs they made, by week, project and agent (a conversation
+  counts in the week it started); the token windows appear above it while token rotation is on. Design: [`docs/library-design.md`](docs/library-design.md).
 - **Skills viewer** — **More features** → **Skills** lists every Claude skill on disk in three
   columns — where it lives, its skills, its `SKILL.md`. The places are your `~/.claude/skills`,
   each enabled plugin (skills shown as `plugin:skill`), and the `.claude/skills` of each folder a
