@@ -27,6 +27,7 @@ function appWithConversations(count: number) {
       ...{ stamp: { size: 1, mtimeMs: 1 }, head: "h", owner: "t", expectedScannedTo: null, to: 1, restart: true },
       state: { ...emptyConversationState(), aiTitle: `title ${String(i)}`, endedAt: i },
       turns: [{ role: "user", text: `needle number ${String(i)}`, at: null }],
+      replies: [],
     }),
   );
   finishLease(db, "t", 0);

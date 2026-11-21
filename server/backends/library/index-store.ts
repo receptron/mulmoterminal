@@ -11,9 +11,10 @@ import { readString } from "../../../common/readString.js";
 import type { LibraryConversation, LibraryTurnRole } from "../../../common/library.js";
 import { conversationTitle, isConversationState, type ConversationState, type IndexedTurn } from "./conversation-fold.js";
 import type { HistoryPrompt } from "./history-fold.js";
+import { spendTotals, type ReplyWeight } from "./spend-fold.js";
 
 /** Bump when a column or what a column means changes: the next open drops and rebuilds. */
-export const LIBRARY_SCHEMA_VERSION = 6;
+export const LIBRARY_SCHEMA_VERSION = 7;
 // A write that meets another process's lock waits SYNCHRONOUSLY, with the event loop stopped, for up
 // to this long; a reader in WAL mode never waits. So it stays short: a write that gives up is a pass
 // that runs again later, while a long wait is a frozen server.
@@ -22,7 +23,7 @@ const BUSY_TIMEOUT_MS = 100;
 // it up, and that happens once, on the worker, before anything is waiting on an answer.
 const OPEN_BUSY_TIMEOUT_MS = 5000;
 
-const TABLES = ["files", "conversations", "titles_fts", "turns", "turns_fts", "lease"];
+const TABLES = ["files", "conversations", "titles_fts", "turns", "turns_fts", "replies", "lease"];
 
 const SCHEMA = `
 create table if not exists meta (key text primary key, value text not null);
@@ -31,7 +32,7 @@ create table if not exists conversations (
   key integer primary key, path text not null unique, id text not null, agent text not null, parent_id text, title text, cwd text, git_branch text, prs text not null,
   cost_usd real, lines_added integer, lines_removed integer, started_at integer, ended_at integer, skills text not null,
   hook_errors integer not null, user_turns integer not null, is_sidechain integer not null, is_temporary integer not null, entrypoint text,
-  memory_writes text not null default '[]');
+  memory_writes text not null default '[]', spend_models text not null default '{}');
 create index if not exists conversations_id on conversations (id);
 create index if not exists conversations_ended on conversations (ended_at);
 create index if not exists conversations_cwd on conversations (cwd);
@@ -54,6 +55,11 @@ create index if not exists turns_path on turns (path);
 create virtual table if not exists turns_fts using fts5 (text, content = 'turns', content_rowid = 'id', tokenize = 'trigram');
 create trigger if not exists turns_ai after insert on turns begin insert into turns_fts (rowid, text) values (new.id, new.text); end;
 create trigger if not exists turns_ad after delete on turns begin insert into turns_fts (turns_fts, rowid, text) values ('delete', old.id, old.text); end;
+-- Each reply's weight in its 15-minute slot (spend-fold.ts), one row per reply id: a later record of the
+-- same reply replaces it.
+create table if not exists replies (path text not null, id text not null, at integer not null, model text not null, weight real not null,
+  primary key (path, id)) without rowid;
+create index if not exists replies_at on replies (at);
 create table if not exists lease (id integer primary key check (id = 1), owner text, expires_ms integer, files_done integer not null default 0,
   files_total integer not null default 0, finished_ms integer);
 insert or ignore into lease (id) values (1);
@@ -174,6 +180,8 @@ export interface TranscriptScan extends ScanClaim {
   restart: boolean;
   state: ConversationState;
   turns: IndexedTurn[];
+  /** The replies the batch read, each replacing any row of the same id. */
+  replies: ReplyWeight[];
 }
 
 /** Commits the scan, or answers false when its claim no longer holds. */
@@ -182,9 +190,11 @@ export function applyTranscriptScan(db: DatabaseSync, scan: TranscriptScan): boo
     if (!claimHolds(db, scan.path, scan)) return false;
     // A conversation found to be temporary only once its cwd arrived keeps no text from before.
     if (scan.restart || scan.isTemporary) deleteTranscriptTurns(db, scan.path);
+    if (scan.restart) deleteReplies(db, scan.path);
     writeFileMark(db, scan.path, "transcript", { ...scan.stamp, head: scan.head, scannedTo: scan.to }, JSON.stringify(scan.state));
     writeConversation(db, scan);
     insertTurns(db, scan.id, scan.path, scan.turns);
+    writeReplies(db, scan.path, scan.replies);
     return true;
   });
 }
@@ -197,7 +207,7 @@ function writeFileMark(db: DatabaseSync, path: string, kind: string, mark: Omit<
 
 const CONVERSATION_COLUMNS = [
   ...["path", "id", "agent", "parent_id", "title", "cwd", "git_branch", "prs", "cost_usd", "lines_added", "lines_removed"],
-  ...["started_at", "ended_at", "skills", "hook_errors", "user_turns", "is_sidechain", "is_temporary", "entrypoint", "memory_writes"],
+  ...["started_at", "ended_at", "skills", "hook_errors", "user_turns", "is_sidechain", "is_temporary", "entrypoint", "memory_writes", "spend_models"],
 ];
 
 function writeConversation(db: DatabaseSync, scan: TranscriptScan): void {
@@ -205,6 +215,7 @@ function writeConversation(db: DatabaseSync, scan: TranscriptScan): void {
   const values: SQLInputValue[] = [scan.path, scan.id, scan.agent, scan.parentId, conversationTitle(s), s.cwd, s.gitBranch, JSON.stringify(s.prs)];
   values.push(s.costUsd, s.linesAdded, s.linesRemoved, s.startedAt, s.endedAt, JSON.stringify(s.skills), s.hookErrors, s.userTurns);
   values.push(s.isSidechain || scan.parentId !== null ? 1 : 0, scan.isTemporary ? 1 : 0, s.entrypoint, JSON.stringify(s.memoryWrites));
+  values.push(JSON.stringify(spendTotals(s.spend)));
   // An upsert rather than `insert or replace`: a replace deletes the row without firing the delete
   // trigger, which would leave its old title in the title index.
   const updates = CONVERSATION_COLUMNS.slice(1).map((column) => `${column} = excluded.${column}`);
@@ -217,6 +228,16 @@ function writeConversation(db: DatabaseSync, scan: TranscriptScan): void {
 function insertTurns(db: DatabaseSync, conv: string, path: string, turns: readonly { role: LibraryTurnRole; text: string; at: number | null }[]): void {
   const insert = db.prepare("insert into turns (conv, path, role, at, text) values (?, ?, ?, ?, ?)");
   turns.forEach((turn) => insert.run(conv, path, turn.role, turn.at, turn.text));
+}
+
+function writeReplies(db: DatabaseSync, path: string, replies: readonly ReplyWeight[]): void {
+  const write = db.prepare(`insert into replies (path, id, at, model, weight) values (?, ?, ?, ?, ?)
+    on conflict (path, id) do update set at = excluded.at, model = excluded.model, weight = excluded.weight`);
+  replies.forEach((reply) => write.run(path, reply.id, reply.at_ms, reply.model, reply.weight));
+}
+
+function deleteReplies(db: DatabaseSync, path: string): void {
+  db.prepare("delete from replies where path = ?").run(path);
 }
 
 // The prompt-history rows have no path: they are the history file's, and outlive a re-read.
@@ -242,6 +263,7 @@ export function removeMissingTranscripts(db: DatabaseSync, owner: string, seen: 
 
 function removeTranscript(db: DatabaseSync, path: string): void {
   deleteTranscriptTurns(db, path);
+  deleteReplies(db, path);
   db.prepare("delete from conversations where path = ?").run(path);
   db.prepare("delete from files where path = ?").run(path);
 }

@@ -2,6 +2,7 @@
 // in production, and the specs answer it in-thread over an in-memory database.
 import { RETROSPECTIVE_WEEKS, type LibraryRetrospective } from "../../../common/libraryRetrospective.js";
 import { retrospective, weekStart } from "./retrospective.js";
+import { splitSpend } from "./spend-split.js";
 import type { LibraryConversation, LibraryConversationPage, LibraryIndexStatus, LibraryPrCreator, LibrarySearchHit } from "../../../common/library.js";
 import {
   conversationDirectories,
@@ -11,6 +12,7 @@ import {
   memorySource,
   prCreators,
   retrospectiveRows,
+  retrospectiveSpendInputs,
   type ConversationFilter,
 } from "./index-queries.js";
 import type { LibraryIndex } from "./library-index.js";
@@ -96,7 +98,9 @@ export function createLocalLibraryService(index: LibraryIndex, options: LibraryS
     retrospective: (now_ms) =>
       answer(() => {
         const since_ms = weekStart(now_ms) - (RETROSPECTIVE_WEEKS - 1) * WEEK_MS - DAY_MS;
-        return retrospective(retrospectiveRows(index.db, since_ms), now_ms);
+        // One snapshot, so a scan committed between the two reads cannot count a conversation's spend without it.
+        const read = inReadSnapshot(index.db, () => ({ rows: retrospectiveRows(index.db, since_ms), spend: retrospectiveSpendInputs(index.db, since_ms) }));
+        return retrospective(read.rows, splitSpend(read.spend), now_ms);
       }),
     memorySource: (file) =>
       answer(() => {
