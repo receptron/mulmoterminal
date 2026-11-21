@@ -336,6 +336,33 @@ describe("GithubBoard with only the work a terminal is open on", () => {
     expect(w.text()).not.toContain("todo thing");
   });
 
+  it("shows a repo no one registered while a terminal is open in it, tagged, and only with the switch on", async () => {
+    serve({
+      repos: [
+        { repo: "o/r", cards: [prCard] },
+        { repo: "x/y", unregistered: true, cards: [mergedWithCell] },
+      ],
+    });
+    const w = mount(GithubBoard);
+    await flushPromises();
+    const repos = () => w.findAll('[data-testid="board-repo"]');
+    expect(repos().map((repo) => repo.find("h3").text())).toEqual(["o/r", "x/y not registered"]);
+    expect(repos()[0]?.find('[data-testid="board-repo-unregistered"]').exists()).toBe(false);
+    expect(repos()[1]?.find('[data-testid="board-repo-unregistered"]').exists()).toBe(true);
+    await w.get<HTMLInputElement>('[data-testid="board-open-work-only"]').setValue(false);
+    expect(repos().map((repo) => repo.find("h3").text())).toEqual(["o/r"]);
+  });
+
+  it("says no repo is configured when only an unregistered one came back and the switch is off", async () => {
+    serve({ repos: [{ repo: "x/y", unregistered: true, cards: [mergedWithCell] }] });
+    setBoardOpenWorkOnly(false);
+    const w = mount(GithubBoard);
+    await flushPromises();
+    expect(w.findAll('[data-testid="board-repo"]')).toHaveLength(0);
+    expect(w.text()).toContain("No repositories configured");
+    expect(w.find('[data-testid="board-nothing-open"]').exists()).toBe(false);
+  });
+
   it("closes the panel of a card the switch hides", async () => {
     serveBoardAndDetail({ repos: [{ repo: "o/r", cards: [todo, prCard] }] });
     setBoardOpenWorkOnly(false);

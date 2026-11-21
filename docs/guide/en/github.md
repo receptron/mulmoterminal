@@ -156,6 +156,7 @@ only the cards with a terminal open are shown, and columns and repositories with
 A merged card still shows while a terminal is left on it, so you notice what is left to tidy. Turn it
 off to see everything, the unstarted issues included. This browser remembers the choice.
 
+- A terminal open in a clone of a GitHub repository you have not added under **Pull request repos** shows too (when `gh` can read that repository; otherwise it is left out with no error), with that repository tagged **not registered**. It is listed after the registered ones, only while the switch is on, and leaves with its last terminal.
 - A terminal on the default branch (`main` and so on) is on no card, so it is not shown.
 - A terminal you close leaves its card at once. One you open shows a few seconds later, when the board reads itself again — wherever it was opened, the phone included.
 - A terminal whose browser went away stays on its card while the server still runs it, until it is reaped.

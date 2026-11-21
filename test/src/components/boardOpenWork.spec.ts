@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { openWorkOnly, visibleColumns } from "../../../src/components/boardOpenWork";
+import { openWorkOnly, registeredOnly, visibleColumns } from "../../../src/components/boardOpenWork";
 import { BOARD_COLUMNS, type BoardCard, type BoardColumn, type RepoBoard } from "../../../common/githubBoard";
 
 const cell = { session: "s", cwd: "/w", working: false, waiting: false };
@@ -29,6 +29,17 @@ describe("openWorkOnly", () => {
 
   it("answers an empty board with an empty one", () => {
     expect(openWorkOnly([])).toEqual([]);
+  });
+});
+
+describe("registeredOnly", () => {
+  it("drops the repos read only because a terminal is open in them, keeping the order", () => {
+    const repos: RepoBoard[] = [{ repo: "o/a" }, { repo: "x/y", unregistered: true, cards: [card("a", "qa", true)] }, { repo: "o/b", unregistered: false }];
+    expect(registeredOnly(repos).map((repo) => repo.repo)).toEqual(["o/a", "o/b"]);
+  });
+
+  it("answers an empty board with an empty one", () => {
+    expect(registeredOnly([])).toEqual([]);
   });
 });
 

@@ -23,12 +23,21 @@ const runGh = vi.hoisted(() =>
 );
 vi.mock("../../../server/git/gh.js", () => ({ runGh }));
 vi.mock("../../../server/git/git-status.js", () => ({ currentBranch: vi.fn(async () => ({ branch: "feat/x", detached: false })) }));
+// A directory's repo by its path: `/w/<owner>/<repo>`, on the host `/w/gitlab/...` names, else GitHub.
+const repoForDir = vi.hoisted(() =>
+  vi.fn(async (dir: string) => {
+    if (dir === "/w/a") return { forge: { kind: "github", host: "github.com", path: "o/r" }, repo: "o/r" };
+    if (dir.startsWith("/w/gitlab/")) return { forge: { kind: "gitlab", host: "gitlab.com", path: "g/p" }, repo: "gitlab.com/g/p" };
+    const repo = dir.replace(/^\/w\//, "");
+    return { forge: { kind: "github", host: "github.com", path: repo }, repo };
+  }),
+);
 vi.mock("../../../server/git/forge-support.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../server/git/forge-support.js")>()),
-  repoForDir: vi.fn(async () => ({ forge: { kind: "github", host: "github.com", path: "o/r" }, repo: "o/r" })),
+  repoForDir,
 }));
 
-const { boardAcrossRepos, boardDetail } = await import("../../../server/git/board-fetch");
+const { boardAcrossRepos, boardDetail, liveCellRepos } = await import("../../../server/git/board-fetch");
 
 const cell = { session: "s1", cwd: "/w/a", working: true, waiting: false };
 
@@ -57,6 +66,48 @@ describe("boardAcrossRepos", () => {
     const [board] = await boardAcrossRepos(["gitlab.com/g/p"], [cell]);
     expect(board?.cards).toBeUndefined();
     expect(board?.error).toBeTruthy();
+  });
+});
+
+describe("boardAcrossRepos with a cell in a repo that is not configured", () => {
+  const elsewhere = { session: "s2", cwd: "/w/x/y", working: false, waiting: false };
+
+  it("reads that repo after the configured ones, marked unregistered, with its cell", async () => {
+    const boards = await boardAcrossRepos(["o/r"], [cell, elsewhere]);
+    expect(boards.map((board) => [board.repo, board.unregistered])).toEqual([
+      ["o/r", undefined],
+      ["x/y", true],
+    ]);
+    expect(boards[1]?.cards?.find((card) => card.key === "pr-5")?.cells.map((c) => c.session)).toEqual(["s2"]);
+  });
+
+  it("reads a configured repo once, however its cell names it", async () => {
+    const boards = await boardAcrossRepos(["github.com/O/R"], [cell]);
+    expect(boards.map((board) => board.repo)).toEqual(["O/R"]);
+  });
+
+  it("leaves out one gh cannot read rather than showing an error", async () => {
+    const broken = { session: "s3", cwd: "/w/x/broken", working: false, waiting: false };
+    const usual = runGh.getMockImplementation();
+    runGh.mockImplementation(async (args: string[]) =>
+      args.includes("x/broken") ? { ok: false, stdout: "", stderr: "no access" } : (usual?.(args) ?? { ok: true, stdout: "[]", stderr: "" }),
+    );
+    try {
+      expect(await boardAcrossRepos([], [broken])).toEqual([]);
+    } finally {
+      if (usual) runGh.mockImplementation(usual);
+    }
+  });
+
+  it("does not read a repo off GitHub that no one configured", async () => {
+    expect(await boardAcrossRepos([], [{ ...elsewhere, cwd: "/w/gitlab/g/p" }])).toEqual([]);
+  });
+});
+
+describe("liveCellRepos", () => {
+  it("is the GitHub repos the cells are in", async () => {
+    const cells = [cell, { ...cell, cwd: "/w/x/y" }, { ...cell, cwd: "/w/gitlab/g/p" }];
+    expect((await liveCellRepos(cells)).sort()).toEqual(["o/r", "x/y"]);
   });
 });
 

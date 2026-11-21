@@ -16,6 +16,8 @@ export const githubBoardEn = {
     openWorkOnly: "Only work with an open terminal",
     nothingOpen: "No terminal is open on any of this work.",
     showAll: "Show everything",
+    unregistered: "not registered",
+    unregisteredTip: "Not in Pull request repos; shown because a terminal is open in it",
     draft: "Draft",
     ci: { passing: "CI passed", failing: "CI failed", pending: "CI running", none: "No CI" },
     changesRequested: "Changes requested",

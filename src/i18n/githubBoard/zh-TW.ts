@@ -16,6 +16,8 @@ export const githubBoardZhTW = {
     openWorkOnly: "僅顯示已開啟終端機的工作",
     nothingOpen: "沒有任何工作開啟了終端機。",
     showAll: "顯示全部",
+    unregistered: "未登記",
+    unregisteredTip: "不在 Pull request repos 中；因為有終端機在其中開啟而顯示",
     draft: "草稿",
     ci: { passing: "CI 通過", failing: "CI 失敗", pending: "CI 執行中", none: "無 CI" },
     changesRequested: "要求修改",
