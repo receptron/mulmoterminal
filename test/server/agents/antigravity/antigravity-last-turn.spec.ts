@@ -128,6 +128,14 @@ describe("antigravityFinalAnswer", () => {
     expect(antigravityFinalAnswer({ ...answer("ok"), tool_calls: [] })).toBe("ok");
   });
 
+  it.each([
+    ["an object", {}],
+    ["a string", "read_file"],
+    ["null", null],
+  ])("rejects a response whose tool_calls is %s rather than a list", (_label, toolCalls) => {
+    expect(antigravityFinalAnswer({ ...answer("I will inspect it."), tool_calls: toolCalls })).toBeNull();
+  });
+
   it("rejects a response that is not DONE", () => {
     expect(antigravityFinalAnswer({ ...answer("partial"), status: "RUNNING" })).toBeNull();
   });
