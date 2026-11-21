@@ -12,6 +12,7 @@ import { githubBoardGoto } from "../composables/useGithubBoardView";
 import GithubPrRepo from "./GithubPrRepo.vue";
 import GithubIssueRepo from "./GithubIssueRepo.vue";
 import IssueStartAgentPicker from "./IssueStartAgentPicker.vue";
+import GithubLoading from "./GithubLoading.vue";
 import { isRecord } from "../../common/isRecord";
 import { isUnknownArray } from "../../common/isUnknownArray";
 import { jsonBody } from "../jsonBody";
@@ -27,6 +28,7 @@ const { loadRepoDirs, startError } = useIssueStart();
 const repos = ref<RepoPrs[]>([]);
 const issueRepos = ref<RepoIssues[]>([]);
 const loading = ref(false);
+const loaded = ref(false);
 const prsError = ref<string | null>(null);
 const issuesError = ref<string | null>(null);
 let reqId = 0;
@@ -63,6 +65,7 @@ async function load(): Promise<void> {
   issueRepos.value = issues.rows.filter(isRepoIssues);
   issuesError.value = issues.error;
   loading.value = false;
+  loaded.value = true;
 }
 
 // On mount rather than on a route change: the overlay mounts this fresh with `v-if` when it opens,
@@ -83,11 +86,12 @@ onMounted(() => void load());
         :disabled="loading"
         :data-tip="t('tips.overlays.reload')"
         :aria-label="t('tips.overlays.reloadGithub')"
+        :aria-busy="loading"
+        data-testid="github-refresh"
         @click="load"
       >
-        <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
+        <span class="material-symbols-outlined" :class="{ 'animate-spin': loading }" aria-hidden="true">refresh</span>
       </button>
-      <span v-if="loading" class="text-[12px] text-muted">Loading…</span>
       <div class="ml-auto flex items-center gap-1">
         <button
           type="button"
@@ -114,7 +118,8 @@ onMounted(() => void load());
       <IssueStartAgentPicker />
     </div>
     <div class="min-w-0 flex-auto overflow-y-auto px-4 pb-16 pt-3">
-      <p v-if="!loading && !prsError && !issuesError && repos.length === 0 && issueRepos.length === 0" class="px-1 py-6 text-[13px] text-muted">
+      <GithubLoading v-if="!loaded" />
+      <p v-else-if="!loading && !prsError && !issuesError && repos.length === 0 && issueRepos.length === 0" class="px-1 py-6 text-[13px] text-muted">
         No repositories configured. Add <code>owner/repo</code> entries under Settings → Pull request repos.
       </p>
       <template v-else>

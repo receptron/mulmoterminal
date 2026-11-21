@@ -115,6 +115,14 @@ describe("grokFinalAnswer", () => {
   });
 
   it.each([
+    ["an object", {}],
+    ["a string", "read_file"],
+    ["null", null],
+  ])("rejects an assistant message whose tool_calls is %s rather than a list", (_label, toolCalls) => {
+    expect(grokFinalAnswer({ ...answer("I'll read it."), tool_calls: toolCalls })).toBeNull();
+  });
+
+  it.each([
     ["an empty answer", answer("   ")],
     ["a reasoning record", reasoning()],
     ["a tool result", toolResult()],

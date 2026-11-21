@@ -37,7 +37,8 @@ export function antigravityTranscriptPath(root: string, id: string): string {
 // (`CONVERSATION_HISTORY`), so the type check alone is not enough.
 const isUserInput = (d: Record<string, unknown>): boolean => d.type === "USER_INPUT" && typeof d.content === "string";
 
-function promptText(content: string): string {
+/** What the user typed, out of the wrapper agy stores a prompt in. */
+export function antigravityPromptText(content: string): string {
   const wrapped = USER_REQUEST_RE.exec(content);
   // No wrapper means a shape we have not seen. Dropping the blocks we DO know keeps a usable
   // title instead of pasting agy's metadata into the row.
@@ -54,7 +55,7 @@ export function antigravityPromptFromTranscriptHead(head: string): string | null
     .map(parseJsonRecord)
     .find((d): d is Record<string, unknown> => d !== null && isUserInput(d));
   if (typeof first?.content !== "string") return null;
-  return promptText(first.content).trim() || null;
+  return antigravityPromptText(first.content).trim() || null;
 }
 
 /** The conversation's title, from the head of its transcript. */

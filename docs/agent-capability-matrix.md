@@ -75,7 +75,7 @@ is where to go read why, not a gap nobody noticed.
 | 9 | **working / waiting flags** | **hooks** (`--settings`) — both | **rollout tail** (1s poll) for working, **`PermissionRequest` hook** (`-c`, trusted once per machine) for waiting — **both** | **hooks** (`.agents/hooks.json` in the directory) — **both**, not on Windows | — | — | **hooks** (a machine-global file) — **working only** | **hooks** (a machine-global file) — **both** |
 | 10 | **Attention sound / Web Push** | yes — finished **and** blocked | yes — finished **and** blocked (the latter once its hook is trusted) | yes — finished only | — | — | yes — finished only | yes — finished only |
 | 11 | Tool-call history (Tools pane) + work phase | yes (from `Pre`/`PostToolUse`) | — | — | — | — | yes (from `preToolUse` / `postToolUse`) | yes (from `preToolUse` / `postToolUse`) |
-| 12 | Last turn → header prompt, handoff, round table, prompts pane | yes | yes | — | yes, from `chat_history.jsonl` — **only `user` messages with a `prompt_index` are the user's; the rest is context grok injects** | — | — (its `turns` table would give it) | yes, from the transcript `.jsonl` |
+| 12 | Last turn → header prompt, handoff, round table, prompts pane | yes | yes | yes, from the brain `transcript.jsonl` — **an interrupt leaves a response with no text, which is not an answer** | yes, from `chat_history.jsonl` — **only `user` messages with a `prompt_index` are the user's; the rest is context grok injects** | — | yes, from `session-state/<id>/events.jsonl` — **not the `turns` table, which is written one turn late** | yes, from the transcript `.jsonl` |
 | 13 | AI-generated session title | yes | — (shows codex's own `/rename` name in the list) | — | — | — | — (the list shows copilot's own `summary`) | — (the list shows the first user message) |
 | 14 | Decision log (`AskUserQuestion`) | yes | — | — | — | — | — | — |
 | 15 | `ctx %` + token badges | yes | yes | yes | yes | yes | — (its `assistant_usage_events` table would give it) | token badge yes, from `stop` (in memory — it writes them to no file); no `ctx %`, because its `model` is `"default"` unless pinned |
@@ -88,7 +88,7 @@ is where to go read why, not a gap nobody noticed.
 | 22 | Editable draft injection | yes (`draftReadyMarker`) | — | — | — | — | — | — |
 | 23 | One-session-per-worktree limit | yes | yes | yes | yes | yes | yes | yes |
 | 24 | Custom-agent wrapper (`customAgents`) | yes | — | — | — | — | — | — |
-| 25 | **The conversation view** — the phone's detail page and the browser's Conversation pane | yes | yes, from the rollout | — | — | — | yes, from its `turns` table — **but no tool ROWS AT ALL: copilot writes none** | yes, from the transcript `.jsonl` — **but no tool RESULTS: cursor writes none** |
+| 25 | **The conversation view** — the phone's detail page and the browser's Conversation pane | yes | yes, from the rollout | — | yes, from `chat_history.jsonl` — calls AND results | — | yes, from its `turns` table — **but no tool ROWS AT ALL: copilot writes none** | yes, from the transcript `.jsonl` — **but no tool RESULTS: cursor writes none** |
 
 ## What each row actually requires
 
@@ -244,10 +244,18 @@ row 9, not from row 18, and an agent with the whole GUI MCP and no hooks gets ne
 **11–14 · Transcript reading.** Requires a **machine-readable, per-session conversation log** with
 user turns and assistant turns distinguishable — and, for the AI title and the decision log,
 claude's specific record shapes. `server/session/transcript/last-turn.ts` normalizes claude and codex into one
-`LastTurn`; cursor and grok have their own readers beside their other files (`cursor-last-turn.ts`,
-`grok-last-turn.ts`), and share the `<user_query>` unwrapping (`server/agents/user-query.ts`) because
-neither escapes the marker. An agent without a reader answers `EMPTY_TURN`: the header shows no
-prompt, handoff has nothing to copy, and a round-table seat contributes nothing.
+`LastTurn`; cursor, agy, grok and copilot have their own readers beside their other files
+(`cursor-last-turn.ts`, `antigravity-last-turn.ts`, `grok-last-turn.ts`, `copilot-last-turn.ts`), and
+cursor and grok share the `<user_query>` unwrapping (`server/agents/user-query.ts`) because neither
+escapes the marker. An agent without a reader answers `EMPTY_TURN`: the header shows no prompt,
+handoff has nothing to copy, and a round-table seat contributes nothing.
+
+Copilot is the case to remember before reusing a store that already feeds row 25. Its `turns` table
+gets a turn's row only when the NEXT prompt is submitted, so it never holds the answer just given —
+fine for a conversation view, and wrong for the last turn, which would quote the previous answer as
+this one's. The event log is written as the turn happens and labels the answer itself
+(`phase: "final_answer"`); a subagent writes into the same log, every record of it carrying a
+top-level `agentId`, and those are skipped.
 
 **15–17 · Accounting.** Needs a file where token counts can be found — at **whatever granularity the
 agent keeps them**, since the badge sums them: claude and codex per turn, grok per turn
@@ -300,7 +308,7 @@ first agent's implementation carries a skeleton the rest land on (`transcript-vi
 source is asked whether IT holds this session, in order, and **the agent is never asked to choose the
 reader** — a claude session that outlived a restart reports its agent as `shell`.
 
-A source is asked one of two ways. Three of the four keep a FILE, located from the session key and read
+A source is asked one of two ways. Every wired agent but copilot keeps a FILE, located from the session key and read
 as a byte window off the tail; copilot keeps a TABLE, whose window is `ORDER BY turn_index DESC LIMIT n`.
 They meet at the SCAN — both hand the same one to the same `transcriptViewOf` — so the line budget, the
 byte cap and the eviction rule are shared by construction rather than by each reader remembering them.
@@ -308,7 +316,7 @@ A query source carries one duty a file source gets for free: its store is machin
 must be scoped to the working directory inside the SQL, or a session id from another project is
 readable here by hand.
 
-What the four wired agents cost, and what the three unwired ones are waiting for:
+What the wired agents cost, and what the unwired ones are waiting for:
 
 | | |
 |---|---|
@@ -316,7 +324,8 @@ What the four wired agents cost, and what the three unwired ones are waiting for
 | codex | the rollout, via the conversation map; TWO tool families (`function_call` and `custom_tool_call` — the latter in 52% of rollouts) and an output field that is a string OR an array in both |
 | cursor | `projects/<slug>/agent-transcripts/<id>/`, slug resolved by asking each project what it stands for; **zero tool results exist in the file** |
 | copilot | its `turns` table — one row per turn, prompt and reply already separated, so the SHAPE needed no measuring: it is declared in SQL. **Zero tool rows of any kind**: `forge_trajectory_events` (`tool_call_id`, `command`, `output`, `exit_code`) is empty even for sessions that ran tools, so a copilot turn shows what was asked and what was said and nothing about what ran. Its cost is not the fold but the WIRING — it is the one source that is a query rather than a file, which is why `TranscriptSource` is a union |
-| grok / muse / antigravity | **not "impossible" but "not measurable here"** — no session of any of them exists on this machine to count record shapes from. They land on the same skeleton the day one does |
+| grok | `sessions/<encoded cwd>/<id>/chat_history.jsonl`, the session key IS the conversation id and the cwd partition binds the read (#3379). Only `user` messages with a `prompt_index` open a turn — the others are context grok injects. It writes tool calls AND what they returned |
+| muse / antigravity | **not "impossible" but "not measured"** — antigravity is #3379's next PR; muse could not be measured (a billing error stopped every turn) and waits on #3375. Both land on the same skeleton |
 
 A session whose agent has no reader answers `not-supported` rather than `none`, which is a sentence for
 the person and a to-do for the next implementation. A **shell** never gets it: it has no conversation and
@@ -522,5 +531,5 @@ difference between cursor having status and not having it.
 
 | Candidate | The probe that decides it |
 |---|---|
-| GitHub Copilot CLI | shipped. Still open, each its own follow-up: does `notification` ever fire (row 3a), the `turns` table for row 12, and `assistant_usage_events` for row 15 — both are columns in `~/.copilot/session-store.db` this build does not read yet |
+| GitHub Copilot CLI | shipped. Still open, each its own follow-up: does `notification` ever fire (row 3a), and `assistant_usage_events` for row 15 — a table in `~/.copilot/session-store.db` this build does not read yet |
 | Cursor CLI | shipped, with the GUI MCP (#2066), the token badge (row 15) and the last-turn read (row 12). Still open: `ctx %`, which needs cursor to name a model on an Auto session |
