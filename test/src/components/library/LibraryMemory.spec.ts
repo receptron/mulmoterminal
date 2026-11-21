@@ -181,7 +181,7 @@ describe("LibraryMemory", () => {
     expect(wrapper.find("[data-testid=memory-issue]").text()).toBe("It links to [[gone]], but no memory here has that name.");
   });
 
-  it("names the other work copies holding the memory by their directory, saying which hold the same text", async () => {
+  describe("work copies", () => {
     const copies = [
       { slug: "-w-lib", same: true },
       { slug: "-w-gone", same: false },
@@ -189,11 +189,41 @@ describe("LibraryMemory", () => {
     const health = new Map<string, LibraryMemoryHealth>([
       ["-w-app", { slug: "-w-app", issues: [], files: { "reply.md": [{ kind: "in-work-copies", copies }] } }],
     ]);
-    const wrapper = await mountMemory("", health);
-    expect(wrapper.find("[data-testid=memory-issue]").text()).toBe(
-      "Also kept in other work copies of this repository: -w-lib (the same), -w-gone (different).",
-    );
-    expect(wrapper.find("[data-testid=memory-tidy]").text()).toContain("1 can be tidied");
+
+    it("names the other copies by their directory, saying which hold the same text, with actions on one that differs", async () => {
+      const wrapper = await mountMemory("", health);
+      expect(wrapper.findAll("[data-testid=memory-work-copy]").map((copy) => copy.text().replace(/\s+/g, " "))).toEqual([
+        "-w-lib (the same)",
+        "-w-gone (different)Add its text hereWrite this text there",
+      ]);
+      expect(wrapper.find("[data-testid=memory-tidy]").text()).toContain("1 can be tidied");
+    });
+
+    it("writes this memory's text in the copy, says so with Undo, and judges the copies again", async () => {
+      texts["-w-gone/reply.md"] = "the copy's older text";
+      const wrapper = await mountMemory("", health);
+      await wrapper.find("[data-testid=memory-copy-write]").trigger("click");
+      await flushPromises();
+      expect(wrapper.find("[data-testid=memory-copy-notice]").text()).toContain("Wrote this memory's text in -w-gone.");
+      expect(wrapper.find("[data-testid=memory-copy-undo]").exists()).toBe(true);
+      expect(wrapper.emitted("changed")).toHaveLength(1);
+    });
+
+    it("adds the copy's body to this memory in the editor, and saving is an ordinary save of this one", async () => {
+      texts["-w-gone/reply.md"] = "---\nname: reply-in-japanese\n---\nThe copy's own line.";
+      const wrapper = await mountMemory("", health);
+      await wrapper.find("[data-testid=memory-copy-add]").trigger("click");
+      await flushPromises();
+      expect(wrapper.find("[data-testid=memory-editor-adding]").text()).toContain("-w-gone");
+      expect(wrapper.find<HTMLTextAreaElement>("[data-testid=memory-editor-field]").element.value).toBe(
+        "---\nname: reply-in-japanese\n---\nAlways Japanese. See [[codex-sandbox]] and [[gone]].\n\nThe copy's own line.\n",
+      );
+      await wrapper.find("[data-testid=memory-editor-save]").trigger("click");
+      await flushPromises();
+      expect(mergeCalls).toEqual([]);
+      expect(wrapper.find("[data-testid=memory-editor]").exists()).toBe(false);
+      expect(wrapper.emitted("changed")).toHaveLength(1);
+    });
   });
 
   it("keeps a project whose only issue is its index when narrowed, rather than saying nothing matches", async () => {

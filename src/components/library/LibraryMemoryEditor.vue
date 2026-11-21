@@ -21,6 +21,9 @@ const props = defineProps<{
   /** Another memory of this project being merged into this one: its body is added to the draft, and
    *  saving also moves it to the Trash. A merge keeps no draft — it is one step, begun again or not. */
   merging?: { file: string; version: string; title: string; body: string } | null;
+  /** Another work copy's text added to the draft, to take it in here; saving is an ordinary save. Like a
+   *  merge it keeps no draft. */
+  adding?: { title: string; body: string } | null;
 }>();
 const emit = defineEmits<{
   (e: "saved", text: string, version: string): void;
@@ -33,9 +36,11 @@ const { t } = useI18n();
  *  so opening and saving it unchanged changes nothing. */
 const crlf = props.text.includes("\r\n");
 const draftKey = memoryDraftKey(props.slug, props.file);
-const kept = props.merging ? null : memoryDraftFor(draftKey, props.version);
+/** The draft was seeded with another memory's text: a step begun again, or not, rather than kept. */
+const seeded = props.merging ?? props.adding ?? null;
+const kept = seeded ? null : memoryDraftFor(draftKey, props.version);
 /** A draft begun on a version the file has since left: offered, not applied. */
-const stale = ref(props.merging ? null : staleMemoryDraftFor(draftKey, props.version));
+const stale = ref(seeded ? null : staleMemoryDraftFor(draftKey, props.version));
 /** Whether the draft kept for this memory is the one in this editor: only then is it ours to drop. */
 let holdsKept = kept !== null;
 function useStaleDraft(): void {
@@ -59,7 +64,7 @@ const withoutTrailingBreaks = (text: string): string =>
     0,
     [...text].reduce((end, char, at) => (char === "\n" ? end : at + 1), 0),
   );
-const draft = ref(props.merging ? mergedDraft(props.merging.body) : (kept?.text ?? props.text).replace(/\r\n?/g, "\n"));
+const draft = ref(seeded ? mergedDraft(seeded.body) : (kept?.text ?? props.text).replace(/\r\n?/g, "\n"));
 /** The draft as it goes to disk: an untouched draft is the file exactly as it was (mixed line endings
  *  included); an edited one takes CRLF throughout when the file had any. */
 const asWritten = (text: string): string => {
@@ -89,7 +94,7 @@ let settled = false;
 
 // Gone with an unsaved draft (the Library closed, the kind switched): kept for next time.
 onBeforeUnmount(() => {
-  if (!settled && !props.merging && dirty.value) keepMemoryDraft(draftKey, { version: props.version, text: asWritten(draft.value) });
+  if (!settled && !seeded && dirty.value) keepMemoryDraft(draftKey, { version: props.version, text: asWritten(draft.value) });
 });
 
 /** Read the file again after a conflict: the draft is given up, as the notice said. */
@@ -190,6 +195,9 @@ function onKey(event: KeyboardEvent): void {
       <span v-if="mergeLinks && mergeLinks.count > 0" data-testid="memory-editor-merge-links">{{
         t("libraryView.memory.merge.links", { count: mergeLinks.count })
       }}</span>
+    </p>
+    <p v-if="adding" class="m-0 px-4 pt-3 font-sans text-[12px] text-secondary" role="status" data-testid="memory-editor-adding">
+      {{ t("libraryView.memory.copies.editing", { name: adding.title }) }}
     </p>
     <p v-if="sessionRunning" class="m-0 px-4 pt-3 font-sans text-[12px] text-warn" role="status" data-testid="memory-editor-running">
       {{ t("libraryView.memory.edit.running") }}
