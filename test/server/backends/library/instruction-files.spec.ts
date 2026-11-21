@@ -126,5 +126,6 @@ describe("isInside", () => {
   it("is the directory itself or below it, by either separator, and not a sibling with the same start", () => {
     expect([isInside("/w/app", "/w/app"), isInside("/w/app", "/w/app/a.md"), isInside("C:\\w", "C:\\w\\a.md")]).toEqual([true, true, true]);
     expect([isInside("/w/app", "/w/application/a.md"), isInside("/w/app", "/w/a.md")]).toEqual([false, false]);
+    expect([isInside("/", "/w/a.md"), isInside("C:\\", "C:\\project\\x.md"), isInside("C:\\", "D:\\x.md")]).toEqual([true, true, false]);
   });
 });

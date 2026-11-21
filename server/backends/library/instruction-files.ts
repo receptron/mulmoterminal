@@ -73,7 +73,12 @@ export function isNetworkPath(target: string): boolean {
 }
 
 /** Whether `target` is `dir` or under it, by either separator. */
-export const isInside = (dir: string, target: string): boolean => target === dir || target.startsWith(`${dir}/`) || target.startsWith(`${dir}\\`);
+export function isInside(dir: string, target: string): boolean {
+  if (target === dir) return true;
+  // A root (`/`, `C:\\`) already ends in its separator.
+  if (dir.endsWith("/") || dir.endsWith("\\")) return target.startsWith(dir);
+  return target.startsWith(`${dir}/`) || target.startsWith(`${dir}\\`);
+}
 
 /** Imports go at most this many hops from the file that loads at launch. */
 export const IMPORT_DEPTH_MAX = 4;
