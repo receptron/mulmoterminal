@@ -9,6 +9,7 @@ import { loadPrCreators } from "../composables/libraryApi";
 import { libraryViewOpen } from "../composables/useLibraryView";
 import { relativeTimeFromIso } from "./cellDisplay";
 import { ciDotClass } from "./ciDot";
+import GithubUnregisteredTag from "./GithubUnregisteredTag.vue";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
@@ -59,6 +60,7 @@ function reviewTagClass(review: string): string {
   <section class="mb-5">
     <h3 class="my-1.5 flex items-center gap-2 border-b border-border pb-1 font-mono text-[13px] font-semibold text-fg">
       {{ repo.repo }}
+      <GithubUnregisteredTag v-if="repo.unregistered" data-testid="prs-repo-unregistered" />
       <span v-if="repo.prs" class="text-[11px] font-normal text-muted">{{ repo.prs.length }}</span>
     </h3>
     <p v-if="repo.error" class="px-1 py-6 text-[13px] text-err">{{ repo.error }}</p>

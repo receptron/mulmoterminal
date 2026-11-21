@@ -11,6 +11,7 @@ import type { RepoDirsResponse } from "../../common/repoDirs.js";
 import type { BoardResponse } from "../../common/githubBoard.js";
 import { boardAcrossRepos, boardDetail, liveCellRepos, type LiveCell } from "../git/board-fetch.js";
 import { parseBoardDetailQuery } from "../git/board-detail.js";
+import { unconfiguredRepos, withUnregisteredLists } from "../git/board-repos.js";
 import { activity, ptys } from "../session/registry.js";
 
 const liveBoardCells = (): LiveCell[] =>
@@ -20,21 +21,23 @@ const liveBoardCells = (): LiveCell[] =>
     return [{ session, cwd: entry.cwd, working: state?.working ?? false, waiting: state?.waiting ?? false }];
   });
 
+const unregisteredRepos = async (): Promise<string[]> => unconfiguredRepos(getPrRepos(), await liveCellRepos(liveBoardCells()));
+
 export function mountRepoRoutes(app: Express): void {
-  // Cross-repo PR list (the /prs view): aggregate open PRs for the configured repos via
-  // the server's `gh` login. Repos come from config (never the request).
+  // Cross-repo PR list (the /prs view): aggregate open PRs for the configured repos, then the GitHub
+  // repos a live cell is in (#3377), via the server's `gh` login. Repos never come from the request.
   app.get("/api/prs", async (_req, res) => {
     try {
-      res.json({ repos: await listPrsAcrossRepos(getPrRepos()) });
+      res.json({ repos: await withUnregisteredLists(getPrRepos(), await unregisteredRepos(), listPrsAcrossRepos) });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
   });
 
-  // Sibling of /api/prs: the same configured repos' open issues (capped per repo).
+  // Sibling of /api/prs: the same repos' open issues (capped per repo).
   app.get("/api/issues", async (_req, res) => {
     try {
-      res.json({ repos: await listIssuesAcrossRepos(getPrRepos()) });
+      res.json({ repos: await withUnregisteredLists(getPrRepos(), await unregisteredRepos(), listIssuesAcrossRepos) });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
