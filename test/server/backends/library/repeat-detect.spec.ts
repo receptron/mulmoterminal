@@ -7,20 +7,18 @@ import {
   candidateOf,
   countedInstructions,
   instructionKey,
+  closeMatchKeys,
   joinAlike,
+  REPEAT_CLOSE_KEYS_MAX,
   occurrencesOf,
-  REPEAT_COMPARED_MAX,
   REPEAT_OCCURRENCES_MAX,
-  REPEAT_PAIR_HOLDERS_MAX,
   REPEAT_NAMED_MAX,
   isCommand,
   repeatCandidates,
   repeatId,
   REPEAT_CLOSE_MAX_CHARS,
-  REPEAT_CLOSE_SIMILARITY,
   REPEAT_MIN_KEY_CHARS,
   REPEAT_WINDOW_MS,
-  similarity,
   type RepeatPrompt,
   type RepeatRules,
 } from "../../../../server/backends/library/repeat-detect.js";
@@ -122,7 +120,7 @@ describe("repeatCandidates", () => {
     expect(repeatCandidates(twoProjects, rules()).filter((c) => c.text.includes("マージ"))).toEqual([]);
   });
 
-  it("groups two short instructions at the similarity bound, and not ones below it", () => {
+  it("groups two short instructions at the similarity bound, and not ones below it, through the whole check", () => {
     const atBound = [...typedIn("publishした", ["a", "b"]), ...typedIn("publishしよう", ["c"])];
     expect(repeatCandidates(atBound, rules()).find((c) => c.text.startsWith("publish"))?.count).toBe(3);
     const below = [...typedIn("コミットしてPR作って", ["a", "b"]), ...typedIn("修正してPR作って", ["c"])];
@@ -164,51 +162,47 @@ describe("repeatCandidates", () => {
   });
 });
 
-describe("similarity", () => {
-  const pairs = (key: string): Set<string> => new Set([...key].slice(1).map((char, at) => `${[...key][at] ?? ""}${char}`));
-
-  it("is the share of letter pairs in common, and the bound sits between alike and not", () => {
-    expect(similarity(pairs("abcd"), pairs("abcd"))).toBe(1);
-    expect(similarity(pairs("abcd"), pairs("wxyz"))).toBe(0);
-    expect(similarity(pairs(instructionKey("CI通ったらマージして")), pairs(instructionKey("CIが通ったらマージして")))).toBeGreaterThanOrEqual(
-      REPEAT_CLOSE_SIMILARITY,
-    );
-    expect(similarity(pairs(instructionKey("マージして")), pairs(instructionKey("マージしてタグ打って")))).toBeLessThan(REPEAT_CLOSE_SIMILARITY);
-  });
-});
-
 describe("joinAlike", () => {
   const recording = () => {
     const joined: Array<[string, string]> = [];
     return { joined, groups: { find: (key: string) => key, join: (a: string, b: string) => void joined.push([a, b]) } };
   };
+  const joinedPairs = (keys: string[]): string[][] => {
+    const { joined, groups } = recording();
+    joinAlike(keys, groups);
+    return joined.map((pair) => [...pair].sort());
+  };
 
-  it("does work bounded per key, however many keys share a common pair", () => {
-    const keys = Array.from({ length: 2000 }, (_, at) => `して${createHash("sha256").update(String(at)).digest("hex").slice(0, 12)}`);
-    const pairsPerKey = Math.max(...keys.map((key) => [...key].length - 1));
-    const { groups } = recording();
-    const work = joinAlike(keys, groups);
-    expect(work.compared).toBeLessThanOrEqual(keys.length * REPEAT_COMPARED_MAX);
-    expect(work.counted).toBeLessThanOrEqual(keys.length * pairsPerKey * REPEAT_PAIR_HOLDERS_MAX);
-    // The common pair alone would have been counted through for every key, against every key.
-    expect(work.counted).toBeLessThan(keys.length * keys.length);
+  it("joins two keys at the similarity bound, and not two below it", () => {
+    expect(joinedPairs([instructionKey("publishした"), instructionKey("publishしよう")])).toHaveLength(1);
+    expect(joinedPairs([instructionKey("コミットしてPR作って"), instructionKey("修正してPR作って")])).toEqual([]);
+    expect(joinedPairs([instructionKey("CI通ったらマージして"), instructionKey("マージしてタグ打って")])).toEqual([]);
   });
 
-  it("joins a short key's real match even when more than the compared bound of long keys hold all its pairs", () => {
+  it("joins a short key's real match however many long keys hold all its pairs", () => {
     const target = "abcdefghij";
     const mate = "abcdefghix";
-    const crowd = Array.from({ length: REPEAT_COMPARED_MAX + 10 }, (_, at) => `${target}${createHash("sha256").update(String(at)).digest("hex").slice(0, 60)}`);
-    const { joined, groups } = recording();
-    joinAlike([target, mate, ...crowd], groups);
-    expect(joined.map((pair) => [...pair].sort())).toContainEqual([target, mate].sort());
+    const crowd = Array.from({ length: 100 }, (_, at) => `${target}${createHash("sha256").update(String(at)).digest("hex").slice(0, 60)}`);
+    expect(joinedPairs([target, mate, ...crowd])).toContainEqual([target, mate].sort());
   });
 
-  it("still joins alike keys hidden among many that share only a common pair", () => {
-    const crowd = Array.from({ length: 1000 }, (_, at) => `して${createHash("sha256").update(String(at)).digest("hex").slice(0, 12)}`);
-    const alike = [instructionKey("CI通ったらマージして"), instructionKey("CIが通ったらマージして")];
-    const { joined, groups } = recording();
-    joinAlike([...crowd, ...alike], groups);
-    expect(joined.map((pair) => [...pair].sort())).toContainEqual([...alike].sort());
+  it("compares only keys that share a letter pair, each pair of keys once", () => {
+    const { groups } = recording();
+    const work = joinAlike(["abcdef", "abcdeg", "zyxwvu"], groups);
+    expect(work.compared).toBe(1);
+  });
+});
+
+describe("closeMatchKeys", () => {
+  const typed = (key: string, times: number, at = 0) => Array.from({ length: times }, () => ({ ...prompt(key, "s"), key, at }));
+
+  it("takes a project's most typed keys, the latest first among equals, up to the bound", () => {
+    const many = Array.from({ length: REPEAT_CLOSE_KEYS_MAX + 5 }, (_, at) => typed(`key${String(at)}`, 1, at)).flat();
+    const keys = closeMatchKeys([...many, ...typed("often", 3)]);
+    expect(keys).toHaveLength(REPEAT_CLOSE_KEYS_MAX);
+    expect(keys[0]).toBe("often");
+    expect(keys[1]).toBe(`key${String(REPEAT_CLOSE_KEYS_MAX + 4)}`);
+    expect(keys).not.toContain("key0");
   });
 });
 

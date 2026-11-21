@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { appendFileSync, mkdtempSync, rmSync, writeFileSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { promptLogReader, repeatPromptOf } from "../../../../server/backends/library/repeat-source.js";
+import { promptLogReader, repeatPromptOf, REPEAT_TEXT_MAX } from "../../../../server/backends/library/repeat-source.js";
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
@@ -19,6 +19,14 @@ describe("repeatPromptOf", () => {
       at: 5,
     });
     expect(repeatPromptOf({ display: "merge it", sessionId: "s" })).toEqual({ text: "merge it", sessionId: "s", project: null, at: 0 });
+  });
+
+  it("keeps a prompt up to the bound, in whole characters", () => {
+    const long = "あ".repeat(REPEAT_TEXT_MAX + 5);
+    expect([...(repeatPromptOf({ display: long, sessionId: "s" })?.text ?? "")]).toHaveLength(REPEAT_TEXT_MAX);
+    const astral = "😀".repeat(REPEAT_TEXT_MAX + 1);
+    expect(repeatPromptOf({ display: astral, sessionId: "s" })?.text).toBe("😀".repeat(REPEAT_TEXT_MAX));
+    expect(repeatPromptOf({ display: "short", sessionId: "s" })?.text).toBe("short");
   });
 
   it("is null for a line with no text or no session", () => {

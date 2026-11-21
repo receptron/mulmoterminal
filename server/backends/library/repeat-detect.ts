@@ -19,12 +19,9 @@ export const REPEAT_MIN_KEY_CHARS = 6;
 export const REPEAT_CLOSE_MAX_CHARS = 80;
 /** How much of two instructions' letter pairs must be shared for them to count as one. */
 export const REPEAT_CLOSE_SIMILARITY = 0.7;
-/** A letter pair held by more keys than this ("して", "th") says little about which keys are alike,
- *  so it is not used to find the keys to compare. */
-export const REPEAT_PAIR_HOLDERS_MAX = 200;
-/** How many keys, those most alike to one by the pairs counted, are compared with it: what keeps the
- *  work linear in the number of keys whatever the log holds. */
-export const REPEAT_COMPARED_MAX = 50;
+/** How many short keys of one project are compared for being alike: its most typed. The comparison
+ *  is exact among them, and its work is bounded by this number whatever the log holds. */
+export const REPEAT_CLOSE_KEYS_MAX = 1500;
 
 export interface RepeatPrompt {
   text: string;
@@ -85,13 +82,6 @@ const letterPairs = (key: string): Set<string> => {
   return new Set(chars.slice(1).map((char, at) => `${chars[at] ?? ""}${char}`));
 };
 
-/** The share of letter pairs two keys have in common. */
-export function similarity(a: Set<string>, b: Set<string>): number {
-  const shared = [...a].filter((pair) => b.has(pair)).length;
-  const union = a.size + b.size - shared;
-  return union === 0 ? 0 : shared / union;
-}
-
 export interface KeyGroups {
   find(key: string): string;
   join(a: string, b: string): void;
@@ -108,54 +98,50 @@ function unionFind(): KeyGroups {
   return { find, join: (a, b) => parent.set(find(a), find(b)) };
 }
 
-/** The keys after `key` most alike to it by the uncommon letter pairs they share — ranked by the share
- *  of both keys' pairs those make, not by how many they are, so a long key that holds all of a short
- *  one's pairs does not crowd out its real match — and how many holders it counted through. */
-function closestKeys(key: string, own: Set<string>, pairs: Map<string, Set<string>>, holders: Map<string, string[]>): { closest: string[]; counted: number } {
-  const shared = new Map<string, number>();
-  let counted = 0;
-  own.forEach((pair) => {
-    const held = holders.get(pair) ?? [];
-    if (held.length > REPEAT_PAIR_HOLDERS_MAX) return;
-    counted += held.length;
-    held.forEach((other) => {
-      if (other > key) shared.set(other, (shared.get(other) ?? 0) + 1);
-    });
-  });
-  const likeness = ([other, count]: [string, number]): number => count / (own.size + (pairs.get(other)?.size ?? 0) - count);
-  const closest = [...shared.entries()]
-    .map((entry): [string, number] => [entry[0], likeness(entry)])
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, REPEAT_COMPARED_MAX)
-    .map(([other]) => other);
-  return { closest, counted };
-}
-
-/** The work joinAlike did: holders counted through, and pairs of keys compared. */
+/** The work joinAlike did: letter-pair holders counted through, and pairs of keys compared. */
 export interface AlikeWork {
   counted: number;
   compared: number;
 }
 
-/** Joins the short keys of one project whose letter pairs mostly match, and answers the work done:
- *  holders counted through, at most REPEAT_PAIR_HOLDERS_MAX per letter pair of a key, and pairs of keys
- *  compared, at most REPEAT_COMPARED_MAX per key. A key is compared only with those sharing the most of
- *  its uncommon letter pairs, which alike keys do. */
+/** Joins the keys whose letter pairs mostly match (REPEAT_CLOSE_SIMILARITY of both keys' pairs),
+ *  exactly: every two keys sharing a pair are compared, by the number they share. Keys sharing none
+ *  are never looked at. Callers hand at most REPEAT_CLOSE_KEYS_MAX keys, which bounds the work. */
 export function joinAlike(keys: readonly string[], groups: KeyGroups): AlikeWork {
   const pairs = new Map(keys.map((key) => [key, letterPairs(key)]));
   const holders = new Map<string, string[]>();
   pairs.forEach((set, key) => set.forEach((pair) => pushTo(holders, pair, key)));
   const work: AlikeWork = { counted: 0, compared: 0 };
-  keys.forEach((key) => {
-    const own = pairs.get(key) ?? new Set<string>();
-    const { closest, counted } = closestKeys(key, own, pairs, holders);
-    work.counted += counted;
-    closest.forEach((other) => {
+  pairs.forEach((own, key) => {
+    const shared = new Map<string, number>();
+    own.forEach((pair) =>
+      (holders.get(pair) ?? []).forEach((other) => {
+        if (other <= key) return;
+        work.counted += 1;
+        shared.set(other, (shared.get(other) ?? 0) + 1);
+      }),
+    );
+    shared.forEach((count, other) => {
       work.compared += 1;
-      if (similarity(own, pairs.get(other) ?? new Set()) >= REPEAT_CLOSE_SIMILARITY) groups.join(key, other);
+      const union = own.size + (pairs.get(other)?.size ?? 0) - count;
+      if (count / union >= REPEAT_CLOSE_SIMILARITY) groups.join(key, other);
     });
   });
   return work;
+}
+
+/** A project's short keys to compare: its REPEAT_CLOSE_KEYS_MAX most typed, the latest first among
+ *  equals. A key past that is still counted when the same words are typed again. */
+export function closeMatchKeys(prompts: ReadonlyArray<RepeatPrompt & { key: string }>): string[] {
+  const typed = new Map<string, { count: number; at: number }>();
+  prompts.forEach(({ key, at }) => {
+    const held = typed.get(key);
+    typed.set(key, { count: (held?.count ?? 0) + 1, at: Math.max(held?.at ?? at, at) });
+  });
+  return [...typed.entries()]
+    .sort((a, b) => b[1].count - a[1].count || b[1].at - a[1].at)
+    .slice(0, REPEAT_CLOSE_KEYS_MAX)
+    .map(([key]) => key);
 }
 
 const mostFirst = (values: readonly string[]): string[] => {
@@ -190,11 +176,9 @@ export function candidateOf(members: ReadonlyArray<RepeatPrompt & { key: string 
 export function repeatGroups(prompts: readonly RepeatPrompt[], rules: RepeatRules): Array<Array<RepeatPrompt & { key: string }>> {
   const counted = countedInstructions(prompts, rules);
   const groups = unionFind();
-  const shortByProject = new Map<string, Set<string>>();
-  counted
-    .filter((prompt) => [...prompt.text].length <= REPEAT_CLOSE_MAX_CHARS)
-    .forEach((prompt) => shortByProject.set(prompt.project ?? "", (shortByProject.get(prompt.project ?? "") ?? new Set()).add(prompt.key)));
-  shortByProject.forEach((keys) => joinAlike([...keys], groups));
+  const shortByProject = new Map<string, Array<RepeatPrompt & { key: string }>>();
+  counted.filter((prompt) => [...prompt.text].length <= REPEAT_CLOSE_MAX_CHARS).forEach((prompt) => pushTo(shortByProject, prompt.project ?? "", prompt));
+  shortByProject.forEach((prompts) => joinAlike(closeMatchKeys(prompts), groups));
   const byRoot = new Map<string, Array<RepeatPrompt & { key: string }>>();
   counted.forEach((prompt) => pushTo(byRoot, groups.find(prompt.key), prompt));
   return [...byRoot.values()].filter((members) => members.length >= REPEAT_MIN_COUNT && new Set(members.map((m) => m.sessionId)).size >= REPEAT_MIN_SESSIONS);

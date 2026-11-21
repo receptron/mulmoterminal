@@ -9,9 +9,15 @@ import { readString } from "../../../common/readString.js";
 import { forEachJsonlRecord } from "../../infra/fs/jsonl-file.js";
 import type { RepeatPrompt } from "./repeat-detect.js";
 
+/** How much of one prompt is kept: an instruction is far shorter, and a prompt that long is a paste. It
+ *  bounds what the check holds and what one answer carries. */
+export const REPEAT_TEXT_MAX = 2000;
+
+const clipped = (text: string): string => (text.length <= REPEAT_TEXT_MAX ? text : [...text.slice(0, REPEAT_TEXT_MAX * 2)].slice(0, REPEAT_TEXT_MAX).join(""));
+
 /** One line of the prompt log as a prompt, or null when it names no session or holds no text. */
 export function repeatPromptOf(record: Record<string, unknown>): RepeatPrompt | null {
-  const text = readString(record.display);
+  const text = clipped(readString(record.display));
   const sessionId = readString(record.sessionId);
   if (text.trim() === "" || sessionId === "") return null;
   const project = readString(record.project);
