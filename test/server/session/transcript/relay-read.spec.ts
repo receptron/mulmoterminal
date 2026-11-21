@@ -69,6 +69,16 @@ describe("readRelay", () => {
     expect(selection).toMatchObject({ markLost: true });
   });
 
+  it("does not call the marker lost when an older page is too large to read", async () => {
+    const readPage = async (before: string | null): Promise<TranscriptPage> =>
+      before === null
+        ? { view: { status: "ok", turns: ["p8", "p9"].map(viewTurn), truncated: true }, older: "8" }
+        : { view: { status: "too-large" }, older: null };
+    const selection = await readRelay({ readPage, lastCompletedPrompt: async () => "p9" }, markOf("p0"), LIMITS);
+    expect(promptsOf(selection)).toEqual(["p8", "p9"]);
+    expect(selection).toMatchObject({ markLost: false, moreBefore: true });
+  });
+
   it("has nothing to send when the view is not readable", async () => {
     const selection = await readRelay(
       { readPage: async () => ({ view: { status: "none" }, older: null }), lastCompletedPrompt: async () => "p0" },

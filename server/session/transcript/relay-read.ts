@@ -46,7 +46,9 @@ async function collect(
 ): Promise<Collected> {
   const page = await deps.readPage(before);
   const turns = [...pageTurns(page), ...newer];
-  if (page.older === null) return { turns, reachedStart: true };
+  // A page that is not `ok` (too-large) also ends the walk, but the marker may sit in what it could
+  // not read — so it is not the start, and a marker not yet seen is not lost.
+  if (page.older === null) return { turns, reachedStart: page.view.status === "ok" };
   if (pagesLeft <= 1 || enough(turns, mark, limits)) return { turns, reachedStart: false };
   return collect(deps, mark, limits, page.older, pagesLeft - 1, turns);
 }
