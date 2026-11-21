@@ -20,6 +20,7 @@ import {
   launchCandidates,
   type InstructionCandidate,
 } from "./instruction-files.js";
+import type { NamedPath } from "./instruction-references.js";
 
 /** Rules read from one folder at most: a folder of thousands is not instructions anyone wrote. */
 export const RULES_PER_FOLDER_MAX = 200;
@@ -262,4 +263,20 @@ export async function readInstructionText(file: string): Promise<LibraryFileText
   if (bytes === null) return { text: null, reason: "unreadable" };
   if (bytes.length > LIBRARY_FILE_TEXT_MAX) return { text: null, reason: "too-large" };
   return bytes.includes(0) ? { text: null, reason: "binary" } : { text: bytes.toString("utf8") };
+}
+
+/** Named paths looked for in one file at most: a file naming thousands is not checked to the end. */
+export const NAMED_PATHS_MAX = 200;
+
+/** The paths a file names that are in none of the places they may be. A path on a network share is
+ *  never looked up, and so never called missing. */
+export async function missingPaths(named: readonly NamedPath[]): Promise<string[]> {
+  const checked = await Promise.all(
+    named.slice(0, NAMED_PATHS_MAX).map(async ({ reference, candidates }) => {
+      if (candidates.some(isNetworkPath)) return null;
+      const found = await Promise.all(candidates.map((candidate) => localTarget(candidate)));
+      return found.some((real) => real !== null) ? null : reference;
+    }),
+  );
+  return checked.filter((reference): reference is string => reference !== null);
 }

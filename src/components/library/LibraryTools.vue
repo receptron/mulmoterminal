@@ -18,7 +18,7 @@ const cwd = ref<string | null>(null);
 const instructions = ref<LibraryInstructions | null>(null);
 const failed = ref(false);
 const chosen = ref<string | null>(null);
-const text = ref<LibraryFileText | null>(null);
+const text = ref<(LibraryFileText & { missing?: string[] }) | null>(null);
 
 /** The directory was picked by hand: the conversation selected later no longer moves it. */
 let picked = false;
@@ -178,6 +178,9 @@ defineExpose({ move });
       <header class="px-4 pb-2 pt-5">
         <h2 class="m-0 break-all font-mono text-[15px] font-[650] text-fg">{{ selected.path }}</h2>
         <p class="m-0 mt-1 font-sans text-[12px] text-dim">{{ [t(`libraryView.tools.scope.${selected.scope}`), ...notes(selected)].join(" · ") }}</p>
+        <p v-if="text?.missing?.length" class="m-0 mt-2 font-sans text-[13px] text-warn" data-testid="tool-missing">
+          {{ t("libraryView.tools.missing", { paths: text.missing.join(", ") }) }}
+        </p>
       </header>
       <div class="min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-3">
         <p v-if="text && text.text === null" class="m-0 font-sans text-[13px] text-err-text" data-testid="tool-text-missing">
