@@ -3,6 +3,8 @@ import {
   pickHandoffTargets,
   pullLastTurn,
   pullSinceRelay,
+  sendLastTurn,
+  sendSinceRelay,
   slotLabel,
   type HandoffDeps,
   type HandoffTarget,
@@ -176,5 +178,65 @@ describe("pullSinceRelay", () => {
     );
     expect(await pullSinceRelay(target(), "cell-1", "/dest", relayDeps({ recordMark: async () => Promise.reject(new Error("x")) }))).toMatch(/^Pasted, but/);
     expect(await pullSinceRelay(target(), "cell-1", null, relayDeps())).toBe("This terminal has no directory to remember the relay by");
+  });
+});
+
+// #3397: the same two operations the other way round — this cell is the source, the partner the
+// destination — with each message naming the right end.
+describe("sendLastTurn / sendSinceRelay", () => {
+  const MARK = "b".repeat(64);
+  const self = { sessionId: "sess-self", cwd: "/src", agent: "claude" as const };
+  const partner: HandoffTarget = { key: "cell-9", label: "#9", source: { sessionId: "sess-9", cwd: "/partner", agent: "codex" } };
+
+  it("reads THIS cell's turn and pastes it into the partner", async () => {
+    const read: unknown[] = [];
+    const pasted: Array<[string, string]> = [];
+    const error = await sendLastTurn(
+      self,
+      partner,
+      deps({ fetchText: async (source) => (read.push(source), "mine"), paste: (key, text) => (pasted.push([key, text]), true) }),
+    );
+    expect(error).toBeNull();
+    expect(read).toEqual([self]);
+    expect(pasted).toEqual([["cell-9", "mine"]]);
+  });
+
+  it("names this cell as the source and the partner as the destination when it fails", async () => {
+    expect(await sendLastTurn(self, partner, deps({ fetchText: async () => "" }))).toBe("This terminal has no completed turn yet");
+    expect(await sendLastTurn(self, partner, deps({ fetchText: async () => Promise.reject(new Error("x")) }))).toBe("Could not read this terminal's last turn");
+    expect(await sendLastTurn(self, partner, deps({ paste: () => false }))).toBe("That terminal is not connected");
+  });
+
+  it("relays since the last relay to the PARTNER's directory, and records it there", async () => {
+    const fetched: Array<[unknown, string]> = [];
+    const recorded: Array<[unknown, string, string]> = [];
+    const pasted: string[] = [];
+    const error = await sendSinceRelay(self, partner, {
+      fetchRelay: async (source, dest) => (fetched.push([source, dest]), { status: "ok", text: "since", mark: MARK }),
+      paste: (key) => (pasted.push(key), true),
+      recordMark: async (source, dest, mark) => void recorded.push([source, dest, mark]),
+    });
+    expect(error).toBeNull();
+    expect(fetched).toEqual([[self, "/partner"]]);
+    expect(pasted).toEqual(["cell-9"]);
+    expect(recorded).toEqual([[self, "/partner", MARK]]);
+  });
+
+  it("reports a partner with no directory, and nothing new, from the sender's side", async () => {
+    const relay = (over: Partial<RelayDeps>): RelayDeps => ({
+      fetchRelay: async () => ({ status: "ok", text: "t", mark: MARK }),
+      paste: () => true,
+      recordMark: async () => {},
+      ...over,
+    });
+    const homeless = { ...partner, source: { ...partner.source, cwd: null } };
+    expect(await sendSinceRelay(self, homeless, relay({}))).toBe("That terminal has no directory to remember the relay by");
+    expect(await sendSinceRelay(self, partner, relay({ fetchRelay: async () => ({ status: "nothing-new", text: "", mark: null }) }))).toBe(
+      "Nothing new since the last relay",
+    );
+    expect(await sendSinceRelay(self, partner, relay({ fetchRelay: async () => ({ status: "no-turn", text: "", mark: null }) }))).toBe(
+      "This terminal has no completed turn yet",
+    );
+    expect(await sendSinceRelay(self, partner, relay({ paste: () => false }))).toBe("That terminal is not connected");
   });
 });

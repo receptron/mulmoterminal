@@ -95,6 +95,11 @@ export const commandPaletteEn = {
     terminalVoice: "Starts or stops voice input in the current terminal, where the mic is available.",
     terminalDiff: "Opens the changes panel of the current worktree terminal, when it has changes.",
     terminalNote: "Opens the current terminal's note for writing or editing.",
+    terminalSendTurn:
+      "Pastes the current terminal's last exchange into its partner — another agent terminal in the same directory or another worktree of the same repo — and moves there, without sending.",
+    terminalSendSince: "Pastes every exchange of the current terminal since the last relay to its partner's directory, and moves there, without sending.",
+    terminalBringTurn: "Pastes the partner's last exchange into the current terminal, without sending.",
+    terminalBringSince: "Pastes every exchange of the partner since the last relay here into the current terminal, without sending.",
     paneFiles: "Opens or closes the Files pane beside the current terminal, or to the right of the grid if it is tiled.",
     panePrompts: "Opens or closes the pane listing the prompts sent in the current terminal.",
     paneTranscript: "Opens or closes the conversation pane of the current terminal.",

@@ -20,6 +20,10 @@ export const CELL_SELF_ACTIONS = [
   "terminal-voice",
   "terminal-diff",
   "terminal-note",
+  "terminal-send-turn",
+  "terminal-send-since",
+  "terminal-bring-turn",
+  "terminal-bring-since",
 ] as const;
 
 export const CELL_ACTIONS = [

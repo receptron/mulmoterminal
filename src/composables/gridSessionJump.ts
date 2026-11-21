@@ -8,9 +8,13 @@ import type { GridState } from "../components/gridTabs";
 export interface GridSessionJump {
   has: (session: string) => boolean;
   goTo: (session: string) => void;
+  /** By slot key (`cell-<uid>`), for a caller holding a terminal connection rather than a session. */
+  goToSlot: (key: string) => void;
 }
 
 export const gridSessionJump = shallowRef<GridSessionJump | null>(null);
+
+const CELL_KEY_PREFIX = "cell-";
 
 const uidOf = (state: GridState, session: string): number | null => state.cells.find((cell) => cell.session === session)?.uid ?? null;
 
@@ -23,6 +27,10 @@ export function useGridSessionJump(state: Ref<GridState>, jumpToTerminal: (uid: 
       if (uid === null) return;
       if (router.currentRoute.value.name !== "terminals") void router.push("/terminals");
       jumpToTerminal(uid);
+    },
+    goToSlot: (key) => {
+      const uid = Number(key.slice(CELL_KEY_PREFIX.length));
+      if (key.startsWith(CELL_KEY_PREFIX) && Number.isInteger(uid)) jumpToTerminal(uid);
     },
   };
   onMounted(() => (gridSessionJump.value = jump));

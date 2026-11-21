@@ -155,16 +155,24 @@ describe("runHeaderButton", () => {
   });
 
   // #2653: a grid cell declining a self action says why, rather than the outside-grid fallback.
-  it.each(["terminal-copy-code", "terminal-insert-path", "terminal-reveal", "terminal-voice", "terminal-diff", "terminal-note"])(
-    "action → %s declined in the grid names its own reason",
-    (action) => {
-      const report = vi.fn();
-      m.requestGridCellAction.mockReturnValueOnce(false);
-      runHeaderButton(btn({ run: "action", action }), "cell-3", "/x", report);
-      expect(report).toHaveBeenCalledTimes(1);
-      expect(report.mock.calls[0]?.[0]).not.toBe("This button acts on a terminal in the grid.");
-    },
-  );
+  it.each([
+    "terminal-copy-code",
+    "terminal-insert-path",
+    "terminal-reveal",
+    "terminal-voice",
+    "terminal-diff",
+    "terminal-note",
+    "terminal-send-turn",
+    "terminal-send-since",
+    "terminal-bring-turn",
+    "terminal-bring-since",
+  ])("action → %s declined in the grid names its own reason", (action) => {
+    const report = vi.fn();
+    m.requestGridCellAction.mockReturnValueOnce(false);
+    runHeaderButton(btn({ run: "action", action }), "cell-3", "/x", report);
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report.mock.calls[0]?.[0]).not.toBe("This button acts on a terminal in the grid.");
+  });
 
   it("action → runs a toolbar operation for the app, and says so when it is not available", () => {
     const report = vi.fn();

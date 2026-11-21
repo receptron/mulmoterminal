@@ -342,6 +342,10 @@ describe("the row-2 and path-menu actions a cell answers itself", () => {
         "terminal-voice",
         "terminal-diff",
         "terminal-note",
+        "terminal-send-turn",
+        "terminal-send-since",
+        "terminal-bring-turn",
+        "terminal-bring-since",
       ] as const
     ).forEach((action) => expect(requestCellAction("cell-7", action), action).toBe(false));
     await flushPromises();

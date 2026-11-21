@@ -96,6 +96,10 @@ const DECLINED_EN: Partial<Record<CellAction, string>> = {
   "terminal-voice": "Voice input is not available here.",
   "terminal-diff": "This terminal has no changes to show.",
   "terminal-note": "A note needs a running session in this terminal.",
+  "terminal-send-turn": "Sending or bringing a turn needs a running agent session in this terminal.",
+  "terminal-send-since": "Sending or bringing a turn needs a running agent session in this terminal.",
+  "terminal-bring-turn": "Sending or bringing a turn needs a running agent session in this terminal.",
+  "terminal-bring-since": "Sending or bringing a turn needs a running agent session in this terminal.",
   "terminal-move-prev": "Moving a terminal needs manual order.",
   "terminal-move-next": "Moving a terminal needs manual order.",
 };
