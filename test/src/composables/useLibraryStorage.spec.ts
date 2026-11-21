@@ -8,9 +8,11 @@ import type { LibraryStorageAnswer } from "../../../common/libraryStorage";
 const reads: string[] = [];
 let measures = 0;
 let answers: Array<LibraryStorageAnswer | null> = [];
+let loadOverride: (() => Promise<LibraryStorageAnswer | null>) | null = null;
 vi.mock("../../../src/composables/libraryApi", () => ({
   loadLibraryStorage: (query: string) => {
     reads.push(query);
+    if (loadOverride !== null) return loadOverride();
     return Promise.resolve(answers.length > 1 ? answers.shift() : answers[0]);
   },
   measureLibraryStorage: () => {
@@ -35,6 +37,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   reads.length = 0;
   measures = 0;
+  loadOverride = null;
 });
 afterEach(() => vi.useRealTimers());
 
@@ -69,6 +72,25 @@ describe("useLibraryStorage", () => {
     start(true);
     await flushPromises();
     expect(measures).toBe(2);
+  });
+
+  it("does not ask for a measurement when hidden while a read was out", async () => {
+    // A stale measurement from an earlier showing is still held when the view is shown again.
+    answers = [answer(Date.now() - STORAGE_STALE_MS - 1)];
+    const { shown } = start(true);
+    await flushPromises();
+    const before = measures;
+    shown.value = false;
+    await nextTick();
+    let answerRead: (value: LibraryStorageAnswer) => void = () => {};
+    loadOverride = () => new Promise((resolve) => (answerRead = resolve));
+    shown.value = true;
+    await nextTick();
+    shown.value = false;
+    await nextTick();
+    answerRead(answer(Date.now() - STORAGE_STALE_MS - 1));
+    await flushPromises();
+    expect(measures).toBe(before);
   });
 
   it("reads again every poll while a measurement runs, and stops when hidden", async () => {

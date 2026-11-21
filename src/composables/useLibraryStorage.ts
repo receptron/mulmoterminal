@@ -47,7 +47,8 @@ export function useLibraryStorage(shown: Ref<boolean>, query: Ref<string>) {
       stopPolling();
       if (!isShown) return;
       await read();
-      if (answer.value !== null && answer.value.measuring === null && isStale(answer.value)) await remeasure();
+      // Hidden while that read was out: the view no longer wants a measurement.
+      if (shown.value && answer.value !== null && answer.value.measuring === null && isStale(answer.value)) await remeasure();
     },
     { immediate: true },
   );
