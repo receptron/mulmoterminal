@@ -13,6 +13,7 @@ import { readBoundedText } from "../backends/library/file-history-read.js";
 import { readMemoryHealth } from "../backends/library/memory-health-read.js";
 import { isFaithfulText, memoryVersion, writeMemory } from "../backends/library/memory-write.js";
 import { mergeMemory, restoreMemory, trashMemory, type MemoryMergeResult } from "../backends/library/memory-trash.js";
+import { linksTo } from "../backends/library/memory-merge-links.js";
 import { systemTrash, type TrashLayout } from "../files/tree-ops.js";
 import { requestBody } from "./requestBody.js";
 import type { LibraryCaller } from "../backends/library/library-service.js";
@@ -161,13 +162,22 @@ async function mergedPair(projectsRoot: string, slug: unknown, into: unknown, fr
 }
 
 function answerMerge(res: Response, merged: MemoryMergeResult): void {
-  if (merged.kind === "merged") res.json({ version: merged.version, undo: merged.undo });
+  // The text as written, since the merge points its own links at the memory too.
+  if (merged.kind === "merged") res.json({ version: merged.version, undo: merged.undo, links: merged.links, text: merged.text });
+  else if (merged.kind === "links-unplaceable") res.status(422).json({ error: "links in these memories could not be rewritten exactly", files: merged.files });
   else if (merged.kind === "conflict") res.status(409).json({ error: "a memory changed since it was opened", file: merged.file });
   else if (merged.kind === "other-volume") res.status(400).json({ error: "the memory is on another volume than the Trash, so nothing was merged" });
   else res.status(400).json({ error: "these memories cannot be merged here, as the index could not be kept in step" });
 }
 
 function mountMemoryMerge(app: Express, projectsRoot: string, trash: () => TrashLayout): void {
+  app.get("/api/library/memory/:slug/:file/links", async (req, res) => {
+    const pair = await mergedPair(projectsRoot, req.params.slug, req.params.file, req.query.from);
+    const links = pair === null ? null : await linksTo(pair.from, pair.into).catch(() => null);
+    if (pair === null) res.status(400).json({ error: "expected ?from= naming another memory file of the project" });
+    else if (links === null) res.status(404).json({ error: "the memory could not be read" });
+    else res.json(links);
+  });
   app.post("/api/library/memory/:slug/:file/merge", async (req, res) => {
     const body = requestBody(req.body);
     const edit = memoryEditOf(body);

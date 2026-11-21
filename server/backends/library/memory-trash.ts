@@ -14,9 +14,10 @@ import path from "node:path";
 import { MEMORY_INDEX_FILE } from "../../../common/libraryMemory.js";
 import { trashEntry, type TrashLayout } from "../../files/tree-ops.js";
 import { readBoundedText } from "./file-history-read.js";
-import { isSameFile } from "./memory-folders.js";
+import { isSameFile, memoryFileNames } from "./memory-folders.js";
 import { withEntryBack, withoutEntry, type RemovedIndexLine } from "./memory-index-lines.js";
 import { isFaithfulText, memoryVersion, replaceKeepingMode, serialize, type Replace } from "./memory-write.js";
+import { linkPlan, type LinkRewrite } from "./memory-merge-links.js";
 
 /** How long a delete can be undone from the Library. */
 export const MEMORY_UNDO_KEEP_MS = 10 * 60_000;
@@ -27,7 +28,18 @@ export type MemoryTrashResult =
 export type MemoryRestoreResult = "restored" | "taken" | "gone";
 
 export type MemoryMergeResult =
-  { kind: "merged"; version: string; undo: string } | { kind: "conflict"; file: "into" | "from" } | { kind: "refused" } | { kind: "other-volume" };
+  | { kind: "merged"; version: string; undo: string; links: number; text: string }
+  | { kind: "conflict"; file: "into" | "from" | "links" }
+  | { kind: "refused" }
+  | { kind: "other-volume" }
+  | { kind: "links-unplaceable"; files: string[] };
+
+/** A memory a merge wrote over: its text before, and the version it was left at. */
+interface Written {
+  file: string;
+  before: string;
+  written: string;
+}
 
 interface Undo extends Moved {
   /** The index as it was, and the version this delete left it at: unchanged since, it is put back whole. */
@@ -36,6 +48,8 @@ interface Undo extends Moved {
   entry: { dev: number; ino: number };
   /** A merge's other memory, which took this one's text: put back as it was when nothing has changed it since. */
   merged: { into: string; before: string; written: string } | null;
+  /** The other memories a merge pointed this one's links away from: each put back when unchanged since. */
+  links: Written[];
   /** The deleted file is back already: a retry after the merged memory could not be put back does only that. */
   fileBack: boolean;
   at_ms: number;
@@ -109,7 +123,7 @@ async function trashChecked({ file, index, expected, layout, now, steps }: Trash
   forget(now.getTime());
   const id = randomUUID();
   const { dev, ino } = await lstat(moved.trashed);
-  undos.set(id, { ...moved, index: kept, entry: { dev, ino }, merged: null, fileBack: false, at_ms: now.getTime() });
+  undos.set(id, { ...moved, index: kept, entry: { dev, ino }, merged: null, links: [], fileBack: false, at_ms: now.getTime() });
   return { kind: "trashed", undo: id };
 }
 
@@ -184,7 +198,7 @@ export function restoreMemory(id: string, now: Date, replace: Replace = replaceK
   forget(now.getTime());
   const undo = undos.get(id);
   if (undo === undefined) return Promise.resolve("gone");
-  const files = undo.merged === null ? [undo.file] : [undo.file, undo.merged.into];
+  const files = [undo.file, ...(undo.merged === null ? [] : [undo.merged.into]), ...undo.links.map((link) => link.file)];
   return inTurn(files, () => restoreChecked(id, undo, replace));
 }
 
@@ -192,7 +206,7 @@ export function restoreMemory(id: string, now: Date, replace: Replace = replaceK
  *  that one order, so two can never each hold what the other waits for. */
 function inTurn<T>(files: string[], task: () => Promise<T>): Promise<T> {
   const index = path.join(path.dirname(files[0] ?? ""), MEMORY_INDEX_FILE);
-  return [...files]
+  return [...new Set(files)]
     .sort((x, y) => x.localeCompare(y))
     .reduceRight<() => Promise<T>>(
       (inner, file) => () => serialize(file, inner),
@@ -211,6 +225,11 @@ async function restoreChecked(id: string, undo: Undo, replace: Replace): Promise
   }
   // Kept until the merged memory is back too: when that write fails, a retry does it again.
   if (undo.merged !== null) await mergedBack(replace, undo.merged);
+  // One at a time, as they were written: a failure leaves none still being written behind a retry.
+  await undo.links.reduce(async (before, link) => {
+    await before;
+    await writtenBack(replace, link);
+  }, Promise.resolve());
   undos.delete(id);
   return "restored";
 }
@@ -237,6 +256,11 @@ async function mergedBack(replace: Replace, merged: NonNullable<Undo["merged"]>)
   if ((await versionOf(merged.into)) === merged.written) await replace(merged.into, merged.before, await modeOf(merged.into));
 }
 
+/** A memory whose links a merge rewrote, as it was — unless it changed since, when it is kept. */
+async function writtenBack(replace: Replace, { file, before, written }: Written): Promise<void> {
+  if ((await versionOf(file)) === written) await replace(file, before, await modeOf(file));
+}
+
 async function indexBack(replace: Replace, index: string, kept: NonNullable<Undo["index"]>): Promise<void> {
   const now = await readIndex(index);
   if (now === null || now === "unreadable") return; // gone or unreadable since: the health check says so
@@ -255,14 +279,28 @@ export interface MemoryMerge {
 }
 
 /** Writes the merged text over `into` and moves `from` to the Trash with its index lines, as one change
- *  that one Undo reverses: both are checked against the versions they were opened on first. */
-export function mergeMemory(merge: MemoryMerge, layout: NonNullable<TrashLayout>, now: Date, steps: MemoryTrashSteps = DISK): Promise<MemoryMergeResult> {
-  return inTurn([merge.into, merge.from], () => mergeChecked(merge, layout, now, steps));
+ *  that one Undo reverses: both are checked against the versions they were opened on first. The links
+ *  to `from` — in the merged text and in the folder's other memories as listed when it starts — are
+ *  pointed at `into`, and each of those memories' turns is held while it does. */
+export async function mergeMemory(merge: MemoryMerge, layout: NonNullable<TrashLayout>, now: Date, steps: MemoryTrashSteps = DISK): Promise<MemoryMergeResult> {
+  const folder = path.dirname(merge.into);
+  // Only these are rewritten: a memory made after this listing has no turn held here, so its links
+  // stay as they are (the health check then reports them) rather than being written over unguarded.
+  const others = await memoryFileNames(folder);
+  return inTurn([merge.into, merge.from, ...others.map((file) => path.join(folder, file))], () => mergeChecked(merge, layout, now, { steps, others }));
 }
 
-async function mergeChecked(merge: MemoryMerge, layout: NonNullable<TrashLayout>, now: Date, steps: MemoryTrashSteps): Promise<MemoryMergeResult> {
+/** The disk steps, and the folder's memories whose turns the merge holds (all it may rewrite). */
+interface MergeHeld {
+  steps: MemoryTrashSteps;
+  others: readonly string[];
+}
+
+async function mergeChecked(merge: MemoryMerge, layout: NonNullable<TrashLayout>, now: Date, { steps, others }: MergeHeld): Promise<MemoryMergeResult> {
   const before = await readBoundedText(merge.into);
   if (before.text === null || !isFaithfulText(before.text) || memoryVersion(before.text) !== merge.intoVersion) return { kind: "conflict", file: "into" };
+  const plan = await linkPlan(merge.from, merge.into, merge.text, others);
+  if ("kind" in plan) return plan;
   const index = path.join(path.dirname(merge.from), MEMORY_INDEX_FILE);
   const trashed = await trashChecked({ file: merge.from, index, expected: merge.fromVersion, layout, now, steps });
   if (trashed.kind !== "trashed") return trashed.kind === "conflict" ? { kind: "conflict", file: "from" } : trashed;
@@ -274,11 +312,32 @@ async function mergeChecked(merge: MemoryMerge, layout: NonNullable<TrashLayout>
     return { kind: "conflict", file: "into" };
   }
   try {
-    await steps.replace(merge.into, merge.text, await modeOf(merge.into));
+    await steps.replace(merge.into, plan.text, await modeOf(merge.into));
+    undo.merged = { into: merge.into, before: before.text, written: memoryVersion(plan.text) };
+    await rewriteLinksIn(steps.replace, plan.rewrites, undo, path.dirname(merge.from));
   } catch (err) {
-    await restoreChecked(trashed.undo, undo, steps.replace); // the merged memory comes back out of the Trash
+    await restoreChecked(trashed.undo, undo, steps.replace); // everything the merge wrote is put back
+    if (err instanceof LinksChanged) return { kind: "conflict", file: "links" };
     throw err;
   }
-  undo.merged = { into: merge.into, before: before.text, written: memoryVersion(merge.text) };
-  return { kind: "merged", version: memoryVersion(merge.text), undo: trashed.undo };
+  return { kind: "merged", version: memoryVersion(plan.text), undo: trashed.undo, links: plan.count, text: plan.text };
+}
+
+/** A memory whose links were to be rewritten changed since they were read: another process (the agent)
+ *  wrote it, which no turn held here keeps out. */
+class LinksChanged extends Error {}
+
+/** The other memories written with their links rewritten, one after another: when one fails, none is
+ *  still being written while the merge is put back. Each is read again just before, and one changed
+ *  since its links were read stops the merge, rather than its change being written over; the window
+ *  left is the save's own, between that read and the rename. Each is recorded before it is written, so
+ *  a write that fails leaves its file at the text it had, which putting back leaves alone. */
+async function rewriteLinksIn(replace: Replace, rewrites: readonly LinkRewrite[], undo: Undo, folder: string): Promise<void> {
+  await rewrites.reduce(async (before, rewrite) => {
+    await before;
+    const file = path.join(folder, rewrite.file);
+    if ((await versionOf(file)) !== memoryVersion(rewrite.before)) throw new LinksChanged(file);
+    undo.links.push({ file, before: rewrite.before, written: memoryVersion(rewrite.text) });
+    await replace(file, rewrite.text, await modeOf(file));
+  }, Promise.resolve());
 }

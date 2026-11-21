@@ -5,6 +5,7 @@ import { Lexer } from "marked";
 import {
   MEMORY_INDEX_BYTES_MAX,
   MEMORY_INDEX_LINES_MAX,
+  memoryLinkNames,
   memoryType,
   parseMemoryFrontmatter,
   type LibraryMemoryHealth,
@@ -25,7 +26,7 @@ const REQUIRED_FIELDS = ["name", "description", "type"] as const;
 
 /** Text with code taken out: a `[[name]]` or a path inside a code span or block is an example, not a
  *  reference (the renderer leaves those inert too). */
-interface MarkdownToken {
+export interface MarkdownToken {
   type: string;
   raw: string;
   text?: string;
@@ -33,7 +34,7 @@ interface MarkdownToken {
   items?: MarkdownToken[];
 }
 
-const isToken = (value: unknown): value is MarkdownToken =>
+export const isToken = (value: unknown): value is MarkdownToken =>
   typeof value === "object" && value !== null && "type" in value && "raw" in value && typeof value.type === "string" && typeof value.raw === "string";
 
 /** A body split as Markdown reads it — by marked's own lexer, so a code span of any number of backticks
@@ -58,8 +59,11 @@ export function indexEntries(indexText: string): string[] {
   return [...indexText.matchAll(/\]\(([^)\s]+\.md)\)/g)].map((match) => (match[1] ?? "").replace(/^\.\//, "")).filter((target) => !target.includes("/"));
 }
 
+/** A `[[name]]` link, the name captured. */
+export const MEMORY_LINK = /\[\[([^\]\n]{1,200})\]\]/g;
+
 /** The `[[name]]` links in a body, outside code. */
-export const linkNames = (body: string): string[] => [...splitCode(body).prose.matchAll(/\[\[([^\]\n]{1,200})\]\]/g)].map((match) => (match[1] ?? "").trim());
+export const linkNames = (body: string): string[] => [...splitCode(body).prose.matchAll(MEMORY_LINK)].map((match) => (match[1] ?? "").trim());
 
 /** Paths a body names in code spans — `server/foo.ts`, `~/.codex/config.toml` — the way memory points at
  *  files: a slash and an extension, no scheme, no wildcard or placeholder. It cannot start with `@`, so
@@ -110,9 +114,9 @@ export function memoryHealth(input: MemoryHealthInput, missingPaths: ReadonlySet
   const fileNames = new Set(input.files.map((file) => file.file));
   const listed = input.index?.text == null ? null : new Set(indexEntries(input.index.text));
   const names = new Set(
-    input.files
-      .flatMap((file) => [file.file.replace(/\.md$/, ""), ...(file.text === null ? [] : [parseMemoryFrontmatter(file.text).fields.name ?? ""])])
-      .filter((name) => name !== ""),
+    input.files.flatMap((file) =>
+      memoryLinkNames({ file: file.file, name: file.text === null ? null : (parseMemoryFrontmatter(file.text).fields.name ?? null) }),
+    ),
   );
   const issues: MemoryProjectIssue[] = [];
   if (input.index === null && input.files.length > 0) issues.push({ kind: "no-index" });

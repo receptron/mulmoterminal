@@ -397,6 +397,34 @@ describe("POST /api/library/memory/:slug/:file/merge", () => {
     }
     expect((await call("/api/library/memory/-w-app/b.md/merge", merging({ fromVersion: "nope" }))).status).toBe(400);
   });
+  it("points the links to the merged memory at the one kept, says how many first, and answers the text written", async () => {
+    const { call, root } = setup();
+    const memory = path.join(root, "-w-app", "memory");
+    writeFileSync(path.join(memory, "c.md"), "See [[alpha]], not `[[alpha]]`.\n");
+    expect((await call("/api/library/memory/-w-app/b.md/links?from=a.md")).body).toEqual({ count: 1, unplaceable: [] });
+    const merged = await call("/api/library/memory/-w-app/b.md/merge", merging({ text: "merged, as [[a]] said" }));
+    expect([merged.status, merged.body.links, merged.body.text]).toEqual([200, 2, "merged, as [[b]] said"]);
+    expect(merged.body.version).toBe(memoryVersion("merged, as [[b]] said"));
+    expect(readFileSync(path.join(memory, "c.md"), "utf8")).toBe("See [[b]], not `[[alpha]]`.\n");
+    expect((await call("/api/library/memory-undo", post({ undo: merged.body.undo }))).status).toBe(200);
+    expect(readFileSync(path.join(memory, "c.md"), "utf8")).toBe("See [[alpha]], not `[[alpha]]`.\n");
+  });
+  it("answers 422 naming the memories whose links it could not rewrite exactly, changing nothing", async () => {
+    const { call, root } = setup();
+    const memory = path.join(root, "-w-app", "memory");
+    writeFileSync(path.join(memory, "c.md"), "[[alpha]]\r\n`[[alpha]]`\n");
+    expect((await call("/api/library/memory/-w-app/b.md/links?from=a.md")).body).toEqual({ count: 0, unplaceable: ["c.md"] });
+    const answer = await call("/api/library/memory/-w-app/b.md/merge", merging());
+    expect([answer.status, answer.body.files]).toEqual([422, ["c.md"]]);
+    expect(readFileSync(path.join(memory, "b.md"), "utf8")).toBe(B_TEXT);
+    expect(existsSync(path.join(memory, "a.md"))).toBe(true);
+  });
+  it("counts links only between two memories of the project, named as spelt on disk", async () => {
+    const { call } = setup();
+    for (const query of ["", "?from=b.md", "?from=MEMORY.md", "?from=A.md", "?from=../../-w-other/memory/top.md"]) {
+      expect((await call(`/api/library/memory/-w-app/b.md/links${query}`)).status, query).toBe(400);
+    }
+  });
   it("answers 501 when this system has no Trash, changing nothing", async () => {
     const { call, root } = setup(["/w/app"], "none");
     expect((await call("/api/library/memory/-w-app/b.md/merge", merging())).status).toBe(501);
