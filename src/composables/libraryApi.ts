@@ -1,6 +1,7 @@
 // The Library's reads (#3329): /api/library/* answered as checked values, or null for any failure —
 // a 503 while the index cannot be opened, a timeout, or a body that is not the wire shape.
 import { isUnknownArray } from "../../common/isUnknownArray";
+import { isLibraryInstructions, type LibraryInstructions } from "../../common/libraryTools";
 import { isLibraryFileText, isLibraryTrackedFile, type LibraryFileText, type LibraryTrackedFile } from "../../common/libraryFiles";
 import { isLibraryMemoryHealth, isLibraryMemoryProject, type LibraryMemoryHealth, type LibraryMemoryProject } from "../../common/libraryMemory";
 import {
@@ -208,6 +209,24 @@ export async function loadLibraryConversation(id: string, cwd: string | null = n
 export async function loadLibraryMemorySource(slug: string, file: string): Promise<LibraryConversation | null> {
   const body = await readJson(`${memoryFileUrl(slug, file)}/source`);
   return isLibraryConversation(body?.conversation) ? body.conversation : null;
+}
+
+/** Every directory a conversation ran in, for the tools kind to choose among. */
+export async function loadToolDirectories(): Promise<string[] | null> {
+  const body = await readJson("/api/library/tools/directories");
+  return isUnknownArray(body?.directories) ? body.directories.filter((cwd): cwd is string => typeof cwd === "string") : null;
+}
+
+/** The instruction files Claude Code loads in a directory, in its order. */
+export async function loadInstructions(cwd: string): Promise<LibraryInstructions | null> {
+  const body = await readJson(`/api/library/tools/instructions?cwd=${encodeURIComponent(cwd)}`);
+  return isLibraryInstructions(body) ? body : null;
+}
+
+/** One of those files' text. */
+export async function loadInstruction(cwd: string, file: string): Promise<LibraryFileText | null> {
+  const body = await readJson(`/api/library/tools/instruction?cwd=${encodeURIComponent(cwd)}&path=${encodeURIComponent(file)}`);
+  return isLibraryFileText(body) ? body : null;
 }
 
 export async function loadLibraryMarks(): Promise<LibraryMarks | null> {

@@ -1,0 +1,89 @@
+// @vitest-environment node
+// Reading the instruction files Claude Code loads for a directory (#3332), on a real tree.
+import { describe, it, expect, afterEach } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { readInstructions } from "../../../../server/backends/library/instruction-files-read";
+import { INSTRUCTION_FILE_MAX_BYTES } from "../../../../common/libraryTools";
+
+const dirs: string[] = [];
+afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+
+function tree(files: Record<string, string>) {
+  const root = mkdtempSync(path.join(tmpdir(), "mt-instructions-"));
+  dirs.push(root);
+  Object.entries(files).forEach(([relative, text]) => {
+    mkdirSync(path.dirname(path.join(root, relative)), { recursive: true });
+    writeFileSync(path.join(root, relative), text);
+  });
+  const at = (relative: string) => path.join(root, relative);
+  const read = () => readInstructions(at("w/app"), at("h/.claude"), at("h"), process.platform === "win32" ? "win32" : "linux");
+  const listed = async () =>
+    (await read()).files.filter((file) => file.path.startsWith(root)).map((file) => `${file.scope} ${path.relative(root, file.path)} ${file.loads}`);
+  return { at, read, listed };
+}
+
+describe("readInstructions", () => {
+  it("lists what exists in Claude Code's order: user, user rules, each directory down, project rules", async () => {
+    const { listed, read } = tree({
+      "h/.claude/CLAUDE.md": "user\n",
+      "h/.claude/rules/style.md": "be brief\n",
+      "w/CLAUDE.md": "parent\n",
+      "w/app/CLAUDE.md": "one\ntwo\n",
+      "w/app/.claude/CLAUDE.md": "project\n",
+      "w/app/CLAUDE.local.md": "mine\n",
+      "w/app/.claude/rules/b/api.md": '---\npaths:\n  - "src/**"\n---\napi\n',
+      "w/app/.claude/rules/a.md": "always\n",
+    });
+    expect(await listed()).toEqual([
+      "user h/.claude/CLAUDE.md launch",
+      "user-rule h/.claude/rules/style.md launch",
+      "directory w/CLAUDE.md launch",
+      "directory w/app/CLAUDE.md launch",
+      "project w/app/.claude/CLAUDE.md launch",
+      "local w/app/CLAUDE.local.md launch",
+      "rule w/app/.claude/rules/a.md launch",
+      "rule w/app/.claude/rules/b/api.md on-demand",
+    ]);
+    const own = (await read()).files.find((file) => file.path.endsWith(path.join("w", "app", "CLAUDE.md")));
+    expect(own).toMatchObject({ lines: 2, bytes: 8, state: "ok", importedBy: null });
+    expect((await read()).agentsMd).toBe(false);
+  });
+
+  it("follows imports in place, at most four hops, each file once", async () => {
+    const { listed } = tree({
+      "w/app/CLAUDE.md": "@one.md and @one.md",
+      "w/app/one.md": "@two.md",
+      "w/app/two.md": "@three.md and back to @one.md",
+      "w/app/three.md": "@four.md",
+      "w/app/four.md": "@five.md",
+      "w/app/five.md": "too deep",
+      "w/app/CLAUDE.local.md": "after the imports",
+    });
+    expect(await listed()).toEqual([
+      "directory w/app/CLAUDE.md launch",
+      "import w/app/one.md launch",
+      "import w/app/two.md launch",
+      "import w/app/three.md launch",
+      "import w/app/four.md launch",
+      "local w/app/CLAUDE.local.md launch",
+    ]);
+  });
+
+  it("lists a file too large for Claude Code as skipped, unread", async () => {
+    const { read } = tree({ "w/app/CLAUDE.md": "x".repeat(INSTRUCTION_FILE_MAX_BYTES + 1) });
+    expect((await read()).files.find((file) => file.scope === "directory")).toMatchObject({ state: "too-large", lines: 0 });
+  });
+
+  it("reads AGENTS.md where no CLAUDE.md counts, the user's still loading beside it", async () => {
+    const { listed, read } = tree({ "h/.claude/CLAUDE.md": "user", "w/AGENTS.md": "parent agents", "w/app/.claude/AGENTS.md": "agents" });
+    expect(await listed()).toEqual(["user h/.claude/CLAUDE.md launch", "agents w/AGENTS.md launch", "agents w/app/.claude/AGENTS.md launch"]);
+    expect((await read()).agentsMd).toBe(true);
+  });
+
+  it("does not read AGENTS.md where a CLAUDE.local.md counts", async () => {
+    const { listed } = tree({ "w/CLAUDE.local.md": "mine", "w/app/AGENTS.md": "agents" });
+    expect(await listed()).toEqual(["local w/CLAUDE.local.md launch"]);
+  });
+});

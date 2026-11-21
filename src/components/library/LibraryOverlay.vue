@@ -8,6 +8,7 @@ import FullScreenOverlay from "../FullScreenOverlay.vue";
 import LibraryList from "./LibraryList.vue";
 import LibraryReader from "./LibraryReader.vue";
 import LibraryMemory from "./LibraryMemory.vue";
+import LibraryTools from "./LibraryTools.vue";
 import { filterMemory } from "./memoryRows";
 import { useLibraryMemory } from "../../composables/useLibraryMemory";
 import { libraryRequested, useLibraryView } from "../../composables/useLibraryView";
@@ -41,9 +42,11 @@ const {
 } = useLibraryMemory(isOpen);
 const memoryCount = computed(() => filterMemory(memoryProjects.value, query.value).reduce((sum, project) => sum + project.files.length, 0));
 /** Which kind the list shows: the conversations, or Claude Code's memory. */
-const kind = ref<"conversations" | "memory">("conversations");
-const searchLabel = computed(() => (kind.value === "memory" ? t("libraryView.memory.search") : t("libraryView.search")));
+const kind = ref<"conversations" | "memory" | "tools">("conversations");
+const SEARCH_LABELS = { conversations: "libraryView.search", memory: "libraryView.memory.search", tools: "libraryView.tools.search" } as const;
+const searchLabel = computed(() => t(SEARCH_LABELS[kind.value]));
 const memoryView = useTemplateRef<{ move(by: number): Promise<void>; startEdit(): void }>("memoryView");
+const toolsView = useTemplateRef<{ move(by: number): Promise<void> }>("toolsView");
 const { marks, pinned, saveFailedFor, loadFailed: marksFailed, change: changeMark } = useLibraryMarks(isOpen);
 
 const searchField = ref<HTMLInputElement | null>(null);
@@ -261,6 +264,8 @@ function runKeyAction(action: NonNullable<ReturnType<typeof libraryKeyAction>>):
   else if (kind.value === "memory") {
     if (action === "primary") memoryView.value?.startEdit();
     else void memoryView.value?.move(by);
+  } else if (kind.value === "tools") {
+    if (action !== "primary") void toolsView.value?.move(by);
   } else if (action === "primary") void resume();
   else void move(by);
 }
@@ -318,13 +323,24 @@ onBeforeUnmount(() => {
             {{ t("libraryView.memory.kind") }}
             <span class="text-dim">{{ memoryCount }}</span>
           </button>
+          <button
+            type="button"
+            data-testid="library-kind-tools"
+            class="cursor-pointer rounded border-0 px-2 py-1"
+            :class="kind === 'tools' ? 'bg-hover text-fg' : 'bg-transparent text-secondary hover:text-fg'"
+            :aria-pressed="kind === 'tools'"
+            @click="kind = 'tools'"
+          >
+            {{ t("libraryView.tools.kind") }}
+          </button>
           <span v-if="progress" class="text-dim" role="status" data-testid="library-progress">{{ progress }}</span>
           <span v-else-if="searching" class="text-dim">{{ t("libraryView.searching") }}</span>
         </div>
       </div>
 
+      <LibraryTools v-if="kind === 'tools'" ref="toolsView" :query="query" :initial-cwd="selected?.cwd ?? null" />
       <LibraryMemory
-        v-if="kind === 'memory'"
+        v-else-if="kind === 'memory'"
         ref="memoryView"
         :projects="memoryProjects"
         :loaded="memoryLoaded"
