@@ -51,7 +51,7 @@ describe("promoting a conversation", () => {
     const { dir, spawned, asked, post } = setup((here) => conversationIn(here));
     const answer = await post(ID, { cwd: "/somewhere/the/browser/said", target: "rule" });
     expect([answer.status, answer.body]).toEqual([200, { chatId: "new-session", agent: "claude" }]);
-    expect(spawned).toEqual([["claude", dir, `/mulmoterminal-library promote rule ${ID}`, true, null]]);
+    expect(spawned).toEqual([["claude", dir, `/mulmoterminal-library promote rule ${ID}`, true, null, { claudePermissionMode: "plan" }]]);
     expect(asked).toEqual([["conversation", ID, "/somewhere/the/browser/said"]]);
   });
 

@@ -335,3 +335,26 @@ describe("spawnClaudePty limited to some GUI tool groups (#3033)", () => {
     expect(argAfter("--allowedTools")).toBe("mcp__mt");
   });
 });
+
+// A spawn can start in its own --permission-mode (#3334: a Library promotion starts in plan mode,
+// so what it read cannot write before the person approves). Absent, the server's mode, as before.
+describe("spawnClaudePty with a permission mode of its own", () => {
+  const argAfter = (flag: string): string | undefined => {
+    const at = spawnedArgs.indexOf(flag);
+    return at < 0 ? undefined : spawnedArgs[at + 1];
+  };
+
+  it("passes it to claude and to the pre-flight check, instead of the server's", () => {
+    refuseUnsupportedPermissionMode.mockClear();
+    spawn({ permissionMode: "plan" }, freshId());
+    expect(argAfter("--permission-mode")).toBe("plan");
+    const preflight = spawnedOptions.preflight;
+    if (typeof preflight === "function") preflight({});
+    expect(refuseUnsupportedPermissionMode).toHaveBeenCalledWith("claude", "plan", {});
+  });
+
+  it("uses the server's mode when the spawn names none", () => {
+    spawn({}, freshId());
+    expect(argAfter("--permission-mode")).toBe("acceptEdits");
+  });
+});

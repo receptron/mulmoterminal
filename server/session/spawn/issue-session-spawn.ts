@@ -35,14 +35,28 @@ export interface IssueSessionSpawnDeps {
   newSessionId?: () => string;
 }
 
+/** `claudePermissionMode` starts a Claude session in that `--permission-mode` instead of the
+ *  server's; the other agents have no such mode to start in, and start as they always do. */
+export interface IssueSessionOptions {
+  claudePermissionMode?: string;
+}
+
 /** `account` is an id `requestedIssueAccount` accepted for this agent, or null for the default login. */
-export type SpawnIssueSession = (agent: TerminalAgent, cwd: string, seed: string, run: boolean, account: string | null) => Promise<SpawnedSession>;
+export type SpawnIssueSession = (
+  agent: TerminalAgent,
+  cwd: string,
+  seed: string,
+  run: boolean,
+  account: string | null,
+  options?: IssueSessionOptions,
+) => Promise<SpawnedSession>;
 
 interface SpawnRequest {
   sessionId: string;
   cwd: string;
   seed: string;
   run: boolean;
+  claudePermissionMode: string | undefined;
 }
 
 type AgentSpawn = (request: SpawnRequest, deps: IssueSessionSpawnDeps) => Promise<void>;
@@ -76,8 +90,8 @@ const directoryGroupsSpawn =
 // A Record over the agents, so hosting a new one is a type error here rather than an issue start
 // that silently spawns Claude under its name.
 const AGENT_SPAWN: Record<TerminalAgent, AgentSpawn> = {
-  claude: async ({ sessionId, cwd, seed, run }, deps) => {
-    deps.spawnClaudePty(sessionId, null, null, issueSpawnOptions(cwd, seed, run));
+  claude: async ({ sessionId, cwd, seed, run, claudePermissionMode }, deps) => {
+    deps.spawnClaudePty(sessionId, null, null, issueSpawnOptions(cwd, seed, run, claudePermissionMode));
   },
   codex: async ({ sessionId, cwd, seed }, deps) => {
     deps.spawnCodexPty(sessionId, null, null, cwd, false, { mcpGroups: await deps.groupsFor(cwd), initialPrompt: seed });
@@ -99,13 +113,13 @@ const AGENT_SPAWN: Record<TerminalAgent, AgentSpawn> = {
 
 export function createIssueSessionSpawner(deps: IssueSessionSpawnDeps): SpawnIssueSession {
   const newSessionId = deps.newSessionId ?? randomUUID;
-  return async (agent, cwd, seed, run, account) => {
+  return async (agent, cwd, seed, run, account, options = {}) => {
     const sessionId = newSessionId();
     // Always a fresh session (a new id), so never the reattach a cell skips this for.
     await deps.reserveWorktreeEnv(cwd);
     // Bound BEFORE the spawn: the spawn reads the binding to choose the login it runs under.
     if (account !== null && isAccountAgent(agent)) await deps.bindAccount(agent, sessionId, account);
-    await AGENT_SPAWN[agent]({ sessionId, cwd, seed, run }, deps);
+    await AGENT_SPAWN[agent]({ sessionId, cwd, seed, run, claudePermissionMode: options.claudePermissionMode }, deps);
     // Only Claude can leave the seed as a draft; the rule is spawnModeFor's, not a second copy.
     return { sessionId, agent, seedRuns: spawnModeFor(agent, !run) !== "claude-draft" };
   };

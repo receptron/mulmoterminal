@@ -80,6 +80,15 @@ describe("createIssueSessionSpawner", () => {
     expect(calls[1].args).toEqual(["s-1", null, null, { cwd: CWD, attachGuiMcp: false, initialPrompt: SEED }]);
   });
 
+  // #3334: a Library promotion starts Claude in plan mode; the agents without one start as always.
+  it("starts Claude in the permission mode asked for, and leaves the others as they are", async () => {
+    const { spawn, calls } = setup();
+    await spawn("claude", CWD, SEED, true, null, { claudePermissionMode: "plan" });
+    await spawn("codex", CWD, SEED, true, null, { claudePermissionMode: "plan" });
+    expect(calls[0].args).toEqual(["s-1", null, null, { cwd: CWD, attachGuiMcp: false, permissionMode: "plan", initialPrompt: SEED }]);
+    expect(calls[1].args).toEqual(["s-1", null, null, CWD, false, { mcpGroups: GROUPS, initialPrompt: SEED }]);
+  });
+
   // attachGuiMcp:false is what makes these a project cell rather than a GUI-started chat.
   it.each(["codex", "copilot"] as const)("gives %s the directory's groups and not the full toolset", async (agent) => {
     const { spawn, calls, groupsFor } = setup();

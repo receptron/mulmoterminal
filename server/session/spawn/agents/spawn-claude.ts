@@ -88,6 +88,9 @@ export interface SpawnClaudeOptions {
   /** Limit this session to these GUI tool groups, for this spawn and every later one on the id
    *  (#3033). Absent leaves whatever was recorded before — on a fresh id, nothing. */
   guiGroups?: readonly ToolGroup[] | undefined;
+  /** `--permission-mode` for this spawn instead of the server's. Not remembered: a later resume of
+   *  the id runs under the server's mode again. */
+  permissionMode?: string | undefined;
 }
 
 // The `work in <clone>` line for a session's PRs, or null when the footer is switched off or the
@@ -277,6 +280,8 @@ function claudeAllowedTools(deps: SpawnDeps, fullGuiMcp: boolean, restrictedTo: 
   return restrictedTo === null ? deps.gridMcpTools : restrictedAllowedTools(deps.gridMcpTools, restrictedTo);
 }
 
+const permissionModeOf = (deps: SpawnDeps, options: SpawnClaudeOptions): string => options.permissionMode ?? deps.permissionMode;
+
 export function createClaudeSpawner(deps: SpawnDeps) {
   // Spawn a fresh claude PTY for this session, register it, and wire its output /
   // exit back to the browser socket. `ws` may be null for a session spawned without
@@ -317,7 +322,7 @@ export function createClaudeSpawner(deps: SpawnDeps) {
       // A provider session's settings carry its token, as a rotated one's do, so they go to a 0600
       // file instead of argv — see session-settings.ts.
       settings: settingsArgument(sessionId, hookSettings, Object.keys(credential.env).length > 0),
-      permissionMode: deps.permissionMode,
+      permissionMode: permissionModeOf(deps, options),
       attachGuiMcp: fullGuiMcp || directoryGroupsJson !== null,
       mcpConfig,
       allowedTools: claudeAllowedTools(deps, fullGuiMcp, restrictedTo),
@@ -363,7 +368,7 @@ export function createClaudeSpawner(deps: SpawnDeps) {
       if (!reattaching) rememberTokenSession(sessionId, credential.tokenId);
       if (!reattaching) printMovedNotice(sessionId, ws, credential.tokenId);
       return spawnWithFullGuiClaim({ sessionId, attachGuiMcp, cwd, wouldReattach: reattaching, agent: "claude", restricted: restrictedTo !== null }, () => {
-        const program = sessionProgram(deps.claudeBin, sessionId, customAgentId, canResume ? resume : null, credential.unset, deps.permissionMode);
+        const program = sessionProgram(deps.claudeBin, sessionId, customAgentId, canResume ? resume : null, credential.unset, permissionModeOf(deps, options));
         const spawnEnv = { ...program.spawnEnv, env: { ...program.spawnEnv.env, ...claudeRendererEnv(sessionId, cwd) } };
         // "claude" whatever wrapper started it — see sessionProgram.
         return startAgentPty({ sessionId, ws, cwd, agent: "claude", file: program.file, args: [...program.prefixArgs, ...args], spawnEnv, note: program.note });

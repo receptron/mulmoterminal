@@ -9,6 +9,9 @@ You were started as `/mulmoterminal-library promote <target> <session-id>`, in t
 conversation ran in. Your job: read that conversation, find what in it is worth keeping as the
 `<target>`, propose it, and write it **only after the user approves**.
 
+MulmoTerminal starts this session in **plan mode**, so reading is all you can do until the user
+approves your plan. That approval is the go-ahead in step 3; do not try to leave plan mode any other way.
+
 If you were started without both arguments, ask which conversation and which target, and stop there.
 
 ## 1. Read the conversation
@@ -16,10 +19,10 @@ If you were started without both arguments, ask which conversation and which tar
 ```sh
 PORT=${MULMOTERMINAL_PORT:-34567}
 # Every prompt the user typed in it, oldest first: { "prompts": [...], "truncated": bool }
-curl --noproxy localhost -s "http://localhost:$PORT/api/transcript/prompts?session=<session-id>&cwd=$(pwd)"
+curl --noproxy localhost -sG "http://localhost:$PORT/api/transcript/prompts" --data-urlencode "session=<session-id>" --data-urlencode "cwd=$(pwd)"
 # The conversation as turns, newest page first: { "view": {...}, "older": <cursor or null> }
-curl --noproxy localhost -s "http://localhost:$PORT/api/transcript/view?session=<session-id>&cwd=$(pwd)"
-# An older page: add &before=<the cursor "older" answered with>; stop when it is null.
+curl --noproxy localhost -sG "http://localhost:$PORT/api/transcript/view" --data-urlencode "session=<session-id>" --data-urlencode "cwd=$(pwd)"
+# An older page: add --data-urlencode "before=<the cursor older answered with>"; stop when it is null.
 ```
 
 Read the prompts first — corrections, repeated instructions and decisions the user made are usually
@@ -51,9 +54,11 @@ worth keeping as this target, say so and stop — that is a good answer.
 
 ## 3. Show it, and ask
 
-Show **exactly** what will change: the file path and a diff (or the whole new file). Then ask the
-user to approve, change, or drop it (AskUserQuestion when it is available). Several candidates?
-Show them all and let the user pick. **Do not write anything before the user says yes.**
+Show **exactly** what will change: the file path and a diff (or the whole new file). Several
+candidates? Show them all and let the user pick (AskUserQuestion when it is available). Then put the
+chosen change, with its path and diff and the backup you will take, in your plan (ExitPlanMode): the
+user approving it is the yes. **Do not write anything before the user says yes.** If plan mode is
+not on (the session was started some other way), ask for the yes explicitly instead.
 
 ## 4. Write, so it can be undone
 

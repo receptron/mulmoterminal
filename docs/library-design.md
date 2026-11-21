@@ -121,8 +121,10 @@ follows is a refusal to add one of those, and the reason sits next to it.
   (storage). `Enter` runs it.
 - The rest live in `more_horiz`. For a conversation: branch from here, pin, rename, promote (to
   memory, rule, plan, issue or skill), export. Promote calls no AI from the Library: it opens a
-  Claude cell in the conversation's directory running the bundled `mulmoterminal-library` skill,
-  which writes nothing until the person approves (#3334).
+  Claude cell in the conversation's directory, in plan mode, running the bundled
+  `mulmoterminal-library` skill, which writes nothing until the person approves its plan (#3334).
+  Plan mode because the cell reads another conversation, which may carry instructions planted in it:
+  the approval is then held by Claude Code, not only by the skill's text.
 - Removing moves to the trash, with a short toast offering Undo.
 - 片付ける confirms what will move inside the reader itself. No modal dialog.
 

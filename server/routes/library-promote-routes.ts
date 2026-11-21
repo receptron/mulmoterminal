@@ -5,6 +5,10 @@
 //
 // A write (it starts a process), so it is same-origin guarded like the other local-only mutations.
 // The directory is never the browser's: it is the one the Library's index holds for that conversation.
+//
+// The session starts in plan mode, whatever mode the server runs cells in: it reads another
+// conversation, which may carry instructions planted in it, so the skill's "ask before writing" is
+// held by Claude Code itself — nothing is written until the person approves the plan.
 import { stat } from "node:fs/promises";
 import type { Express } from "express";
 import { isPromoteTarget, promoteTurn } from "../../common/libraryPromote.js";
@@ -19,6 +23,8 @@ export interface LibraryPromoteDeps {
   spawnSession: SpawnIssueSession;
   isAllowedOrigin: (origin: string | undefined, remoteAddress: string | undefined) => boolean;
 }
+
+const PROMOTE_PERMISSION_MODE = "plan";
 
 const isDirectory = async (dir: string): Promise<boolean> => (await stat(dir).catch(() => null))?.isDirectory() === true;
 
@@ -37,7 +43,7 @@ export function mountLibraryPromoteRoute(app: Express, call: LibraryCaller, deps
       return res.status(409).json({ error: "the directory this conversation ran in is not on this machine" });
     }
     try {
-      const spawned = await deps.spawnSession("claude", found.cwd, turn, true, null);
+      const spawned = await deps.spawnSession("claude", found.cwd, turn, true, null, { claudePermissionMode: PROMOTE_PERMISSION_MODE });
       res.json({ chatId: spawned.sessionId, agent: spawned.agent });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : "the session could not be started" });
