@@ -130,6 +130,7 @@ export const libraryViewKo = {
       cleanupUnreadable: "settings.json에서 cleanupPeriodDays를 읽지 못해, Claude Code가 대화 기록을 얼마나 보관하는지 여기서는 알 수 없습니다.",
       measuredAt: "{when}에 측정했습니다.",
       remeasure: "다시 측정",
+      startRefused: "측정을 시작하지 못했습니다. 잠시 후 다시 시도하세요.",
       notMeasured: "아직 측정하지 않았습니다.",
       measureFailed: "Claude Code 폴더를 측정하지 못했습니다.",
       unreadableHome: "{root}을(를) 읽지 못했습니다.",

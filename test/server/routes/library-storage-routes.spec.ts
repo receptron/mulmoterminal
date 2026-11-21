@@ -17,8 +17,9 @@ const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 
 const size = (bytes: number) => ({ bytes, files: 1, unreadable: 0 });
-/** A temp project's folder as Claude Code names it on this platform (macOS's /tmp is /private/tmp). */
-const TEMP_SLUG = `${encodeProjectDirName(claudeProjectPath("/tmp"))}-probe`;
+/** A temp project's folder as Claude Code names it on this platform: under its own temp directory,
+ *  real path resolved (macOS's /var is /private/var; Windows has no /tmp). */
+const TEMP_SLUG = `${encodeProjectDirName(claudeProjectPath(tmpdir()))}-probe`;
 const MEASURE: HomeMeasure = {
   measuredAt: 1000,
   total: size(30),
@@ -126,6 +127,10 @@ describe("GET /api/library/storage", () => {
     state = { ...state, measure: { ...MEASURE, measuredAt: 3000 } };
     await request("/api/library/storage");
     expect(asked).toHaveLength(3);
+    // Another measurement finished in the same millisecond is another measurement.
+    state = { ...state, measure: { ...MEASURE, measuredAt: 3000, projects: [{ slug: "-other", ...size(1) }] } };
+    expect((await request("/api/library/storage")).body).toMatchObject({ measure: { projects: [{ slug: "-other" }] } });
+    expect(asked).toHaveLength(4);
   });
 
   it("reads cleanupPeriodDays from the settings file, and says when it cannot", async () => {

@@ -76,6 +76,34 @@ describe("measureHome", () => {
     expect(empty?.entries.map((entry) => entry.name)).toEqual(["a-file"]);
   });
 
+  it("measures a home behind a parent it may not search as unreadable, not as missing", async () => {
+    const denied = (code: string): WalkFs => ({
+      ...realFs,
+      lstat: () => Promise.reject(Object.assign(new Error(code), { code })),
+      readdir: () => Promise.reject(Object.assign(new Error(code), { code })),
+    });
+    expect(
+      (
+        await measureHome(
+          "/h",
+          denied("EACCES"),
+          () => 1,
+          () => {},
+        )
+      ).total.unreadable,
+    ).toBe(1);
+    expect(
+      (
+        await measureHome(
+          "/h",
+          denied("ENOENT"),
+          () => 1,
+          () => {},
+        )
+      ).total.unreadable,
+    ).toBe(0);
+  });
+
   it("measures a `projects` that is a file as an entry, with no projects", async () => {
     await writeFile(path.join(home, "projects"), "x");
     const measure = await measureHome(home, realFs, Date.now, () => {});

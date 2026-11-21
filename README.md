@@ -1886,8 +1886,8 @@ narrow and tall for one record you are discussing — and each position keeps it
   a `CLAUDE.md` rule, a plan under `plans/`, an issue or a skill: it opens a Claude cell in plan mode in the
   directory the conversation ran in, running the bundled `mulmoterminal-library` skill, which reads
   the conversation, shows the change as a diff, and writes nothing until you approve its plan (it backs up every
-  file it changes first, and says how to undo). **Storage** shows what each entry of `~/.claude` (or `CLAUDE_CONFIG_DIR`) takes on disk, and under `projects/` each project, largest first, with temp-directory ones marked; it is measured in the background and measured again when the last one is over an hour old, and it says what `cleanupPeriodDays` is set to. `claude -p` and SDK runs, and runs from temp directories, are left
-  out. The index behind it is built in the background the first time you open it and kept up to
+  file it changes first, and says how to undo). **Storage** shows what each entry of `~/.claude` (or `CLAUDE_CONFIG_DIR`) takes on disk, and under `projects/` each project, largest first, with temp-directory ones marked; it is measured in the background and measured again when the last one is over an hour old, and it says what `cleanupPeriodDays` is set to. The conversation list leaves out `claude -p` and SDK runs, and runs from temp
+  directories. The index behind it is built in the background the first time you open it and kept up to
   date from what is appended; it is `~/.mulmoterminal/library/index.db` and can be deleted at any
   time (it is rebuilt). `marks.json` beside it holds your pins and names and is not rebuilt.
   A conversation's PR numbers open the PR; in the GitHub view, a PR a conversation made has a

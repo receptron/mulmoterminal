@@ -2,7 +2,7 @@
 // The Library's Storage view (#3333): what each entry of Claude Code's home takes, largest first, and
 // for `projects/` what each project takes. Read-only; the server measures on a worker and this shows
 // the last measurement while a newer one runs.
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { PROJECTS_ENTRY, type LibraryStorageAnswer, type StorageEntry } from "../../../common/libraryStorage";
 import { formatSize } from "../folderView";
@@ -13,6 +13,7 @@ const props = defineProps<{
   answer: LibraryStorageAnswer | null;
   loaded: boolean;
   failed: boolean;
+  startRefused: boolean;
   now: number;
 }>();
 const emit = defineEmits<{ remeasure: [] }>();
@@ -64,11 +65,14 @@ function choose(name: string): void {
 }
 
 /** Move the selection by `by` rows, for the arrow keys; held inside the list, as the other kinds are. */
-function move(by: number): void {
+async function move(by: number): Promise<void> {
   const list = entries.value;
   const at = selected.value === null ? -1 : list.indexOf(selected.value);
   const next = list[movedIndex(at, by, list.length)];
-  if (next !== undefined) chosenName.value = next.name;
+  if (next === undefined) return;
+  chosenName.value = next.name;
+  await nextTick();
+  document.querySelector("[data-storage-row][aria-current=true]")?.scrollIntoView?.({ block: "nearest" });
 }
 
 defineExpose({ move });
@@ -93,6 +97,7 @@ defineExpose({ move });
     >
       {{ t("libraryView.storage.remeasure") }}
     </button>
+    <p v-if="startRefused" class="m-0 mt-2 text-err-text" role="status" data-testid="storage-start-refused">{{ t("libraryView.storage.startRefused") }}</p>
   </div>
   <div v-else class="flex min-h-0 flex-1 border-t border-border" data-testid="library-storage">
     <div
@@ -110,6 +115,7 @@ defineExpose({ move });
         :key="entry.name"
         type="button"
         data-library-row
+        data-storage-row
         data-testid="storage-row"
         class="block w-full cursor-pointer border-0 px-4 py-1.5 text-left font-sans"
         :class="selected?.name === entry.name ? 'bg-selected' : 'bg-transparent hover:bg-hover'"
@@ -170,6 +176,7 @@ defineExpose({ move });
           >
             {{ t("libraryView.storage.remeasure") }}
           </button>
+          <span v-if="startRefused" class="text-err-text" role="status" data-testid="storage-start-refused">{{ t("libraryView.storage.startRefused") }}</span>
         </p>
       </article>
     </div>

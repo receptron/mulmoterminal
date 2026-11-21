@@ -46,10 +46,16 @@ async function measureEntry(home: string, name: string, fs: WalkFs): Promise<Sto
   return { name, directory: stat?.isDirectory() === true, ...(await measurePath(at, fs)) };
 }
 
-/** A home that cannot be listed measures as nothing, and as unreadable when it is there at all. */
+const isMissing = (err: unknown): boolean => err instanceof Error && "code" in err && err.code === "ENOENT";
+
+/** A home that cannot be listed measures as nothing: as unreadable unless it is plainly not there (a
+ *  parent that may not be searched is a reason it cannot be read, not a missing home). */
 async function unlistedHome(home: string, fs: WalkFs, now: () => number): Promise<HomeMeasure> {
-  const there = (await fs.lstat(home).catch(() => null)) !== null;
-  return { measuredAt: now(), total: { ...NOTHING, unreadable: there ? 1 : 0 }, entries: [], projects: [] };
+  const missing = await fs.lstat(home).then(
+    () => false,
+    (err: unknown) => isMissing(err),
+  );
+  return { measuredAt: now(), total: { ...NOTHING, unreadable: missing ? 0 : 1 }, entries: [], projects: [] };
 }
 
 /** `home` measured. `onProgress` hears each step. */

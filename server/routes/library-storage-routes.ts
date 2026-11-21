@@ -63,12 +63,13 @@ const slugOf = (cwd: string): string => encodeProjectDirName(claudeProjectPath(c
  *  real path of every directory the index knows, which is too much to repeat on every read. When the
  *  index does not answer, the sizes are still shown, unmatched, and the next read tries again. */
 function projectMatcher(call: LibraryCaller): (measure: HomeMeasure) => Promise<StorageProject[]> {
-  let matched: { measuredAt: number; projects: StorageProject[] } | null = null;
+  // Keyed by the measurement itself: two can finish within one millisecond.
+  let matched: { measure: HomeMeasure; projects: StorageProject[] } | null = null;
   return async (measure) => {
-    if (matched?.measuredAt === measure.measuredAt) return matched.projects;
+    if (matched?.measure === measure) return matched.projects;
     const directories = await knownDirectories(call);
     const projects = matchProjects(measure.projects, directories ?? [], { slugOf, temporaryRoots: temporaryRoots() });
-    if (directories !== null) matched = { measuredAt: measure.measuredAt, projects };
+    if (directories !== null) matched = { measure, projects };
     return projects;
   };
 }

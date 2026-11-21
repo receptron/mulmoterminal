@@ -42,10 +42,11 @@ function onWorkerMessage(message: unknown, events: StorageWorkerEvents): void {
 
 export const startStorageWorker: StartStorageWorker = (home, events) => {
   const worker = new Worker(new URL("./storage-worker.ts", import.meta.url), { workerData: { home }, execArgv: workerExecArgv() });
-  worker.unref(); // a measurement must never be what keeps the server from exiting
   worker.on("message", (message: unknown) => onWorkerMessage(message, events));
   worker.on("error", (err: unknown) => events.failed(err instanceof Error ? err.message : "the measurement failed"));
   worker.on("exit", () => events.failed("the measurement stopped"));
+  // After the listeners: adding the first `message` listener refs the worker's port again.
+  worker.unref(); // a measurement must never be what keeps the server from exiting
   return () => void worker.terminate();
 };
 

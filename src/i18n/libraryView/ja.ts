@@ -129,6 +129,7 @@ export const libraryViewJa = {
       cleanupUnreadable: "settings.json から cleanupPeriodDays を読めなかったので、Claude Code が会話の記録をいつまで残すかはここでは分かりません。",
       measuredAt: "{when}に測りました。",
       remeasure: "測り直す",
+      startRefused: "測り始められませんでした。少しして試してください。",
       notMeasured: "まだ測っていません。",
       measureFailed: "Claude Code のフォルダを測れませんでした。",
       unreadableHome: "{root} を読めませんでした。",

@@ -62,7 +62,7 @@ const SEARCH_LABELS = {
 const searchLabel = computed(() => t(SEARCH_LABELS[kind.value]));
 const memoryView = useTemplateRef<{ move(by: number): Promise<void>; startEdit(): void }>("memoryView");
 const toolsView = useTemplateRef<{ move(by: number): Promise<void> }>("toolsView");
-const storageView = useTemplateRef<{ move(by: number): void }>("storageView");
+const storageView = useTemplateRef<{ move(by: number): Promise<void> }>("storageView");
 const storage = useLibraryStorage(
   computed(() => isOpen.value && kind.value === "storage"),
   query,
@@ -298,7 +298,7 @@ function runKeyAction(action: NonNullable<ReturnType<typeof libraryKeyAction>>):
   const by = action === "up" ? -1 : 1;
   if (action === "focus-search") searchField.value?.focus();
   else if (kind.value === "storage") {
-    if (action !== "primary") storageView.value?.move(by);
+    if (action !== "primary") void storageView.value?.move(by);
   } else if (kind.value === "memory") {
     if (action === "primary") memoryView.value?.startEdit();
     else void memoryView.value?.move(by);
@@ -391,6 +391,7 @@ onBeforeUnmount(() => {
         :answer="storage.answer.value"
         :loaded="storage.loaded.value"
         :failed="storage.failed.value"
+        :start-refused="storage.startRefused.value"
         :now="now"
         @remeasure="storage.remeasure"
       />

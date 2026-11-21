@@ -31,8 +31,10 @@ const answerWith = (over: Partial<LibraryStorageAnswer> = {}, cleanup: CleanupPe
   ...over,
 });
 
-const mountWith = (answer: LibraryStorageAnswer | null, extra: { loaded?: boolean; failed?: boolean } = {}) =>
-  mount(LibraryStorage, { props: { answer, loaded: extra.loaded ?? true, failed: extra.failed ?? false, now: NOW } });
+const mountWith = (answer: LibraryStorageAnswer | null, extra: { loaded?: boolean; failed?: boolean; startRefused?: boolean } = {}) =>
+  mount(LibraryStorage, {
+    props: { answer, loaded: extra.loaded ?? true, failed: extra.failed ?? false, startRefused: extra.startRefused ?? false, now: NOW },
+  });
 
 describe("LibraryStorage", () => {
   it("lists the entries with the total, and opens on the first", () => {
@@ -78,14 +80,14 @@ describe("LibraryStorage", () => {
 
   it("walks the entries with the arrow keys, stopping at both ends", async () => {
     const wrapper = mountWith(answerWith());
-    const view = wrapper.vm as unknown as { move(by: number): void };
-    const heading = async (): Promise<string> => (await wrapper.vm.$nextTick(), wrapper.get('[data-testid="storage-reader"] h2').text());
-    view.move(-1);
-    expect(await heading()).toBe("projects/");
-    view.move(1);
-    expect(await heading()).toBe("debug/");
-    view.move(5);
-    expect(await heading()).toBe("history.jsonl");
+    const view = wrapper.vm as unknown as { move(by: number): Promise<void> };
+    const heading = (): string => wrapper.get('[data-testid="storage-reader"] h2').text();
+    await view.move(-1);
+    expect(heading()).toBe("projects/");
+    await view.move(1);
+    expect(heading()).toBe("debug/");
+    await view.move(5);
+    expect(heading()).toBe("history.jsonl");
   });
 
   it("counts one file as one", () => {
@@ -132,6 +134,35 @@ describe("LibraryStorage", () => {
         .text(),
     ).toContain("older one");
     expect(mountWith(answerWith()).get('[data-testid="storage-reader"]').text()).not.toContain("older one");
+  });
+
+  it("keeps the row the keys moved to in view", async () => {
+    const wrapper = mount(LibraryStorage, {
+      props: { answer: answerWith(), loaded: true, failed: false, startRefused: false, now: NOW },
+      attachTo: document.body,
+    });
+    const scrolled: string[] = [];
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this.textContent ?? "");
+    };
+    try {
+      await (wrapper.vm as unknown as { move(by: number): Promise<void> }).move(1);
+      expect(scrolled).toEqual([expect.stringContaining("debug/")]);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+      wrapper.unmount();
+    }
+  });
+
+  it("says when asking for a measurement was refused, with or without an older one", () => {
+    expect(mountWith(answerWith(), { startRefused: true }).find('[data-testid="storage-start-refused"]').exists()).toBe(true);
+    expect(
+      mountWith(answerWith({ measure: null }), { startRefused: true })
+        .find('[data-testid="storage-start-refused"]')
+        .exists(),
+    ).toBe(true);
+    expect(mountWith(answerWith()).find('[data-testid="storage-start-refused"]').exists()).toBe(false);
   });
 
   it("says so when nothing could be read", () => {

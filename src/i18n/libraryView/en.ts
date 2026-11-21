@@ -130,6 +130,7 @@ export const libraryViewEn = {
       cleanupUnreadable: "Could not read cleanupPeriodDays from settings.json, so how long Claude Code keeps transcripts is not known here.",
       measuredAt: "Measured {when}.",
       remeasure: "Measure again",
+      startRefused: "Could not start measuring. Try again in a moment.",
       notMeasured: "Not measured yet.",
       measureFailed: "Could not measure Claude Code's folder.",
       unreadableHome: "Could not read {root}.",

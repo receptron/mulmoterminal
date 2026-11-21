@@ -128,6 +128,7 @@ export const libraryViewZhCN = {
       cleanupUnreadable: "无法从 settings.json 读取 cleanupPeriodDays，因此这里无法得知 Claude Code 会保留对话记录多久。",
       measuredAt: "测量于{when}。",
       remeasure: "重新测量",
+      startRefused: "无法开始测量。请稍后再试。",
       notMeasured: "尚未测量。",
       measureFailed: "无法测量 Claude Code 的文件夹。",
       unreadableHome: "无法读取 {root}。",
