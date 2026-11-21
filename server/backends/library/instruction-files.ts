@@ -79,7 +79,8 @@ export const isInside = (dir: string, target: string): boolean => target === dir
 export const IMPORT_DEPTH_MAX = 4;
 
 /** The `@path` imports in an instruction file's text, outside code spans and blocks: a backslash keeps
- *  a space in the path, and a quoted path is not an import. Resolved against the file's own folder,
+ *  a space in the path, and a quoted path is not an import — `@"path"` nor `"@path"` (asked of Claude
+ *  Code itself: it loads neither). Resolved against the file's own folder,
  *  `~/` against the home. An `@` inside a word (an address) is not one. At most `limit`, distinct, in
  *  the order written: reading stops there, however many more the file holds. */
 export function importsOf(
@@ -90,7 +91,7 @@ export function importsOf(
   limit = Number.POSITIVE_INFINITY,
 ): string[] {
   const paths = new Set<string>();
-  for (const match of splitCode(text).prose.matchAll(/(?<![\w@])@((?:\\.|[^\s"'`\\])+)/g)) {
+  for (const match of splitCode(text).prose.matchAll(/(?<![\w@"'])@((?:\\.|[^\s"'`\\])+)/g)) {
     if (paths.size >= limit) break;
     const raw = withoutClosingPunctuation((match[1] ?? "").replace(/\\ /g, " "));
     if (raw !== "") paths.add(raw.startsWith("~/") ? flavour.join(home, raw.slice(2)) : flavour.resolve(flavour.dirname(fromFile), raw));

@@ -84,6 +84,9 @@ describe("importsOf", () => {
       "C:\\w\\docs\\guide.md",
     ]);
   });
+  it("leaves out an import inside quotes, either style, as Claude Code does", () => {
+    expect(importsOf(`"@README.md" and '@docs/guide.md' but @plain.md`, from, "/h")).toEqual(["/w/app/plain.md"]);
+  });
   it("ignores code, quoted paths, addresses and a bare @", () => {
     expect(importsOf('`@README` and\n```\n@inside.md\n```\nmail me@example.com, @"Design Docs/quoted.md", @ alone', from, "/h")).toEqual([]);
   });
