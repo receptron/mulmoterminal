@@ -14,6 +14,7 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
   trashLibraryMemoryFile: (...args: unknown[]) => trashCalls.push(args) && Promise.resolve(trashAnswer),
   undoLibraryMemoryTrash: (undo: string) => undoCalls.push(undo) && Promise.resolve(undoAnswer),
   mergeLibraryMemoryFiles: (request: unknown) => mergeCalls.push(request) && Promise.resolve(mergeAnswer),
+  loadLibraryMemoryLinks: () => Promise.resolve(linksAnswer),
 }));
 let running = false;
 vi.mock("../../../../src/composables/useDirLists", () => ({
@@ -26,7 +27,14 @@ let undoCalls: string[] = [];
 let trashAnswer: { kind: string; undo?: string } = { kind: "trashed", undo: "u-1" };
 let undoAnswer = "restored";
 let mergeCalls: unknown[] = [];
-let mergeAnswer: { kind: string; version?: string; undo?: string; file?: string } = { kind: "merged", version: "v3", undo: "u-m" };
+let mergeAnswer: { kind: string; version?: string; undo?: string; file?: string; text?: string; links?: number; files?: string[] } = {
+  kind: "merged",
+  version: "v3",
+  undo: "u-m",
+  text: "merged as written",
+  links: 0,
+};
+let linksAnswer: { count: number; unplaceable: string[] } | null = { count: 0, unplaceable: [] };
 
 const LibraryMemory = (await import("../../../../src/components/library/LibraryMemory.vue")).default;
 const { MEMORY_TRASH_NOTICE_MS } = await import("../../../../src/composables/useMemoryTrash");
@@ -53,7 +61,8 @@ beforeEach(() => {
   trashAnswer = { kind: "trashed", undo: "u-1" };
   undoAnswer = "restored";
   mergeCalls = [];
-  mergeAnswer = { kind: "merged", version: "v3", undo: "u-m" };
+  mergeAnswer = { kind: "merged", version: "v3", undo: "u-m", text: "merged as written", links: 0 };
+  linksAnswer = { count: 0, unplaceable: [] };
   texts = {
     "-w-app/reply.md": "---\nname: reply-in-japanese\n---\nAlways Japanese. See [[codex-sandbox]] and [[gone]].",
     "-w-app/codex.md": "---\nname: codex-sandbox\n---\nThe sandbox refuses rm.",
@@ -413,6 +422,44 @@ describe("LibraryMemory", () => {
       await flushPromises();
       expect(undoCalls).toEqual(["u-m"]);
       expect(wrapper.find("[data-testid=memory-reader] h2").text()).toBe("reply-in-japanese");
+    });
+
+    it("says first how many links will point here, then shows the text as written and how many did", async () => {
+      linksAnswer = { count: 2, unplaceable: [] };
+      mergeAnswer = { kind: "merged", version: "v3", undo: "u-m", text: "---\nname: codex-sandbox\n---\nAs written, [[codex-sandbox]].", links: 2 };
+      const wrapper = await mountMemory();
+      await chooseMerge(wrapper);
+      await pickFirst(wrapper);
+      expect(wrapper.find("[data-testid=memory-editor-merge-links]").text()).toBe("2 links to it will point here.");
+      await wrapper.find("[data-testid=memory-editor-save]").trigger("click");
+      await flushPromises();
+      expect(wrapper.find("[data-testid=memory-trash-notice]").text()).toContain("Merged “reply-in-japanese” into “codex-sandbox”. 2 links now point at it.");
+      expect(wrapper.find("[data-testid=memory-body]").text()).toBe("As written, codex-sandbox.");
+    });
+
+    it("says which memories' links could not be rewritten, before saving and when refused, and merges nothing", async () => {
+      linksAnswer = { count: 0, unplaceable: ["e.md"] };
+      mergeAnswer = { kind: "unplaceable", files: ["e.md", "f.md"] };
+      const wrapper = await mountMemory();
+      await chooseMerge(wrapper);
+      await pickFirst(wrapper);
+      expect(wrapper.find("[data-testid=memory-editor-notice]").text()).toContain("Links in e.md could not be rewritten exactly");
+      expect(wrapper.find("[data-testid=memory-editor-merge-links]").exists()).toBe(false);
+      await wrapper.find("[data-testid=memory-editor-save]").trigger("click");
+      await flushPromises();
+      expect(wrapper.find("[data-testid=memory-editor-notice]").text()).toContain("Links in e.md, f.md could not be rewritten exactly");
+      expect(wrapper.find("[data-testid=memory-trash-notice]").exists()).toBe(false);
+    });
+
+    it("says when a memory whose links it rewrites changed meanwhile, and that saving again retries", async () => {
+      mergeAnswer = { kind: "changed", file: "links" };
+      const wrapper = await mountMemory();
+      await chooseMerge(wrapper);
+      await pickFirst(wrapper);
+      await wrapper.find("[data-testid=memory-editor-save]").trigger("click");
+      await flushPromises();
+      expect(wrapper.find("[data-testid=memory-editor-notice]").text()).toContain("whose links this merge rewrites changed meanwhile");
+      expect(wrapper.find("[data-testid=memory-editor]").exists()).toBe(true);
     });
 
     it("says when the memory merged in changed since, and merges nothing", async () => {

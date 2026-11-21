@@ -7,9 +7,10 @@ import { trashLibraryMemoryFile, undoLibraryMemoryTrash, type MemoryTrashResult 
 /** How long the notice, and so its Undo, stays. */
 export const MEMORY_TRASH_NOTICE_MS = 10_000;
 
-/** `into`: the title of the memory it was merged into, when it went by a merge. */
+/** `into`: the title of the memory it was merged into, when it went by a merge; `links`, how many links
+ *  that merge pointed at it. */
 export type MemoryTrashNotice =
-  | { kind: "trashed"; title: string; key: string; undo: string; running: boolean; undoFailed?: boolean; into?: string }
+  | { kind: "trashed"; title: string; key: string; undo: string; running: boolean; undoFailed?: boolean; into?: string; links?: number }
   | { kind: "changed" | "failed" | "taken" | "gone" };
 
 export interface MemoryTrashTarget {
@@ -47,8 +48,8 @@ export function useMemoryTrash(changed: () => void) {
   }
 
   /** A merge done in the editor: the same notice, with the same Undo, as a move to the Trash. */
-  function merged(target: Pick<MemoryTrashTarget, "title" | "key">, into: string, undo: string): void {
-    show({ kind: "trashed", title: target.title, key: target.key, undo, running: false, into });
+  function merged(target: Pick<MemoryTrashTarget, "title" | "key">, into: string, undo: string, links = 0): void {
+    show({ kind: "trashed", title: target.title, key: target.key, undo, running: false, into, links });
     changed();
   }
 

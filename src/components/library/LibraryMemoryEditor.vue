@@ -6,7 +6,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, wa
 import { dropMemoryDraft, keepMemoryDraft, memoryDraftFor, memoryDraftKey, staleMemoryDraftFor } from "./memoryDrafts";
 import { isImeConfirming } from "../../composables/imeComposition";
 import { useI18n } from "vue-i18n";
-import { mergeLibraryMemoryFiles, saveLibraryMemoryFile, type MemorySaveResult } from "../../composables/libraryApi";
+import { loadLibraryMemoryLinks, mergeLibraryMemoryFiles, saveLibraryMemoryFile, type MemorySaveResult } from "../../composables/libraryApi";
 import { sessionRunningIn } from "./memorySessions";
 import { MEMORY_EDIT_MAX_BYTES } from "../../../common/libraryMemory";
 
@@ -27,7 +27,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (e: "saved", text: string, version: string): void;
-  (e: "merged", text: string, version: string, undo: string): void;
+  (e: "merged", text: string, version: string, undo: string, links: number): void;
   (e: "cancel" | "reload"): void;
 }>();
 const { t } = useI18n();
@@ -75,7 +75,12 @@ const asWritten = (text: string): string => {
 const dirty = computed(() => asWritten(draft.value) !== props.text);
 defineExpose({ dirty });
 const saving = ref(false);
-const notice = ref<"changed" | "from-changed" | "failed" | "too-large" | "unsaved" | "restored" | null>(kept === null ? null : "restored");
+const notice = ref<"changed" | "from-changed" | "links-changed" | "unplaceable" | "failed" | "too-large" | "unsaved" | "restored" | null>(
+  kept === null ? null : "restored",
+);
+/** A merge's links to the memory merged in, said before saving: how many will point here, and the
+ *  memories whose links could not be rewritten (which stop the merge). */
+const mergeLinks = ref<{ count: number; unplaceable: string[] } | null>(null);
 watch(
   () => props.leaveRefused,
   () => (notice.value = "unsaved"),
@@ -110,7 +115,12 @@ function cancel(): void {
 onMounted(async () => {
   await nextTick();
   field.value?.focus();
-  sessionRunning.value = await sessionRunningIn(props.cwd);
+  const merging = props.merging;
+  const [running, links] = await Promise.all([sessionRunningIn(props.cwd), merging ? loadLibraryMemoryLinks(props.slug, props.file, merging.file) : null]);
+  sessionRunning.value = running;
+  mergeLinks.value = links;
+  // Said before saving, as the merge would be refused for it.
+  if ((links?.unplaceable.length ?? 0) > 0) notice.value = "unplaceable";
 });
 
 async function save(): Promise<void> {
@@ -141,8 +151,11 @@ async function merge(text: string, merging: NonNullable<typeof props.merging>): 
   const result = await mergeLibraryMemoryFiles(request);
   if (result.kind === "merged") {
     settled = true;
-    emit("merged", text, result.version, result.undo);
-  } else notice.value = result.kind === "changed" && result.file === "from" ? "from-changed" : result.kind;
+    emit("merged", result.text, result.version, result.undo, result.links);
+    return;
+  }
+  if (result.kind === "unplaceable") mergeLinks.value = { count: 0, unplaceable: result.files };
+  notice.value = result.kind === "changed" && result.file !== "into" ? `${result.file}-changed` : result.kind;
 }
 
 /** ⌘Enter (Ctrl+Enter elsewhere) saves; Esc stops editing, not the Library. */
@@ -179,6 +192,9 @@ function onKey(event: KeyboardEvent): void {
     </p>
     <p v-if="merging" class="m-0 px-4 pt-3 font-sans text-[12px] text-secondary" role="status" data-testid="memory-editor-merging">
       {{ t("libraryView.memory.merge.editing", { title: merging.title }) }}
+      <span v-if="mergeLinks && mergeLinks.count > 0" data-testid="memory-editor-merge-links">{{
+        t("libraryView.memory.merge.links", { count: mergeLinks.count })
+      }}</span>
     </p>
     <p v-if="adding" class="m-0 px-4 pt-3 font-sans text-[12px] text-secondary" role="status" data-testid="memory-editor-adding">
       {{ t("libraryView.memory.copies.editing", { name: adding.title }) }}
@@ -197,7 +213,7 @@ function onKey(event: KeyboardEvent): void {
     ></textarea>
     <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-border px-4 py-2">
       <p v-if="notice" class="m-0 mr-auto font-sans text-[12px] text-err-text" role="status" data-testid="memory-editor-notice">
-        {{ t(`libraryView.memory.edit.${notice}`) }}
+        {{ t(`libraryView.memory.edit.${notice}`, { files: (mergeLinks?.unplaceable ?? []).join(", ") }) }}
         <button
           v-if="notice === 'changed' || notice === 'from-changed'"
           type="button"

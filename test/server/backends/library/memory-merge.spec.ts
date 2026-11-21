@@ -6,7 +6,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { mergeMemory, restoreMemory, type MemoryMergeResult } from "../../../../server/backends/library/memory-trash";
-import { memoryVersion, replaceKeepingMode } from "../../../../server/backends/library/memory-write";
+import { memoryVersion, replaceKeepingMode, writeMemory } from "../../../../server/backends/library/memory-write";
+import { linksTo } from "../../../../server/backends/library/memory-merge-links";
+import { memoryHealth } from "../../../../server/backends/library/memory-health";
 import { trashEntry, type TrashLayout } from "../../../../server/files/tree-ops";
 
 const dirs: string[] = [];
@@ -47,7 +49,7 @@ describe("mergeMemory", () => {
   it("writes the merged text, moves the other memory and its index line to the Trash, and Undo puts both back", async () => {
     const { layout, read, trashed, merge, memory } = setup();
     const result = await mergeMemory(merge(), layout, NOW);
-    expect(result).toEqual({ kind: "merged", version: memoryVersion(MERGED), undo: undoOf(result) });
+    expect(result).toEqual({ kind: "merged", version: memoryVersion(MERGED), undo: undoOf(result), links: 0, text: MERGED });
     expect(read("b.md")).toBe(MERGED);
     expect(existsSync(path.join(memory, "a.md"))).toBe(false);
     expect(trashed()).toEqual(["a.md"]);
@@ -120,5 +122,174 @@ describe("mergeMemory", () => {
     ]);
     expect(results.map((result) => result.kind).sort()).toEqual(["conflict", "merged"]);
     expect(read("MEMORY.md").split("\n")).toHaveLength(3);
+  });
+});
+
+describe("the links a merge points at the memory that stays", () => {
+  const A = "---\nname: alpha\n---\nAlpha body.\n";
+  const B = "---\nname: beta\n---\nBeta body.\n";
+  const C = "See [[alpha]] and [[a]], not `[[alpha]]`.\n\n```\n[[alpha]]\n```\n";
+  const D = "Also [[ alpha ]].\r\n```\r\n[[alpha]]\r\n```\r\n";
+
+  function linked(extra: Record<string, string | Buffer> = {}) {
+    const { memory, layout, read, trashed } = setup();
+    const files: Record<string, string | Buffer> = { "a.md": A, "b.md": B, "c.md": C, "d.md": D, ...extra };
+    Object.entries(files).forEach(([name, text]) => writeFileSync(path.join(memory, name), text));
+    const merge = (text = `${B}\nAlpha body.\n`, fromVersion = memoryVersion(A)) => ({
+      into: path.join(memory, "b.md"),
+      text,
+      intoVersion: memoryVersion(B),
+      from: path.join(memory, "a.md"),
+      fromVersion,
+    });
+    return { memory, layout, read, trashed, merge };
+  }
+
+  it("rewrites the links outside code in every other memory and in the merged text, and says how many", async () => {
+    const { layout, read, merge } = linked();
+    const result = await mergeMemory(merge(`${B}\nAs [[alpha]] said.\n`), layout, NOW);
+    expect(result).toMatchObject({ kind: "merged", links: 4, text: `${B}\nAs [[beta]] said.\n` });
+    expect(read("b.md")).toBe(`${B}\nAs [[beta]] said.\n`);
+    expect(read("c.md")).toBe("See [[beta]] and [[beta]], not `[[alpha]]`.\n\n```\n[[alpha]]\n```\n");
+    expect(read("d.md")).toBe("Also [[beta]].\r\n```\r\n[[alpha]]\r\n```\r\n");
+  });
+
+  it("leaves nothing for the health check to call a broken link", async () => {
+    const { layout, read, merge } = linked();
+    await mergeMemory(merge(), layout, NOW);
+    const files = ["b.md", "c.md", "d.md"].map((file) => ({ file, text: read(file) }));
+    const health = memoryHealth({ slug: "-w-app", index: { text: read("MEMORY.md"), lines: 2, bytes: 0 }, files }, new Set());
+    expect(
+      Object.values(health.files)
+        .flat()
+        .filter((issue) => issue.kind === "broken-link"),
+    ).toEqual([]);
+  });
+
+  it("puts every rewritten link back on Undo, except in a memory changed since", async () => {
+    const { layout, read, merge, memory } = linked();
+    const result = await mergeMemory(merge(), layout, NOW);
+    writeFileSync(path.join(memory, "d.md"), "rewritten again by the agent [[beta]]\n");
+    expect(await restoreMemory(undoOf(result), NOW)).toBe("restored");
+    expect([read("a.md"), read("b.md"), read("c.md")]).toEqual([A, B, C]);
+    expect(read("d.md")).toBe("rewritten again by the agent [[beta]]\n");
+  });
+
+  it("writes nothing when a link to the merged memory cannot be rewritten exactly, and names the files", async () => {
+    const mixed = "[[alpha]]\r\n`[[alpha]]`\n";
+    const unfaithful = Buffer.concat([Buffer.from("[[alpha]] "), Buffer.from([0xff])]);
+    const { layout, read, trashed, merge } = linked({ "e.md": mixed, "f.md": unfaithful, "g.md": "mixed but no link\r\n`x`\n" });
+    expect(await mergeMemory(merge(), layout, NOW)).toEqual({ kind: "links-unplaceable", files: ["e.md", "f.md"] });
+    expect([read("a.md"), read("b.md"), read("c.md"), read("MEMORY.md"), trashed()]).toEqual([A, B, C, INDEX, []]);
+  });
+
+  it("puts everything back when a rewritten memory cannot be written", async () => {
+    const { layout, read, trashed, merge } = linked();
+    const failOnD = async (target: string, text: string, mode: number): Promise<void> => {
+      if (path.basename(target) === "d.md") throw new Error(`no write: ${target}`);
+      await replaceKeepingMode(target, text, mode);
+    };
+    await expect(mergeMemory(merge(), layout, NOW, { replace: failOnD, move: trashEntry })).rejects.toThrow("no write");
+    expect([read("a.md"), read("b.md"), read("c.md"), read("d.md"), read("MEMORY.md"), trashed()]).toEqual([A, B, C, D, INDEX, []]);
+  });
+
+  it("puts everything back only once no rewrite is still being written", async () => {
+    const { layout, read, trashed, merge } = linked();
+    const slowCFailingD = async (target: string, text: string, mode: number): Promise<void> => {
+      if (path.basename(target) === "d.md") throw new Error(`no write: ${target}`);
+      if (path.basename(target) === "c.md") await new Promise((resolve) => setTimeout(resolve, 200));
+      await replaceKeepingMode(target, text, mode);
+    };
+    await expect(mergeMemory(merge(), layout, NOW, { replace: slowCFailingD, move: trashEntry })).rejects.toThrow("no write");
+    await new Promise((resolve) => setTimeout(resolve, 300)); // a write still under way would land by now
+    expect([read("a.md"), read("b.md"), read("c.md"), read("d.md"), read("MEMORY.md"), trashed()]).toEqual([A, B, C, D, INDEX, []]);
+  });
+
+  it("leaves a memory made after it listed the folder as it is: its turn is not held", async () => {
+    const { layout, read, merge, memory } = linked();
+    const gate: { open: () => void } = { open: () => undefined };
+    const held = new Promise<void>((resolve) => (gate.open = resolve));
+    const slow = async (target: string, text: string, mode: number): Promise<void> => {
+      await held;
+      await replaceKeepingMode(target, text, mode);
+    };
+    const save = writeMemory(path.join(memory, "c.md"), "C again [[alpha]]\n", memoryVersion(C), slow);
+    const merged = mergeMemory(merge(), layout, NOW); // lists the folder, then waits for c.md
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    writeFileSync(path.join(memory, "x.md"), "Made since [[alpha]].\n");
+    gate.open();
+    expect([(await save).kind, (await merged).kind]).toEqual(["written", "merged"]);
+    expect(read("x.md")).toBe("Made since [[alpha]].\n");
+    expect(read("c.md")).toBe("C again [[beta]]\n");
+  });
+
+  it("leaves a link in a frontmatter value as it is, and does not count it", async () => {
+    const withFrontmatter = "---\nname: gamma\ndescription: grew out of [[alpha]]\n---\nSee [[alpha]].\n";
+    const { layout, read, merge } = linked({ "c.md": withFrontmatter });
+    expect(await mergeMemory(merge(), layout, NOW)).toMatchObject({ kind: "merged", links: 2 });
+    expect(read("c.md")).toBe("---\nname: gamma\ndescription: grew out of [[alpha]]\n---\nSee [[beta]].\n");
+  });
+
+  it("rewrites a link by a quoted name with spaces around it, as the health check reads that name", async () => {
+    const spaced = '---\nname: " alpha "\n---\nAlpha body.\n';
+    const { layout, read, merge } = linked({ "a.md": spaced });
+    expect(await mergeMemory(merge(`${B}\nAlpha body.\n`, memoryVersion(spaced)), layout, NOW)).toMatchObject({ kind: "merged", links: 3 });
+    expect(read("d.md")).toBe("Also [[beta]].\r\n```\r\n[[alpha]]\r\n```\r\n");
+  });
+
+  it("leaves a link by a name another memory has too: it still means that one", async () => {
+    const { layout, read, merge } = linked({ "z.md": "---\nname: alpha\n---\nAnother alpha.\n" });
+    expect(await mergeMemory(merge(), layout, NOW)).toMatchObject({ kind: "merged", links: 1 });
+    expect(read("c.md")).toBe("See [[alpha]] and [[beta]], not `[[alpha]]`.\n\n```\n[[alpha]]\n```\n");
+    expect(read("d.md")).toBe(D);
+  });
+
+  it("stops and puts everything back when another process writes a memory whose links it was rewriting", async () => {
+    const { layout, read, trashed, merge, memory } = linked();
+    const agentWritesC = async (target: string, text: string, mode: number): Promise<void> => {
+      await replaceKeepingMode(target, text, mode);
+      // The agent writes c.md just after the merge wrote the memory kept: no turn held here keeps it out.
+      if (path.basename(target) === "b.md" && text !== B) writeFileSync(path.join(memory, "c.md"), "the agent's [[alpha]]\n");
+    };
+    expect(await mergeMemory(merge(), layout, NOW, { replace: agentWritesC, move: trashEntry })).toEqual({ kind: "conflict", file: "links" });
+    expect([read("a.md"), read("b.md"), read("c.md"), read("d.md"), read("MEMORY.md"), trashed()]).toEqual([A, B, "the agent's [[alpha]]\n", D, INDEX, []]);
+  });
+
+  it("does not count a link by a name the two memories share, which already reaches the one that stays", async () => {
+    const { layout, read, merge } = linked({ "b.md": "---\nname: alpha\n---\nB.\n" });
+    const result = await mergeMemory({ ...merge("---\nname: alpha\n---\nB.\n"), intoVersion: memoryVersion("---\nname: alpha\n---\nB.\n") }, layout, NOW);
+    expect(result).toMatchObject({ kind: "merged", links: 1 });
+    expect(read("c.md")).toBe("See [[alpha]] and [[alpha]], not `[[alpha]]`.\n\n```\n[[alpha]]\n```\n");
+  });
+
+  it("holds every memory of the folder, so a save between its read and its write waits and finds it changed", async () => {
+    const { layout, read, merge, memory } = linked();
+    const gate: { open: () => void } = { open: () => undefined };
+    const held = new Promise<void>((resolve) => (gate.open = resolve));
+    const slow = async (target: string, text: string, mode: number): Promise<void> => {
+      await held;
+      await replaceKeepingMode(target, text, mode);
+    };
+    // The merge has read c.md and waits to write; a save of c.md named on the text it read must not
+    // land in between, or the merge's write would then put back the text the save replaced.
+    const merged = mergeMemory(merge(), layout, NOW, { replace: slow, move: trashEntry });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const save = writeMemory(path.join(memory, "c.md"), "C again [[alpha]]\n", memoryVersion(C));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    gate.open();
+    expect([(await merged).kind, (await save).kind]).toEqual(["merged", "conflict"]);
+    expect(read("c.md")).toBe("See [[beta]] and [[beta]], not `[[alpha]]`.\n\n```\n[[alpha]]\n```\n");
+  });
+});
+
+describe("linksTo", () => {
+  it("says how many links merging would rewrite into the memory as it is, or which cannot be", async () => {
+    const { memory } = setup();
+    writeFileSync(path.join(memory, "a.md"), "---\nname: alpha\n---\nA.\n");
+    writeFileSync(path.join(memory, "c.md"), "[[alpha]] [[a]] `[[alpha]]`\n");
+    expect(await linksTo(path.join(memory, "a.md"), path.join(memory, "b.md"))).toEqual({ count: 2, unplaceable: [] });
+    writeFileSync(path.join(memory, "e.md"), "[[a]]\r\n`x`\n");
+    expect(await linksTo(path.join(memory, "a.md"), path.join(memory, "b.md"))).toEqual({ count: 0, unplaceable: ["e.md"] });
+    expect(await linksTo(path.join(memory, "a.md"), path.join(memory, "gone.md"))).toBeNull();
   });
 });

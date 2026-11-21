@@ -3,6 +3,7 @@
 import {
   MEMORY_INDEX_BYTES_MAX,
   MEMORY_INDEX_LINES_MAX,
+  linkNamesMemory,
   type LibraryMemoryFile,
   type LibraryMemoryHealth,
   type LibraryMemoryProject,
@@ -45,7 +46,7 @@ export function filterMemory(projects: readonly LibraryMemoryProject[], query: s
 
 /** The memory a `[[name]]` names in the same project — by frontmatter name, or by file name. */
 export const linkTarget = (project: LibraryMemoryProject, name: string): LibraryMemoryFile | null =>
-  project.files.find((memory) => memory.name === name || memory.file === `${name}.md`) ?? null;
+  project.files.find((memory) => linkNamesMemory(name, memory)) ?? null;
 
 /** A memory's place across projects, as one identity: the slug and the file. */
 export const memoryKey = (slug: string, file: string): string => `${slug}/${file}`;
