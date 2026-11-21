@@ -143,6 +143,12 @@ follows is a refusal to add one of those, and the reason sits next to it.
 
 ![Memory with an issue](library-design/memory.png)
 
+## Tidying memory
+
+- Each project in Memory has a tidy-up button (#3334): the same skill, in plan mode in the project's
+  directory, proposes merges, removals (checked against the code), health-check fixes and moves to a
+  rule or a skill, backing up every file it changes. The turn carries the project's folder name only.
+
 ## Repeats
 
 - Instructions typed again and again (#3334): read from Claude Code's prompt log, the counted ones

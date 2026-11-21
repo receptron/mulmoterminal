@@ -16,6 +16,7 @@ import {
 } from "../../../common/libraryMemory";
 import { renderWikiHtml } from "../../wikiMarkdown";
 import LibraryMemoryEditor from "./LibraryMemoryEditor.vue";
+import LibraryMemoryTidy from "./LibraryMemoryTidy.vue";
 import LibraryMoreMenu from "./LibraryMoreMenu.vue";
 import LibraryMemoryMergeChooser from "./LibraryMemoryMergeChooser.vue";
 import LibraryMemoryWorkCopies from "./LibraryMemoryWorkCopies.vue";
@@ -358,6 +359,7 @@ defineExpose({ move, startEdit });
           >
             {{ gaugeLabel(project) }}
           </span>
+          <LibraryMemoryTidy :slug="project.slug" :class="indexFill(project.index) ? '' : 'ml-auto'" />
         </h3>
         <p
           v-for="issue in health.get(project.slug)?.issues ?? []"

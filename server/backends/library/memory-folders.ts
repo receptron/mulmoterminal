@@ -10,6 +10,7 @@ import {
   projectSlug,
   type LibraryMemoryFile,
   type LibraryMemoryProject,
+  isProjectSlug,
 } from "../../../common/libraryMemory.js";
 
 /** Folders read at once: a machine has thousands of project folders, most with no memory at all. */
@@ -17,8 +18,6 @@ const FOLDERS_AT_ONCE = 64;
 
 /** A memory file's name as the folder holds it: a plain `.md` name, never a path. */
 export const isMemoryFileName = (name: string): boolean => /^\w[\w.-]{0,199}\.md$/.test(name);
-/** A project folder's name as Claude Code makes them (`projectSlug`). */
-export const isProjectSlug = (slug: string): boolean => /^[A-Za-z0-9_-]{1,255}$/.test(slug);
 
 async function entriesOf(dir: string): Promise<Dirent[]> {
   try {

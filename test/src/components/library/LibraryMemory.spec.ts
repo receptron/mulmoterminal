@@ -82,7 +82,11 @@ const mountMemory = async (query = "", health: ReadonlyMap<string, LibraryMemory
 describe("LibraryMemory", () => {
   it("groups by project, named by its directory or else its folder, with the index gauge warning past nine tenths", async () => {
     const wrapper = await mountMemory();
-    expect(wrapper.findAll("h3").map((heading) => heading.text())).toEqual(["appMEMORY.md 190 / 200 lines", "-w-libMEMORY.md 3 / 200 lines"]);
+    // The heading's last control is the tidy-up button, whose icon is its text.
+    expect(wrapper.findAll("h3").map((heading) => heading.text())).toEqual([
+      "appMEMORY.md 190 / 200 linesauto_fix_high",
+      "-w-libMEMORY.md 3 / 200 linesauto_fix_high",
+    ]);
     expect(wrapper.findAll("[data-testid=memory-index-fill]").map((gauge) => gauge.classes().includes("text-warn"))).toEqual([true, false]);
   });
 

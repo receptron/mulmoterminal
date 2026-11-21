@@ -3,7 +3,7 @@
 import type { LibraryConversation } from "../../../common/library";
 import type { PromoteTarget } from "../../../common/libraryPromote";
 import type { RepeatTarget } from "../../../common/libraryRepeats";
-import { promoteLibraryConversation, promoteLibraryRepeat, type LibraryPromoteResult } from "../../composables/libraryApi";
+import { askLibraryMemoryTidy, promoteLibraryConversation, promoteLibraryRepeat, type LibraryPromoteResult } from "../../composables/libraryApi";
 import { placeSpawnedChat } from "../../composables/useSpawnedChat";
 
 type Refusals = Record<Exclude<LibraryPromoteResult["kind"], "started">, string>;
@@ -12,6 +12,13 @@ type Refusals = Record<Exclude<LibraryPromoteResult["kind"], "started">, string>
 export const PROMOTE_REFUSALS: Refusals = {
   gone: "libraryView.promote.gone",
   "no-dir": "libraryView.promote.noDir",
+  failed: "libraryView.promote.failed",
+};
+
+/** The same for tidying a project's memory. */
+export const TIDY_REFUSALS: Refusals = {
+  gone: "libraryView.memory.tidyAsk.gone",
+  "no-dir": "libraryView.memory.tidyAsk.noDir",
   failed: "libraryView.promote.failed",
 };
 
@@ -25,6 +32,11 @@ export const REPEAT_REFUSALS: Refusals = {
 /** Null when the session was started and handed to the grid, else the refusal's sentence key. */
 export async function startPromote(conversation: LibraryConversation, target: PromoteTarget): Promise<string | null> {
   return placed(await promoteLibraryConversation(conversation.id, conversation.cwd, target), PROMOTE_REFUSALS);
+}
+
+/** The same for a proposal to tidy one project's memory (#3334). */
+export async function startMemoryTidy(slug: string): Promise<string | null> {
+  return placed(await askLibraryMemoryTidy(slug), TIDY_REFUSALS);
 }
 
 /** The same for an instruction typed again and again (#3334). */

@@ -16,6 +16,9 @@ export const MEMORY_INDEX_FILE = "MEMORY.md";
  *  becomes `-` (its own rule, so a directory is matched to its memory without guessing). */
 export const projectSlug = (cwd: string): string => cwd.replace(/[^a-zA-Z0-9\-_]/g, "-") || "unknown";
 
+/** A project folder's name as Claude Code makes them (`projectSlug`). */
+export const isProjectSlug = (slug: string): boolean => /^[A-Za-z0-9_-]{1,255}$/.test(slug);
+
 export interface LibraryMemoryFile {
   /** The file's name in the folder. */
   file: string;
