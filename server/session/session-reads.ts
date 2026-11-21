@@ -65,6 +65,9 @@ import { cursorTranscriptPath } from "../agents/cursor/cursor-sessions.js";
 import { cursorLastTurnFromRecords } from "../agents/cursor/cursor-last-turn.js";
 import { copilotEventsPath, copilotSessionExistsForCwd } from "../agents/copilot/copilot-sessions.js";
 import { copilotCurrentTurnReplyFromEvents, copilotLastTurnFromEvents } from "../agents/copilot/copilot-last-turn.js";
+import { grokSessionsRoot, isGrokConversationId } from "../agents/grok/grok-session.js";
+import { grokChatHistoryPath } from "../agents/grok/grok-sessions.js";
+import { grokLastTurnFromMessages } from "../agents/grok/grok-last-turn.js";
 import type { DiskStat, PendingSession, SessionMeta } from "./types.js";
 import { readString } from "../../common/readString.js";
 import type { TerminalAgent } from "../../common/sessionAgent.js";
@@ -313,6 +316,14 @@ export async function copilotCurrentTurnReply(cwd: string, id: string): Promise<
   return copilotCurrentTurnReplyFromEvents(await copilotEventRecords(cwd, id));
 }
 
+/** A grok conversation's last complete exchange. The id is the one this server handed grok with
+ *  `--session-id`, and the conversation lives under its cwd, so the path itself binds the read to
+ *  the directory; the id is checked for shape first because it is joined into that path. */
+function grokLastTurn(cwd: string, id: string): LastTurn {
+  if (!isGrokConversationId(id)) return EMPTY_TURN;
+  return grokLastTurnFromMessages(readTailRecords(grokChatHistoryPath(grokSessionsRoot(), cwd, id)));
+}
+
 // The tail, not the whole file — which is what #865 said the fix would be and #998 forced.
 //
 // Reading it whole cost its full size: measured over 10,506 real transcripts the median is 0.1 MB,
@@ -327,9 +338,10 @@ export async function sessionLastTurn(cwd: string, id: string, agent: TerminalAg
   if (agent === "codex") return codexLastTurn(id);
   if (agent === "cursor") return cursorLastTurn(cwd, id);
   if (agent === "copilot") return copilotLastTurnFromEvents(await copilotEventRecords(cwd, id));
+  if (agent === "grok") return grokLastTurn(cwd, id);
   // Everything that is not claude answers EMPTY_TURN, rather than the three agents that were true
-  // when this was written. Each of them HAS a log — agy's brain directory, grok's
-  // `chat_history.jsonl`, muse's `session.jsonl` — and none is parsed yet;
+  // when this was written. Each of them HAS a log — agy's brain directory, muse's `session.jsonl` —
+  // and none is parsed yet;
   // EMPTY_TURN is the honest answer until one is, because every caller handles it (a push says
   // nothing rather than something wrong, a handoff carries no reply) and a wrong guess at a format
   // would be worse than silence.
