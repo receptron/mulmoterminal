@@ -1,6 +1,8 @@
 // Reading the Library's index (#3328): the list, one conversation, and search. The tables are
 // index-store.ts's; this file only selects from them, and reads every column back through a guard.
-import type { RetrospectiveRow, RetrospectiveSpend } from "./retrospective.js";
+import type { RetrospectiveRow } from "./retrospective.js";
+import type { SpendInputs } from "./spend-split.js";
+import { parseSpendTotals } from "./spend-fold.js";
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import { isRecord } from "../../../common/isRecord.js";
 import { readString } from "../../../common/readString.js";
@@ -95,23 +97,38 @@ export function retrospectiveRows(db: DatabaseSync, since_ms: number): Retrospec
     }));
 }
 
-/** What the conversations the Library lists spent at or after `since_ms`, slot by slot and model by model. */
-export function retrospectiveSpends(db: DatabaseSync, since_ms: number): RetrospectiveSpend[] {
+/** What splitting the spending of the slots at or after `since_ms` needs (spend-split.ts): the replies'
+ *  weights in those slots, each such conversation's whole weight per model, and its per-model totals —
+ *  with the conversations that started then and have no reply weighed at all. */
+export function retrospectiveSpendInputs(db: DatabaseSync, since_ms: number): SpendInputs {
   const where = filterClause({});
-  const sql = `select c.cwd, c.agent, s.at, s.model, s.cost_usd, s.input, s.output, s.cache_read, s.cache_write
-    from spend s join conversations c on c.path = s.path where s.at >= ? and ${where.sql}`;
+  const shown = `select distinct r.path from replies r where r.at >= ?`;
   const number = (value: unknown): number => (typeof value === "number" ? value : 0);
-  return db
-    .prepare(sql)
+  const slots = db
+    .prepare(
+      `select r.path, r.at, r.model, sum(r.weight) as weight from replies r join conversations c on c.path = r.path
+      where r.at >= ? and ${where.sql} group by r.path, r.at, r.model`,
+    )
     .all(since_ms, ...where.params)
+    .map((row) => ({ path: readString(row.path), at_ms: number(row.at), model: readString(row.model), weight: number(row.weight) }));
+  const wholeWeights = db
+    .prepare(`select r.path, r.model, sum(r.weight) as weight from replies r where r.path in (${shown}) group by r.path, r.model`)
+    .all(since_ms)
+    .map((row) => ({ path: readString(row.path), model: readString(row.model), weight: number(row.weight) }));
+  const conversations = db
+    .prepare(
+      `select c.path, c.cwd, c.agent, c.started_at, c.spend_models from conversations c where c.spend_models != '{}' and ${where.sql}
+      and (c.path in (${shown}) or (c.started_at >= ? and not exists (select 1 from replies r where r.path = c.path)))`,
+    )
+    .all(...where.params, since_ms, since_ms)
     .map((row) => ({
+      path: readString(row.path),
       cwd: typeof row.cwd === "string" ? row.cwd : null,
-      agent: typeof row.agent === "string" ? row.agent : "",
-      at_ms: number(row.at),
-      model: typeof row.model === "string" ? row.model : "",
-      costUsd: number(row.cost_usd),
-      ...{ input: number(row.input), output: number(row.output), cacheRead: number(row.cache_read), cacheWrite: number(row.cache_write) },
+      agent: readString(row.agent),
+      startedAt: typeof row.started_at === "number" ? row.started_at : null,
+      totals: parseSpendTotals(row.spend_models),
     }));
+  return { conversations, slots, wholeWeights };
 }
 
 /** Every directory a conversation ran in — what names a project's memory folder. */

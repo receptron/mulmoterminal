@@ -49,7 +49,7 @@ function setup(allowed = true) {
       ...{ stamp: { size: 1, mtimeMs: 1 }, head: "h", owner: "t", expectedScannedTo: null, to: 1, restart: true },
       state: { ...emptyConversationState(), cwd: project, entrypoint: id === "auto" ? AUTOMATED_ENTRYPOINT : "cli" },
       turns: [],
-      spent: [],
+      replies: [],
     }),
   );
   finishLease(db, "t", 0);

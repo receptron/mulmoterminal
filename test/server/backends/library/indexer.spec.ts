@@ -17,9 +17,10 @@ import {
   prCreators,
   prCreatorsQuery,
   retrospectiveRows,
-  retrospectiveSpends,
+  retrospectiveSpendInputs,
 } from "../../../../server/backends/library/index-queries";
 import { retrospective } from "../../../../server/backends/library/retrospective";
+import { splitSpend } from "../../../../server/backends/library/spend-split";
 import { searchLibrary } from "../../../../server/backends/library/library-search";
 import { runIndexPass, type IndexPassDeps } from "../../../../server/backends/library/indexer";
 import { HEAD_BYTES } from "../../../../server/backends/library/opened-file";
@@ -172,7 +173,7 @@ describe("runIndexPass", () => {
       });
     const cost = (startTime: number, usd: number, output: number): string =>
       line({ type: "cost-state", startTime, totalCostUSD: usd, modelUsage: { "claude-opus-5[1m]": { costUSD: usd, outputTokens: output } } });
-    const totalsOf = (db: DatabaseSync) => retrospective(retrospectiveRows(db, 0), retrospectiveSpends(db, 0), NOW);
+    const totalsOf = (db: DatabaseSync) => retrospective(retrospectiveRows(db, 0), splitSpend(retrospectiveSpendInputs(db, 0)), NOW);
 
     it("adds up to every count's highest cost-state, each share in the week its replies were written", async () => {
       const { db, deps, transcript } = setup();
@@ -196,6 +197,24 @@ describe("runIndexPass", () => {
         { model: "", costUsd: 2.5, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } },
       ]);
       expect(conversationOfRow(findConversation(db, "one") ?? {}).costUsd).toBe(5);
+      const since_ms = Date.parse("2026-11-09T00:00:00");
+      const recent = splitSpend(retrospectiveSpendInputs(db, since_ms)).reduce((sum, share) => sum + share.costUsd, 0);
+      expect(recent).toBeCloseTo(3 + 1 + 2.5, 9); // the first week's dollar stays outside, weighed against the whole
+    });
+
+    it("keeps one weight per reply however far apart its records are, the newest standing", async () => {
+      const { db, deps, transcript } = setup();
+      const others = Array.from({ length: 40 }, (_, n) => answer("2026-11-10T09:00:00", `o${String(n)}`, 1)).join("");
+      const file = transcript("one", opened("2026-11-10T07:00:00") + answer("2026-11-10T08:00:00", "m1", 10) + others);
+      await runIndexPass(deps);
+      appendFileSync(file, answer("2026-11-10T08:00:00", "m1", 30));
+      await runIndexPass(deps);
+      expect(
+        db
+          .prepare("select weight from replies where id = 'm1'")
+          .all()
+          .map((row) => row.weight),
+      ).toEqual([150]);
     });
 
     it("counts a transcript read again from the start once", async () => {
@@ -207,6 +226,20 @@ describe("runIndexPass", () => {
       await runIndexPass(deps);
       expect(totalsOf(db).total.costUsd).toBe(2);
       expect(totalsOf(db).weeks.at(-2)?.costUsd).toBe(2);
+    });
+
+    it("forgets the replies of a transcript replaced by another", async () => {
+      const { db, deps, transcript } = setup();
+      const file = transcript("one", opened("2026-11-10T07:00:00") + answer("2026-11-10T08:00:00", "m1", 100));
+      await runIndexPass(deps);
+      writeFileSync(file, opened("2026-11-12T07:00:00") + answer("2026-11-12T08:00:00", "m2", 100));
+      await runIndexPass(deps);
+      expect(
+        db
+          .prepare("select id from replies")
+          .all()
+          .map((row) => row.id),
+      ).toEqual(["m2"]);
     });
   });
 

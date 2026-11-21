@@ -25,7 +25,7 @@ export const usageViewEn = {
     project: "Project",
     agent: "Agent",
     noProject: "(no directory)",
-    note: "Added up from the cost each conversation recorded, for the conversations the Library lists. Money and tokens count in the week they were spent, shared out over the replies between two of a conversation's cost records; a conversation and its PRs count in the week it started.",
+    note: "Added up from the cost each conversation recorded, for the conversations the Library lists. Money and tokens count in the week they were spent: each model's cost is split over the conversation's replies by their tokens. A conversation and its PRs count in the week it started.",
     tokens: "Tokens: {input} input, {output} output, {cacheRead} read from cache, {cacheWrite} written to cache",
     model: "Model",
     input: "Input",

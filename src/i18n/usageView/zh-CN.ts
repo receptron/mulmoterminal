@@ -25,7 +25,7 @@ export const usageViewZhCN = {
     project: "项目",
     agent: "代理",
     noProject: "（无目录）",
-    note: "按资料库列出的会话，把每个会话记录的金额相加。金额和令牌计入花费的那一周（分摊到会话两次金额记录之间的回复上）；会话和 PR 计入它开始的那一周。",
+    note: "按资料库列出的会话，把每个会话记录的金额相加。金额和令牌计入花费的那一周（按令牌数把每个模型的金额分摊到会话的回复上）；会话和 PR 计入它开始的那一周。",
     tokens: "令牌：输入 {input}，输出 {output}，缓存读取 {cacheRead}，缓存写入 {cacheWrite}",
     model: "模型",
     input: "输入",

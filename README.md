@@ -1929,10 +1929,10 @@ narrow and tall for one record you are discussing — and each position keeps it
   added up), environment variables, hooks and other keys in effect, each naming the file that set it.
   Read only. **More features** → **Usage** adds a retrospective of the last twelve weeks from the
   same index: money, tokens, conversations and the PRs they made, by week, project, agent and model.
-  Money and tokens count in the week they were spent — Claude Code records cost only as running totals,
-  so each step between two of them is shared over the replies in between by their tokens — and every
-  time Claude Code started counting again is added in; a conversation and its PRs count in the week it
-  started. The token windows appear above it while token rotation is on. Design: [`docs/library-design.md`](docs/library-design.md).
+  Money and tokens count in the week they were spent — Claude Code records cost only as running totals
+  with no time, so each model's cost is split over the conversation's replies by their tokens — and
+  every time Claude Code started counting again is added in; a conversation and its PRs count in the
+  week it started. The token windows appear above it while token rotation is on. Design: [`docs/library-design.md`](docs/library-design.md).
 - **Skills viewer** — **More features** → **Skills** lists every Claude skill on disk in three
   columns — where it lives, its skills, its `SKILL.md`. The places are your `~/.claude/skills`,
   each enabled plugin (skills shown as `plugin:skill`), and the `.claude/skills` of each folder a

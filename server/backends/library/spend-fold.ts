@@ -1,22 +1,23 @@
-// What a conversation spent, when, and on which model (#3395), folded from its transcript.
+// What a conversation spent and on which model, and how much each of its replies weighed (#3395), folded
+// from its transcript.
 //
-// Claude Code records cost only as `cost-state`: running totals, per model, with no time, written now
-// and then — days apart in a long conversation. So the difference between two of them is shared out
-// over the replies between them, each weighted by its tokens at their relative prices, and lands in the
-// 15-minute slot the reply was written in. What is shared adds back up to the difference, so every
-// total still equals what Claude Code recorded.
+// Claude Code records cost only as `cost-state`: running totals per model, with no time, written now and
+// then — days apart in a long conversation. So the fold keeps two things apart and spend-split.ts joins
+// them when read: each reply's weight (its tokens at their relative prices) in the 15-minute slot it was
+// written in, one index row per reply id, and the conversation's totals per model with every count added
+// up. For one model, cost per unit of weight is its price, so splitting the model's whole cost by weight
+// places it as well as splitting each step between two cost records would — and nothing here has to be
+// carried between cost records, cleared, or remembered past one record.
 //
-// Pure: no fs, no clock. Bounded: what is worked out is handed to the index at each commit
-// (`takeSpent`) rather than kept, because the state is stored with every batch.
+// Pure: no fs, no clock. Bounded: the replies are handed to the index at each commit (`takeReplies`), and
+// what stays is one entry per count and model.
 import { isRecord } from "../../../common/isRecord.js";
 import { readString } from "../../../common/readString.js";
 import { finiteNumber } from "../../../common/finiteNumber.js";
 
 export const SPEND_SLOT_MS = 15 * 60 * 1000;
-/** Replies remembered by id: one reply is written as several records, one after another. */
-export const RECENT_REPLIES = 32;
-/** A token's price relative to an input token, the same for every Claude model. Only the ratios
- *  matter: they decide how a known cost is shared, never what it is. */
+/** A token's price relative to an input token, the same for every Claude model. Only the ratios matter:
+ *  they decide how a known cost is split, never what it is. */
 const TOKEN_PRICE = { input: 1, cacheWrite: 1.25, cacheRead: 0.1, output: 5 };
 /** The model a cost record names with no per-model breakdown. */
 export const UNKNOWN_MODEL = "";
@@ -29,14 +30,11 @@ export interface SpendTotals {
   cacheWrite: number;
 }
 
-export interface SpendRow extends SpendTotals {
-  at_ms: number;
-  model: string;
-}
-
-interface RecentReply {
+/** One reply: its id (the index keeps one row per id, so a later record of it replaces the earlier), the
+ *  slot it was written in, its model and its weight. */
+export interface ReplyWeight {
   id: string;
-  slot: number;
+  at_ms: number;
   model: string;
   weight: number;
 }
@@ -51,21 +49,11 @@ interface RunTotals {
 export interface SpendState {
   /** Every count, by its `startTime` (`runKey`). A transcript holds as many as Claude Code started over. */
   runs: Record<string, RunTotals>;
-  /** The replies since the last cost record: slot → model → weight. */
-  pending: Record<string, Record<string, number>>;
-  /** The last replies seen, kept across cost records so a reply's later records never count again. */
-  recent: RecentReply[];
-  /** When the last record with a time was written. */
-  lastAt: number | null;
-  /** Shared out before this file had any time, by model: placed at the first time it has. */
-  unplaced: Record<string, SpendTotals>;
-  /** Shared out since the last commit, by `slot|model`. */
-  unwritten: Record<string, SpendRow>;
+  /** Replies read since the last commit, by id. */
+  unwritten: Record<string, ReplyWeight>;
 }
 
-export const emptySpendState = (): SpendState => ({ runs: {}, pending: {}, recent: [], lastAt: null, unplaced: {}, unwritten: {} });
-
-const runKey = (startTime: number | null): string => (startTime === null ? "" : String(startTime));
+export const emptySpendState = (): SpendState => ({ runs: {}, unwritten: {} });
 
 type SpendField = keyof SpendTotals;
 const perField = (value: (field: SpendField) => number): SpendTotals => ({
@@ -75,7 +63,8 @@ const perField = (value: (field: SpendField) => number): SpendTotals => ({
   cacheRead: value("cacheRead"),
   cacheWrite: value("cacheWrite"),
 });
-const zero = (): SpendTotals => perField(() => 0);
+export const zeroSpend = (): SpendTotals => perField(() => 0);
+const runKey = (startTime: number | null): string => (startTime === null ? "" : String(startTime));
 const slotOf = (at_ms: number): number => Math.floor(at_ms / SPEND_SLOT_MS) * SPEND_SLOT_MS;
 const count = (value: unknown): number => Math.max(finiteNumber(value) ?? 0, 0);
 
@@ -92,10 +81,6 @@ export function spentUsd(spend: SpendState): number | null {
 }
 
 export function foldSpendRecord(spend: SpendState, record: Record<string, unknown>, at_ms: number | null): void {
-  if (at_ms !== null) {
-    spend.lastAt = at_ms;
-    placeUnplaced(spend, at_ms);
-  }
   if (record.type === "assistant" && at_ms !== null) foldReply(spend, record, at_ms);
   if (record.type === "cost-state") foldCost(spend, record);
 }
@@ -106,32 +91,15 @@ function replyWeight(usage: Record<string, unknown>): number {
   return input * TOKEN_PRICE.input + cacheWrite * TOKEN_PRICE.cacheWrite + cacheRead * TOKEN_PRICE.cacheRead + output * TOKEN_PRICE.output;
 }
 
-function addPending(spend: SpendState, slot: number, model: string, weight: number): void {
-  const models = (spend.pending[String(slot)] ??= {});
-  models[model] = (models[model] ?? 0) + weight;
-}
-
-// A reply written again under the same id counts once, with its newest usage.
+// One reply is written as several records under one message id; the newest record's usage stands.
 function foldReply(spend: SpendState, record: Record<string, unknown>, at_ms: number): void {
   const message = record.message;
   if (!isRecord(message) || !isRecord(message.usage)) return;
-  const model = readString(message.model);
+  const model = modelName(readString(message.model));
   if (model === "" || model.startsWith("<")) return;
-  const weight = replyWeight(message.usage);
-  const id = readString(message.id);
-  const seen = id === "" ? undefined : spend.recent.find((reply) => reply.id === id);
-  if (seen !== undefined) {
-    // Only the change counts: the weight it had may already have been shared out by a cost record.
-    const models = (spend.pending[String(seen.slot)] ??= {});
-    models[seen.model] = Math.max((models[seen.model] ?? 0) + weight - seen.weight, 0);
-    seen.weight = weight;
-    return;
-  }
-  const slot = slotOf(at_ms);
-  addPending(spend, slot, model, weight);
+  const id = readString(message.id) || readString(record.uuid);
   if (id === "") return;
-  spend.recent.push({ id, slot, model, weight });
-  if (spend.recent.length > RECENT_REPLIES) spend.recent.shift();
+  spend.unwritten[id] = { id, at_ms: slotOf(at_ms), model, weight: replyWeight(message.usage) };
 }
 
 /** Each model's totals in a cost record, or the overall cost under UNKNOWN_MODEL when it has no breakdown. */
@@ -140,7 +108,7 @@ export function costRecordTotals(record: Record<string, unknown>): Record<string
   if (isRecord(record.modelUsage)) {
     Object.entries(record.modelUsage).forEach(([key, usage]) => {
       if (!isRecord(usage)) return;
-      const into = (totals[modelName(key)] ??= zero());
+      const into = (totals[modelName(key)] ??= zeroSpend());
       into.costUsd += count(usage.costUSD);
       into.input += count(usage.inputTokens);
       into.output += count(usage.outputTokens);
@@ -149,116 +117,81 @@ export function costRecordTotals(record: Record<string, unknown>): Record<string
     });
   }
   const overall = finiteNumber(record.totalCostUSD);
-  if (Object.keys(totals).length === 0 && overall !== null) totals[UNKNOWN_MODEL] = { ...zero(), costUsd: Math.max(overall, 0) };
+  if (Object.keys(totals).length === 0 && overall !== null) totals[UNKNOWN_MODEL] = { ...zeroSpend(), costUsd: Math.max(overall, 0) };
   return totals;
 }
+
+const modelCost = (models: Record<string, SpendTotals>): number =>
+  Object.entries(models).reduce((sum, [model, totals]) => (model === UNKNOWN_MODEL ? sum : sum + totals.costUsd), 0);
 
 /** The count's overall cost as this record tells it: its own total when it gives no breakdown, else every
  *  model's highest — a model a record leaves out keeps what it reached. */
 function overallCost(run: RunTotals, now: Record<string, SpendTotals>): number {
   const perModel = Object.keys(now).some((model) => model !== UNKNOWN_MODEL);
-  if (!perModel) return now[UNKNOWN_MODEL]?.costUsd ?? 0;
-  return Object.entries(run.models).reduce((sum, [model, totals]) => (model === UNKNOWN_MODEL ? sum : sum + totals.costUsd), 0);
+  return perModel ? modelCost(run.models) : (now[UNKNOWN_MODEL]?.costUsd ?? 0);
 }
 
 // Within one count each total only grows, so a lower one changes nothing. The cost is followed as ONE
-// overall total — a record may give it per model or only overall, and the two must not add up twice — and
-// its growth goes to the models whose own cost grew, in proportion. Counts are kept by `startTime`, so a
-// count Claude Code goes back to continues where it was.
+// overall total — a record may give it per model or only overall, and the two must not add up twice.
+// Counts are kept by `startTime`, so a count Claude Code goes back to continues where it was.
 function foldCost(spend: SpendState, record: Record<string, unknown>): void {
   const now = costRecordTotals(record);
   if (Object.keys(now).length === 0) return;
-  const startTime = finiteNumber(record.startTime);
-  const run = (spend.runs[runKey(startTime)] ??= { costUsd: 0, models: {} });
-  const grown = Object.entries(now).map(([model, totals]): [string, SpendTotals] => {
-    const was = run.models[model] ?? zero();
+  const run = (spend.runs[runKey(finiteNumber(record.startTime))] ??= { costUsd: 0, models: {} });
+  Object.entries(now).forEach(([model, totals]) => {
+    const was = run.models[model] ?? zeroSpend();
     run.models[model] = perField((field) => Math.max(totals[field], was[field]));
-    return [model, perField((field) => Math.max(totals[field] - was[field], 0))];
   });
-  const costGrowth = Math.max(overallCost(run, now) - run.costUsd, 0);
-  run.costUsd += costGrowth;
-  const modelGrowth = grown.reduce((sum, [, totals]) => sum + totals.costUsd, 0);
-  const shares = grown.map(([model, totals]): [string, SpendTotals] => [
-    model,
-    { ...totals, costUsd: modelGrowth === 0 ? 0 : (costGrowth * totals.costUsd) / modelGrowth },
-  ]);
-  shares.forEach(([model, share]) => shareOut(spend, model, share, startTime));
-  // A record that repeats the running total shares nothing, so the replies wait for the next one.
-  if (shares.some(([, share]) => Object.values(share).some((value) => value > 0))) spend.pending = {};
+  run.costUsd = Math.max(run.costUsd, overallCost(run, now));
 }
 
-/** Where `model`'s share goes, as slot → weight: its own replies since the last cost record, else every
- *  reply then (a subagent's model has none in this file), else the last moment this file has a time for. */
-function sharesFor(spend: SpendState, model: string, startTime: number | null): [number, number][] {
-  const slots = Object.entries(spend.pending);
-  const own = slots.map(([slot, models]): [number, number] => [Number(slot), models[model] ?? 0]).filter(([, weight]) => weight > 0);
-  if (own.length > 0) return own;
-  const any = slots
-    .map(([slot, models]): [number, number] => [Number(slot), Object.values(models).reduce((sum, weight) => sum + weight, 0)])
-    .filter(([, weight]) => weight > 0);
-  if (any.length > 0) return any;
-  const at_ms = spend.lastAt ?? startTime;
-  return at_ms === null ? [] : [[slotOf(at_ms), 1]];
+/** The conversation's totals per model, every count added up: each count's models, and what its overall
+ *  cost came to beyond them under UNKNOWN_MODEL. Adds up to `spentUsd`. */
+export function spendTotals(spend: SpendState): Record<string, SpendTotals> {
+  const totals: Record<string, SpendTotals> = {};
+  const add = (model: string, share: SpendTotals): void => {
+    const held = totals[model] ?? zeroSpend();
+    totals[model] = perField((field) => held[field] + share[field]);
+  };
+  Object.values(spend.runs).forEach((run) => {
+    Object.entries(run.models).forEach(([model, share]) => {
+      if (model !== UNKNOWN_MODEL) add(model, share);
+    });
+    const beyond = run.costUsd - modelCost(run.models);
+    if (beyond > 0) add(UNKNOWN_MODEL, { ...zeroSpend(), costUsd: beyond });
+  });
+  return totals;
 }
 
-function addRow(spend: SpendState, slot: number, model: string, share: SpendTotals): void {
-  const row = (spend.unwritten[`${String(slot)}|${model}`] ??= { at_ms: slot, model, ...zero() });
-  Object.assign(
-    row,
-    perField((field) => row[field] + share[field]),
-  );
-}
-
-function shareOut(spend: SpendState, model: string, grown: SpendTotals, startTime: number | null): void {
-  if (Object.values(grown).every((value) => value === 0)) return;
-  const shares = sharesFor(spend, model, startTime);
-  if (shares.length === 0) {
-    const held = spend.unplaced[model] ?? zero();
-    spend.unplaced[model] = perField((field) => held[field] + grown[field]);
-    return;
-  }
-  const whole = shares.reduce((sum, [, weight]) => sum + weight, 0);
-  shares.forEach(([slot, weight]) =>
-    addRow(
-      spend,
-      slot,
-      model,
-      perField((field) => (grown[field] * weight) / whole),
-    ),
-  );
-}
-
-function placeUnplaced(spend: SpendState, at_ms: number): void {
-  Object.entries(spend.unplaced).forEach(([model, held]) => addRow(spend, slotOf(at_ms), model, held));
-  spend.unplaced = {};
-}
-
-/** What was shared out since the last call, for the index to add; the state keeps none of it. */
-export function takeSpent(spend: SpendState): SpendRow[] {
-  const rows = Object.values(spend.unwritten);
+/** The replies read since the last call, for the index to keep; the state keeps none of them. */
+export function takeReplies(spend: SpendState): ReplyWeight[] {
+  const replies = Object.values(spend.unwritten);
   spend.unwritten = {};
-  return rows;
+  return replies;
 }
 
 const isTotals = (value: unknown): value is SpendTotals =>
   isRecord(value) && ["costUsd", "input", "output", "cacheRead", "cacheWrite"].every((field) => typeof value[field] === "number");
-const isRecent = (value: unknown): value is RecentReply =>
-  isRecord(value) && typeof value.id === "string" && typeof value.slot === "number" && typeof value.model === "string" && typeof value.weight === "number";
 const isRun = (value: unknown): boolean =>
   isRecord(value) && typeof value.costUsd === "number" && isRecord(value.models) && Object.values(value.models).every(isTotals);
-const isTotalsByModel = (value: unknown): boolean => isRecord(value) && Object.values(value).every(isTotals);
-const isPending = (value: unknown): boolean =>
-  isRecord(value) && Object.values(value).every((models) => isRecord(models) && Object.values(models).every((weight) => typeof weight === "number"));
 
 /** A spend state read back from the index; anything off-shape means "fold the transcript again". */
 export const isSpendState = (value: unknown): value is SpendState =>
-  isRecord(value) &&
-  isRecord(value.runs) &&
-  Object.values(value.runs).every(isRun) &&
-  isTotalsByModel(value.unplaced) &&
-  isPending(value.pending) &&
-  Array.isArray(value.recent) &&
-  value.recent.every(isRecent) &&
-  (value.lastAt === null || typeof value.lastAt === "number") &&
-  isRecord(value.unwritten) &&
-  Object.keys(value.unwritten).length === 0;
+  isRecord(value) && isRecord(value.runs) && Object.values(value.runs).every(isRun) && isRecord(value.unwritten) && Object.keys(value.unwritten).length === 0;
+
+/** A conversation's per-model totals read back from its index row; anything off-shape reads as none. */
+export function parseSpendTotals(raw: unknown): Record<string, SpendTotals> {
+  if (typeof raw !== "string") return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    const totals: Record<string, SpendTotals> = {};
+    if (isRecord(parsed)) {
+      Object.entries(parsed).forEach(([model, value]) => {
+        if (isTotals(value)) totals[model] = value;
+      });
+    }
+    return totals;
+  } catch {
+    return {};
+  }
+}

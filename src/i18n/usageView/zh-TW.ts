@@ -25,7 +25,7 @@ export const usageViewZhTW = {
     project: "專案",
     agent: "代理",
     noProject: "（無目錄）",
-    note: "依資料庫列出的對話，把每個對話記錄的金額相加。金額和權杖計入花費的那一週（分攤到對話兩次金額記錄之間的回覆上）；對話和 PR 計入它開始的那一週。",
+    note: "依資料庫列出的對話，把每個對話記錄的金額相加。金額和權杖計入花費的那一週（依權杖數把每個模型的金額分攤到對話的回覆上）；對話和 PR 計入它開始的那一週。",
     tokens: "權杖：輸入 {input}，輸出 {output}，快取讀取 {cacheRead}，快取寫入 {cacheWrite}",
     model: "模型",
     input: "輸入",
