@@ -8,9 +8,9 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **13.4.0 is out.** In the Library's Memory, each project has a tidy-up button: Claude proposes
-> merging, removing, fixing and moving that project's memories, and writes nothing until you
-> approve. [Setup guide](v13.4.0.html)
+> **13.5.0 is out.** Usage now counts money and tokens in the week they were spent, adds a table by
+> model, and keeps the cost from before Claude Code started counting again.
+> [Setup guide](v13.5.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 

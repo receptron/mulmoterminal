@@ -4,7 +4,7 @@ nav_title: Feature list
 layout: default
 parent: English
 nav_order: 6.5
-as_of: 13.4.0
+as_of: 13.5.0
 description: "Every capability MulmoTerminal has today, one line each with the release it arrived in, grouped by area (as of 9.1.0)."
 ---
 
@@ -461,6 +461,7 @@ More: [Blueprints](blueprints.html)
 More: [Feature reference](features.html)
 
 - More features → Usage looks back over the last twelve weeks — cost, conversations and PRs by week, project and agent, from the Library's index — whether or not token rotation is set up (v13.3.0)
+- Usage counts money and tokens in the week they were spent, with a table by model and token totals, and keeps the cost from before Claude Code started counting again (v13.5.0)
 - The Claude usage check runs in a folder of MulmoTerminal's own that it marks trusted for Claude Code itself, so the gauge works wherever MulmoTerminal was started, home directory included (v11.5.0)
 - The usage gauge can be switched off, and how often it measures Claude set in minutes (v11.1.0)
 - More features → Processes shows each session's processes (with End) and the worktrees that can be removed (v8.6.0)
