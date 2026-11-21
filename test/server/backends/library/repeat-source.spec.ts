@@ -44,3 +44,27 @@ describe("promptLogReader", () => {
     expect((await read()).map((p) => p.text)).toEqual(["one", "two"]);
   });
 });
+
+describe("promptLogReader with overlapping calls", () => {
+  it("shares one read between calls that overlap, and reads again after one that failed", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "mt-prompt-log-"));
+    dirs.push(dir);
+    const file = path.join(dir, "history.jsonl");
+    writeFileSync(file, "{}\n");
+    let reads = 0;
+    let fail = true;
+    const read = promptLogReader(file, async () => {
+      reads += 1;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      if (fail) throw new Error("unreadable");
+      return [{ text: "x", sessionId: "s", project: null, at: 1 }];
+    });
+    const overlapping = await Promise.allSettled([read(), read()]);
+    expect(overlapping.map((result) => result.status)).toEqual(["rejected", "rejected"]);
+    expect(reads).toBe(1);
+    fail = false;
+    expect((await read()).map((p) => p.text)).toEqual(["x"]);
+    await read();
+    expect(reads).toBe(2);
+  });
+});

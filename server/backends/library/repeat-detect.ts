@@ -19,6 +19,12 @@ export const REPEAT_MIN_KEY_CHARS = 6;
 export const REPEAT_CLOSE_MAX_CHARS = 80;
 /** How much of two instructions' letter pairs must be shared for them to count as one. */
 export const REPEAT_CLOSE_SIMILARITY = 0.7;
+/** A letter pair held by more keys than this ("して", "th") says little about which keys are alike,
+ *  so it is not used to find the keys to compare. */
+export const REPEAT_PAIR_HOLDERS_MAX = 200;
+/** How many keys, those sharing the most letter pairs with one, are compared with it: what keeps the
+ *  work linear in the number of keys whatever the log holds. */
+export const REPEAT_COMPARED_MAX = 50;
 
 export interface RepeatPrompt {
   text: string;
@@ -86,7 +92,12 @@ export function similarity(a: Set<string>, b: Set<string>): number {
   return union === 0 ? 0 : shared / union;
 }
 
-function unionFind(): { find(key: string): string; join(a: string, b: string): void } {
+export interface KeyGroups {
+  find(key: string): string;
+  join(a: string, b: string): void;
+}
+
+function unionFind(): KeyGroups {
   const parent = new Map<string, string>();
   const find = (key: string): string => {
     let root = key;
@@ -97,19 +108,51 @@ function unionFind(): { find(key: string): string; join(a: string, b: string): v
   return { find, join: (a, b) => parent.set(find(a), find(b)) };
 }
 
-/** Joins the short keys of one project whose letter pairs mostly match. Keys sharing no pair are never
- *  compared, so the work grows with the pairs that are alike rather than with every pair. */
-function joinAlike(keys: readonly string[], groups: ReturnType<typeof unionFind>): void {
+/** The keys after `key` that share the most of its letter pairs, counting only pairs few keys hold;
+ *  and how many holders it counted through. */
+function closestKeys(key: string, own: Set<string>, holders: Map<string, string[]>): { closest: string[]; counted: number } {
+  const shared = new Map<string, number>();
+  let counted = 0;
+  own.forEach((pair) => {
+    const held = holders.get(pair) ?? [];
+    if (held.length > REPEAT_PAIR_HOLDERS_MAX) return;
+    counted += held.length;
+    held.forEach((other) => {
+      if (other > key) shared.set(other, (shared.get(other) ?? 0) + 1);
+    });
+  });
+  const closest = [...shared.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, REPEAT_COMPARED_MAX)
+    .map(([other]) => other);
+  return { closest, counted };
+}
+
+/** The work joinAlike did: holders counted through, and pairs of keys compared. */
+export interface AlikeWork {
+  counted: number;
+  compared: number;
+}
+
+/** Joins the short keys of one project whose letter pairs mostly match, and answers the work done:
+ *  holders counted through, at most REPEAT_PAIR_HOLDERS_MAX per letter pair of a key, and pairs of keys
+ *  compared, at most REPEAT_COMPARED_MAX per key. A key is compared only with those sharing the most of
+ *  its uncommon letter pairs, which alike keys do. */
+export function joinAlike(keys: readonly string[], groups: KeyGroups): AlikeWork {
   const pairs = new Map(keys.map((key) => [key, letterPairs(key)]));
   const holders = new Map<string, string[]>();
   pairs.forEach((set, key) => set.forEach((pair) => pushTo(holders, pair, key)));
+  const work: AlikeWork = { counted: 0, compared: 0 };
   keys.forEach((key) => {
     const own = pairs.get(key) ?? new Set<string>();
-    const others = new Set([...own].flatMap((pair) => holders.get(pair) ?? []).filter((other) => other > key));
-    others.forEach((other) => {
+    const { closest, counted } = closestKeys(key, own, holders);
+    work.counted += counted;
+    closest.forEach((other) => {
+      work.compared += 1;
       if (similarity(own, pairs.get(other) ?? new Set()) >= REPEAT_CLOSE_SIMILARITY) groups.join(key, other);
     });
   });
+  return work;
 }
 
 const mostFirst = (values: readonly string[]): string[] => {
@@ -156,6 +199,13 @@ export function repeatCandidates(prompts: readonly RepeatPrompt[], rules: Repeat
     .sort((a, b) => b.count - a.count || b.lastAt - a.lastAt);
 }
 
-/** The times a group was typed, newest first. */
+/** How many of the times a group was typed one answer carries: the view lists a few conversations and
+ *  the skill reads a few; `count` still says how many there were. */
+export const REPEAT_OCCURRENCES_MAX = 50;
+
+/** The latest times a group was typed, newest first, at most REPEAT_OCCURRENCES_MAX. */
 export const occurrencesOf = (members: ReadonlyArray<RepeatPrompt>): RepeatOccurrence[] =>
-  [...members].sort((a, b) => b.at - a.at).map(({ sessionId, project, at, text }) => ({ sessionId, project, at, text }));
+  [...members]
+    .sort((a, b) => b.at - a.at)
+    .slice(0, REPEAT_OCCURRENCES_MAX)
+    .map(({ sessionId, project, at, text }) => ({ sessionId, project, at, text }));

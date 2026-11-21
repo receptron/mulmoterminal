@@ -6,6 +6,11 @@ import { createHash } from "node:crypto";
 import {
   countedInstructions,
   instructionKey,
+  joinAlike,
+  occurrencesOf,
+  REPEAT_COMPARED_MAX,
+  REPEAT_OCCURRENCES_MAX,
+  REPEAT_PAIR_HOLDERS_MAX,
   isCommand,
   repeatCandidates,
   repeatId,
@@ -167,5 +172,41 @@ describe("similarity", () => {
       REPEAT_CLOSE_SIMILARITY,
     );
     expect(similarity(pairs(instructionKey("マージして")), pairs(instructionKey("マージしてタグ打って")))).toBeLessThan(REPEAT_CLOSE_SIMILARITY);
+  });
+});
+
+describe("joinAlike", () => {
+  const recording = () => {
+    const joined: Array<[string, string]> = [];
+    return { joined, groups: { find: (key: string) => key, join: (a: string, b: string) => void joined.push([a, b]) } };
+  };
+
+  it("does work bounded per key, however many keys share a common pair", () => {
+    const keys = Array.from({ length: 2000 }, (_, at) => `して${createHash("sha256").update(String(at)).digest("hex").slice(0, 12)}`);
+    const pairsPerKey = Math.max(...keys.map((key) => [...key].length - 1));
+    const { groups } = recording();
+    const work = joinAlike(keys, groups);
+    expect(work.compared).toBeLessThanOrEqual(keys.length * REPEAT_COMPARED_MAX);
+    expect(work.counted).toBeLessThanOrEqual(keys.length * pairsPerKey * REPEAT_PAIR_HOLDERS_MAX);
+    // The common pair alone would have been counted through for every key, against every key.
+    expect(work.counted).toBeLessThan(keys.length * keys.length);
+  });
+
+  it("still joins alike keys hidden among many that share only a common pair", () => {
+    const crowd = Array.from({ length: 1000 }, (_, at) => `して${createHash("sha256").update(String(at)).digest("hex").slice(0, 12)}`);
+    const alike = [instructionKey("CI通ったらマージして"), instructionKey("CIが通ったらマージして")];
+    const { joined, groups } = recording();
+    joinAlike([...crowd, ...alike], groups);
+    expect(joined.map((pair) => [...pair].sort())).toContainEqual([...alike].sort());
+  });
+});
+
+describe("occurrencesOf", () => {
+  it("carries the latest ones only, newest first", () => {
+    const members = Array.from({ length: REPEAT_OCCURRENCES_MAX + 10 }, (_, at) => prompt("merge it now please", `s${String(at)}`, "/w", at));
+    const latest = occurrencesOf(members);
+    expect(latest).toHaveLength(REPEAT_OCCURRENCES_MAX);
+    expect(latest[0]?.at).toBe(REPEAT_OCCURRENCES_MAX + 9);
+    expect(latest.at(-1)?.at).toBe(10);
   });
 });

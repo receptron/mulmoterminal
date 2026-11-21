@@ -24,20 +24,30 @@ export function automatedSessions(db: DatabaseSync): Set<string> {
   return new Set(rows.map((row) => readString(row.id)));
 }
 
-/** The prompt log's prompts, read again only when the file changed. A missing log has none. */
-export function promptLogReader(file: string): () => Promise<RepeatPrompt[]> {
-  let held: { stamp: string; prompts: RepeatPrompt[] } | null = null;
+async function readPrompts(file: string): Promise<RepeatPrompt[]> {
+  const prompts: RepeatPrompt[] = [];
+  await forEachJsonlRecord(file, (record) => {
+    const prompt = repeatPromptOf(record);
+    if (prompt !== null) prompts.push(prompt);
+  });
+  return prompts;
+}
+
+/** The prompt log's prompts, read again only when the file changed. Calls that overlap share the read
+ *  in flight; a read that failed is not kept, so the next call reads again. A missing log has none. */
+export function promptLogReader(file: string, read: (file: string) => Promise<RepeatPrompt[]> = readPrompts): () => Promise<RepeatPrompt[]> {
+  let held: { stamp: string; prompts: Promise<RepeatPrompt[]> } | null = null;
   return async () => {
     const info = await stat(file).catch(() => null);
     if (info === null) return [];
     const stamp = `${String(info.size)}:${String(info.mtimeMs)}`;
-    if (held?.stamp === stamp) return held.prompts;
-    const prompts: RepeatPrompt[] = [];
-    await forEachJsonlRecord(file, (record) => {
-      const prompt = repeatPromptOf(record);
-      if (prompt !== null) prompts.push(prompt);
-    });
-    held = { stamp, prompts };
-    return prompts;
+    if (held?.stamp !== stamp) {
+      const entry = { stamp, prompts: read(file) };
+      held = entry;
+      entry.prompts.catch(() => {
+        if (held === entry) held = null;
+      });
+    }
+    return held.prompts;
   };
 }

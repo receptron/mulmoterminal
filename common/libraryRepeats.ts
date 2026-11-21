@@ -39,7 +39,8 @@ export interface RepeatCandidate {
   lastAt: number;
 }
 
-/** One candidate with the times it was typed, newest first (for the skill that promotes it). */
+/** One candidate with the latest times it was typed, newest first (for the skill that promotes it);
+ *  `count` is how many there were in all. */
 export interface RepeatDetail extends RepeatCandidate {
   occurrences: RepeatOccurrence[];
 }
