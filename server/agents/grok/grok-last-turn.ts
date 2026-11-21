@@ -36,7 +36,10 @@ const textOf = (content: unknown): string =>
 
 const promptOf = (record: Record<string, unknown>): string | null => userQueryText(textOf(record.content)) || null;
 
-const hasToolCalls = (record: Record<string, unknown>): boolean => Array.isArray(record.tool_calls) && record.tool_calls.length > 0;
+// Absent or an empty list is "no tools"; any other value — including a shape that is not a list —
+// is not trusted as a turn's end, so a malformed record cannot be quoted as the answer.
+const hasToolCalls = (record: Record<string, unknown>): boolean =>
+  record.tool_calls !== undefined && !(Array.isArray(record.tool_calls) && record.tool_calls.length === 0);
 
 /** The text of an answer that ends the turn, or null for every other message. */
 export function grokFinalAnswer(record: Record<string, unknown>): string | null {

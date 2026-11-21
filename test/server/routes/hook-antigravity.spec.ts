@@ -11,6 +11,7 @@ import { ptys } from "../../../server/session/registry";
 vi.mock("../../../server/session/session-reads.js", () => ({
   latestUserPrompt: vi.fn(async () => null),
   sessionLastTurn: vi.fn(async () => ({ prompt: null, reply: null })),
+  antigravityCurrentTurnReply: vi.fn(async () => null),
 }));
 
 const ID = "4078f9a6-4ce0-4906-a544-ca0cf917eb96";
