@@ -55,6 +55,31 @@ export const libraryViewJa = {
       folded: "変更のない {count} 行",
     },
     tools: {
+      settings: {
+        row: "設定（重ねた結果）",
+        rowNote: "権限・環境変数・フック と、それぞれを決めたファイル",
+        order: "Claude Code はこの順に読み、下のファイルが上を上書きします。リストは上に足されます。",
+        failed: "設定ファイルを読めませんでした。",
+        none: "なし",
+        env: "環境変数",
+        hooks: "フック",
+        other: "そのほかの設定",
+        source: {
+          user: "自分",
+          project: "プロジェクト",
+          local: "自分・ここだけ",
+          managed: "組織",
+        },
+        state: {
+          absent: "なし",
+          invalid: "JSON ではないので読まれない",
+        },
+        permissions: {
+          allow: "聞かずに許可",
+          ask: "必ず聞く",
+          deny: "拒否",
+        },
+      },
       shortcuts: "/ 検索 · ↑↓ 移動 · Esc 閉じる",
       kind: "道具",
       search: "指示ファイルを探す",

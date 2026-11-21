@@ -5,6 +5,7 @@ import os from "node:os";
 import type { Express } from "express";
 import type { LibraryCaller } from "../backends/library/library-service.js";
 import { readInstructionText, readInstructions } from "../backends/library/instruction-files-read.js";
+import { readSettings } from "../backends/library/settings-layers-read.js";
 import { agentHome } from "../agents/agent-homes.js";
 import { answer } from "./library-routes.js";
 
@@ -47,6 +48,15 @@ export function mountToolsRoutes(app: Express, call: LibraryCaller, deps: ToolsR
       res.json(await readInstructions(cwd, configDir(), home()));
     } catch {
       res.status(500).json({ error: "the instruction files could not be read" });
+    }
+  });
+  app.get("/api/library/tools/settings", async (req, res) => {
+    const cwd = await knownDirectory(res, call, req.query.cwd);
+    if (cwd === null) return;
+    try {
+      res.json(await readSettings(cwd, configDir()));
+    } catch {
+      res.status(500).json({ error: "the settings files could not be read" });
     }
   });
   app.get("/api/library/tools/instruction", async (req, res) => {

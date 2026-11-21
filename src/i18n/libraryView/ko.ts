@@ -55,6 +55,31 @@ export const libraryViewKo = {
       folded: "변경 없는 {count}줄",
     },
     tools: {
+      settings: {
+        row: "설정(겹친 결과)",
+        rowNote: "권한·환경 변수·훅과 각각을 정한 파일",
+        order: "Claude Code는 이 순서로 읽으며 아래 파일이 위를 덮어씁니다. 목록은 위에 더해집니다.",
+        failed: "설정 파일을 읽지 못했습니다.",
+        none: "없음",
+        env: "환경 변수",
+        hooks: "훅",
+        other: "그 밖의 설정",
+        source: {
+          user: "내 것",
+          project: "프로젝트",
+          local: "내 것·여기만",
+          managed: "조직",
+        },
+        state: {
+          absent: "없음",
+          invalid: "JSON이 아니어서 읽히지 않음",
+        },
+        permissions: {
+          allow: "묻지 않고 허용",
+          ask: "항상 물음",
+          deny: "거부",
+        },
+      },
       shortcuts: "/ 검색 · ↑↓ 이동 · Esc 닫기",
       kind: "도구",
       search: "지시 파일 찾기",

@@ -1920,7 +1920,10 @@ narrow and tall for one record you are discussing — and each position keeps it
   `~/.claude/rules`, every `CLAUDE.md` / `.claude/CLAUDE.md` / `CLAUDE.local.md` from the filesystem root
   down, the project's `.claude/rules` (a rule with `paths` marked as loading only for matching files),
   and what their `@path` imports bring in — or `AGENTS.md` where no `CLAUDE.md` counts. Each is read
-  beside the list. Read only. Design: [`docs/library-design.md`](docs/library-design.md).
+  beside the list. Above them, **Settings, laid over each other** reads the user, project, local and
+  managed `settings.json` files in Claude Code's order and shows the permission rules (every file's,
+  added up), environment variables, hooks and other keys in effect, each naming the file that set it.
+  Read only. Design: [`docs/library-design.md`](docs/library-design.md).
 - **Skills viewer** — **More features** → **Skills** lists every Claude skill on disk in three
   columns — where it lives, its skills, its `SKILL.md`. The places are your `~/.claude/skills`,
   each enabled plugin (skills shown as `plugin:skill`), and the `.claude/skills` of each folder a
