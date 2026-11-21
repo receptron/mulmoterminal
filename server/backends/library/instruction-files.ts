@@ -4,6 +4,7 @@
 // the reader asks the disk which exist.
 import path from "node:path";
 import { splitCode } from "./memory-health.js";
+import { trimEndOf } from "../../../common/trimEndOf.js";
 import type { LibraryInstructionScope } from "../../../common/libraryTools.js";
 
 export type InstructionScope = LibraryInstructionScope;
@@ -60,11 +61,7 @@ export function agentsCandidates(cwd: string, platform: NodeJS.Platform): Instru
 
 /** A path as written in a sentence ends before the punctuation closing that sentence: `@README.md.` */
 const CLOSING = new Set([".", ",", ";", ":", ")", "]"]);
-const withoutClosingPunctuation = (raw: string): string =>
-  raw.slice(
-    0,
-    [...raw].reduce((end, char, at) => (CLOSING.has(char) ? end : at + 1), 0),
-  );
+const withoutClosingPunctuation = (raw: string): string => trimEndOf(raw, CLOSING);
 
 /** A network path, which Claude Code never follows a link or an import to: looking one up can contact
  *  the host it names (`\\\\server\\share`, `/net/…`, `/Network/…`). `\\\\wsl$` is not one. */
