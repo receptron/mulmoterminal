@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { pickHandoffTargets, pullLastTurn, slotLabel, type HandoffDeps, type HandoffTarget } from "../../../src/composables/useHandoff";
+import {
+  pickHandoffTargets,
+  pullLastTurn,
+  pullSinceRelay,
+  slotLabel,
+  type HandoffDeps,
+  type HandoffTarget,
+  type RelayDeps,
+} from "../../../src/composables/useHandoff";
 import type { SlotInfo } from "../../../src/composables/readableSlot";
 
 const slot = (key: string, agent: "claude" | "codex" = "claude", cwd: string | null = "/Users/me/work/proj", sessionId = `sess-${key}`): SlotInfo => ({
@@ -101,5 +109,72 @@ describe("slotLabel", () => {
 
   it("falls back to cell and agent when the slot has no directory", () => {
     expect(slotLabel({ key: "cell-1", sessionId: "S", cwd: null, agent: "claude" }, null)).toBe("#1 · claude");
+  });
+});
+
+describe("pullSinceRelay", () => {
+  const MARK = "a".repeat(64);
+  const relayDeps = (over: Partial<RelayDeps> = {}): RelayDeps => ({
+    fetchRelay: async () => ({ status: "ok", text: "relayed", mark: MARK }),
+    paste: () => true,
+    recordMark: async () => {},
+    ...over,
+  });
+
+  it("pastes into the asking cell, then records the marker for its directory", async () => {
+    const recorded: Array<[string, string, string]> = [];
+    const pasted: Array<[string, string]> = [];
+    const error = await pullSinceRelay(
+      target("cell-2"),
+      "cell-1",
+      "/dest",
+      relayDeps({
+        paste: (key, text) => (pasted.push([key, text]), true),
+        recordMark: async (source, dest, mark) => void recorded.push([source.sessionId, dest, mark]),
+      }),
+    );
+    expect(error).toBeNull();
+    expect(pasted).toEqual([["cell-1", "relayed"]]);
+    expect(recorded).toEqual([["sess-cell-2", "/dest", MARK]]);
+  });
+
+  it("does not move the marker when the paste fails", async () => {
+    let recordCalls = 0;
+    const error = await pullSinceRelay(
+      target(),
+      "cell-1",
+      "/dest",
+      relayDeps({
+        paste: () => false,
+        recordMark: async () => {
+          recordCalls++;
+        },
+      }),
+    );
+    expect(error).toBe("This terminal is not connected");
+    expect(recordCalls).toBe(0);
+  });
+
+  it.each([
+    ["nothing-new", "Nothing new since the last relay"],
+    ["no-turn", "That terminal has no completed turn yet"],
+  ] as const)("reports %s without pasting", async (status, message) => {
+    let pasteCalls = 0;
+    const error = await pullSinceRelay(
+      target(),
+      "cell-1",
+      "/dest",
+      relayDeps({ fetchRelay: async () => ({ status, text: "", mark: null }), paste: () => (pasteCalls++, true) }),
+    );
+    expect(error).toBe(message);
+    expect(pasteCalls).toBe(0);
+  });
+
+  it("reports a failed read, a failed record, and a cell with no directory", async () => {
+    expect(await pullSinceRelay(target(), "cell-1", "/dest", relayDeps({ fetchRelay: async () => Promise.reject(new Error("x")) }))).toBe(
+      "Could not read that terminal's conversation",
+    );
+    expect(await pullSinceRelay(target(), "cell-1", "/dest", relayDeps({ recordMark: async () => Promise.reject(new Error("x")) }))).toMatch(/^Pasted, but/);
+    expect(await pullSinceRelay(target(), "cell-1", null, relayDeps())).toBe("This terminal has no directory to remember the relay by");
   });
 });

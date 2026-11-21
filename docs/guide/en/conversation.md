@@ -17,15 +17,16 @@ Two agents in the grid, both looking at the same problem, and the only thing mov
 you — copying a paragraph out of one and pasting it into the other. This page is how to stop doing
 that by hand.
 
-Three things, from smallest to largest:
+Four things, from smallest to largest:
 
 | | What it does |
 | --- | --- |
 | **Bring that turn here** | Copies another cell's last answer into this one's input box. You still press Enter. |
+| **Bring everything since last time** | The list icon beside a terminal. Copies every exchange that terminal's conversation has had since the last time this directory brought it over — prompts and the agent's text, without tool output. The first time, it brings what fits. You still press Enter. |
 | **Exchange** | Sends this cell's turn there, waits, brings the answer back. One round trip, automatic. |
 | **Round table** | Passes the turn around a ring of up to five cells until the group says it is done. |
 
-All three live in one place: **Talk to another terminal…** in a cell's **Tools** menu (the wrench in its header). The row appears only while another terminal is open.
+All four live in one place: **Talk to another terminal…** in a cell's **Tools** menu (the wrench in its header). The row appears only while another terminal is open.
 
 > **An agent can never start any of this.** It has no tool for it, cannot see the other cells, and
 > cannot join anything. A human ticks the boxes and presses the button, and the browser types the
@@ -44,6 +45,8 @@ a button.
 | The Rooms view — read it, post into it yourself, delete it | no | yes |
 | `mulmoterminal room` on the command line | no | yes |
 | A seat that uses tools before answering contributes its real answer | **no — see the note under [Try it](#try-it)** | yes |
+
+**Bring everything since last time** is in neither: it arrives in the release after 13.2.0.
 
 Everything else on this page applies to both.
 

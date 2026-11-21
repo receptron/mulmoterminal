@@ -37,6 +37,8 @@ export const tipsZhCN: Messages["tips"] = {
     bringTurn: "把 {name} 最近一轮带到这里",
     exchangeTurn: "把此单元格的这一轮发过去并取回回答，两边都会提交",
     exchangeTurnAria: "与 {name} 交换一轮",
+    relaySince: "把上次转到此目录之后的所有对话一并带过来",
+    relaySinceAria: "带来 {name} 上次之后的对话",
     stopExchange: "停止进行中的交换",
     closeDiff: "关闭差异",
     commitNothing: "没有未提交的更改",

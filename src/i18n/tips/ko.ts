@@ -37,6 +37,8 @@ export const tipsKo: Messages["tips"] = {
     bringTurn: "{name}의 마지막 턴을 여기로 가져오기",
     exchangeTurn: "이 셀의 턴을 보내고 답을 가져옵니다(양쪽 모두 제출됨)",
     exchangeTurnAria: "{name}와 한 턴 주고받기",
+    relaySince: "이 디렉터리로 마지막으로 가져온 이후의 대화를 모두 가져오기",
+    relaySinceAria: "{name}의 지난번 이후 대화 가져오기",
     stopExchange: "진행 중인 주고받기 중지",
     closeDiff: "변경 사항 닫기",
     commitNothing: "커밋하지 않은 변경 사항이 없습니다",
