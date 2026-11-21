@@ -4,13 +4,15 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import type { BoardCard, BoardResponse } from "../../../common/githubBoard";
 import { BOARD_POLL_MS, BOARD_TURN_RELOAD_DELAY_MS } from "../../../src/composables/useGithubBoardLive";
+import { PTY_OPENED_CHANNEL } from "../../../common/ptyOpenedChannel";
 
-const subscribers = new Map<string, (data: unknown) => void>();
+const subscribers = new Map<string, Set<(data: unknown) => void>>();
 vi.mock("../../../src/composables/usePubSub", () => ({
   usePubSub: () => ({
     subscribe: (channel: string, handler: (data: unknown) => void) => {
-      subscribers.set(channel, handler);
-      return () => subscribers.delete(channel);
+      const handlers = subscribers.get(channel) ?? new Set();
+      subscribers.set(channel, handlers.add(handler));
+      return () => handlers.delete(handler);
     },
     onReconnect: () => () => {},
   }),
@@ -28,11 +30,14 @@ const working: BoardCard = {
 };
 
 let boardLoads = 0;
+// Set to hold the next board read open until the test releases it.
+let holdNextRead: Promise<void> | null = null;
 let activitySeeds = 0;
 let activitySeed: Record<string, unknown> = {};
 
 beforeEach(() => {
   boardLoads = 0;
+  holdNextRead = null;
   activitySeeds = 0;
   activitySeed = {};
   subscribers.clear();
@@ -43,6 +48,9 @@ beforeEach(() => {
       if (url === "/api/github/board") {
         boardLoads++;
         const body: BoardResponse = { repos: [{ repo: "o/r", cards: [working] }] };
+        const held = holdNextRead;
+        holdNextRead = null;
+        if (held) await held;
         return new Response(JSON.stringify(body));
       }
       if (url.startsWith("/api/activity")) {
@@ -59,7 +67,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const push = (data: unknown): void => subscribers.get("sessions")?.(data);
+const publish = (channel: string, data: unknown): void => subscribers.get(channel)?.forEach((handler) => handler(data));
+const push = (data: unknown): void => publish("sessions", data);
+const cellCount = (w: { findAll: (selector: string) => unknown[] }): number => w.findAll('[data-testid="board-cell"]').length;
 
 describe("GithubBoard, live", () => {
   it("shows a cell as the channel says it is now, and marks its card as waiting", async () => {
@@ -139,5 +149,95 @@ describe("GithubBoard, live", () => {
     expect(w.findAll('[data-testid="board-card"]')).toHaveLength(1);
     expect(w.text()).toContain("Could not read the board.");
     w.unmount();
+  });
+
+  it("takes a closed terminal off its card at once, without reading again", async () => {
+    const w = mount(GithubBoard);
+    await flushPromises();
+    expect(cellCount(w)).toBe(1);
+    push({ id: "s1", working: false, event: "closed" });
+    await flushPromises();
+    expect(cellCount(w)).toBe(0);
+    expect(boardLoads).toBe(1);
+    w.unmount();
+  });
+
+  it("leaves a card alone for a session that is not on it", async () => {
+    const w = mount(GithubBoard);
+    await flushPromises();
+    push({ id: "elsewhere", working: false, event: "closed" });
+    await flushPromises();
+    expect(cellCount(w)).toBe(1);
+    w.unmount();
+  });
+
+  it("keeps a closed terminal off when a read sent before the close answers with it", async () => {
+    const w = mount(GithubBoard);
+    await flushPromises();
+    let release = (): void => {};
+    holdNextRead = new Promise((resolve) => (release = resolve));
+    await vi.advanceTimersByTimeAsync(BOARD_POLL_MS);
+    push({ id: "s1", working: false, event: "closed" });
+    release();
+    await flushPromises();
+    expect(boardLoads).toBe(2);
+    expect(cellCount(w)).toBe(0);
+    w.unmount();
+  });
+
+  it("lets go of a close once a read sent after it has answered", async () => {
+    const w = mount(GithubBoard);
+    await flushPromises();
+    push({ id: "s1", working: false, event: "closed" });
+    await vi.advanceTimersByTimeAsync(BOARD_POLL_MS);
+    await flushPromises();
+    expect(boardLoads).toBe(2);
+    // The server still listing it after a read that started later means it is alive again.
+    expect(cellCount(w)).toBe(1);
+    w.unmount();
+  });
+
+  it("reads the board again shortly after a terminal opens, once for several", async () => {
+    const w = mount(GithubBoard);
+    await flushPromises();
+    publish(PTY_OPENED_CHANNEL, { sessionId: "n1", cwd: "/w/a" });
+    await vi.advanceTimersByTimeAsync(BOARD_TURN_RELOAD_DELAY_MS - 1);
+    publish(PTY_OPENED_CHANNEL, { sessionId: "n2", cwd: "/w/b" });
+    await vi.advanceTimersByTimeAsync(BOARD_TURN_RELOAD_DELAY_MS - 1);
+    expect(boardLoads).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(boardLoads).toBe(2);
+    w.unmount();
+  });
+
+  it("ignores an opened frame it cannot read", async () => {
+    const w = mount(GithubBoard);
+    await flushPromises();
+    publish(PTY_OPENED_CHANNEL, { sessionId: 7 });
+    publish(PTY_OPENED_CHANNEL, null);
+    await vi.advanceTimersByTimeAsync(BOARD_TURN_RELOAD_DELAY_MS * 2);
+    expect(boardLoads).toBe(1);
+    w.unmount();
+  });
+
+  it("shows a session again when it opens after closing", async () => {
+    const w = mount(GithubBoard);
+    await flushPromises();
+    push({ id: "s1", working: false, event: "closed" });
+    await flushPromises();
+    publish(PTY_OPENED_CHANNEL, { sessionId: "s1", cwd: "/w/a" });
+    await flushPromises();
+    expect(cellCount(w)).toBe(1);
+    w.unmount();
+  });
+
+  it("listens to nothing once the board is closed", async () => {
+    const w = mount(GithubBoard);
+    await flushPromises();
+    w.unmount();
+    publish(PTY_OPENED_CHANNEL, { sessionId: "n1", cwd: "/w/a" });
+    await vi.advanceTimersByTimeAsync(BOARD_TURN_RELOAD_DELAY_MS * 2);
+    expect(boardLoads).toBe(1);
+    expect(subscribers.get(PTY_OPENED_CHANNEL)?.size ?? 0).toBe(0);
   });
 });
