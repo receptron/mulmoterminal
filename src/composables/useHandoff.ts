@@ -95,3 +95,66 @@ export async function pullLastTurn(target: HandoffTarget, ownKey: string, deps: 
   if (!text) return "That terminal has no completed turn yet";
   return deps.paste(ownKey, text) ? null : "This terminal is not connected";
 }
+
+// Every exchange since the last relay to `destCwd` (#3389). The marker is recorded only after the
+// paste succeeded, so a failed paste brings the same exchanges again next time.
+export interface RelayFetched {
+  status: "ok" | "no-turn" | "nothing-new";
+  text: string;
+  mark: string | null;
+}
+
+const relayParams = (source: HandoffSource, destCwd: string): string => {
+  const params = new URLSearchParams({ session: source.sessionId, agent: source.agent, dest: destCwd });
+  if (source.cwd) params.set("cwd", source.cwd);
+  return params.toString();
+};
+
+const RELAY_STATUSES: readonly RelayFetched["status"][] = ["ok", "no-turn", "nothing-new"];
+const isRelayStatus = (value: unknown): value is RelayFetched["status"] => RELAY_STATUSES.some((status) => status === value);
+
+async function fetchRelay(source: HandoffSource, destCwd: string): Promise<RelayFetched> {
+  const res = await fetchWithTimeout(`/api/transcript/relay?${relayParams(source, destCwd)}`, undefined, REQUEST_TIMEOUT_MS);
+  if (!res.ok) throw new Error(`relay request failed (${res.status})`);
+  const data: unknown = await res.json();
+  if (!isRecord(data) || !isRelayStatus(data.status)) return { status: "no-turn", text: "", mark: null };
+  return { status: data.status, text: typeof data.text === "string" ? data.text : "", mark: typeof data.mark === "string" ? data.mark : null };
+}
+
+async function recordRelayMark(source: HandoffSource, destCwd: string, mark: string): Promise<void> {
+  const init = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mark }) };
+  const res = await fetchWithTimeout(`/api/transcript/relay-mark?${relayParams(source, destCwd)}`, init, REQUEST_TIMEOUT_MS);
+  if (!res.ok) throw new Error(`relay-mark request failed (${res.status})`);
+}
+
+export interface RelayDeps {
+  fetchRelay: (source: HandoffSource, destCwd: string) => Promise<RelayFetched>;
+  paste: (destKey: string, text: string) => boolean;
+  recordMark: (source: HandoffSource, destCwd: string, mark: string) => Promise<void>;
+}
+const defaultRelayDeps: RelayDeps = { fetchRelay, paste: pasteText, recordMark: recordRelayMark };
+
+// Null on success, or a short message for the cell — like pullLastTurn.
+export async function pullSinceRelay(
+  target: HandoffTarget,
+  ownKey: string,
+  destCwd: string | null,
+  deps: RelayDeps = defaultRelayDeps,
+): Promise<string | null> {
+  if (!destCwd) return "This terminal has no directory to remember the relay by";
+  let relay: RelayFetched;
+  try {
+    relay = await deps.fetchRelay(target.source, destCwd);
+  } catch {
+    return "Could not read that terminal's conversation";
+  }
+  if (relay.status === "nothing-new") return "Nothing new since the last relay";
+  if (relay.status === "no-turn" || !relay.text || relay.mark === null) return "That terminal has no completed turn yet";
+  if (!deps.paste(ownKey, relay.text)) return "This terminal is not connected";
+  try {
+    await deps.recordMark(target.source, destCwd, relay.mark);
+  } catch {
+    return "Pasted, but where it ended could not be saved — the next relay will repeat it";
+  }
+  return null;
+}

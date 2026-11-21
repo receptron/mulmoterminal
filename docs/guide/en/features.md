@@ -251,7 +251,7 @@ so a very large unsaved buffer may not get out.
 | Copy & paste | **`copyOnSelect`** copies the moment you finish selecting (off by default), and copy / paste can be bound to keys (`keymap`). Both are opt-in, because a bound key stops reaching the program inside the terminal ([config](config.html#copy-on-select)) |
 | Summarize output (AI) | Pass terminal output to `claude -p` and summarize **errors / warnings / cause / how to fix** |
 | Copy as prompt | Copy command + directory + summary + follow-up and paste it into any session |
-| Cross-terminal talk | **Bring another terminal's last turn** brings another cell's last turn into this one; **Exchange** does an **automatic round-trip** — send, wait for the other agent's answer, bring it back (great for Claude ↔ Codex mutual review) |
+| Cross-terminal talk | **Bring another terminal's last turn** brings another cell's last turn into this one; **Bring everything since last time** (list icon) brings every exchange since the last relay to this directory; **Exchange** does an **automatic round-trip** — send, wait for the other agent's answer, bring it back (great for Claude ↔ Codex mutual review) |
 | Plain shell | The launcher's **Shell** toggle runs your OS default shell (`$SHELL`) in the chosen directory as a **persistent terminal** — nothing to install, nothing to configure |
 | Filter the resume list | Once the launcher's **or resume here** list is long, a **Filter by title** box sits above it: a conversation stays listed when every word you typed is in its title, in any order. The box empties when you change the directory or the agent |
 | Launch commands | Start any other interactive command (`codex`, `htop`, …) as a **persistent terminal** |

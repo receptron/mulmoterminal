@@ -83,7 +83,7 @@ import { CELL_STATUS, DOT_STATUS, HEADER_STATUS } from "./cellStatusClasses";
 import { headerStatusStyleFor } from "./cellHeaderStyle";
 import { mergeHeaderStatusColors } from "../../common/headerStatusColors";
 import { globalHeaderStatusColors, globalHeaderStatusTint } from "../composables/headerStatusColors";
-import { handoffTargets, pullLastTurn, slotLabel, type HandoffTarget } from "../composables/useHandoff";
+import { handoffTargets, pullLastTurn, pullSinceRelay, slotLabel, type HandoffTarget } from "../composables/useHandoff";
 import { menuPlacement } from "../composables/menuPlacement";
 import { runOneExchange, liveCrossTalkDeps } from "../composables/useCrossTalk";
 import { runRoundTable, liveRoundTableDeps, memberFromTarget, type TableMember } from "../composables/useRoundTable";
@@ -739,6 +739,12 @@ function showAskMsg(msg: string) {
 async function askCell(target: HandoffTarget) {
   askMenuOpen.value = false;
   const error = await pullLastTurn(target, `cell-${props.uid}`);
+  if (error) showAskMsg(error);
+}
+
+async function relayCell(target: HandoffTarget) {
+  askMenuOpen.value = false;
+  const error = await pullSinceRelay(target, `cell-${props.uid}`, cwd.value);
   if (error) showAskMsg(error);
 }
 
@@ -1749,6 +1755,16 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                       @click="askCell(target)"
                     >
                       {{ target.label }}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="cell-relay-item"
+                      :aria-label="t('tips.cell.relaySinceAria', { name: target.label })"
+                      class="cursor-pointer rounded-[4px] border-none bg-transparent px-1.5 py-1.5 font-sans text-[12px] text-dim hover:bg-hover hover:text-fg"
+                      :data-tip="t('tips.cell.relaySince')"
+                      @click="relayCell(target)"
+                    >
+                      <span class="material-symbols-outlined" aria-hidden="true">playlist_add</span>
                     </button>
                     <button
                       type="button"

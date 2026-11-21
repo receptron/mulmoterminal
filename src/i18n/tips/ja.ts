@@ -37,6 +37,8 @@ export const tipsJa: Messages["tips"] = {
     bringTurn: "{name} の最後のやり取りをここに取り込む",
     exchangeTurn: "このセルのやり取りを送り、返ってきた答えを取り込む（どちらも送信済みになります）",
     exchangeTurnAria: "{name} と 1 往復やり取りする",
+    relaySince: "前回この場所に取り込んだ後のやり取りを、まとめて取り込む",
+    relaySinceAria: "{name} の前回以降のやり取りを取り込む",
     stopExchange: "進行中のやり取りを止める",
     closeDiff: "差分を閉じる",
     commitNothing: "コミットしていない変更はありません",
