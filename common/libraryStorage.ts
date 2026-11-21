@@ -51,11 +51,13 @@ export interface StorageProgress {
 }
 
 /** GET /api/library/storage. `measure` is the last finished measurement (null before the first);
- *  `measuring` is the one running now, if any. */
+ *  `measuring` is the one running now, if any; `measureFailed` says the last one ended without an
+ *  answer, `measure` then being an older one or null. */
 export interface LibraryStorageAnswer {
   root: string;
   measure: StorageMeasure | null;
   measuring: StorageProgress | null;
+  measureFailed: boolean;
   cleanup: CleanupPeriod;
 }
 
@@ -99,4 +101,5 @@ export const isLibraryStorageAnswer = (value: unknown): value is LibraryStorageA
   typeof value.root === "string" &&
   (value.measure === null || isMeasure(value.measure)) &&
   (value.measuring === null || isStorageProgress(value.measuring)) &&
+  typeof value.measureFailed === "boolean" &&
   isCleanup(value.cleanup);

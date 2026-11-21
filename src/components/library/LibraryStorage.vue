@@ -41,6 +41,23 @@ const cleanupSentence = computed((): string => {
   return t(cleanup.state === "set" ? "libraryView.storage.cleanupSet" : "libraryView.storage.cleanupDefault", { days: cleanup.days });
 });
 
+/** What stands in for the list when there is no measurement to show, or it found nothing. */
+const noMeasureSentence = computed((): string => {
+  const answer = props.answer;
+  if (answer === null) return "";
+  if (progressLabel.value !== null) return progressLabel.value;
+  if (answer.measureFailed) return t("libraryView.storage.measureFailed");
+  if (answer.measure === null) return t("libraryView.storage.notMeasured");
+  const key = answer.measure.total.unreadable > 0 ? "libraryView.storage.unreadableHome" : "libraryView.storage.empty";
+  return t(key, { root: answer.root });
+});
+
+/** When the shown measurement was taken, and that it is an older one when the last one failed. */
+function measuredSentence(measuredAt: number): string {
+  const when = t("libraryView.storage.measuredAt", { when: whenLabel(measuredAt, props.now, locale.value) });
+  return props.answer?.measureFailed ? `${when} ${t("libraryView.storage.olderShown")}` : when;
+}
+
 function choose(name: string): void {
   chosenName.value = name;
   readerShown.value = true;
@@ -61,17 +78,22 @@ defineExpose({ move });
   <p v-if="failed && answer === null" class="m-0 px-4 py-6 font-sans text-[13px] text-err-text" data-testid="storage-failed">
     {{ t("libraryView.storage.loadFailed") }}
   </p>
-  <p
-    v-else-if="!loaded || answer === null || answer.measure === null"
-    class="m-0 px-4 py-6 font-sans text-[13px] text-dim"
-    role="status"
-    data-testid="storage-waiting"
-  >
-    {{ progressLabel ?? t("libraryView.storage.measuring") }}
+  <p v-else-if="!loaded || answer === null" class="m-0 px-4 py-6 font-sans text-[13px] text-dim" role="status" data-testid="storage-waiting">
+    {{ t("libraryView.storage.measuring") }}
   </p>
-  <p v-else-if="entries.length === 0" class="m-0 px-4 py-6 font-sans text-[13px] text-dim" data-testid="storage-empty">
-    {{ t("libraryView.storage.empty", { root: answer.root }) }}
-  </p>
+  <!-- No measurement to show: one running, one that failed, or none asked for yet. -->
+  <div v-else-if="answer.measure === null || entries.length === 0" class="px-4 py-6 font-sans text-[13px] text-dim" data-testid="storage-unmeasured">
+    <p class="m-0" role="status" :class="answer.measureFailed && !answer.measuring ? 'text-err-text' : ''">{{ noMeasureSentence }}</p>
+    <button
+      v-if="!answer.measuring"
+      type="button"
+      class="mt-2 cursor-pointer border-0 bg-transparent p-0 font-sans text-[13px] text-accent hover:underline"
+      data-testid="storage-remeasure"
+      @click="emit('remeasure')"
+    >
+      {{ t("libraryView.storage.remeasure") }}
+    </button>
+  </div>
   <div v-else class="flex min-h-0 flex-1 border-t border-border" data-testid="library-storage">
     <div
       class="min-h-0 w-[360px] flex-none overflow-y-auto border-r border-border py-2 max-[760px]:w-full max-[760px]:border-r-0"
@@ -138,7 +160,7 @@ defineExpose({ move });
         </section>
 
         <p class="m-0 mt-6 flex items-center gap-3 text-[12px] text-dim">
-          <span role="status">{{ progressLabel ?? t("libraryView.storage.measuredAt", { when: whenLabel(answer.measure.measuredAt, now, locale) }) }}</span>
+          <span role="status">{{ progressLabel ?? measuredSentence(answer.measure.measuredAt) }}</span>
           <button
             v-if="!answer.measuring"
             type="button"

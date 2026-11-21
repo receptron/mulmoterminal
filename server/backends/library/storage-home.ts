@@ -46,10 +46,16 @@ async function measureEntry(home: string, name: string, fs: WalkFs): Promise<Sto
   return { name, directory: stat?.isDirectory() === true, ...(await measurePath(at, fs)) };
 }
 
-/** `home` measured; null when it is not a readable directory. `onProgress` hears each step. */
-export async function measureHome(home: string, fs: WalkFs, now: () => number, onProgress: (progress: StorageProgress) => void): Promise<HomeMeasure | null> {
+/** A home that cannot be listed measures as nothing, and as unreadable when it is there at all. */
+async function unlistedHome(home: string, fs: WalkFs, now: () => number): Promise<HomeMeasure> {
+  const there = (await fs.lstat(home).catch(() => null)) !== null;
+  return { measuredAt: now(), total: { ...NOTHING, unreadable: there ? 1 : 0 }, entries: [], projects: [] };
+}
+
+/** `home` measured. `onProgress` hears each step. */
+export async function measureHome(home: string, fs: WalkFs, now: () => number, onProgress: (progress: StorageProgress) => void): Promise<HomeMeasure> {
   const names = await namesIn(home, fs);
-  if (names === null) return null;
+  if (names === null) return unlistedHome(home, fs, now);
   const projectsDir = fs.join(home, PROJECTS_ENTRY);
   // Measured project by project only when it is a folder that can be listed; else it is one more entry.
   const slugs = names.includes(PROJECTS_ENTRY) ? await namesIn(projectsDir, fs) : null;

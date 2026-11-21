@@ -12,6 +12,7 @@ const size = (bytes: number, files = 1) => ({ bytes, files, unreadable: 0 });
 const answerWith = (over: Partial<LibraryStorageAnswer> = {}, cleanup: CleanupPeriod = { state: "default", days: 30 }): LibraryStorageAnswer => ({
   root: "/home/me/.claude",
   measuring: null,
+  measureFailed: false,
   cleanup,
   measure: {
     measuredAt: NOW,
@@ -97,7 +98,8 @@ describe("LibraryStorage", () => {
 
   it("waits with the progress before the first measurement, and offers to measure again after", async () => {
     const waiting = mountWith(answerWith({ measure: null, measuring: { done: 4, of: 10 } }));
-    expect(waiting.get('[data-testid="storage-waiting"]').text()).toContain("10");
+    expect(waiting.get('[data-testid="storage-unmeasured"]').text()).toContain("10");
+    expect(waiting.find('[data-testid="storage-remeasure"]').exists()).toBe(false);
     const done = mountWith(answerWith());
     await done.get('[data-testid="storage-remeasure"]').trigger("click");
     expect(done.emitted("remeasure")).toHaveLength(1);
@@ -106,6 +108,30 @@ describe("LibraryStorage", () => {
         .find('[data-testid="storage-remeasure"]')
         .exists(),
     ).toBe(false);
+  });
+
+  it("never leaves a finished-but-empty state looking like a measurement in progress", async () => {
+    const notYet = mountWith(answerWith({ measure: null }));
+    expect(notYet.get('[data-testid="storage-unmeasured"]').text()).toContain("Not measured");
+    const failed = mountWith(answerWith({ measure: null, measureFailed: true }));
+    expect(failed.get('[data-testid="storage-unmeasured"]').text()).toContain("Could not measure");
+    await failed.get('[data-testid="storage-remeasure"]').trigger("click");
+    expect(failed.emitted("remeasure")).toHaveLength(1);
+    const unreadable = answerWith();
+    if (unreadable.measure === null) throw new Error("expected a measure");
+    unreadable.measure = { ...unreadable.measure, entries: [], projects: [], total: { bytes: 0, files: 0, unreadable: 1 } };
+    expect(mountWith(unreadable).get('[data-testid="storage-unmeasured"]').text()).toContain("Could not read /home/me/.claude");
+    unreadable.measure.total.unreadable = 0;
+    expect(mountWith(unreadable).get('[data-testid="storage-unmeasured"]').text()).toContain("nothing in /home/me/.claude");
+  });
+
+  it("says an older measurement is shown when the last one failed", () => {
+    expect(
+      mountWith(answerWith({ measureFailed: true }))
+        .get('[data-testid="storage-reader"]')
+        .text(),
+    ).toContain("older one");
+    expect(mountWith(answerWith()).get('[data-testid="storage-reader"]').text()).not.toContain("older one");
   });
 
   it("says so when nothing could be read", () => {
@@ -117,6 +143,7 @@ describe("isLibraryStorageAnswer", () => {
   it("takes a whole answer and one before the first measurement", () => {
     expect(isLibraryStorageAnswer(answerWith())).toBe(true);
     expect(isLibraryStorageAnswer(answerWith({ measure: null, measuring: { done: 0, of: 0 } }))).toBe(true);
+    expect(isLibraryStorageAnswer(answerWith({ measureFailed: true }))).toBe(true);
   });
 
   it("refuses a malformed one", () => {
@@ -127,6 +154,7 @@ describe("isLibraryStorageAnswer", () => {
       null,
       {},
       { ...good, root: 3 },
+      { ...good, measureFailed: undefined },
       { ...good, cleanup: { state: "set" } },
       { ...good, cleanup: { state: "other", days: 1 } },
       { ...good, measuring: { done: 1 } },

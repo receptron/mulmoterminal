@@ -32,27 +32,40 @@ export const addSizes = (a: StorageSize, b: StorageSize): StorageSize => ({
   unreadable: a.unreadable + b.unreadable,
 });
 
-/** One entry's own space, and the children to look at next when it is a readable directory. */
-async function visit(path: string, fs: WalkFs): Promise<{ size: StorageSize; children: string[] }> {
+/** One entry's own space, and its children's names when it is a directory that can be listed. */
+async function visit(path: string, fs: WalkFs): Promise<{ size: StorageSize; names: string[] | null }> {
   const stat = await fs.lstat(path).catch(() => null);
-  if (stat === null) return { size: { ...NOTHING, unreadable: 1 }, children: [] };
+  if (stat === null) return { size: { ...NOTHING, unreadable: 1 }, names: null };
   const bytes = diskBytes(stat);
-  if (!stat.isDirectory()) return { size: { bytes, files: 1, unreadable: 0 }, children: [] };
+  if (!stat.isDirectory()) return { size: { bytes, files: 1, unreadable: 0 }, names: null };
   const names = await fs.readdir(path).catch(() => null);
-  if (names === null) return { size: { bytes, files: 0, unreadable: 1 }, children: [] };
-  return { size: { bytes, files: 0, unreadable: 0 }, children: names.map((name) => fs.join(path, name)) };
+  return { size: { bytes, files: 0, unreadable: names === null ? 1 : 0 }, names };
 }
 
-/** The space `path` takes, all the way down. Walked from a list of paths still to look at, the newest
- *  batch at a time (depth first, so the list stays short), with no more than one batch in flight. */
+/** A directory being walked: its children's names, and how far through them the walk is. */
+interface Frame {
+  dir: string;
+  names: string[];
+  next: number;
+}
+
+/** The space `path` takes, all the way down. Depth first over the directories still being walked,
+ *  each holding only its names: a child's path is made when its batch is taken, and no more than
+ *  one batch is in flight. */
 export async function measurePath(path: string, fs: WalkFs): Promise<StorageSize> {
-  const pending = [path];
-  let total = NOTHING;
-  while (pending.length > 0) {
-    const visited = await Promise.all(pending.splice(Math.max(0, pending.length - WALK_BATCH)).map((next) => visit(next, fs)));
-    visited.forEach(({ size, children }) => {
+  const root = await visit(path, fs);
+  let total = root.size;
+  const frames: Frame[] = root.names === null ? [] : [{ dir: path, names: root.names, next: 0 }];
+  for (let frame = frames.at(-1); frame !== undefined; frame = frames.at(-1)) {
+    const batch = frame.names.slice(frame.next, frame.next + WALK_BATCH);
+    frame.next += batch.length;
+    if (frame.next >= frame.names.length) frames.pop(); // its names are released as soon as they are all taken
+    const visited = await Promise.all(batch.map((name) => visit(fs.join(frame.dir, name), fs)));
+    const dir = frame.dir;
+    visited.forEach(({ size, names }, at) => {
       total = addSizes(total, size);
-      children.forEach((child) => pending.push(child));
+      const name = batch[at];
+      if (names !== null && names.length > 0 && name !== undefined) frames.push({ dir: fs.join(dir, name), names, next: 0 });
     });
   }
   return total;

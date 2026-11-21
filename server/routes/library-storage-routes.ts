@@ -53,11 +53,12 @@ export function mountStorageRoutes(app: Express, call: LibraryCaller, deps: Libr
   const measurer = deps.measurer ?? createStorageMeasurer(home);
   app.get("/api/library/storage", async (req, res) => {
     const query = typeof req.query.q === "string" ? req.query.q : "";
-    const { measure, measuring } = measurer.state();
+    const { measure, measuring, failed } = measurer.state();
     const answer: LibraryStorageAnswer = {
       root: home,
       measure: measure === null ? null : await measureFor(measure, query, call),
       measuring,
+      measureFailed: failed,
       cleanup: await readCleanupPeriod(home),
     };
     res.json(answer);

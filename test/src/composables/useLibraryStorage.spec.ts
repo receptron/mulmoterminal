@@ -23,6 +23,7 @@ const { useLibraryStorage, STORAGE_POLL_MS, STORAGE_STALE_MS } = await import(".
 const answer = (measuredAt: number | null, measuring: LibraryStorageAnswer["measuring"] = null): LibraryStorageAnswer => ({
   root: "/h",
   measuring,
+  measureFailed: false,
   cleanup: { state: "default", days: 30 },
   measure:
     measuredAt === null

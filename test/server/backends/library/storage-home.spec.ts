@@ -55,10 +55,22 @@ describe("measureHome", () => {
     expect(steps.map((step) => step.done)).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it("is null for a home that is not a directory, and empty for one with nothing in it", async () => {
-    expect(await measureHome(path.join(home, "missing"), realFs, Date.now, () => {})).toBeNull();
+  it("measures a missing home as nothing, one that cannot be listed as unreadable, and an empty one as empty", async () => {
+    const missing = await measureHome(
+      path.join(home, "missing"),
+      realFs,
+      () => 7,
+      () => {},
+    );
+    expect(missing).toEqual({ measuredAt: 7, total: { bytes: 0, files: 0, unreadable: 0 }, entries: [], projects: [] });
     await writeFile(path.join(home, "a-file"), "x");
-    expect(await measureHome(path.join(home, "a-file"), realFs, Date.now, () => {})).toBeNull();
+    const notADirectory = await measureHome(
+      path.join(home, "a-file"),
+      realFs,
+      () => 7,
+      () => {},
+    );
+    expect(notADirectory).toEqual({ measuredAt: 7, total: { bytes: 0, files: 0, unreadable: 1 }, entries: [], projects: [] });
     const empty = await measureHome(path.join(home), realFs, Date.now, () => {});
     expect(empty?.projects).toEqual([]);
     expect(empty?.entries.map((entry) => entry.name)).toEqual(["a-file"]);

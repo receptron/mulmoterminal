@@ -31,7 +31,7 @@ function setup(options: { state?: StorageState; directories?: () => Promise<unkn
   const home = mkdtempSync(path.join(tmpdir(), "mt-storage-routes-"));
   dirs.push(home);
   let measured = 0;
-  const state = options.state ?? { measure: MEASURE, measuring: null };
+  const state: StorageState = options.state ?? { measure: MEASURE, measuring: null, failed: false };
   const app = express();
   app.use(express.json());
   mountLibraryRoutes(app, {
@@ -51,6 +51,7 @@ describe("GET /api/library/storage", () => {
     expect(answer.body).toMatchObject({
       root: home,
       measuring: null,
+      measureFailed: false,
       cleanup: { state: "default", days: 30 },
       measure: {
         measuredAt: 1000,
@@ -71,8 +72,13 @@ describe("GET /api/library/storage", () => {
   });
 
   it("answers null before the first measurement, with how far the running one is", async () => {
-    const { request } = setup({ state: { measure: null, measuring: { done: 3, of: 9 } } });
+    const { request } = setup({ state: { measure: null, measuring: { done: 3, of: 9 }, failed: false } });
     expect((await request("/api/library/storage")).body).toMatchObject({ measure: null, measuring: { done: 3, of: 9 } });
+  });
+
+  it("says the last measurement failed, keeping the older one", async () => {
+    const { request } = setup({ state: { measure: MEASURE, measuring: null, failed: true } });
+    expect((await request("/api/library/storage")).body).toMatchObject({ measureFailed: true, measure: { measuredAt: 1000 } });
   });
 
   it("still answers the sizes when the index does not", async () => {
@@ -94,7 +100,7 @@ describe("GET /api/library/storage", () => {
 
 describe("POST /api/library/storage/measure", () => {
   it("starts a measurement", async () => {
-    const { request, measured } = setup({ state: { measure: null, measuring: { done: 0, of: 0 } } });
+    const { request, measured } = setup({ state: { measure: null, measuring: { done: 0, of: 0 }, failed: false } });
     const answer = await request("/api/library/storage/measure", { method: "POST" });
     expect(answer.status).toBe(202);
     expect(measured()).toBe(1);
