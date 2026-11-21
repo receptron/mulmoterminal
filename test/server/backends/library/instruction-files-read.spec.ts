@@ -9,6 +9,8 @@ import { IMPORTS_PER_FILE_MAX, readInstructions, RULES_PER_FOLDER_MAX } from "..
 import { INSTRUCTION_FILE_MAX_BYTES } from "../../../../common/libraryTools";
 
 const dirs: string[] = [];
+/** A path under the tree, written with `/` on every system, so one expectation holds on Windows too. */
+const posixRelative = (from: string, to: string): string => path.relative(from, to).split(path.sep).join("/");
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 
 function tree(files: Record<string, string>) {
@@ -21,7 +23,7 @@ function tree(files: Record<string, string>) {
   const at = (relative: string) => path.join(root, relative);
   const read = () => readInstructions(at("w/app"), at("h/.claude"), at("h"), process.platform === "win32" ? "win32" : "linux");
   const listed = async () =>
-    (await read()).files.filter((file) => file.path.startsWith(root)).map((file) => `${file.scope} ${path.relative(root, file.path)} ${file.loads}`);
+    (await read()).files.filter((file) => file.path.startsWith(root)).map((file) => `${file.scope} ${posixRelative(root, file.path)} ${file.loads}`);
   return { at, read, listed };
 }
 
@@ -141,7 +143,7 @@ describe("readInstructions", () => {
       stat.mockRestore();
       realpath.mockRestore();
       expect(looked.filter((target) => target.startsWith("/net") || target.endsWith(path.join("rules", "network")))).toEqual([]);
-      const shown = files.map((file) => `${file.scope} ${path.relative(at(""), file.path)} ${file.loads}`);
+      const shown = files.map((file) => `${file.scope} ${posixRelative(at(""), file.path)} ${file.loads}`);
       expect(shown).toEqual([
         "directory w/CLAUDE.md launch",
         "import outside/notes.md approval", // from a parent directory's file too: Claude Code asks first
@@ -179,7 +181,7 @@ describe("readInstructions", () => {
     const files = (await read()).files.filter((file) => file.path.startsWith(at("")));
     const looked = [...stat.mock.calls, ...lstat.mock.calls, ...realpath.mock.calls].map(([target]) => String(target));
     [stat, lstat, realpath].forEach((spy) => spy.mockRestore());
-    expect(files.map((file) => path.relative(at(""), file.path))).toEqual(["w/app/CLAUDE.local.md", "w/app/own.md"]);
+    expect(files.map((file) => posixRelative(at(""), file.path))).toEqual(["w/app/CLAUDE.local.md", "w/app/own.md"]);
     expect(looked.filter((target) => target.startsWith("/net"))).toEqual([]);
   });
 
@@ -190,7 +192,7 @@ describe("readInstructions", () => {
     symlinkSync(at("w/app/real.md"), at("w/app/x.md"));
     symlinkSync(at("w/app/real.md"), at("w/app/y.md"));
     const files = (await read()).files.filter((file) => file.path.startsWith(at("")));
-    expect(files.map((file) => `${path.relative(at(""), file.path)} ${file.loads}`)).toEqual([
+    expect(files.map((file) => `${posixRelative(at(""), file.path)} ${file.loads}`)).toEqual([
       "w/app/CLAUDE.md launch",
       "w/app/x.md launch",
       "w/app/.claude/rules/a.md approval",
