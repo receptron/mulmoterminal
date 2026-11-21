@@ -70,5 +70,12 @@ export async function directoriesByFolder(
   return uniqueByFolder(resolved);
 }
 
+/** Whether `dir` is, right now, the checkout Claude Code names folder `folder` after — asked afresh,
+ *  past the kept answers, since a link repointed in the meantime would start a session elsewhere. */
+export async function namesFolderNow(dir: string, folder: string, realpath: RealPath = nativeRealpath): Promise<boolean> {
+  const real = await realpath(path.resolve(dir)).catch(() => null);
+  return real !== null && encodeProjectDirName(real) === folder;
+}
+
 /** Forget the resolved names, for tests. */
 export const forgetResolvedFolders = (): void => held.clear();

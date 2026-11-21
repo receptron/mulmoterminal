@@ -65,8 +65,8 @@ describe("directoriesByFolder", () => {
     const resolve = (absolute: string) => (asked.push(absolute), Promise.resolve(absolute));
     await directoriesByFolder(["/w/app", "/w/app"], resolve, 1000);
     await directoriesByFolder(["/w/app"], resolve, 1000 + REALPATH_MEMO_MS - 1);
-    expect(asked).toEqual(["/w/app"]);
+    expect(asked).toEqual([path.resolve("/w/app")]);
     await directoriesByFolder(["/w/app"], resolve, 1000 + REALPATH_MEMO_MS);
-    expect(asked).toEqual(["/w/app", "/w/app"]);
+    expect(asked).toEqual([path.resolve("/w/app"), path.resolve("/w/app")]);
   });
 });

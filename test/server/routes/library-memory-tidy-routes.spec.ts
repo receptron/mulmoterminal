@@ -4,15 +4,19 @@
 // for a name that is not a folder name, a project with no memory, or a directory not on this machine.
 import { describe, it, expect, afterEach } from "vitest";
 import express from "express";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { routeCall } from "../../helpers/routeCall";
 import { mountLibraryRoutes } from "../../../server/routes/library-routes";
 import { encodeProjectDirName } from "../../../server/session/project-dir";
+import { forgetResolvedFolders } from "../../../server/backends/library/project-folders";
 
 const dirs: string[] = [];
-afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+afterEach(() => {
+  dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true }));
+  forgetResolvedFolders();
+});
 
 function setup(options: { allowed?: boolean; withMemory?: boolean; projectHere?: boolean; name?: string; alsoIndexed?: string[] } = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "mt-tidy-"));
@@ -78,5 +82,33 @@ describe("POST /api/library/memory/:slug/tidy", () => {
     const { post, spawned, slug } = setup({ projectHere: false });
     expect((await post(slug)).status).toBe(409);
     expect(spawned).toEqual([]);
+  });
+
+  it.skipIf(process.platform === "win32")("refuses a link repointed elsewhere while its last answer is still kept", async () => {
+    const root = realpathSync.native(mkdtempSync(path.join(tmpdir(), "mt-tidy-link-")));
+    dirs.push(root);
+    const [app, other, link] = ["app", "other", "current"].map((name) => path.join(root, name));
+    [app, other].forEach((dir) => mkdirSync(dir));
+    symlinkSync(app, link);
+    const slug = encodeProjectDirName(app);
+    const projectsRoot = path.join(root, "projects");
+    mkdirSync(path.join(projectsRoot, slug, "memory"), { recursive: true });
+    const spawned: unknown[][] = [];
+    const server = express();
+    server.use(express.json());
+    mountLibraryRoutes(server, {
+      projectsRoot,
+      call: (method) => Promise.resolve(method === "directories" ? [link] : null),
+      promote: {
+        spawnSession: (...args) => (spawned.push(args), Promise.resolve({ sessionId: "s", agent: "claude", seedRuns: true })),
+        isAllowedOrigin: () => true,
+      },
+    });
+    const post = () => routeCall(server)(`/api/library/memory/${slug}/tidy`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    expect((await post()).status).toBe(200);
+    unlinkSync(link);
+    symlinkSync(other, link);
+    expect((await post()).status).toBe(409);
+    expect(spawned.map((args) => args[1])).toEqual([link]);
   });
 });
