@@ -14,6 +14,15 @@ export const skillsViewJa = {
     noMatch: "この検索に合うスキルはありません。",
     pick: "スキルを選ぶと SKILL.md を表示します。",
     docFailed: "この SKILL.md を読み込めませんでした。",
+    edit: {
+      edit: "編集",
+      label: "SKILL.md の本文",
+      save: "保存",
+      cancel: "やめる",
+      changed: "開いたあとに SKILL.md が変わったので、保存しませんでした。編集を写してから",
+      reload: "読み直す",
+      failed: "保存できませんでした。少ししてからもう一度試してください。",
+    },
     modes: "探す場所",
     mode: { local: "このマシン", remote: "skills.sh" },
     remote: {

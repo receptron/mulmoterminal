@@ -11,7 +11,7 @@ import { SLUG_RE } from "../../agents/codex/codex-skills.js";
 import { assembleSkillCatalog, recentDistinctDirs, type FoundPlugin, type FoundSource, type SkillCatalog } from "../../../common/skillCatalog.js";
 
 /** A SKILL.md is a page of instructions; anything past this is not one, and is not read whole. */
-const MAX_SKILL_DOC_BYTES = 1024 * 1024;
+export const MAX_SKILL_DOC_BYTES = 1024 * 1024;
 const SKILL_FILE = "SKILL.md";
 
 export interface SkillCatalogOptions {
@@ -66,11 +66,16 @@ async function allowedRoot(request: SkillDocRequest): Promise<string | null> {
   return install ? pluginSkillsDir(install) : null;
 }
 
+/** Where a request's SKILL.md is, or null when the request is not allowed. */
+export async function skillDocFile(request: SkillDocRequest): Promise<string | null> {
+  const root = await allowedRoot(request);
+  return root === null || !SLUG_RE.test(request.slug) ? null : join(root, request.slug, SKILL_FILE);
+}
+
 /** The SKILL.md text, or null when the request is not allowed, the file is missing, or too large. */
 export async function readSkillDoc(request: SkillDocRequest): Promise<string | null> {
-  const root = await allowedRoot(request);
-  if (root === null || !SLUG_RE.test(request.slug)) return null;
-  const file = join(root, request.slug, SKILL_FILE);
+  const file = await skillDocFile(request);
+  if (file === null) return null;
   try {
     if ((await stat(file)).size > MAX_SKILL_DOC_BYTES) return null;
     return await readFile(file, "utf-8");

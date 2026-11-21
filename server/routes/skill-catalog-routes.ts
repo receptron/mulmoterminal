@@ -6,6 +6,10 @@ import { rememberedSessionCwds } from "../session/registry.js";
 import { readSkillCatalog, readSkillDoc, type SkillDocSource } from "../backends/skills/skillCatalog.js";
 import { MAX_QUERY_CHARS, readSkillsShSkill, searchSkillsSh, type FetchText } from "../backends/skills/skillsSh.js";
 import { isRemoteSkillId, isRemoteSource } from "../../common/skillsSh.js";
+import { isEditableSkill, writeSkillDoc } from "../backends/skills/skillEdit.js";
+import { isFaithfulText, memoryVersion } from "../backends/library/memory-write.js";
+import { memoryEditOf } from "./library-memory-routes.js";
+import { requestBody } from "./requestBody.js";
 
 const nonEmpty = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
 
@@ -36,7 +40,29 @@ export function mountSkillCatalogRoutes(app: Express, deps: SkillCatalogRouteDep
       res.status(404).json({ error: "skill not found" });
       return;
     }
-    res.json({ markdown });
+    // A version to save over, for a skill the user may edit here: one not written faithfully as text has none.
+    const editable = isEditableSkill(docSource(req.query), slug) && isFaithfulText(markdown);
+    res.json({ markdown, editable, ...(editable ? { version: memoryVersion(markdown) } : {}) });
+  });
+
+  // Saves a SKILL.md over the text it was opened on: 409 when it changed since, 400 when it is not one
+  // to edit here (a plugin's, a bundled one, or a request that names no skill).
+  app.put("/api/skills/doc", async (req, res) => {
+    const body = requestBody(req.body);
+    const edit = memoryEditOf(body);
+    const slug = typeof body.slug === "string" ? body.slug : "";
+    if (edit === null) {
+      res.status(400).json({ error: "expected { slug, text, version }" });
+      return;
+    }
+    try {
+      const written = await writeSkillDoc({ source: docSource(body), slug, cwds: await rememberedSessionCwds() }, edit.text, edit.version);
+      if (written.kind === "written") res.json({ version: written.version });
+      else if (written.kind === "conflict") res.status(409).json({ error: "the skill changed since it was opened", version: written.version });
+      else res.status(400).json({ error: "this skill cannot be edited here" });
+    } catch {
+      res.status(500).json({ error: "the skill could not be written" });
+    }
   });
 
   mountSkillsShRoutes(app, deps.fetchSkillsSh);

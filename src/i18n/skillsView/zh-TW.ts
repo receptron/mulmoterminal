@@ -14,6 +14,15 @@ export const skillsViewZhTW = {
     noMatch: "沒有符合此搜尋的技能。",
     pick: "選擇一個技能以檢視其 SKILL.md。",
     docFailed: "無法讀取此 SKILL.md。",
+    edit: {
+      edit: "編輯",
+      label: "SKILL.md 內文",
+      save: "儲存",
+      cancel: "取消",
+      changed: "開啟後 SKILL.md 已變更，因此沒有儲存。請先複製你的編輯，然後",
+      reload: "重新讀取",
+      failed: "無法儲存，請稍後再試。",
+    },
     modes: "尋找位置",
     mode: { local: "本機", remote: "skills.sh" },
     remote: {
