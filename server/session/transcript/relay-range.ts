@@ -8,6 +8,7 @@
 
 import { createHash } from "node:crypto";
 import type { TranscriptTurn } from "../../../common/transcriptView.js";
+import { ownWordsOf } from "./relayed-prompt.js";
 
 export interface RelayTurn {
   prompt: string;
@@ -68,8 +69,9 @@ export function completedCount(turns: readonly RelayTurn[], lastCompletedPrompt:
 
 const codePoints = (text: string): number => [...text].length;
 
+// The prompt as formatRelay emits it, so a turn that only carried a pasted handoff costs its reply.
 export const relayTurnChars = (turn: RelayTurn, limits: RelayLimits): number =>
-  Math.min(codePoints(turn.prompt), limits.promptMaxChars) + turn.replies.reduce((n, reply) => n + codePoints(reply), 0);
+  Math.min(codePoints(ownWordsOf(turn.prompt)), limits.promptMaxChars) + turn.replies.reduce((n, reply) => n + codePoints(reply), 0);
 
 /** The newest turns that fit the budget, oldest first — always at least the newest one. */
 function newestThatFit(pending: readonly RelayTurn[], limits: RelayLimits): RelayTurn[] {

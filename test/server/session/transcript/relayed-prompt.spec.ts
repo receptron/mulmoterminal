@@ -2,6 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { ownWordsOf } from "../../../../server/session/transcript/relayed-prompt.js";
 import { formatHandoff, formatRelay } from "../../../../server/session/transcript/handoff-text.js";
+import { DEFAULT_RELAY_LIMITS, relayTurnChars } from "../../../../server/session/transcript/relay-range.js";
 
 const source = { label: "codex · feat/x", cwd: "/w/proj" };
 const turn = (prompt: string, reply: string) => ({ prompt, promptClipped: false, replies: [reply], at: null });
@@ -31,6 +32,12 @@ describe("ownWordsOf", () => {
 
   it("leaves a prompt that is not a handoff exactly as it was", () => {
     ["review this", "", "   ", "see Another terminal (x) above", "--- end ---", "line one\n--- end ---\nline two"].forEach((prompt) =>
+      expect(ownWordsOf(prompt)).toBe(prompt),
+    );
+  });
+
+  it("leaves a human prompt that merely starts with the opening words alone", () => {
+    ["Another terminal (the codex one) said the plan is wrong", "Another terminal (x)\n\nfirst\n--- end ---\nsecond"].forEach((prompt) =>
       expect(ownWordsOf(prompt)).toBe(prompt),
     );
   });
@@ -66,5 +73,14 @@ describe("the formatters do not echo a relayed prompt back", () => {
     expect(text).not.toContain("--- their prompt (1/2) ---");
     expect(text).toContain("--- their reply (1/2) ---\n\nr1");
     expect(text).toContain("--- their prompt (2/2) ---\n\nplain");
+  });
+});
+
+describe("the relay budget counts the prompt as it is sent", () => {
+  it("a turn whose prompt was only a pasted handoff costs its reply", () => {
+    const pasted = formatHandoff(source, { prompt: "x".repeat(2_000), reply: "y" });
+    expect(relayTurnChars(turn(pasted, "reply"), DEFAULT_RELAY_LIMITS)).toBe("reply".length);
+    expect(relayTurnChars(turn(`${pasted}\n\nmine`, "reply"), DEFAULT_RELAY_LIMITS)).toBe("mine".length + "reply".length);
+    expect(relayTurnChars(turn("plain", "reply"), DEFAULT_RELAY_LIMITS)).toBe("plain".length + "reply".length);
   });
 });
