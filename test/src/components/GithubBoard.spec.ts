@@ -277,6 +277,52 @@ describe("GithubBoard", () => {
     expect(w.find('[data-testid="board-column-todo"]').exists()).toBe(false);
   });
 
+  it("shows the loading state where the cards go until the first read answers", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        await gate;
+        return new Response(JSON.stringify({ repos: [{ repo: "o/r", cards: [prCard] }] }));
+      }),
+    );
+    const w = mount(GithubBoard);
+    await flushPromises();
+    expect(w.find('[data-testid="github-loading"]').exists()).toBe(true);
+    expect(w.get('[data-testid="board-refresh"] .material-symbols-outlined').classes()).toContain("animate-spin");
+    release();
+    await flushPromises();
+    expect(w.find('[data-testid="github-loading"]').exists()).toBe(false);
+    expect(w.get('[data-testid="board-column-review"]').text()).toContain("feat: it works");
+    w.unmount();
+  });
+
+  it("keeps the cards on screen while reading again, spinning the refresh button", async () => {
+    serve({ repos: [{ repo: "o/r", cards: [prCard] }] });
+    const w = mount(GithubBoard);
+    await flushPromises();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => {})),
+    );
+    await w.get('[data-testid="board-refresh"]').trigger("click");
+    expect(w.find('[data-testid="github-loading"]').exists()).toBe(false);
+    expect(w.get('[data-testid="board-column-review"]').text()).toContain("feat: it works");
+    expect(w.get('[data-testid="board-refresh"]').attributes("aria-busy")).toBe("true");
+    expect(w.get('[data-testid="board-refresh"] .material-symbols-outlined').classes()).toContain("animate-spin");
+    w.unmount();
+  });
+
+  it("drops the loading state for the failure line when the first read fails", async () => {
+    serve(null);
+    const w = mount(GithubBoard);
+    await flushPromises();
+    expect(w.find('[data-testid="github-loading"]').exists()).toBe(false);
+    expect(w.text()).toContain("Could not read the board.");
+    w.unmount();
+  });
+
   it("says the board could not be read when the request fails", async () => {
     serve(null);
     const w = mount(GithubBoard);

@@ -12,6 +12,7 @@ import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTim
 import { useAppConfig } from "../composables/useAppConfig";
 import GithubBoardCard from "./GithubBoardCard.vue";
 import GithubBoardDetail from "./GithubBoardDetail.vue";
+import GithubLoading from "./GithubLoading.vue";
 import IssueStartAgentPicker from "./IssueStartAgentPicker.vue";
 import { useIssueStart } from "../composables/useIssueStart";
 import { boardSelection, type BoardSelection } from "../composables/useGithubBoardView";
@@ -28,6 +29,8 @@ const { boardOpenWorkOnly, setBoardOpenWorkOnly } = useBoardOpenWorkOnly();
 
 const repos = ref<RepoBoard[]>([]);
 const loading = ref(false);
+// Until the first read answers there is nothing to show yet, which is not the same as nothing open.
+const loaded = ref(false);
 const failed = ref(false);
 let requestId = 0;
 
@@ -52,7 +55,10 @@ async function load(): Promise<void> {
   } catch {
     if (id === requestId) failed.value = true;
   } finally {
-    if (id === requestId) loading.value = false;
+    if (id === requestId) {
+      loading.value = false;
+      loaded.value = true;
+    }
   }
 }
 
@@ -102,11 +108,12 @@ onBeforeUnmount(() => (boardSelection.value = null));
         :disabled="loading"
         :data-tip="t('githubBoard.refresh')"
         :aria-label="t('githubBoard.refresh')"
+        :aria-busy="loading"
+        data-testid="board-refresh"
         @click="load"
       >
-        <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
+        <span class="material-symbols-outlined" :class="{ 'animate-spin': loading }" aria-hidden="true">refresh</span>
       </button>
-      <span v-if="loading" class="text-[12px] text-muted">{{ t("githubBoard.loading") }}</span>
       <label class="flex cursor-pointer items-center gap-1.5 text-[12px] text-secondary">
         <input type="checkbox" data-testid="board-open-work-only" :checked="boardOpenWorkOnly" @change="onOpenWorkOnlyChange" />
         {{ t("githubBoard.openWorkOnly") }}
@@ -138,7 +145,8 @@ onBeforeUnmount(() => (boardSelection.value = null));
       <div class="min-w-0 flex-auto overflow-auto px-4 pb-16 pt-3">
         <p class="mb-3 text-[12px] text-muted">{{ t("githubBoard.rule") }}</p>
         <p v-if="startError" data-testid="issue-start-error" class="mb-3 text-[13px] text-err">{{ startError }}</p>
-        <p v-if="failed" class="px-1 py-6 text-[13px] text-err">{{ t("githubBoard.loadFailed") }}</p>
+        <GithubLoading v-if="!loaded" />
+        <p v-else-if="failed" class="px-1 py-6 text-[13px] text-err">{{ t("githubBoard.loadFailed") }}</p>
         <p v-else-if="!loading && noRepos" class="px-1 py-6 text-[13px] text-muted">{{ t("githubBoard.noRepos") }}</p>
         <p v-else-if="nothingOpen" data-testid="board-nothing-open" class="px-1 py-6 text-[13px] text-muted">
           {{ t("githubBoard.nothingOpen") }}

@@ -124,6 +124,45 @@ describe("GithubPane", () => {
     expect(w.text()).toContain("No repositories configured");
   });
 
+  it("shows the loading state where the lists go until the first read answers", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    mockFetch([{ repo: "octo/a", prs: [pr(1, "first")] }]);
+    const answer = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        await gate;
+        return answer(input);
+      }),
+    );
+    const w = mount(GithubPane);
+    await flushPromises();
+    expect(w.find('[data-testid="github-loading"]').exists()).toBe(true);
+    expect(w.text()).not.toContain("No repositories configured");
+    expect(w.get('[data-testid="github-refresh"] .material-symbols-outlined').classes()).toContain("animate-spin");
+    release();
+    await flushPromises();
+    expect(w.find('[data-testid="github-loading"]').exists()).toBe(false);
+    expect(w.get('[data-testid="github-refresh"] .material-symbols-outlined').classes()).not.toContain("animate-spin");
+    expect(w.text()).toContain("first");
+  });
+
+  it("keeps the lists on screen while reading again, spinning the reload button", async () => {
+    mockFetch([{ repo: "octo/a", prs: [pr(1, "first")] }]);
+    const w = mount(GithubPane);
+    await flushPromises();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => {})),
+    );
+    await w.get('[data-testid="github-refresh"]').trigger("click");
+    expect(w.find('[data-testid="github-loading"]').exists()).toBe(false);
+    expect(w.text()).toContain("first");
+    expect(w.get('[data-testid="github-refresh"]').attributes("aria-busy")).toBe("true");
+    expect(w.get('[data-testid="github-refresh"] .material-symbols-outlined').classes()).toContain("animate-spin");
+  });
+
   it("lists repos in the configured order", async () => {
     mockFetch([
       { repo: "octo/first", prs: [pr(1, "one")] },
