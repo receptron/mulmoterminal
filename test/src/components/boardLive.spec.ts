@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { boardSessionIds, cardWaiting, finishedTurns, withLiveCells } from "../../../src/components/boardLive";
+import { boardSessionIds, cardWaiting, closesAfter, finishedTurns, withLiveCells, withoutClosedCells } from "../../../src/components/boardLive";
 import type { BoardCard, BoardCell, RepoBoard } from "../../../common/githubBoard";
 
 const cell = (session: string, over: Partial<BoardCell> = {}): BoardCell => ({ session, cwd: `/w/${session}`, working: false, waiting: false, ...over });
@@ -79,5 +79,68 @@ describe("finishedTurns", () => {
     ).toEqual([]);
     expect(finishedTurns(map([["s1", false]]), map([]))).toEqual([]);
     expect(finishedTurns(map([]), map([["s1", false]]))).toEqual([]);
+  });
+});
+
+describe("withoutClosedCells", () => {
+  const repos: RepoBoard[] = [
+    { repo: "o/a", cards: [card("x", [cell("s1"), cell("s2")]), card("y", [cell("s1")])] },
+    { repo: "o/err", error: "gh failed" },
+  ];
+
+  it("drops a closed session's cell from every card that carries it, keeping the rest", () => {
+    const out = withoutClosedCells(repos, new Map([["s1", 1]]));
+    expect(out[0].cards?.map((c) => c.cells.map((x) => x.session))).toEqual([["s2"], []]);
+    expect(out[1]).toEqual(repos[1]);
+  });
+
+  it("keeps the card itself when its last cell closes, for the switch to decide", () => {
+    expect(withoutClosedCells(repos, new Map([["s1", 1]]))[0].cards?.map((c) => c.key)).toEqual(["x", "y"]);
+  });
+
+  it("changes nothing with no closes, or closes of sessions on no card", () => {
+    expect(withoutClosedCells(repos, new Map())).toEqual(repos);
+    expect(withoutClosedCells(repos, new Map([["gone", 3]]))).toEqual(repos);
+  });
+
+  it("does not change the board it was handed", () => {
+    const before = structuredClone(repos);
+    withoutClosedCells(
+      repos,
+      new Map([
+        ["s1", 1],
+        ["s2", 2],
+      ]),
+    );
+    expect(repos).toEqual(before);
+  });
+
+  it("answers an empty board with an empty one", () => {
+    expect(withoutClosedCells([], new Map([["s1", 1]]))).toEqual([]);
+  });
+});
+
+describe("closesAfter", () => {
+  const closed = new Map([
+    ["early", 1],
+    ["late", 5],
+  ]);
+
+  it("keeps only the closes that arrived after the read was sent", () => {
+    expect([...closesAfter(closed, 3).keys()]).toEqual(["late"]);
+  });
+
+  it("keeps every close for a read sent before all of them, and none for one sent after", () => {
+    expect([...closesAfter(closed, 0).keys()]).toEqual(["early", "late"]);
+    expect(closesAfter(closed, 6).size).toBe(0);
+  });
+
+  it("does not change the map it was handed", () => {
+    closesAfter(closed, 6);
+    expect(closed.size).toBe(2);
+  });
+
+  it("answers no closes with none", () => {
+    expect(closesAfter(new Map(), 1).size).toBe(0);
   });
 });
