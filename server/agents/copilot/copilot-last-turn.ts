@@ -2,10 +2,9 @@
 // round-table seat contributes, and what the finished-turn push quotes (capability matrix row 12).
 //
 // Read from `session-state/<id>/events.jsonl`, NOT from the `turns` table the conversation view
-// uses. The table is written one turn LATE: measured against copilot 1.0.83, a turn's row appears
-// when the NEXT prompt is submitted, so the newest finished answer is never in it. Reading it here
-// would hand another cell the previous turn's answer as this one's — the error that cannot be seen
-// at the other end.
+// uses. On copilot 1.0.83 the table was written one turn LATE — a turn's row appeared when the NEXT
+// prompt was submitted — and reading it would hand another cell the previous turn's answer as this
+// one's. 1.0.114 writes the row with the answer, but an older CLI can still be installed.
 //
 // THE RECORD SHAPE, measured on live sessions (tools, a shell command, a subagent, an interrupt).
 // One JSON object per line, `{type, data, id, timestamp, parentId}`:
