@@ -2009,7 +2009,7 @@ narrow and tall for one record you are discussing — and each position keeps it
   - **Tool traffic is folded away**, one line saying what ran (`Bash · Read`); click to open it.
     It is most of a turn's bulk and almost none of what you came back to read.
   - A **snapshot**, not a live tail — the terminal beside it is the live view — and the header's
-    reload fetches the newest turns again. Claude, Codex, Cursor, Copilot and Grok; an agent whose
+    reload fetches the newest turns again. Claude, Codex, Cursor, Copilot, Grok and Antigravity; an agent whose
     conversation no reader here can read yet says so rather than showing an empty pane.
 - **Notifications** (🔔) — a toolbar bell with an unread badge and a dropdown of active
   notifications; click a row to jump to its session.
