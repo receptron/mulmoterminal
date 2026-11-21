@@ -8,6 +8,19 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@13.5.0 — 2026-11-22
+
+> **Setup guide:** [13.5.0 — Usage counts money when it was spent, by model](https://receptron.github.io/mulmoterminal/guide/en/v13.5.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.5.0.html))
+
+### Usage retrospective: money and tokens in the week they were spent, by model (#3396)
+
+For #3395, the two parts #3390 left for later (#3335).
+
+- **When it was spent**: Claude Code records cost only as `cost-state` running totals with no time. The index now keeps each reply's weight (its tokens at relative prices: input 1, cache write 1.25, cache read 0.1, output 5) in its 15-minute slot, one row per reply id in a new `replies (path, id, at, model, weight)` table, so a later record of the same reply replaces it; and each conversation's per-model totals in a new `spend_models` column. `server/backends/library/spend-split.ts` splits a model's totals over that model's replies by weight when read (for one model, cost per unit of weight is its price); a model with no reply of its own in the file (a subagent's, or a cost with no breakdown) is split over every reply, and a conversation with no reply keeps its spending at its start. Conversations and PRs still count in the week they started.
+- **By model and tokens**: `/usage` adds a by-model table (spent, input, output, cache read, cache write) and a token total line; `LibraryRetrospective` gains `models` and `total.tokens`.
+- **Every count kept**: counts are kept by `startTime`, a count Claude Code returns to continues where it was, and within a count the overall cost is the larger of the models' highest totals and the record's own `totalCostUSD`, so records with and without a breakdown never add up twice; what exceeds the breakdown shows under the unknown model. The index used to keep only the last `cost-state`; a conversation's `cost_usd` in the Library is now the sum of every count.
+- `LIBRARY_SCHEMA_VERSION` 6 → 7: the index is rebuilt once in the background. The retrospective's two reads share one snapshot.
+
 ## mulmoterminal@13.4.0 — 2026-11-22
 
 > **Setup guide:** [13.4.0 — Ask Claude to tidy a project's memory](https://receptron.github.io/mulmoterminal/guide/en/v13.4.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.4.0.html))
