@@ -27,6 +27,8 @@ const emit = defineEmits<{ "open-conversation": [conversation: LibraryConversati
 const { t, locale } = useI18n();
 
 const candidates = ref<RepeatCandidate[]>([]);
+/** How many there are in all; the list holds the most typed of them. */
+const total = ref(0);
 const loaded = ref(false);
 const failed = ref(false);
 const chosenId = ref<string | null>(null);
@@ -52,7 +54,8 @@ const recentSessions = computed(() => {
 async function load(): Promise<void> {
   const found = await loadLibraryRepeats();
   failed.value = found === null;
-  candidates.value = found ?? [];
+  candidates.value = found?.candidates ?? [];
+  total.value = found?.total ?? 0;
   loaded.value = true;
 }
 void load();
@@ -89,8 +92,12 @@ async function promote(target: RepeatTarget): Promise<void> {
   if (selected.value?.id === candidate.id) notice.value = refusal === null ? null : t(refusal);
 }
 
+// Only the last click opens anything: a slower answer to an earlier one is dropped.
+let opens = 0;
 async function openSession(sessionId: string, cwd: string | null): Promise<void> {
+  const mine = ++opens;
   const conversation = await loadLibraryConversation(sessionId, cwd);
+  if (mine !== opens) return;
   if (conversation === null) notice.value = t("libraryView.repeats.noConversation");
   else emit("open-conversation", conversation);
 }
@@ -121,6 +128,9 @@ defineExpose({ move });
       class="min-h-0 w-[360px] flex-none overflow-y-auto border-r border-border py-2 max-[760px]:w-full max-[760px]:border-r-0"
       :class="readerShown ? 'max-[760px]:hidden' : ''"
     >
+      <p v-if="total > candidates.length" class="m-0 px-4 pb-1 font-sans text-[12px] text-dim" data-testid="repeats-more">
+        {{ t("libraryView.repeats.more", { shown: candidates.length, total }) }}
+      </p>
       <p class="m-0 px-4 pb-1 font-sans text-[12px] text-dim">
         {{ t("libraryView.repeats.intro", { days: REPEAT_WINDOW_DAYS, count: REPEAT_MIN_COUNT, sessions: REPEAT_MIN_SESSIONS }) }}
       </p>

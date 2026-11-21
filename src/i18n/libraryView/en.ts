@@ -137,6 +137,7 @@ export const libraryViewEn = {
       olderShown: "The last measurement failed, so this is an older one.",
     },
     repeats: {
+      more: "The {shown} most typed of {total}.",
       kind: "Repeats",
       search: "Search repeated instructions",
       shortcuts: "/ search · ↑↓ move · Esc close",

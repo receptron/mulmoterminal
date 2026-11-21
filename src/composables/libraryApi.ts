@@ -24,7 +24,7 @@ import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
 import type { PromoteTarget } from "../../common/libraryPromote";
 import { isLibraryStorageAnswer, type LibraryStorageAnswer } from "../../common/libraryStorage";
-import { isRepeatCandidate, isRepeatDetail, type RepeatCandidate, type RepeatDetail, type RepeatTarget } from "../../common/libraryRepeats";
+import { isRepeatDetail, isRepeatList, type RepeatDetail, type RepeatList, type RepeatTarget } from "../../common/libraryRepeats";
 
 /** The index answers a page from what it holds, but a first open also starts the worker. */
 const LIBRARY_READ_TIMEOUT_MS = 15_000;
@@ -216,10 +216,10 @@ export async function loadLibraryRepeat(id: string): Promise<RepeatDetail | null
   return isRepeatDetail(body) ? body : null;
 }
 
-/** Instructions typed again and again, most typed first (#3334). */
-export async function loadLibraryRepeats(): Promise<RepeatCandidate[] | null> {
+/** Instructions typed again and again, the most typed first, and how many there are (#3334). */
+export async function loadLibraryRepeats(): Promise<RepeatList | null> {
   const body = await readJson("/api/library/repeats");
-  return body !== null && isUnknownArray(body.candidates) ? body.candidates.filter(isRepeatCandidate) : null;
+  return isRepeatList(body) ? body : null;
 }
 
 async function postPromote(url: string, body: Record<string, unknown>): Promise<LibraryPromoteResult> {

@@ -22,7 +22,7 @@ export const REPEAT_CLOSE_SIMILARITY = 0.7;
 /** A letter pair held by more keys than this ("して", "th") says little about which keys are alike,
  *  so it is not used to find the keys to compare. */
 export const REPEAT_PAIR_HOLDERS_MAX = 200;
-/** How many keys, those sharing the most letter pairs with one, are compared with it: what keeps the
+/** How many keys, those most alike to one by the pairs counted, are compared with it: what keeps the
  *  work linear in the number of keys whatever the log holds. */
 export const REPEAT_COMPARED_MAX = 50;
 
@@ -108,9 +108,10 @@ function unionFind(): KeyGroups {
   return { find, join: (a, b) => parent.set(find(a), find(b)) };
 }
 
-/** The keys after `key` that share the most of its letter pairs, counting only pairs few keys hold;
- *  and how many holders it counted through. */
-function closestKeys(key: string, own: Set<string>, holders: Map<string, string[]>): { closest: string[]; counted: number } {
+/** The keys after `key` most alike to it by the uncommon letter pairs they share — ranked by the share
+ *  of both keys' pairs those make, not by how many they are, so a long key that holds all of a short
+ *  one's pairs does not crowd out its real match — and how many holders it counted through. */
+function closestKeys(key: string, own: Set<string>, pairs: Map<string, Set<string>>, holders: Map<string, string[]>): { closest: string[]; counted: number } {
   const shared = new Map<string, number>();
   let counted = 0;
   own.forEach((pair) => {
@@ -121,7 +122,9 @@ function closestKeys(key: string, own: Set<string>, holders: Map<string, string[
       if (other > key) shared.set(other, (shared.get(other) ?? 0) + 1);
     });
   });
+  const likeness = ([other, count]: [string, number]): number => count / (own.size + (pairs.get(other)?.size ?? 0) - count);
   const closest = [...shared.entries()]
+    .map((entry): [string, number] => [entry[0], likeness(entry)])
     .sort((a, b) => b[1] - a[1])
     .slice(0, REPEAT_COMPARED_MAX)
     .map(([other]) => other);
@@ -145,7 +148,7 @@ export function joinAlike(keys: readonly string[], groups: KeyGroups): AlikeWork
   const work: AlikeWork = { counted: 0, compared: 0 };
   keys.forEach((key) => {
     const own = pairs.get(key) ?? new Set<string>();
-    const { closest, counted } = closestKeys(key, own, holders);
+    const { closest, counted } = closestKeys(key, own, pairs, holders);
     work.counted += counted;
     closest.forEach((other) => {
       work.compared += 1;
@@ -164,16 +167,21 @@ const mostFirst = (values: readonly string[]): string[] => {
 /** A stable id for a group: from its most typed key. */
 export const repeatId = (key: string): string => createHash("sha256").update(key).digest("hex").slice(0, 16);
 
+/** How many forms and directories one candidate names: the most typed ones. */
+export const REPEAT_NAMED_MAX = 10;
+/** How many candidates one answer lists: the most typed ones; `total` says how many there were. */
+export const REPEAT_LISTED_MAX = 200;
+
 /** A group as a candidate: its most typed form, its counts, where and when last. */
 export function candidateOf(members: ReadonlyArray<RepeatPrompt & { key: string }>): RepeatCandidate {
   const variants = mostFirst(members.map((member) => member.text));
   return {
     id: repeatId(mostFirst(members.map((member) => member.key))[0] ?? ""),
     text: variants[0] ?? "",
-    variants,
+    variants: variants.slice(0, REPEAT_NAMED_MAX),
     count: members.length,
     sessions: new Set(members.map((member) => member.sessionId)).size,
-    projects: mostFirst(members.flatMap((member) => (member.project === null ? [] : [member.project]))),
+    projects: mostFirst(members.flatMap((member) => (member.project === null ? [] : [member.project]))).slice(0, REPEAT_NAMED_MAX),
     lastAt: Math.max(...members.map((member) => member.at)),
   };
 }

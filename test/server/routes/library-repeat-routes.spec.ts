@@ -17,6 +17,8 @@ import { localLibraryCaller } from "../../../server/backends/library/library-dis
 import { emptyConversationState } from "../../../server/backends/library/conversation-fold";
 import { AUTOMATED_ENTRYPOINT } from "../../../common/library";
 import { isRepeatCandidate, isRepeatDetail } from "../../../common/libraryRepeats";
+import { REPEAT_LISTED_MAX } from "../../../server/backends/library/repeat-detect";
+import { createHash } from "node:crypto";
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
@@ -81,6 +83,30 @@ describe("GET /api/library/repeats", () => {
     const answer = await request("/api/library/repeats");
     expect(answer.status).toBe(200);
     expect(answer.body.candidates).toEqual([expect.objectContaining({ text: MERGE, count: 3, sessions: 3, projects: [project] })]);
+    expect(answer.body.total).toBe(1);
+  });
+
+  it("lists the most typed up to the bound, and says how many there are", async () => {
+    const { request, root, project } = setup();
+    const extra = REPEAT_LISTED_MAX + 1;
+    const lines = Array.from({ length: extra }, (_, at) => {
+      const text = `do ${createHash("sha256").update(String(at)).digest("hex").slice(0, 24)}`;
+      return ["x", "y", "z"].flatMap((session) => [
+        JSON.stringify({ sessionId: `${session}${String(at)}`, display: text, project, timestamp: NOW - at }),
+        JSON.stringify({
+          sessionId: `${session}${String(at)}`,
+          display: createHash("sha256")
+            .update(`${session}${String(at)}`)
+            .digest("hex"),
+          project,
+          timestamp: NOW - at,
+        }),
+      ]);
+    });
+    writeFileSync(path.join(root, "history.jsonl"), `${lines.flat().join("\n")}\n`);
+    const answer = await request("/api/library/repeats");
+    expect(answer.body.total).toBe(extra);
+    expect(Array.isArray(answer.body.candidates) ? answer.body.candidates.length : -1).toBe(REPEAT_LISTED_MAX);
   });
 
   it("answers one with each time it was typed, newest first, and 404 / 400 otherwise", async () => {

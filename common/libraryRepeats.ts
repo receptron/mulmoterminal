@@ -39,6 +39,12 @@ export interface RepeatCandidate {
   lastAt: number;
 }
 
+/** GET /api/library/repeats: the most typed candidates, and how many there are in all. */
+export interface RepeatList {
+  candidates: RepeatCandidate[];
+  total: number;
+}
+
 /** One candidate with the latest times it was typed, newest first (for the skill that promotes it);
  *  `count` is how many there were in all. */
 export interface RepeatDetail extends RepeatCandidate {
@@ -75,3 +81,6 @@ const isOccurrence = (value: unknown): value is RepeatOccurrence =>
 
 export const isRepeatDetail = (value: unknown): value is RepeatDetail =>
   isRepeatCandidate(value) && isRecord(value) && Array.isArray(value.occurrences) && value.occurrences.every(isOccurrence);
+
+export const isRepeatList = (value: unknown): value is RepeatList =>
+  isRecord(value) && Array.isArray(value.candidates) && value.candidates.every(isRepeatCandidate) && typeof value.total === "number";

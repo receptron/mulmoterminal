@@ -6,6 +6,10 @@ import type { RepeatCandidate, RepeatDetail } from "../../../../common/libraryRe
 import type { LibraryConversation } from "../../../../common/library";
 
 const NOW = Date.now();
+const fullConversation: LibraryConversation = {
+  ...{ id: "s2", agent: "claude", title: "t", cwd: "/w/app", gitBranch: null, prs: [], costUsd: null, linesAdded: null, linesRemoved: null },
+  ...{ startedAt: 1, endedAt: 2, skills: [], hookErrors: 0, userTurns: 1, isSidechain: false, parentId: null, isTemporary: false, entrypoint: "cli" },
+};
 const candidate = (id: string, text: string, over: Partial<RepeatCandidate> = {}): RepeatCandidate => ({
   id,
   text,
@@ -17,11 +21,13 @@ const candidate = (id: string, text: string, over: Partial<RepeatCandidate> = {}
   ...over,
 });
 let listed: RepeatCandidate[] | null = [];
+let extraTotal = 0;
 const promotes: unknown[][] = [];
 let refusal: string | null = null;
 let conversation: LibraryConversation | null = null;
+let openConversation: (() => Promise<LibraryConversation | null>) | null = null;
 vi.mock("../../../../src/composables/libraryApi", () => ({
-  loadLibraryRepeats: () => Promise.resolve(listed),
+  loadLibraryRepeats: () => Promise.resolve(listed === null ? null : { candidates: listed, total: listed.length + extraTotal }),
   loadLibraryRepeat: (id: string): Promise<RepeatDetail | null> => {
     const found = listed?.find((c) => c.id === id);
     return Promise.resolve(
@@ -37,7 +43,7 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
           },
     );
   },
-  loadLibraryConversation: () => Promise.resolve(conversation),
+  loadLibraryConversation: () => (openConversation ?? (() => Promise.resolve(conversation)))(),
 }));
 vi.mock("../../../../src/components/library/libraryPromoteStart", () => ({
   startRepeatPromote: (id: string, target: string) => (promotes.push([id, target]), Promise.resolve(refusal)),
@@ -59,6 +65,8 @@ beforeEach(() => {
   promotes.length = 0;
   refusal = null;
   conversation = null;
+  openConversation = null;
+  extraTotal = 0;
 });
 
 describe("LibraryRepeats", () => {
@@ -99,13 +107,30 @@ describe("LibraryRepeats", () => {
     await flushPromises();
     expect(wrapper.emitted("open-conversation")).toBeUndefined();
     expect(wrapper.get('[data-testid="repeat-notice"]').text()).not.toBe("");
-    conversation = {
-      ...{ id: "s2", agent: "claude", title: "t", cwd: "/w/app", gitBranch: null, prs: [], costUsd: null, linesAdded: null, linesRemoved: null },
-      ...{ startedAt: 1, endedAt: 2, skills: [], hookErrors: 0, userTurns: 1, isSidechain: false, parentId: null, isTemporary: false, entrypoint: "cli" },
-    };
+    conversation = fullConversation;
     await wrapper.findAll('[data-testid="repeat-session"]')[0]?.trigger("click");
     await flushPromises();
     expect(wrapper.emitted("open-conversation")).toEqual([[conversation]]);
+  });
+
+  it("opens only the conversation clicked last, when an earlier click answers later", async () => {
+    const wrapper = await mountWith();
+    const answers: Array<(value: LibraryConversation | null) => void> = [];
+    openConversation = () => new Promise((resolve) => answers.push(resolve));
+    const rows = wrapper.findAll('[data-testid="repeat-session"]');
+    await rows[0]?.trigger("click");
+    await rows[1]?.trigger("click");
+    const later = { ...fullConversation, id: "later" };
+    answers[1]?.(later);
+    answers[0]?.({ ...fullConversation, id: "earlier" });
+    await flushPromises();
+    expect(wrapper.emitted("open-conversation")).toEqual([[later]]);
+  });
+
+  it("says how many there are when the list holds only the most typed", async () => {
+    expect((await mountWith()).find('[data-testid="repeats-more"]').exists()).toBe(false);
+    extraTotal = 40;
+    expect((await mountWith()).get('[data-testid="repeats-more"]').text()).toContain("42");
   });
 
   it("walks the candidates with the arrow keys, stopping at the ends", async () => {

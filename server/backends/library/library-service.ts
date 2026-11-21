@@ -16,8 +16,8 @@ import {
 import type { LibraryIndex } from "./library-index.js";
 import { inReadSnapshot, readLease } from "./index-store.js";
 import { searchLibrary } from "./library-search.js";
-import type { RepeatCandidate, RepeatDetail } from "../../../common/libraryRepeats.js";
-import { candidateOf, occurrencesOf, repeatCandidates, repeatGroups, type RepeatPrompt, type RepeatRules } from "./repeat-detect.js";
+import type { RepeatDetail, RepeatList } from "../../../common/libraryRepeats.js";
+import { candidateOf, occurrencesOf, repeatCandidates, repeatGroups, REPEAT_LISTED_MAX, type RepeatPrompt, type RepeatRules } from "./repeat-detect.js";
 import { automatedSessions, promptLogReader } from "./repeat-source.js";
 import { isTemporaryCwd } from "./temporary-path.js";
 
@@ -40,8 +40,8 @@ export interface LibraryService {
   prCreators(repository: string, numbers: number[]): Promise<LibraryPrCreator[]>;
   /** The conversation that last wrote a memory file, by its path, when the index knows one. */
   memorySource(file: string): Promise<LibraryConversation | null>;
-  /** Instructions typed again and again, most typed first (#3334). */
-  repeats(): Promise<RepeatCandidate[]>;
+  /** Instructions typed again and again, the most typed first, and how many there are (#3334). */
+  repeats(): Promise<RepeatList>;
   /** One of them with each time it was typed, or null when no candidate has that id now. */
   repeat(id: string): Promise<RepeatDetail | null>;
   /** The retrospective's totals for the weeks up to now. */
@@ -105,7 +105,8 @@ export function createLocalLibraryService(index: LibraryIndex, options: LibraryS
       }),
     repeats: async () => {
       const { prompts, rules } = await repeats();
-      return repeatCandidates(prompts, rules);
+      const candidates = repeatCandidates(prompts, rules);
+      return { candidates: candidates.slice(0, REPEAT_LISTED_MAX), total: candidates.length };
     },
     repeat: async (id) => {
       const { prompts, rules } = await repeats();

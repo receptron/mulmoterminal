@@ -117,7 +117,7 @@ describe("dispatchLibraryRequest", () => {
     directories: () => (calls.push(["directories"]), Promise.resolve([])),
     search: (...args) => (calls.push(["search", ...args]), Promise.resolve([])),
     memorySource: (...args) => (calls.push(["memorySource", ...args]), Promise.resolve(null)),
-    repeats: () => (calls.push(["repeats"]), Promise.resolve([])),
+    repeats: () => (calls.push(["repeats"]), Promise.resolve({ candidates: [], total: 0 })),
     repeat: (...args) => (calls.push(["repeat", ...args]), Promise.resolve(null)),
     retrospective: (...args) => (
       calls.push(["retrospective", ...args]),

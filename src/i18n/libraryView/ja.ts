@@ -136,6 +136,7 @@ export const libraryViewJa = {
       olderShown: "最後の測定は失敗したので、これは前の結果です。",
     },
     repeats: {
+      more: "全 {total} 件のうち、多い順に {shown} 件。",
       kind: "繰り返し",
       search: "繰り返している指示を探す",
       shortcuts: "/ で検索 · ↑↓ で移動 · Esc で閉じる",

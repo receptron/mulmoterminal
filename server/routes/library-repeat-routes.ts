@@ -1,6 +1,6 @@
 // The Library's Repeats view over HTTP (#3334): instructions typed again and again, found on the
 // index's worker from Claude Code's prompt log.
-//   GET  /api/library/repeats           — the candidates, most typed first
+//   GET  /api/library/repeats           — the most typed candidates, and how many there are
 //   GET  /api/library/repeats/:id       — one, with each time it was typed (what the skill reads)
 //   POST /api/library/repeats/:id/promote { target: rule | skill } — start the skill on it
 // The promote is the conversation promote's: same-origin guarded, a turn the server builds from a
@@ -23,8 +23,8 @@ async function promoteDirectory(projects: readonly string[]): Promise<string | n
 
 export function mountRepeatRoutes(app: Express, call: LibraryCaller, promote: LibraryPromoteDeps | undefined): void {
   app.get("/api/library/repeats", async (_req, res) => {
-    const candidates = await answer(res, call, "repeats", []);
-    if (candidates !== undefined) res.json({ candidates });
+    const list = await answer(res, call, "repeats", []);
+    if (list !== undefined) res.json(list);
   });
   app.get("/api/library/repeats/:id", async (req, res) => {
     if (!isRepeatId(req.params.id)) return res.status(400).json({ error: "expected a repeat id" });

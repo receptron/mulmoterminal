@@ -135,6 +135,7 @@ export const libraryViewZhTW = {
       olderShown: "上次測量失敗，這是先前的結果。",
     },
     repeats: {
+      more: "共 {total} 條中輸入最多的 {shown} 條。",
       kind: "重複",
       search: "搜尋重複的指示",
       shortcuts: "/ 搜尋 · ↑↓ 移動 · Esc 關閉",

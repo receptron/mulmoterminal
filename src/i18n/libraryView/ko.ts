@@ -137,6 +137,7 @@ export const libraryViewKo = {
       olderShown: "마지막 측정이 실패하여 이전 결과를 보여 줍니다.",
     },
     repeats: {
+      more: "전체 {total}개 중 많이 입력한 {shown}개.",
       kind: "반복",
       search: "반복한 지시 찾기",
       shortcuts: "/ 찾기 · ↑↓ 이동 · Esc 닫기",

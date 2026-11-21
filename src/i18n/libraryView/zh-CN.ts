@@ -135,6 +135,7 @@ export const libraryViewZhCN = {
       olderShown: "上次测量失败，这是之前的结果。",
     },
     repeats: {
+      more: "共 {total} 条中输入最多的 {shown} 条。",
       kind: "重复",
       search: "搜索重复的指示",
       shortcuts: "/ 搜索 · ↑↓ 移动 · Esc 关闭",

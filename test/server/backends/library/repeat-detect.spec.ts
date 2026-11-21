@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import {
+  candidateOf,
   countedInstructions,
   instructionKey,
   joinAlike,
@@ -11,6 +12,7 @@ import {
   REPEAT_COMPARED_MAX,
   REPEAT_OCCURRENCES_MAX,
   REPEAT_PAIR_HOLDERS_MAX,
+  REPEAT_NAMED_MAX,
   isCommand,
   repeatCandidates,
   repeatId,
@@ -192,12 +194,34 @@ describe("joinAlike", () => {
     expect(work.counted).toBeLessThan(keys.length * keys.length);
   });
 
+  it("joins a short key's real match even when more than the compared bound of long keys hold all its pairs", () => {
+    const target = "abcdefghij";
+    const mate = "abcdefghix";
+    const crowd = Array.from({ length: REPEAT_COMPARED_MAX + 10 }, (_, at) => `${target}${createHash("sha256").update(String(at)).digest("hex").slice(0, 60)}`);
+    const { joined, groups } = recording();
+    joinAlike([target, mate, ...crowd], groups);
+    expect(joined.map((pair) => [...pair].sort())).toContainEqual([target, mate].sort());
+  });
+
   it("still joins alike keys hidden among many that share only a common pair", () => {
     const crowd = Array.from({ length: 1000 }, (_, at) => `して${createHash("sha256").update(String(at)).digest("hex").slice(0, 12)}`);
     const alike = [instructionKey("CI通ったらマージして"), instructionKey("CIが通ったらマージして")];
     const { joined, groups } = recording();
     joinAlike([...crowd, ...alike], groups);
     expect(joined.map((pair) => [...pair].sort())).toContainEqual([...alike].sort());
+  });
+});
+
+describe("candidateOf", () => {
+  it("names the most typed forms and directories only, and counts them all", () => {
+    const members = Array.from({ length: REPEAT_NAMED_MAX + 5 }, (_, at) => ({
+      ...prompt(`merge it now ${"!".repeat(at)}`, `s${String(at)}`, `/w/p${String(at)}`),
+      key: instructionKey("merge it now"),
+    }));
+    const candidate = candidateOf(members);
+    expect(candidate.variants).toHaveLength(REPEAT_NAMED_MAX);
+    expect(candidate.projects).toHaveLength(REPEAT_NAMED_MAX);
+    expect(candidate.count).toBe(REPEAT_NAMED_MAX + 5);
   });
 });
 
