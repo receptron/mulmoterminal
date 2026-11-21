@@ -41,7 +41,7 @@ const UNDO_ID = /^[0-9a-f-]{36}$/;
 
 export function mountMemoryRoutes(app: Express, call: LibraryCaller, projectsRoot: string, trash: () => TrashLayout = systemTrash): void {
   mountMemoryReads(app, call, projectsRoot);
-  mountMemorySource(app, call);
+  mountMemorySource(app, call, projectsRoot);
   mountMemoryEdit(app, projectsRoot);
   mountMemoryTrash(app, projectsRoot, trash);
   mountMemoryMerge(app, projectsRoot, trash);
@@ -191,11 +191,12 @@ function mountMemoryMerge(app: Express, projectsRoot: string, trash: () => Trash
 }
 
 /** The conversation that last wrote a memory, for the reader to link to. It names no path: the index is
- *  asked by folder and name, checked as every memory route checks them. */
-function mountMemorySource(app: Express, call: LibraryCaller): void {
+ *  asked by folder and name, checked as every memory route checks them — never the memory index, by
+ *  identity as the writes check it (on a case-insensitive disk `memory.md` is that file). */
+function mountMemorySource(app: Express, call: LibraryCaller, projectsRoot: string): void {
   app.get("/api/library/memory/:slug/:file/source", async (req, res) => {
     const { slug, file } = req.params;
-    if (!isProjectSlug(slug) || !isMemoryFileName(file) || file === MEMORY_INDEX_FILE) {
+    if (file === MEMORY_INDEX_FILE || (await changeableMemory(projectsRoot, slug, file)) === null) {
       res.status(400).json({ error: "not a memory file" });
       return;
     }

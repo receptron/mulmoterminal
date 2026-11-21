@@ -436,3 +436,19 @@ describe("GET /api/library/memory/:slug/:file/source", () => {
     expect(asked).toEqual([]);
   });
 });
+describe("GET /api/library/memory/:slug/:file/source, on the disk", () => {
+  it("refuses a name that is the index on this disk, and asks nothing", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "mt-memory-source-"));
+    dirs.push(root);
+    mkdirSync(path.join(root, "-w-app", "memory"), { recursive: true });
+    writeFileSync(path.join(root, "-w-app", "memory", "MEMORY.md"), "- [A](a.md)\n");
+    const asked: unknown[] = [];
+    const app = express();
+    mountLibraryRoutes(app, { call: (method) => (asked.push(method), Promise.resolve(null)), projectsRoot: root });
+    const lower = (await routeCall(app)("/api/library/memory/-w-app/memory.md/source")).status;
+    // On a case-insensitive disk `memory.md` IS the index; elsewhere it is a memory, asked for.
+    const caseInsensitive = existsSync(path.join(root, "-w-app", "memory", "memory.md"));
+    expect(lower).toBe(caseInsensitive ? 400 : 200);
+    expect(asked).toEqual(caseInsensitive ? [] : ["memorySource"]);
+  });
+});
