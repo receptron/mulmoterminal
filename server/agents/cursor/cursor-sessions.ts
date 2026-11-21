@@ -21,7 +21,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { open, readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { isRecord } from "../../../common/isRecord.js";
-import { cursorUserText } from "./cursor-last-turn.js";
+import { userQueryText } from "../user-query.js";
 import { readString } from "../../../common/readString.js";
 import { cursorHome } from "./cursor-hooks-file.js";
 import { rememberBounded } from "../bounded-cache.js";
@@ -186,7 +186,7 @@ export function cursorTranscriptTitle(head: string): string {
     // Shared with the last-turn reader, which is where the rule is written down: cursor does not
     // escape the marker, so a prompt containing the literal `</user_query>` truncates under the
     // non-greedy regex this used to hold.
-    return cursorUserText(text);
+    return userQueryText(text);
   } catch {
     return "";
   }

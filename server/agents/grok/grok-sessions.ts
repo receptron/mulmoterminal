@@ -43,6 +43,9 @@ export const grokSignalsPath = (root: string, cwd: string, id: string): string =
  *  place a per-turn token count is written down (grok-usage.ts). */
 export const grokUpdatesPath = (root: string, cwd: string, id: string): string => path.join(grokCwdDir(root, cwd), id, "updates.jsonl");
 
+/** The conversation itself, one message per line, appended as each step completes (grok-last-turn.ts). */
+export const grokChatHistoryPath = (root: string, cwd: string, id: string): string => path.join(grokCwdDir(root, cwd), id, "chat_history.jsonl");
+
 /** The first prompt of each conversation the cwd's prompt_history.jsonl still remembers.
  *
  *  FIRST, not last: it is standing in for a title, and a title is what the conversation was

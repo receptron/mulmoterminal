@@ -16,7 +16,7 @@
 //   1. THE PROMPT IS WRAPPED. A user record's text arrives as
 //      `<timestamp>…</timestamp>\n<user_query>…</user_query>`, and cursor does NOT escape the
 //      marker — a prompt containing the literal text `</user_query>` is stored verbatim inside the
-//      wrapper (measured in #2072). `cursorUserText` unwraps first-open-to-LAST-close for that
+//      wrapper (measured in #2072). `userQueryText` unwraps first-open-to-LAST-close for that
 //      reason, and it is shared with the conversation list's titles rather than copied.
 //   2. `tool_use.input` IS AN OBJECT, not a string. Codex's two families both carry their arguments
 //      as a string; cursor's is `{ command, description }`. So the call row serialises it rather
@@ -38,7 +38,8 @@
 // rather than ceremonial: it is what makes a shape this store never showed us VISIBLE instead of
 // silently thinning the view.
 import { isRecord } from "../../../common/isRecord.js";
-import { contentOf, cursorUserText } from "../../agents/cursor/cursor-last-turn.js";
+import { contentOf } from "../../agents/cursor/cursor-last-turn.js";
+import { userQueryText } from "../../agents/user-query.js";
 import { type TranscriptScan, foldTurnRecord, unknownRow } from "./transcript-view.js";
 import type { TranscriptRow } from "../../../common/transcriptView.js";
 
@@ -89,7 +90,7 @@ export function cursorTurnPrompt(record: Record<string, unknown>): string | null
   const raw = contentOf(record)
     .flatMap((part) => (isRecord(part) && part.type === "text" ? [text(part.text)] : []))
     .join("");
-  const prompt = cursorUserText(raw);
+  const prompt = userQueryText(raw);
   return prompt === "" ? null : prompt;
 }
 
