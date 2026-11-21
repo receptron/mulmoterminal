@@ -20,12 +20,14 @@ const size = (bytes: number) => ({ bytes, files: 1, unreadable: 0 });
 /** A temp project's folder as Claude Code names it on this platform: under its own temp directory,
  *  real path resolved (macOS's /var is /private/var; Windows has no /tmp). */
 const TEMP_SLUG = `${encodeProjectDirName(claudeProjectPath(tmpdir()))}-probe`;
+/** An ordinary project's folder by the same rule (on Windows `/work/app` resolves onto a drive). */
+const APP_SLUG = encodeProjectDirName(claudeProjectPath("/work/app"));
 const MEASURE: HomeMeasure = {
   measuredAt: 1000,
   total: size(30),
   entries: [{ name: "projects", directory: true, ...size(30) }],
   projects: [
-    { slug: encodeProjectDirName("/work/app"), ...size(20) },
+    { slug: APP_SLUG, ...size(20) },
     { slug: TEMP_SLUG, ...size(10) },
   ],
 };
@@ -62,7 +64,7 @@ describe("GET /api/library/storage", () => {
       measure: {
         measuredAt: 1000,
         projects: [
-          { slug: encodeProjectDirName("/work/app"), cwd: "/work/app", temporary: false },
+          { slug: APP_SLUG, cwd: "/work/app", temporary: false },
           { slug: TEMP_SLUG, cwd: null, temporary: true },
         ],
         otherProjects: { count: 0 },
