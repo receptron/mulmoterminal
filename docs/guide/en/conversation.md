@@ -46,6 +46,8 @@ a button.
 | `mulmoterminal room` on the command line | no | yes |
 | A seat that uses tools before answering contributes its real answer | **no — see the note under [Try it](#try-it)** | yes |
 
+**Bring everything since last time** is in neither: it arrives in the release after 13.2.0.
+
 Everything else on this page applies to both.
 
 ---

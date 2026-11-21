@@ -12,7 +12,7 @@ const viewTurn = (prompt: string): TranscriptTurn => ({
     { kind: "assistant", text: `answer to ${prompt}` },
   ],
 });
-const markOf = (prompt: string) => relayFingerprint({ prompt, replies: [`answer to ${prompt}`], at: null });
+const markOf = (prompt: string) => relayFingerprint({ prompt, promptClipped: false, replies: [`answer to ${prompt}`], at: null });
 
 /** A conversation split into pages of `perPage`, newest page first, with numeric cursors. */
 function pagedReader(prompts: string[], perPage: number) {

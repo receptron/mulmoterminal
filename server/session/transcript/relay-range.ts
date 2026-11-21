@@ -11,6 +11,8 @@ import type { TranscriptTurn } from "../../../common/transcriptView.js";
 
 export interface RelayTurn {
   prompt: string;
+  /** The view cut this prompt to fit its byte cap, so only its start can be compared. */
+  promptClipped: boolean;
   /** Every assistant text of the turn in order, commentary included. Tool rows are not relayed. */
   replies: string[];
   at: string | null;
@@ -18,7 +20,8 @@ export interface RelayTurn {
 
 export interface RelayLimits {
   promptMaxChars: number;
-  /** Across every turn sent; a single turn larger than this is still sent, clipped to it. */
+  /** Quoted text across every turn sent, framing excluded; a single turn larger than this is still
+   *  sent, its reply clipped so prompt and reply together fit. */
   totalMaxChars: number;
 }
 
@@ -41,10 +44,10 @@ export type RelaySelection =
     };
 
 export function relayTurnOf(turn: TranscriptTurn): RelayTurn | null {
-  const prompt = turn.rows.find((row) => row.kind === "user")?.text;
-  if (prompt === undefined) return null;
+  const promptRow = turn.rows.find((row) => row.kind === "user");
+  if (promptRow === undefined) return null;
   const replies = turn.rows.filter((row) => row.kind === "assistant" && row.text.trim() !== "").map((row) => row.text);
-  return { prompt, replies, at: turn.at };
+  return { prompt: promptRow.text, promptClipped: promptRow.clipped === true, replies, at: turn.at };
 }
 
 export const relayFingerprint = (turn: RelayTurn): string =>
@@ -59,7 +62,7 @@ export const isRelayMark = (value: unknown): value is string => typeof value ===
 export function completedCount(turns: readonly RelayTurn[], lastCompletedPrompt: string | null): number {
   if (lastCompletedPrompt === null || turns.length === 0) return 0;
   const wanted = lastCompletedPrompt.trim();
-  const index = turns.findLastIndex((turn) => turn.prompt.trim() === wanted);
+  const index = turns.findLastIndex((turn) => (turn.promptClipped ? wanted.startsWith(turn.prompt.trimStart()) : turn.prompt.trim() === wanted));
   return index === -1 ? turns.length - 1 : index + 1;
 }
 

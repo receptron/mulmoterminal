@@ -10,7 +10,7 @@ import {
   type RelayTurn,
 } from "../../../../server/session/transcript/relay-range.js";
 
-const turn = (prompt: string, reply = `answer to ${prompt}`, at: string | null = null): RelayTurn => ({ prompt, replies: [reply], at });
+const turn = (prompt: string, reply = `answer to ${prompt}`, at: string | null = null): RelayTurn => ({ prompt, promptClipped: false, replies: [reply], at });
 const LIMITS: RelayLimits = { promptMaxChars: 600, totalMaxChars: 10_000 };
 const turns = ["a", "b", "c", "d"].map((p) => turn(p));
 const select = (over: Partial<Parameters<typeof selectRelay>[0]>) =>
@@ -32,7 +32,11 @@ describe("relayTurnOf", () => {
           { kind: "unknown", text: "[unknown block: x]" },
         ],
       }),
-    ).toEqual({ prompt: "q", replies: ["I'll look.", "Done."], at: "2026-11-21T00:00:00Z" });
+    ).toEqual({ prompt: "q", promptClipped: false, replies: ["I'll look.", "Done."], at: "2026-11-21T00:00:00Z" });
+  });
+
+  it("says when the view clipped the prompt", () => {
+    expect(relayTurnOf({ at: null, rows: [{ kind: "user", text: "long…", clipped: true }] })).toMatchObject({ promptClipped: true });
   });
 
   it("answers null for a turn with no prompt row", () => {
@@ -69,6 +73,12 @@ describe("completedCount", () => {
 
   it("matches a view prompt that carries leading blank lines the last-turn read does not", () => {
     expect(completedCount([turn("a"), turn("\n\n<pasted>q</pasted>")], "<pasted>q</pasted>")).toBe(2);
+  });
+
+  it("matches a prompt the view clipped by its start", () => {
+    const clipped: RelayTurn = { ...turn("\nthe start of a very long"), promptClipped: true };
+    expect(completedCount([turn("a"), clipped], "the start of a very long prompt")).toBe(2);
+    expect(completedCount([turn("a"), clipped], "a different prompt")).toBe(1);
   });
 
   it("treats the newest turn as running when no prompt matches", () => {

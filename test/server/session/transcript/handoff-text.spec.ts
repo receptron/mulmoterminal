@@ -118,8 +118,8 @@ describe("formatHandoff — reply shape", () => {
 describe("formatRelay", () => {
   const relay = (over: Partial<Parameters<typeof formatRelay>[1]> = {}) => ({
     turns: [
-      { prompt: "first", replies: ["I'll look.", "Found it."], at: null },
-      { prompt: "second", replies: ["Done."], at: null },
+      { prompt: "first", replies: ["I'll look.", "Found it."], at: null, promptClipped: false },
+      { prompt: "second", replies: ["Done."], at: null, promptClipped: false },
     ],
     omitted: 0,
     moreBefore: false,
@@ -138,7 +138,7 @@ describe("formatRelay", () => {
   });
 
   it("drops the numbering for a single exchange", () => {
-    const text = formatRelay(source, relay({ turns: [{ prompt: "only", replies: ["r"], at: null }] }));
+    const text = formatRelay(source, relay({ turns: [{ prompt: "only", replies: ["r"], at: null, promptClipped: false }] }));
     expect(text).toContain("had 1 exchange since");
     expect(text).toContain("--- their prompt ---\n\nonly");
   });
@@ -150,13 +150,21 @@ describe("formatRelay", () => {
   });
 
   it("clips a long prompt, strips control bytes, and answers empty with no turns", () => {
-    const text = formatRelay(source, relay({ turns: [{ prompt: "p".repeat(50), replies: ["a\u0007b"], at: null }] }), {
+    const text = formatRelay(source, relay({ turns: [{ prompt: "p".repeat(50), replies: ["a\u0007b"], at: null, promptClipped: false }] }), {
       promptMaxChars: 10,
       totalMaxChars: 100,
     });
     expect(text).toContain(`${"p".repeat(10)}\n… (truncated)`);
     expect(hasControlByte(text)).toBe(false);
     expect(formatRelay(source, relay({ turns: [] }))).toBe("");
+  });
+
+  it("clips a turn over the budget so its prompt and reply together fit", () => {
+    const text = formatRelay(source, relay({ turns: [{ prompt: "p".repeat(8), replies: ["r".repeat(50)], at: null, promptClipped: false }] }), {
+      promptMaxChars: 10,
+      totalMaxChars: 20,
+    });
+    expect(text).toContain(`--- their reply ---\n\n${"r".repeat(12)}\n… (truncated)`);
   });
 
   it("frames the blocks as a record", () => {

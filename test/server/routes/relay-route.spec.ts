@@ -67,6 +67,13 @@ describe("GET /api/transcript/relay + POST /api/transcript/relay-mark", () => {
     expect(log).toContain('"dest":"/dest/a"');
   });
 
+  it("sees a marker another server instance appended to the same log", async () => {
+    const fresh = await relay("/dest/c");
+    const log = path.join(scratchHome.path, ".mulmoterminal", "relay-marks.jsonl");
+    await fs.appendFile(log, `${JSON.stringify({ agent: "claude", conversation: SESSION, dest: "/dest/c", mark: fresh.body.mark, at: 0 })}\n`);
+    expect((await relay("/dest/c")).body).toMatchObject({ status: "nothing-new" });
+  });
+
   it("refuses a missing destination and a malformed marker", async () => {
     expect((await call(`/api/transcript/relay?${new URLSearchParams({ session: SESSION, cwd: CWD })}`)).status).toBe(400);
     expect((await record("not-a-mark")).status).toBe(400);

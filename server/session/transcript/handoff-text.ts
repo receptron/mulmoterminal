@@ -83,7 +83,8 @@ function relayNotes(relay: RelayText): string[] {
 function relayTurnBlocks(turn: RelayTurn, index: number, count: number, limits: RelayLimits): string[] {
   const position = count === 1 ? "" : ` (${index + 1}/${count})`;
   const prompt = clip(sanitizeMultilineText(turn.prompt), limits.promptMaxChars);
-  const reply = clip(sanitizeMultilineText(turn.replies.join("\n\n")), limits.totalMaxChars);
+  const promptChars = Math.min([...turn.prompt].length, limits.promptMaxChars);
+  const reply = clip(sanitizeMultilineText(turn.replies.join("\n\n")), Math.max(0, limits.totalMaxChars - promptChars));
   return [...quoted(`their prompt${position}`, prompt), ...(reply ? quoted(`their reply${position}`, reply) : [])];
 }
 
