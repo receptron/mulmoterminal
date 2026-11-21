@@ -144,7 +144,7 @@ describe("readInstructions", () => {
       const shown = files.map((file) => `${file.scope} ${path.relative(at(""), file.path)} ${file.loads}`);
       expect(shown).toEqual([
         "directory w/CLAUDE.md launch",
-        "import outside/notes.md launch", // from a parent directory's file, as it loads
+        "import outside/notes.md approval", // from a parent directory's file too: Claude Code asks first
         "directory w/app/CLAUDE.md launch",
         "rule w/app/.claude/rules/always.md approval",
         "rule w/app/.claude/rules/own.md launch",
@@ -215,5 +215,17 @@ describe("readInstructions", () => {
     lookups.forEach((spy) => spy.mockRestore());
     expect(result.files).toEqual([]);
     expect(looked.filter((target) => target.startsWith("/net") || target.startsWith(at("w/project/")))).toEqual([]);
+  });
+
+  it("lets your own CLAUDE.md import from anywhere without approval, and a parent's not", async () => {
+    const { read } = tree({
+      "h/.claude/CLAUDE.md": "@../../shared/mine.md",
+      "shared/mine.md": "mine",
+      "w/CLAUDE.md": "@../shared/theirs.md",
+      "shared/theirs.md": "theirs",
+      "w/app/notes.txt": "",
+    });
+    const loads = Object.fromEntries((await read()).files.map((file) => [path.basename(file.path), file.loads]));
+    expect([loads["mine.md"], loads["theirs.md"]]).toEqual(["launch", "approval"]);
   });
 });

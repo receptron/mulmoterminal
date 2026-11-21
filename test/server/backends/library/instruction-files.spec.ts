@@ -59,7 +59,7 @@ describe("agentsCandidates", () => {
 describe("importsOf", () => {
   const from = "/w/app/CLAUDE.md";
   it("resolves imports against the file's folder, `~/` against the home, and keeps an escaped space", () => {
-    expect(importsOf("See @README.md and @docs/guide.md, also @~/notes.md and @/abs/x.md.\n- @Design\\ Docs/api.md", from, "/h")).toEqual([
+    expect(importsOf("See @README.md and @docs/guide.md, also @~/notes.md and @/abs/x.md.\n- @Design\\ Docs/api.md", from, "/h", path.posix)).toEqual([
       "/w/app/README.md",
       "/w/app/docs/guide.md",
       "/h/notes.md",
@@ -73,10 +73,10 @@ describe("importsOf", () => {
     ["@docs/v1.2/guide.md,", "/w/app/docs/v1.2/guide.md"],
     ["see @a.b.c.md)", "/w/app/a.b.c.md"],
   ])("trims only the punctuation closing a sentence: %s", (text, imported) => {
-    expect(importsOf(text, from, "/h")).toEqual([imported]);
+    expect(importsOf(text, from, "/h", path.posix)).toEqual([imported]);
   });
   it("stops reading imports at the limit, distinct ones in the order written", () => {
-    expect(importsOf("@a.md @a.md @b.md @c.md @d.md", from, "/h", path, 2)).toEqual(["/w/app/a.md", "/w/app/b.md"]);
+    expect(importsOf("@a.md @a.md @b.md @c.md @d.md", from, "/h", path.posix, 2)).toEqual(["/w/app/a.md", "/w/app/b.md"]);
   });
   it("reads Windows imports whole, backslashes and all", () => {
     expect(importsOf("@C:\\shared\\guide.md and @docs\\guide.md", "C:\\w\\CLAUDE.md", "C:\\h", path.win32)).toEqual([
@@ -85,10 +85,10 @@ describe("importsOf", () => {
     ]);
   });
   it("leaves out an import inside quotes, either style, as Claude Code does", () => {
-    expect(importsOf(`"@README.md" and '@docs/guide.md' but @plain.md`, from, "/h")).toEqual(["/w/app/plain.md"]);
+    expect(importsOf(`"@README.md" and '@docs/guide.md' but @plain.md`, from, "/h", path.posix)).toEqual(["/w/app/plain.md"]);
   });
   it("ignores code, quoted paths, addresses and a bare @", () => {
-    expect(importsOf('`@README` and\n```\n@inside.md\n```\nmail me@example.com, @"Design Docs/quoted.md", @ alone', from, "/h")).toEqual([]);
+    expect(importsOf('`@README` and\n```\n@inside.md\n```\nmail me@example.com, @"Design Docs/quoted.md", @ alone', from, "/h", path.posix)).toEqual([]);
   });
 });
 

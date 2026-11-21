@@ -147,9 +147,12 @@ interface Walk {
   truncated: boolean;
   /** The working directory, as given and as resolved: what an import must really stay in not to need approval. */
   cwd: string[];
+  /** Files that are yours or the managed one, or imported from those: their imports need no approval. */
+  userFiles: Set<string>;
 }
 
 const insideCwd = (walk: Walk, target: string): boolean => walk.cwd.some((dir) => isInside(dir, target));
+const USER_SCOPES: ReadonlySet<string> = new Set(["managed", "user", "user-rule"]);
 
 /** One file and, after it, what its imports bring in — depth-first, as they are expanded in place. */
 async function addFile(
@@ -169,7 +172,10 @@ async function addFile(
   walk.seen.add(read.real);
   walk.out.push({ ...read.file, scope: candidate.scope, loads, importedBy });
   if (read.text === null || depth >= IMPORT_DEPTH_MAX) return;
-  const fromInside = insideCwd(walk, read.real);
+  // An import out of the directory needs approval when the file asking for it is the project's, its
+  // parents' included (asked of Claude Code: neither loads unapproved); yours and the managed one are not.
+  const fromProject = !USER_SCOPES.has(candidate.scope) && !(candidate.scope === "import" && importedBy !== null && walk.userFiles.has(importedBy));
+  if (!fromProject) walk.userFiles.add(candidate.path);
   // One past the cap is asked for, so a file with more says the listing stopped.
   const imports = importsOf(read.text, candidate.path, walk.home, path, IMPORTS_PER_FILE_MAX + 1);
   if (imports.length > IMPORTS_PER_FILE_MAX) walk.truncated = true;
@@ -177,7 +183,7 @@ async function addFile(
     const landed = await localTarget(imported);
     if (landed === null) continue;
     // A file in the project importing one really outside it: loaded only once that is approved.
-    const external = fromInside && !insideCwd(walk, landed);
+    const external = fromProject && !insideCwd(walk, landed);
     await addFile(walk, { scope: "import", path: imported }, external ? "approval" : loads, candidate.path, depth + 1);
   }
 }
@@ -211,7 +217,7 @@ export async function readInstructions(
   // up: every lookup below it would go through that link.
   const real = await localTarget(cwd);
   if (real === null) return { cwd, files: [], agentsMd: false, truncated: false };
-  const walk: Walk = { home, seen: new Set(), out: [], looked: 0, truncated: false, cwd: [cwd, real] };
+  const walk: Walk = { home, seen: new Set(), out: [], looked: 0, truncated: false, cwd: [cwd, real], userFiles: new Set() };
   const candidates = launchCandidates(cwd, configDir, platform);
   const claudeMd = await Promise.all(candidates.filter(countsAsClaudeMd).map((candidate) => readInstruction(candidate.path)));
   const agentsMd = claudeMd.every((read) => read === null);
