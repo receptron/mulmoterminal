@@ -85,6 +85,13 @@ const notes = (file: LibraryInstructionFile): string[] =>
     file.importedBy !== null ? t("libraryView.tools.importedBy", { name: instructionLabel({ path: file.importedBy }, cwd.value ?? "") }) : null,
   ].filter((note): note is string => note !== null);
 
+/** Why a file's text is not shown: over the size Claude Code reads (skipped, as the list says), over
+ *  the size shown here (Claude Code still reads it), or unreadable. */
+function missingText(file: LibraryInstructionFile, read: LibraryFileText): string {
+  if (file.state === "too-large") return t("libraryView.tools.tooLarge");
+  return read.reason === "too-large" ? t("libraryView.tools.tooLargeToShow") : t("libraryView.tools.unreadable");
+}
+
 /** The arrow keys, from the overlay. */
 async function move(by: number): Promise<void> {
   const index = selected.value ? shown.value.indexOf(selected.value) : -1;
@@ -150,7 +157,7 @@ defineExpose({ move });
       </header>
       <div class="min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-3">
         <p v-if="text && text.text === null" class="m-0 font-sans text-[13px] text-err-text" data-testid="tool-text-missing">
-          {{ text.reason === "too-large" ? t("libraryView.tools.tooLargeToShow") : t("libraryView.tools.unreadable") }}
+          {{ missingText(selected, text) }}
         </p>
         <pre v-else-if="text" class="m-0 whitespace-pre-wrap break-words font-mono text-[12px] leading-[1.6] text-fg" data-testid="tool-text">{{
           text.text

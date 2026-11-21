@@ -116,4 +116,11 @@ describe("LibraryTools", () => {
     await flushPromises();
     expect(chosen()).toBe("/w/app");
   });
+
+  it("says a file over what Claude Code reads is skipped, not that it still loads", async () => {
+    textAnswer = { text: null, reason: "too-large" };
+    listing["/w/app"] = { cwd: "/w/app", agentsMd: false, truncated: false, files: [file("directory", "/w/app/CLAUDE.md", { state: "too-large" })] };
+    const wrapper = await mountTools("/w/app");
+    expect(wrapper.find("[data-testid=tool-text-missing]").text()).toBe("over 4 MiB, so Claude Code skips it");
+  });
 });
