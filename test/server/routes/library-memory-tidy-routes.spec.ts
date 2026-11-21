@@ -43,15 +43,15 @@ function setup(options: { allowed?: boolean; withMemory?: boolean; projectHere?:
   });
   const post = (name: string) =>
     routeCall(app)(`/api/library/memory/${encodeURIComponent(name)}/tidy`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-  return { post, spawned, slug, project };
+  return { post, spawned, slug, project, real: existsSync(project) ? realpathSync.native(project) : project };
 }
 
 describe("POST /api/library/memory/:slug/tidy", () => {
   it("starts the skill on the folder in plan mode, in the project's directory", async () => {
-    const { post, spawned, slug, project } = setup();
+    const { post, spawned, slug, real } = setup();
     const answer = await post(slug);
     expect([answer.status, answer.body]).toEqual([200, { chatId: "new-session", agent: "claude" }]);
-    expect(spawned).toEqual([["claude", project, `/mulmoterminal-library tidy ${slug}`, true, null, { claudePermissionMode: "plan" }]]);
+    expect(spawned).toEqual([["claude", real, `/mulmoterminal-library tidy ${slug}`, true, null, { claudePermissionMode: "plan" }]]);
   });
 
   it("refuses another origin, a name that is not a folder name, and a project with no memory", async () => {
@@ -66,10 +66,10 @@ describe("POST /api/library/memory/:slug/tidy", () => {
   });
 
   it("finds a directory whose name has a character Claude Code's folder name folds", async () => {
-    const { post, spawned, slug, project } = setup({ name: "my_app" });
+    const { post, spawned, slug, real } = setup({ name: "my_app" });
     expect(slug.endsWith("my-app")).toBe(true);
     expect((await post(slug)).status).toBe(200);
-    expect(spawned[0]?.[1]).toBe(project);
+    expect(spawned[0]?.[1]).toBe(real);
   });
 
   it("refuses when two directories the index knows share the folder's name", async () => {
@@ -84,7 +84,7 @@ describe("POST /api/library/memory/:slug/tidy", () => {
     expect(spawned).toEqual([]);
   });
 
-  it.skipIf(process.platform === "win32")("refuses a link repointed elsewhere while its last answer is still kept", async () => {
+  it.skipIf(process.platform === "win32")("starts in the link's target, and refuses a link repointed while its last answer is kept", async () => {
     const root = realpathSync.native(mkdtempSync(path.join(tmpdir(), "mt-tidy-link-")));
     dirs.push(root);
     const [app, other, link] = ["app", "other", "current"].map((name) => path.join(root, name));
@@ -109,6 +109,6 @@ describe("POST /api/library/memory/:slug/tidy", () => {
     unlinkSync(link);
     symlinkSync(other, link);
     expect((await post()).status).toBe(409);
-    expect(spawned.map((args) => args[1])).toEqual([link]);
+    expect(spawned.map((args) => args[1])).toEqual([app]);
   });
 });

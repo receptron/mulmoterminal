@@ -70,11 +70,12 @@ export async function directoriesByFolder(
   return uniqueByFolder(resolved);
 }
 
-/** Whether `dir` is, right now, the checkout Claude Code names folder `folder` after — asked afresh,
- *  past the kept answers, since a link repointed in the meantime would start a session elsewhere. */
-export async function namesFolderNow(dir: string, folder: string, realpath: RealPath = nativeRealpath): Promise<boolean> {
+/** Where `dir` really is right now, when that is the checkout Claude Code names folder `folder` after;
+ *  null otherwise. Asked afresh, past the kept answers, and the real path is what to start in: a link
+ *  repointed after this answer cannot then move the session elsewhere. */
+export async function checkoutOfFolderNow(dir: string, folder: string, realpath: RealPath = nativeRealpath): Promise<string | null> {
   const real = await realpath(path.resolve(dir)).catch(() => null);
-  return real !== null && encodeProjectDirName(real) === folder;
+  return real !== null && encodeProjectDirName(real) === folder ? real : null;
 }
 
 /** Forget the resolved names, for tests. */

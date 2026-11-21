@@ -10,15 +10,15 @@ import type { LibraryCaller } from "../backends/library/library-service.js";
 import { requestOriginAllowed } from "./same-origin-guard.js";
 import { answer } from "./library-routes.js";
 import { isDirectory, startPromoteSession, type LibraryPromoteDeps } from "./library-promote-routes.js";
-import { directoriesByFolder, namesFolderNow } from "../backends/library/project-folders.js";
+import { directoriesByFolder, checkoutOfFolderNow } from "../backends/library/project-folders.js";
 
-/** The one directory the index knows for folder `slug`, when it is here; null when there is none, or
- *  more than one, which leaves the checkout to start in (and to check the memories against) unknown,
- *  or when it is no longer that folder's checkout. */
+/** Where the one directory the index knows for folder `slug` really is, when it is here and still that
+ *  folder's checkout; null when there is none, or more than one, which leaves the checkout to start in
+ *  (and to check the memories against) unknown. */
 async function projectDirectory(slug: string, directories: unknown): Promise<string | null> {
   const known = Array.isArray(directories) ? directories.filter((dir): dir is string => typeof dir === "string") : [];
   const dir = (await directoriesByFolder(known)).get(slug);
-  return dir !== undefined && (await isDirectory(dir)) && (await namesFolderNow(dir, slug)) ? dir : null;
+  return dir !== undefined && (await isDirectory(dir)) ? checkoutOfFolderNow(dir, slug) : null;
 }
 
 export function mountMemoryTidyRoute(app: Express, call: LibraryCaller, projectsRoot: string, deps: LibraryPromoteDeps): void {
