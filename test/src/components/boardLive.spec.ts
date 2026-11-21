@@ -172,6 +172,12 @@ describe("the cells on the default branch", () => {
     expect(withoutClosedCells(repos, new Map([["m2", 1]]))[0]?.mainlineCells?.map((c) => c.session)).toEqual(["m1"]);
   });
 
+  it("leave a repo with no cell lists as the very same object", () => {
+    const bare: RepoBoard[] = [{ repo: "o/err", error: "gh failed" }, { repo: "o/none" }];
+    expect(withLiveCells(bare, new Map([["s1", live(true, false)]]))[0]).toBe(bare[0]);
+    expect(withoutClosedCells(bare, new Map([["s1", 1]]))[1]).toBe(bare[1]);
+  });
+
   it("are not added to a repo that had none", () => {
     expect(withLiveCells([{ repo: "o/b", cards: [] }], new Map())[0]).not.toHaveProperty("mainlineCells");
     expect(withoutClosedCells([{ repo: "o/b", cards: [] }], new Map([["x", 1]]))[0]).not.toHaveProperty("mainlineCells");

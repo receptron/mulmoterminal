@@ -11,6 +11,7 @@ export const boardSessionIds = (repos: readonly RepoBoard[]): string[] => [...ne
 
 // Every cell list in a repo — each card's and the default branch's — passed through `change`.
 const withEachCellList = (repo: RepoBoard, change: <T extends BoardCell>(cells: T[]) => T[]): RepoBoard => {
+  if (!repo.cards && !repo.mainlineCells) return repo;
   const next: RepoBoard = repo.cards ? { ...repo, cards: repo.cards.map((card: BoardCard) => ({ ...card, cells: change(card.cells) })) } : { ...repo };
   if (repo.mainlineCells) next.mainlineCells = change(repo.mainlineCells);
   return next;
