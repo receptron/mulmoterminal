@@ -204,7 +204,10 @@ export async function readInstructions(
   home: string,
   platform: NodeJS.Platform = process.platform,
 ): Promise<LibraryInstructions> {
-  const real = await fs.realpath(cwd).catch(() => cwd);
+  // A directory that is not a local one (gone, or leading to a network path) has nothing under it to look
+  // up: every lookup below it would go through that link.
+  const real = await localTarget(cwd);
+  if (real === null) return { cwd, files: [], agentsMd: false, truncated: false };
   const walk: Walk = { home, seen: new Set(), out: [], looked: 0, truncated: false, cwd: [cwd, real] };
   const candidates = launchCandidates(cwd, configDir, platform);
   const claudeMd = await Promise.all(candidates.filter(countsAsClaudeMd).map((candidate) => readInstruction(candidate.path)));

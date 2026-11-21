@@ -204,4 +204,16 @@ describe("readInstructions", () => {
     expect(result.files.filter((file) => file.scope === "rule")).toHaveLength(RULES_PER_FOLDER_MAX);
     expect(result.truncated).toBe(true);
   });
+
+  it.skipIf(process.platform === "win32")("lists nothing, looking nothing up, for a directory that leads to a network path", async () => {
+    const { at } = tree({ "h/.claude/CLAUDE.md": "user" });
+    mkdirSync(at("w"), { recursive: true });
+    symlinkSync("/net/server/project", at("w/project"));
+    const lookups = [vi.spyOn(fsPromises, "stat"), vi.spyOn(fsPromises, "lstat"), vi.spyOn(fsPromises, "realpath")];
+    const result = await readInstructions(at("w/project"), at("h/.claude"), at("h"), "linux");
+    const looked = lookups.flatMap((spy) => spy.mock.calls.map(([target]) => String(target)));
+    lookups.forEach((spy) => spy.mockRestore());
+    expect(result.files).toEqual([]);
+    expect(looked.filter((target) => target.startsWith("/net") || target.startsWith(at("w/project/")))).toEqual([]);
+  });
 });
