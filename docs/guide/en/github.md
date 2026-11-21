@@ -57,7 +57,7 @@ From there, [the ▶ on an issue row](#start-from-issue) starts the work.
 
 ## 1. Register the repos you want to see {#register}
 
-Only the repos you **register** appear (nothing is auto-added from worktrees or sessions). Two ways;
+The repos you **register** appear. The one exception: a GitHub repo you have not registered shows, tagged **not registered**, while a terminal is open in a clone of it ([the lists](#read-the-view), [the board](#board)). Two ways;
 a repo added in Settings takes effect **immediately** (no restart).
 
 ### From the Settings modal (recommended)
@@ -90,6 +90,7 @@ GitLab projects can be listed too. → [Using GitLab](#gitlab)
 - A **Pull requests** section on top, an **Issues** section below. Both are grouped **per repository**
   (an `owner/repo` heading with a count).
 - Only **open** items are shown. Order is your registration order (repos) and whatever `gh` returns (items).
+- A GitHub repo you have not registered shows too while a terminal is open in a clone of it (on any branch), after the registered ones and tagged **not registered**. One `gh` cannot read is left out with no error, and it leaves on the next read after its last terminal closes. The command palette's PR / issue entries include it as well, a little later, since the palette keeps what it read for a few minutes.
 - **Clicking a row opens it on GitHub in a new tab** (nothing opens in-app).
 - **↻ (Reload)** at the top re-fetches. **There is no auto-refresh** — it loads once when you open the
   view, then only on Reload.

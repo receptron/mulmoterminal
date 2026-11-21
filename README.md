@@ -1923,7 +1923,9 @@ narrow and tall for one record you are discussing — and each position keeps it
   beside the list, with the paths it names (Markdown links, code-span paths) that are not there. Above them, **Settings, laid over each other** reads the user, project, local and
   managed `settings.json` files in Claude Code's order and shows the permission rules (every file's,
   added up), environment variables, hooks and other keys in effect, each naming the file that set it.
-  Read only. Design: [`docs/library-design.md`](docs/library-design.md).
+  Read only. **More features** → **Usage** adds a retrospective of the last twelve weeks from the
+  same index: money, conversations and the PRs they made, by week, project and agent (a conversation
+  counts in the week it started); the token windows appear above it while token rotation is on. Design: [`docs/library-design.md`](docs/library-design.md).
 - **Skills viewer** — **More features** → **Skills** lists every Claude skill on disk in three
   columns — where it lives, its skills, its `SKILL.md`. The places are your `~/.claude/skills`,
   each enabled plugin (skills shown as `plugin:skill`), and the `.claude/skills` of each folder a
@@ -2233,6 +2235,8 @@ name in `MULMOTERMINAL_HOST` / `MULMOTERMINAL_ALLOWED_ORIGINS`, against DNS rebi
 | `GET /api/cursor/sessions?cwd=` | Cursor chats for the project, newest first. Cursor's project directory name is a truncated-and-hashed slug of the path, so this reads each directory's own `.workspace-trusted` to learn which one it stands for and omits any that does not say. |
 | `GET /api/cost?cwd=&session=` | Estimated $ cost — session / today / month. |
 | `GET /api/transcript/timeline?session=&cwd=` | Per-session activity timeline (tools run). |
+| `GET /api/transcript/relay?session=&cwd=&agent=&dest=` | Every exchange of that session since the last relay to directory `dest`: `status` (`ok` / `nothing-new` / `no-turn`), the `text` to paste, and the `mark` to record. |
+| `POST /api/transcript/relay-mark?session=&cwd=&agent=&dest=` | Body `{ mark }`. Records where the relay to `dest` ended, once the text was pasted. |
 | `GET /api/transcript/last-turn?session=&cwd=&agent=` | A session's last completed exchange (`prompt`, `reply`) plus the `text` to paste into another terminal. `agent=codex` reads the codex rollout instead of the Claude transcript. |
 | `GET /api/decisions?cwd=&limit=` | The decisions a human was asked to make in this project, newest first — each question with the options it offered, their descriptions, and the answer. `answerKind` says whether the answer was one of the options, text the user wrote instead (the question was wrong), or never given. Read out of Claude's own transcripts; writes nothing. `scanned` reports how many transcripts were read (the scan is capped) and `unreadable` how many could not be, so a partial answer is visible rather than implied. A `cwd` that is not an existing directory answers an empty response rather than falling back to the default workspace. |
 | `GET /api/decisions/digest?cwd=` | The same decisions as Markdown, for an agent to read (`{ enabled, markdown }`). `enabled: false` means the `decisionDigest` setting is off — a different answer from an empty digest, so a reader can tell "switched off" from "nothing decided here". |

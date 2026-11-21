@@ -21,6 +21,7 @@ import { boardSelection, type BoardSelection } from "../composables/useGithubBoa
 import { useGithubBoardLive } from "../composables/useGithubBoardLive";
 import { useBoardOpenWorkOnly } from "../composables/useBoardOpenWorkOnly";
 import { openWorkOnly, registeredOnly, visibleColumns } from "./boardOpenWork";
+import GithubUnregisteredTag from "./GithubUnregisteredTag.vue";
 
 const emit = defineEmits<{ (e: "close" | "list"): void }>();
 
@@ -159,13 +160,7 @@ onBeforeUnmount(() => (boardSelection.value = null));
         <section v-for="repo in shownRepos" :key="repo.repo" data-testid="board-repo" class="mb-6">
           <h3 class="my-1.5 flex items-center gap-2 border-b border-border pb-1 font-mono text-[13px] font-semibold text-fg">
             {{ repo.repo }}
-            <span
-              v-if="repo.unregistered"
-              data-testid="board-repo-unregistered"
-              class="rounded border border-border px-1.5 font-sans text-[11px] font-normal text-muted"
-              :data-tip="t('githubBoard.unregisteredTip')"
-              >{{ t("githubBoard.unregistered") }}</span
-            >
+            <GithubUnregisteredTag v-if="repo.unregistered" data-testid="board-repo-unregistered" />
           </h3>
           <p v-if="repo.error" class="px-1 py-3 text-[13px] text-err">{{ repo.error }}</p>
           <div v-if="repo.mainlineCells?.length" data-testid="board-mainline" class="mb-2.5 flex flex-wrap gap-2.5">

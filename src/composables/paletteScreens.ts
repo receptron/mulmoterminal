@@ -53,7 +53,7 @@ export const SCREEN_LABEL_KEYS: Record<PaletteScreen, string> = {
   usage: "featureMenu.items.usage.label",
 };
 
-const GATED_BY: Partial<Record<PaletteScreen, GatedEntry>> = { prs: "prs", rooms: "rooms", worklog: "worklog", usage: "usage" };
+const GATED_BY: Partial<Record<PaletteScreen, GatedEntry>> = { prs: "prs", rooms: "rooms", worklog: "worklog" };
 
 export function visibleScreens(gated: Record<GatedEntry, boolean>): PaletteScreen[] {
   return PALETTE_SCREENS.filter((screen) => {

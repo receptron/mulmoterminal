@@ -37,6 +37,8 @@ export const tipsEn = {
     bringTurn: "Bring {name}'s last turn here",
     exchangeTurn: "Send this cell's turn there and bring the answer back, both submitted",
     exchangeTurnAria: "Exchange one turn with {name}",
+    relaySince: "Bring every exchange since the last relay to this directory",
+    relaySinceAria: "Bring {name}'s exchanges since the last relay",
     stopExchange: "Stop the exchange in progress",
     closeDiff: "Close diff",
     commitNothing: "No uncommitted changes",

@@ -7,13 +7,12 @@ import { roomsExist } from "./useRooms";
 import { worklogEnabled } from "./worklog";
 
 export function useGatedEntries(): ComputedRef<Record<GatedEntry, boolean>> {
-  const { prRepos, tokenRotation } = useAppConfig();
+  const { prRepos } = useAppConfig();
   return computed(() =>
     visibleGatedEntries({
       prRepoCount: prRepos.value.length,
       roomsExist: roomsExist.value,
       worklogEnabled: worklogEnabled.value,
-      tokenRotationOn: tokenRotation.value.enabled && tokenRotation.value.tokens.length > 0,
     }),
   );
 }

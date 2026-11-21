@@ -1,6 +1,7 @@
 // The Library's reads (#3329): /api/library/* answered as checked values, or null for any failure —
 // a 503 while the index cannot be opened, a timeout, or a body that is not the wire shape.
 import { isUnknownArray } from "../../common/isUnknownArray";
+import { isLibraryRetrospective, type LibraryRetrospective } from "../../common/libraryRetrospective";
 import { isLibraryInstructions, type LibraryInstructions } from "../../common/libraryTools";
 import { isLibrarySettings, type LibrarySettings } from "../../common/librarySettings";
 import { isLibraryFileText, isLibraryTrackedFile, type LibraryFileText, type LibraryTrackedFile } from "../../common/libraryFiles";
@@ -277,6 +278,12 @@ export async function loadInstruction(cwd: string, file: string): Promise<(Libra
   if (!isLibraryFileText(body)) return null;
   const missing = isUnknownArray(body.missing) ? body.missing.filter((reference): reference is string => typeof reference === "string") : [];
   return { ...body, missing };
+}
+
+/** The retrospective's totals for the last weeks, from the Library's index (#3335). */
+export async function loadRetrospective(): Promise<LibraryRetrospective | null> {
+  const body = await readJson("/api/library/retrospective");
+  return isLibraryRetrospective(body) ? body : null;
 }
 
 export async function loadLibraryMarks(): Promise<LibraryMarks | null> {

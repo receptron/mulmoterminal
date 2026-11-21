@@ -76,6 +76,11 @@ export async function answer(res: Response, call: LibraryCaller, method: Library
 export function mountLibraryRoutes(app: Express, deps: LibraryRouteDeps = {}): void {
   const call = deps.call ?? sharedCaller;
   const pageLimit = (value: unknown): number => queryCount(value, LIBRARY_PAGE_DEFAULT, LIBRARY_PAGE_MAX);
+  // The retrospective in /usage (#3335): the last weeks by week, project and agent, from the index.
+  app.get("/api/library/retrospective", async (_req, res) => {
+    const totals = await answer(res, call, "retrospective", [Date.now()]);
+    if (totals !== undefined) res.json(totals);
+  });
   app.get("/api/library/status", async (_req, res) => {
     const status = await answer(res, call, "status", []);
     if (status !== undefined) res.json(status);

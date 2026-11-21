@@ -16,6 +16,7 @@ const METHODS: readonly LibraryMethod[] = [
   "memorySource",
   "repeats",
   "repeat",
+  "retrospective",
 ];
 
 export const isLibraryRequest = (value: unknown): value is LibraryRequest =>
@@ -60,6 +61,8 @@ export function dispatchLibraryRequest(service: LibraryService, request: Library
       return service.repeats();
     case "repeat":
       return service.repeat(text(first));
+    case "retrospective":
+      return service.retrospective(typeof first === "number" && Number.isFinite(first) ? first : Date.now());
   }
 }
 

@@ -37,6 +37,8 @@ export const tipsZhTW: Messages["tips"] = {
     bringTurn: "把 {name} 最近一輪帶到這裡",
     exchangeTurn: "把此儲存格的這一輪傳過去並取回回答，兩邊都會送出",
     exchangeTurnAria: "與 {name} 交換一輪",
+    relaySince: "把上次轉到此目錄之後的所有對話一併帶過來",
+    relaySinceAria: "帶來 {name} 上次之後的對話",
     stopExchange: "停止進行中的交換",
     closeDiff: "關閉差異",
     commitNothing: "沒有未提交的變更",

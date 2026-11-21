@@ -119,6 +119,10 @@ describe("dispatchLibraryRequest", () => {
     memorySource: (...args) => (calls.push(["memorySource", ...args]), Promise.resolve(null)),
     repeats: () => (calls.push(["repeats"]), Promise.resolve([])),
     repeat: (...args) => (calls.push(["repeat", ...args]), Promise.resolve(null)),
+    retrospective: (...args) => (
+      calls.push(["retrospective", ...args]),
+      Promise.resolve({ weeks: [], projects: [], agents: [], total: { costUsd: 0, conversations: 0, prs: 0 } })
+    ),
   };
 
   it("passes well-formed arguments through, and replaces malformed ones with safe values", async () => {

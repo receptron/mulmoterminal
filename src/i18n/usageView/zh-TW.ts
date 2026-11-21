@@ -1,8 +1,8 @@
 // The token usage screen (#2919).
 export const usageViewZhTW = {
-  title: "權杖用量",
-  region: "權杖用量",
-  close: "關閉權杖用量",
+  title: "用量",
+  region: "用量",
+  close: "關閉用量",
   intro: "tokenRotation 中每個訂閱的剩餘量。新工作階段會在「每週剩餘量 ÷ 距重置的小時數」最大的訂閱上啟動。",
   column: { subscription: "訂閱", fiveHour: "5 小時視窗", sevenDay: "每週視窗" },
   left: "剩餘 {percent}",
@@ -13,4 +13,18 @@ export const usageViewZhTW = {
   },
   limitReset: "{window}：約 {at} 重置（最後一次讀取的值）",
   empty: "尚未設定權杖。",
+  retro: {
+    title: "最近幾週",
+    loading: "正在讀取資料庫索引…",
+    failed: "無法讀取資料庫索引。",
+    total: "{conversations} 個對話花費 {cost}，PR {prs} 個",
+    week: "週起始",
+    cost: "金額",
+    conversations: "對話",
+    prs: "PR",
+    project: "專案",
+    agent: "代理",
+    noProject: "（無目錄）",
+    note: "依資料庫列出的對話，把每個對話記錄的金額相加；對話計入它開始的那一週。",
+  },
 };
