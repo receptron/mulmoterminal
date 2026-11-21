@@ -45,4 +45,15 @@ describe("registerPty", () => {
     registerPty("s1", entry("/w/a"));
     expect(heard).toEqual([]);
   });
+
+  it("keeps the entry and does not throw when the listener throws", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    onPtyRegistered(() => {
+      throw new Error("publish failed");
+    });
+    expect(() => registerPty("s1", entry("/w/a"))).not.toThrow();
+    expect(ptys.has("s1")).toBe(true);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("publish failed"));
+    warn.mockRestore();
+  });
 });

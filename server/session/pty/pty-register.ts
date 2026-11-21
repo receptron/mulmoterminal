@@ -2,6 +2,7 @@
 // one place rather than at each spawner.
 import { ptys } from "../registry.js";
 import type { PtyEntry } from "../types.js";
+import { messageOf } from "../../errors.js";
 
 type PtyRegisteredListener = (sessionId: string, entry: PtyEntry) => void;
 
@@ -12,7 +13,13 @@ export function onPtyRegistered(next: PtyRegisteredListener | null): void {
   listener = next;
 }
 
+/** The announcement is extra: a listener that throws is logged, and the spawn that called this
+ *  carries on with its pty registered. */
 export function registerPty(sessionId: string, entry: PtyEntry): void {
   ptys.set(sessionId, entry);
-  listener?.(sessionId, entry);
+  try {
+    listener?.(sessionId, entry);
+  } catch (err) {
+    console.warn(`[pty] could not announce ${sessionId}: ${messageOf(err)}`);
+  }
 }
