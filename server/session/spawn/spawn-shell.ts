@@ -6,7 +6,7 @@ import type { IPty } from "node-pty";
 import type { WebSocket } from "ws";
 import { getLaunchers } from "../../config/config-routes.js";
 import { launcherAt, launchInvocation, launchTargetLabel, shellInvocation, type LaunchTarget } from "./shell-command.js";
-import { ptys } from "../registry.js";
+import { registerPty } from "../pty/pty-register.js";
 import { ptySpawn, spawnPty } from "../pty/pty-spawn.js";
 import { ptyExitLine, ptyStartLine } from "../pty/pty-exit-log.js";
 import { wireAgentPtyRelay } from "../pty/pty-relay.js";
@@ -63,7 +63,7 @@ export function createShellSpawners(deps: SpawnDeps) {
     // codex (#1208), which is a guess about someone else's text and the same guess that made a chip
     // indistinguishable from the Agent Picker. The Agent Picker is what records a real agent.
     const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, reattached, active: false, agent: "shell" };
-    ptys.set(sessionId, entry);
+    registerPty(sessionId, entry);
     // Persistent and tmux-backed like an agent cell, so its exit is read the same way (#1496).
     wireAgentPtyRelay(entry, sessionId, spawnedAtMs, deps, { loggedAs: "launcher" });
     return entry;
@@ -78,7 +78,7 @@ export function createShellSpawners(deps: SpawnDeps) {
     const spawnedAtMs = Date.now();
     console.log(ptyStartLine({ agent: "bot-job", pid: term.pid, cwd, tmux, reattached, sessionId, note: null }));
     const entry: PtyEntry = { term, ws: null, buffer: "", cwd, tmux, reattached, active: false, agent: "shell" };
-    ptys.set(sessionId, entry);
+    registerPty(sessionId, entry);
     wireAgentPtyRelay(entry, sessionId, spawnedAtMs, deps, { loggedAs: "bot-job" });
     deps.publishSessionCreated(sessionId);
     return entry;
