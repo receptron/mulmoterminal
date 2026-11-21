@@ -5,7 +5,7 @@ import type { WebSocket } from "ws";
 import type { SessionAgent } from "../../../common/sessionAgent.js";
 import { ptySpawn, type PtySpawnEnv } from "./pty-spawn.js";
 import { ptyStartLine } from "./pty-exit-log.js";
-import { ptys } from "../registry.js";
+import { registerPty } from "./pty-register.js";
 import { SESSION_AGENT_ENV } from "../../infra/process/tmux-pane-exit.js";
 import type { PtyEntry } from "../types.js";
 
@@ -48,6 +48,6 @@ export function startAgentPty(start: AgentPtyStart): StartedAgentPty {
   const spawnedAtMs = Date.now();
   console.log(ptyStartLine({ agent, pid: term.pid, cwd, tmux, reattached, sessionId, note }));
   const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, reattached, active: false, agent };
-  ptys.set(sessionId, entry);
+  registerPty(sessionId, entry);
   return { entry, spawnedAtMs, reattached };
 }
