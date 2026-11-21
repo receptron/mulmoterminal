@@ -178,11 +178,13 @@ function foldCost(spend: SpendState, record: Record<string, unknown>): void {
   const costGrowth = Math.max(overallCost(run, now) - run.costUsd, 0);
   run.costUsd += costGrowth;
   const modelGrowth = grown.reduce((sum, [, totals]) => sum + totals.costUsd, 0);
-  grown.forEach(([model, totals]) => {
-    const costUsd = modelGrowth === 0 ? 0 : (costGrowth * totals.costUsd) / modelGrowth;
-    shareOut(spend, model, { ...totals, costUsd }, startTime);
-  });
-  spend.pending = {};
+  const shares = grown.map(([model, totals]): [string, SpendTotals] => [
+    model,
+    { ...totals, costUsd: modelGrowth === 0 ? 0 : (costGrowth * totals.costUsd) / modelGrowth },
+  ]);
+  shares.forEach(([model, share]) => shareOut(spend, model, share, startTime));
+  // A record that repeats the running total shares nothing, so the replies wait for the next one.
+  if (shares.some(([, share]) => Object.values(share).some((value) => value > 0))) spend.pending = {};
 }
 
 /** Where `model`'s share goes, as slot → weight: its own replies since the last cost record, else every

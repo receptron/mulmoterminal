@@ -99,6 +99,18 @@ describe("sharing a cost record out over the replies before it", () => {
     expect(costBySlot(later.rows)).toEqual({ [`${iso(T0 + HOUR_MS)} m`]: 1 });
   });
 
+  it("keeps the replies for the next cost record when one repeats the running total", () => {
+    const { rows } = fold([
+      reply(T0, "a", { output_tokens: 10 }),
+      cost(1, { m: { costUSD: 1 } }),
+      reply(T0 + HOUR_MS, "b", { output_tokens: 10 }),
+      cost(1, { m: { costUSD: 1 } }),
+      reply(T0 + 2 * HOUR_MS, "c", { output_tokens: 10 }),
+      cost(1, { m: { costUSD: 3 } }),
+    ]);
+    expect(costBySlot(rows)).toEqual({ [`${iso(T0)} m`]: 1, [`${iso(T0 + HOUR_MS)} m`]: 1, [`${iso(T0 + 2 * HOUR_MS)} m`]: 1 });
+  });
+
   it("does not count a reply again when its records fall on both sides of a cost record", () => {
     const { rows } = fold([
       reply(T0, "a", { output_tokens: 10 }),
