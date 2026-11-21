@@ -124,11 +124,11 @@ export function costRecordTotals(record: Record<string, unknown>): Record<string
 const modelCost = (models: Record<string, SpendTotals>): number =>
   Object.entries(models).reduce((sum, [model, totals]) => (model === UNKNOWN_MODEL ? sum : sum + totals.costUsd), 0);
 
-/** The count's overall cost as this record tells it: its own total when it gives no breakdown, else every
- *  model's highest — a model a record leaves out keeps what it reached. */
-function overallCost(run: RunTotals, now: Record<string, SpendTotals>): number {
+/** The count's overall cost as this record tells it: every model's highest — a model a record leaves out
+ *  keeps what it reached — or its own total where that is more (no breakdown, or one short of the total). */
+function overallCost(run: RunTotals, now: Record<string, SpendTotals>, recordTotal: number | null): number {
   const perModel = Object.keys(now).some((model) => model !== UNKNOWN_MODEL);
-  return perModel ? modelCost(run.models) : (now[UNKNOWN_MODEL]?.costUsd ?? 0);
+  return Math.max(perModel ? modelCost(run.models) : 0, recordTotal ?? 0);
 }
 
 // Within one count each total only grows, so a lower one changes nothing. The cost is followed as ONE
@@ -142,7 +142,7 @@ function foldCost(spend: SpendState, record: Record<string, unknown>): void {
     const was = run.models[model] ?? zeroSpend();
     run.models[model] = perField((field) => Math.max(totals[field], was[field]));
   });
-  run.costUsd = Math.max(run.costUsd, overallCost(run, now));
+  run.costUsd = Math.max(run.costUsd, overallCost(run, now, finiteNumber(record.totalCostUSD)));
 }
 
 /** The conversation's totals per model, every count added up: each count's models, and what its overall

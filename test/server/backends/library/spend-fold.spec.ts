@@ -98,6 +98,12 @@ describe("counts", () => {
     expect(spendTotals(toModels)).toEqual({ m: { ...none, costUsd: 7 } });
   });
 
+  it("puts what a record's total comes to beyond its breakdown under the unknown model", () => {
+    const { spend } = fold([cost(1, { m: { costUSD: 5 } }, 6)]);
+    expect(spentUsd(spend)).toBe(6);
+    expect(spendTotals(spend)).toEqual({ m: { ...none, costUsd: 5 }, [UNKNOWN_MODEL]: { ...none, costUsd: 1 } });
+  });
+
   it("keeps what a model reached when a record leaves it out", () => {
     const { spend } = fold([cost(1, { a: { costUSD: 2 }, b: { costUSD: 4 } }), cost(1, { a: { costUSD: 3 } })]);
     expect(spentUsd(spend)).toBe(7);
