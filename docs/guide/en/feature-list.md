@@ -4,7 +4,7 @@ nav_title: Feature list
 layout: default
 parent: English
 nav_order: 6.5
-as_of: 13.2.0
+as_of: 13.3.0
 description: "Every capability MulmoTerminal has today, one line each with the release it arrived in, grouped by area (as of 9.1.0)."
 ---
 
@@ -71,6 +71,8 @@ More: [Basics](basics.html)
 
 More: [Agents](agents.html)
 
+- The Skills viewer edits one of your own or a project's SKILL.md in place; plugin and bundled skills stay read only (v13.3.0)
+- Bring that turn here, Exchange and Round table carry a Copilot, Antigravity or Grok cell's answer, and a Grok or Antigravity session's conversation shows in the Conversation pane and on the phone (v13.3.0)
 - Antigravity cells light the working dot during a turn and play the finished sound and push when it ends (v10.5.0)
 - `POST /api/session/:id/close` ends a session and closes the cell showing it, as `/exit` would; `terminate` leaves the cell (v10.7.2)
 - An agent can start a Claude session with only some GUI tool groups (`spawnBackgroundChat` `guiGroups`) (v10.5.0)
@@ -106,6 +108,16 @@ More: [Agents](agents.html)
 
 More: [Conversations](conversation.html)
 
+- The Library's Memory kind marks what can be tidied — a memory missing from MEMORY.md, missing frontmatter, a [[link]] to no memory, a file it names that is gone, or an index that is missing, overfull or lists a gone file — and Show narrows the list to it (v13.3.0)
+- A memory can be edited in place in the Library, whole text and frontmatter included; a save is refused if the file changed on disk since it was opened (v13.3.0)
+- A memory can be moved to the system Trash with its MEMORY.md lines, or merged into another memory of the same project with the [[links]] to it pointed at the one kept; Undo puts either back (v13.3.0)
+- The Library reports a memory also kept in another work copy of the same repository, says whether its text is the same, and can bring the copies into one with Add its text here and Write this text there (v13.3.0)
+- Under a memory's title, Written in names the conversation that last wrote it and opens it (v13.3.0)
+- A Library conversation can be promoted to a memory, a CLAUDE.md rule, a plan, an issue or a skill: a Claude cell opens in plan mode where it ran, and the bundled mulmoterminal-library skill writes nothing until you approve (v13.3.0)
+- The Library's Repeats kind lists the instructions typed 3 times or more in 2 conversations or more in the last 90 days, and Make a rule / Make a skill turns one into a CLAUDE.md rule or a skill after your approval (v13.3.0)
+- The Library's Tools kind lists the instruction files Claude Code loads in a directory, in its order with their @path imports, says which paths each names that are not there, and shows the settings.json files laid over each other with the file that set each value (v13.3.0)
+- The Library's Storage kind shows what each entry of ~/.claude and each project takes on disk, largest first, with temp-directory projects marked and what cleanupPeriodDays is set to (v13.3.0)
+- Bring everything since last time (the list icon in Talk to another terminal…) pastes every exchange another terminal has had since this directory last received one (v13.3.0)
 - The Library's Memory kind lists Claude Code's auto memory by project, shows how full each MEMORY.md is against what Claude Code loads, and reads each memory as Markdown with its [[links]] working (v13.2.0)
 - The Library's reader shows the files a conversation edited, with the whole change or one turn's change as a diff, from Claude Code's own file history (v13.2.0)
 - The Library (More features → Library) lists every Claude conversation on this machine, newest first, with full-text search over what was said; pick one to read it, and Resume opens it in a terminal where it ran (v13.1.0)
@@ -222,6 +234,9 @@ More: [Feature reference](features.html)
 
 More: [Worktrees](worktree.html)
 
+- The GitHub board's Only work with an open terminal switch (on by default) keeps only the cards a terminal is open on, and the board follows terminals opening and closing without waiting for its next read (v13.3.0)
+- The board and the PR and issue lists also show a GitHub repo you have not registered while a terminal is open in a clone of it, tagged not registered (v13.3.0)
+- A terminal on a repo's default branch or on no branch shows on the board in a row above that repo's columns, grouped by branch (v13.3.0)
 - A board card shows the latest Codex cross-review verdict as Codex N: LGTM or changes requested, coloured only when it names the current push (v11.5.0)
 - An experimental GitHub board puts each piece of work in a column (To do, Implementing, In review, Ready, Merged), joining the issue, its PR and the terminals on its branch, and keeps itself current (v11.4.0)
 - From a board card: read its issue, checks and reviews, start a To do issue with its text sent at once, and read or answer its terminals (v11.4.0)
@@ -444,6 +459,7 @@ More: [Blueprints](blueprints.html)
 
 More: [Feature reference](features.html)
 
+- More features → Usage looks back over the last twelve weeks — cost, conversations and PRs by week, project and agent, from the Library's index — whether or not token rotation is set up (v13.3.0)
 - The Claude usage check runs in a folder of MulmoTerminal's own that it marks trusted for Claude Code itself, so the gauge works wherever MulmoTerminal was started, home directory included (v11.5.0)
 - The usage gauge can be switched off, and how often it measures Claude set in minutes (v11.1.0)
 - More features → Processes shows each session's processes (with End) and the worktrees that can be removed (v8.6.0)
