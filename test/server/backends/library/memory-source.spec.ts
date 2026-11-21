@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Which conversation wrote a memory (#3331): the memory writes in a transcript record, both ways.
 import { describe, it, expect } from "vitest";
 import { memoryWriteKey, memoryWritesOf } from "../../../../server/backends/library/memory-source";
