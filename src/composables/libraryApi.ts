@@ -2,6 +2,7 @@
 // a 503 while the index cannot be opened, a timeout, or a body that is not the wire shape.
 import { isUnknownArray } from "../../common/isUnknownArray";
 import { isLibraryInstructions, type LibraryInstructions } from "../../common/libraryTools";
+import { isLibrarySettings, type LibrarySettings } from "../../common/librarySettings";
 import { isLibraryFileText, isLibraryTrackedFile, type LibraryFileText, type LibraryTrackedFile } from "../../common/libraryFiles";
 import { isLibraryMemoryHealth, isLibraryMemoryProject, type LibraryMemoryHealth, type LibraryMemoryProject } from "../../common/libraryMemory";
 import {
@@ -239,6 +240,12 @@ export async function loadToolDirectories(): Promise<string[] | null> {
 export async function loadInstructions(cwd: string): Promise<LibraryInstructions | null> {
   const body = await readJson(`/api/library/tools/instructions?cwd=${encodeURIComponent(cwd)}`);
   return isLibraryInstructions(body) ? body : null;
+}
+
+/** Claude Code's settings files for a directory, laid over each other. */
+export async function loadToolSettings(cwd: string): Promise<LibrarySettings | null> {
+  const body = await readJson(`/api/library/tools/settings?cwd=${encodeURIComponent(cwd)}`);
+  return isLibrarySettings(body) ? body : null;
 }
 
 /** One of those files' text. */

@@ -9,6 +9,7 @@ import path from "node:path";
 import { routeCall } from "../../helpers/routeCall";
 import { mountLibraryRoutes } from "../../../server/routes/library-routes";
 import { isLibraryInstructions } from "../../../common/libraryTools";
+import { isLibrarySettings } from "../../../common/librarySettings";
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
@@ -64,5 +65,17 @@ describe("library tools routes", () => {
     expect((await call("/api/library/tools/instructions")).status).toBe(400);
     expect((await call(`/api/library/tools/instruction${q({ cwd: app, path: path.join(app, "secret.txt") })}`)).status).toBe(404);
     expect((await call(`/api/library/tools/instruction${q({ cwd: root, path: path.join(app, "CLAUDE.md") })}`)).status).toBe(404);
+  });
+
+  it("lays a known directory's settings over each other, and refuses an unknown directory", async () => {
+    const { call, app, root } = setup();
+    mkdirSync(path.join(root, "h", ".claude"), { recursive: true });
+    writeFileSync(path.join(root, "h", ".claude", "settings.json"), JSON.stringify({ permissions: { allow: ["Bash(npm test)"] } }));
+    writeFileSync(path.join(app, ".claude", "settings.json"), JSON.stringify({ permissions: { deny: ["Read(.env)"] } }));
+    const answer = await call(`/api/library/tools/settings${q({ cwd: app })}`);
+    if (!isLibrarySettings(answer.body)) throw new Error("not settings");
+    expect(answer.body.permissions.allow).toEqual([{ value: "Bash(npm test)", source: "user" }]);
+    expect(answer.body.permissions.deny).toEqual([{ value: "Read(.env)", source: "project" }]);
+    expect((await call(`/api/library/tools/settings${q({ cwd: root })}`)).status).toBe(404);
   });
 });
