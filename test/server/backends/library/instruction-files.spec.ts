@@ -67,6 +67,14 @@ describe("importsOf", () => {
       "/w/app/Design Docs/api.md",
     ]);
   });
+  it.each([
+    ["@README.md", "/w/app/README.md"],
+    ["@README.md.", "/w/app/README.md"],
+    ["@docs/v1.2/guide.md,", "/w/app/docs/v1.2/guide.md"],
+    ["see @a.b.c.md)", "/w/app/a.b.c.md"],
+  ])("trims only the punctuation closing a sentence: %s", (text, imported) => {
+    expect(importsOf(text, from, "/h")).toEqual([imported]);
+  });
   it("ignores code, quoted paths, addresses and a bare @", () => {
     expect(importsOf('`@README` and\n```\n@inside.md\n```\nmail me@example.com, @"Design Docs/quoted.md", @ alone', from, "/h")).toEqual([]);
   });
