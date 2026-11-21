@@ -52,6 +52,7 @@ export const libraryViewEn = {
       none: "No instruction file is loaded here.",
       agentsMd: "No CLAUDE.md here or above, so Claude Code reads AGENTS.md instead.",
       onDemand: "loads only for matching files",
+      onApproval: "outside this directory: loads once external imports are approved here",
       tooLarge: "over 4 MiB, so Claude Code skips it",
       tooLargeToShow: "Too large to show here (over 1 MB). Claude Code still loads it.",
       truncated: "Only the first files are listed: more load here than the Library reads through.",

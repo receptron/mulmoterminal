@@ -1,6 +1,7 @@
 // @vitest-environment node
 // Reading the instruction files Claude Code loads for a directory (#3332), on a real tree.
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { promises as fsPromises } from "node:fs";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -95,9 +96,10 @@ describe("readInstructions", () => {
     const rules = (await listed()).filter((line) => line.startsWith("rule "));
     expect(rules).toEqual([
       "rule w/app/.claude/rules/own.md launch",
-      "rule w/app/.claude/rules/security.md launch",
-      "rule w/app/.claude/rules/shared/more/api.md launch",
-      "rule w/app/.claude/rules/shared/security.md launch",
+      // linked in from outside the directory: Claude Code loads these once external imports are approved
+      "rule w/app/.claude/rules/security.md approval",
+      "rule w/app/.claude/rules/shared/more/api.md approval",
+      "rule w/app/.claude/rules/shared/security.md approval",
     ]);
   });
 
@@ -115,5 +117,44 @@ describe("readInstructions", () => {
       many[`w/app/.claude/rules/p${String(n)}.md`] = "p";
     });
     expect((await tree(many).read()).truncated).toBe(true);
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "marks what is linked or imported from outside the directory as needing approval, and never follows a network path",
+    async () => {
+      const { at, read } = tree({
+        "shared/always.md": "always",
+        "shared/scoped.md": "---\npaths: src/**\n---\nscoped",
+        "outside/notes.md": "notes",
+        "w/app/CLAUDE.md": "@../../outside/notes.md and @/net/host/x.md",
+        "w/app/.claude/rules/own.md": "own",
+        "w/CLAUDE.md": "@../outside/notes.md",
+      });
+      symlinkSync(at("shared/always.md"), at("w/app/.claude/rules/always.md"));
+      symlinkSync(at("shared/scoped.md"), at("w/app/.claude/rules/scoped.md"));
+      symlinkSync("/net/host/rules", at("w/app/.claude/rules/network"));
+      // Spies that call through: what matters is that a network target is never looked up at all.
+      const stat = vi.spyOn(fsPromises, "stat");
+      const realpath = vi.spyOn(fsPromises, "realpath");
+      const files = (await read()).files.filter((file) => file.path.startsWith(at("")));
+      const looked = [...stat.mock.calls, ...realpath.mock.calls].map(([target]) => String(target));
+      stat.mockRestore();
+      realpath.mockRestore();
+      expect(looked.filter((target) => target.startsWith("/net") || target.endsWith(path.join("rules", "network")))).toEqual([]);
+      const shown = files.map((file) => `${file.scope} ${path.relative(at(""), file.path)} ${file.loads}`);
+      expect(shown).toEqual([
+        "directory w/CLAUDE.md launch",
+        "import outside/notes.md launch", // from a parent directory's file, as it loads
+        "directory w/app/CLAUDE.md launch",
+        "rule w/app/.claude/rules/always.md approval",
+        "rule w/app/.claude/rules/own.md launch",
+      ]);
+    },
+  );
+
+  it("marks an import from the project to outside it as needing approval", async () => {
+    const { at, read } = tree({ "w/app/CLAUDE.md": "@../../outside/notes.md", "outside/notes.md": "notes" });
+    const imported = (await read()).files.find((file) => file.path === at("outside/notes.md"));
+    expect(imported?.loads).toBe("approval");
   });
 });

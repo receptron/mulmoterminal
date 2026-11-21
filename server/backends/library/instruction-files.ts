@@ -66,6 +66,16 @@ const withoutClosingPunctuation = (raw: string): string =>
     [...raw].reduce((end, char, at) => (CLOSING.has(char) ? end : at + 1), 0),
   );
 
+/** A network path, which Claude Code never follows a link or an import to: looking one up can contact
+ *  the host it names (`\\\\server\\share`, `/net/…`, `/Network/…`). `\\\\wsl$` is not one. */
+export function isNetworkPath(target: string): boolean {
+  if (target.startsWith("\\\\")) return !target.toLowerCase().startsWith("\\\\wsl$");
+  return /^\/(?:net|Network)(?:\/|$)/.test(target);
+}
+
+/** Whether `target` is `dir` or under it, by either separator. */
+export const isInside = (dir: string, target: string): boolean => target === dir || target.startsWith(`${dir}/`) || target.startsWith(`${dir}\\`);
+
 /** Imports go at most this many hops from the file that loads at launch. */
 export const IMPORT_DEPTH_MAX = 4;
 

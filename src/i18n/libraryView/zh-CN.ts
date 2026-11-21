@@ -52,6 +52,7 @@ export const libraryViewZhCN = {
       none: "这里没有会被读取的指令文件。",
       agentsMd: "这里及上层都没有 CLAUDE.md，因此 Claude Code 改为读取 AGENTS.md。",
       onDemand: "仅在处理匹配的文件时读取",
+      onApproval: "在此目录之外：批准外部导入后才会读取",
       tooLarge: "超过 4 MiB，Claude Code 不会读取",
       tooLargeToShow: "太大，无法在此显示（超过 1 MB）。Claude Code 仍会读取。",
       truncated: "只列出了前面的文件：这里读取的文件多到资料库读不完。",

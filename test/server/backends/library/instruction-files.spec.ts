@@ -6,6 +6,8 @@ import {
   agentsCandidates,
   directoriesDown,
   importsOf,
+  isInside,
+  isNetworkPath,
   isPathScopedRule,
   launchCandidates,
   managedInstructionFile,
@@ -82,5 +84,21 @@ describe("isPathScopedRule", () => {
     ["empty", ""],
   ])("is not one with %s", (_label, text) => {
     expect(isPathScopedRule(text)).toBe(false);
+  });
+});
+
+describe("isNetworkPath", () => {
+  it.each(["\\\\server\\share\\rules", "/net/host/rules", "/Network/Servers/x", "/net"])("%s is one", (target) => {
+    expect(isNetworkPath(target)).toBe(true);
+  });
+  it.each(["\\\\wsl$\\Ubuntu\\home", "\\\\WSL$\\x", "/network/x", "/netlify/x", "/home/me/net/x", "C:\\net\\x"])("%s is not", (target) => {
+    expect(isNetworkPath(target)).toBe(false);
+  });
+});
+
+describe("isInside", () => {
+  it("is the directory itself or below it, by either separator, and not a sibling with the same start", () => {
+    expect([isInside("/w/app", "/w/app"), isInside("/w/app", "/w/app/a.md"), isInside("C:\\w", "C:\\w\\a.md")]).toEqual([true, true, true]);
+    expect([isInside("/w/app", "/w/application/a.md"), isInside("/w/app", "/w/a.md")]).toEqual([false, false]);
   });
 });

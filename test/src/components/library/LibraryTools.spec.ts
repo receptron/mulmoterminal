@@ -100,4 +100,20 @@ describe("LibraryTools", () => {
     expect(wrapper.find("[data-testid=tool-text-missing]").text()).toContain("Too large to show here");
     expect(wrapper.find("[data-testid=library-tools-truncated]").exists()).toBe(true);
   });
+
+  it("follows the conversation selected once it arrives, until a directory is picked by hand", async () => {
+    const wrapper = await mountTools(null);
+    const chosen = () => wrapper.find<HTMLSelectElement>("[data-testid=library-tools-cwd]").element.value;
+    expect(chosen()).toBe("/w/app");
+    await wrapper.setProps({ initialCwd: "/w/lib" });
+    await flushPromises();
+    expect(chosen()).toBe("/w/lib");
+    await wrapper.find("[data-testid=library-tools-cwd]").setValue("/w/app");
+    await flushPromises();
+    await wrapper.setProps({ initialCwd: "/w/lib" });
+    await wrapper.setProps({ initialCwd: null });
+    await wrapper.setProps({ initialCwd: "/w/lib" });
+    await flushPromises();
+    expect(chosen()).toBe("/w/app");
+  });
 });

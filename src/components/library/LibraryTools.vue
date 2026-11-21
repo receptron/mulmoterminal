@@ -19,6 +19,19 @@ const failed = ref(false);
 const chosen = ref<string | null>(null);
 const text = ref<LibraryFileText | null>(null);
 
+/** The directory was picked by hand: the conversation selected later no longer moves it. */
+let picked = false;
+const pickByHand = (): void => {
+  picked = true;
+};
+// Opened before the conversations have loaded, the directory follows the one selected once it arrives.
+watch(
+  () => props.initialCwd,
+  (wanted) => {
+    if (!picked && wanted !== null && (directories.value ?? []).includes(wanted)) cwd.value = wanted;
+  },
+);
+
 /** The directories could not be listed (the index is unavailable): said, not shown as "none yet". */
 const directoriesFailed = ref(false);
 
@@ -66,6 +79,7 @@ const label = (file: LibraryInstructionFile) => instructionLabel(file, cwd.value
 const notes = (file: LibraryInstructionFile): string[] =>
   [
     file.loads === "on-demand" ? t("libraryView.tools.onDemand") : null,
+    file.loads === "approval" ? t("libraryView.tools.onApproval") : null,
     file.state === "too-large" ? t("libraryView.tools.tooLarge") : null,
     file.state === "unreadable" ? t("libraryView.tools.unreadable") : null,
     file.importedBy !== null ? t("libraryView.tools.importedBy", { name: instructionLabel({ path: file.importedBy }, cwd.value ?? "") }) : null,
@@ -89,6 +103,7 @@ defineExpose({ move });
       v-model="cwd"
       class="min-w-0 max-w-full flex-1 truncate rounded border border-border bg-transparent px-2 py-1 font-mono text-[12px] text-fg"
       data-testid="library-tools-cwd"
+      @change="pickByHand"
     >
       <option v-for="dir in directories ?? []" :key="dir" :value="dir">{{ dir }}</option>
     </select>

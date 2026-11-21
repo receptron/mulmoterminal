@@ -1,7 +1,7 @@
 // Reading the instruction files Claude Code loads for one directory (#3332): which of the candidates
 // exist, their size, the rules in each `.claude/rules` folder, and the files their `@path` imports bring
 // in. Read only; the order and the rules of loading are instruction-files.ts.
-import { promises as fs } from "node:fs";
+import { promises as fs, type Dirent } from "node:fs";
 import path from "node:path";
 import { INSTRUCTION_FILE_MAX_BYTES, type LibraryInstructionFile, type LibraryInstructions } from "../../../common/libraryTools.js";
 import { LIBRARY_FILE_TEXT_MAX, type LibraryFileText } from "../../../common/libraryFiles.js";
@@ -10,6 +10,8 @@ import {
   countsAsClaudeMd,
   importsOf,
   IMPORT_DEPTH_MAX,
+  isInside,
+  isNetworkPath,
   isPathScopedRule,
   launchCandidates,
   type InstructionCandidate,
@@ -46,28 +48,54 @@ async function readInstruction(file: string): Promise<Read | null> {
   return { file: { path: file, lines: lineCount(text), bytes: Buffer.byteLength(text), state: "ok" }, text };
 }
 
+interface RuleFile {
+  path: string;
+  /** Reached through a link whose target is outside `within`: read only once that is approved. */
+  external: boolean;
+}
+
+/** Where a link points, when it is one: its own text, resolved, without looking the target up (a
+ *  network target would be contacted). */
+async function linkTarget(file: string): Promise<string | null> {
+  const target = await fs.readlink(file).catch(() => null);
+  return target === null ? null : path.resolve(path.dirname(file), target);
+}
+
+/** One entry of a rules folder: a folder to walk, a rule, or nothing (anything else, or a link to a
+ *  network path). Through a link, whether its target leaves `within`. */
+async function ruleEntry(dir: RuleFile, entry: Dirent, within: string | null): Promise<{ kind: "folder" | "rule"; rule: RuleFile } | null> {
+  const full = path.join(dir.path, entry.name);
+  const target = entry.isSymbolicLink() ? await linkTarget(full) : null;
+  if (target !== null && isNetworkPath(target)) return null;
+  const info = target === null ? entry : await fs.stat(full).catch(() => null);
+  const realTarget = target === null ? null : await fs.realpath(full).catch(() => null);
+  const external = dir.external || (within !== null && realTarget !== null && !isInside(within, realTarget));
+  if (info?.isDirectory()) return { kind: "folder", rule: { path: full, external } };
+  return info?.isFile() && entry.name.endsWith(".md") ? { kind: "rule", rule: { path: full, external } } : null;
+}
+
 /** The `.md` files under a rules folder, in path order, at most the cap. Links are followed, as Claude
- *  Code follows a shared rules folder linked in; each real folder is walked once, so a loop ends. */
-async function ruleFiles(folder: string): Promise<string[]> {
-  const found: string[] = [];
-  const queue = [folder];
+ *  Code follows a shared rules folder linked in — never to a network path — and each real folder is
+ *  walked once, so a loop ends. `within` is the directory a link must stay in not to need approval. */
+async function ruleFiles(folder: string, within: string | null): Promise<RuleFile[]> {
+  const found: RuleFile[] = [];
+  const queue: RuleFile[] = [{ path: folder, external: false }];
   const walked = new Set<string>();
   let budget = RULE_ENTRIES_MAX;
   while (queue.length > 0 && budget > 0) {
-    const dir = queue.shift() ?? "";
-    const real = await fs.realpath(dir).catch(() => null);
+    const dir = queue.shift() ?? { path: "", external: false };
+    const real = await fs.realpath(dir.path).catch(() => null);
     if (real === null || walked.has(real)) continue;
     walked.add(real);
-    const entries = (await fs.readdir(dir, { withFileTypes: true }).catch(() => [])).slice(0, budget);
+    const entries = (await fs.readdir(dir.path, { withFileTypes: true }).catch(() => [])).slice(0, budget);
     budget -= entries.length;
     for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      const info = entry.isSymbolicLink() ? await fs.stat(full).catch(() => null) : entry;
-      if (info?.isDirectory()) queue.push(full);
-      else if (info?.isFile() && entry.name.endsWith(".md")) found.push(full);
+      const seen = await ruleEntry(dir, entry, within);
+      if (seen?.kind === "folder") queue.push(seen.rule);
+      else if (seen?.kind === "rule") found.push(seen.rule);
     }
   }
-  return found.toSorted((a, b) => a.localeCompare(b)).slice(0, RULES_PER_FOLDER_MAX);
+  return found.toSorted((a, b) => a.path.localeCompare(b.path)).slice(0, RULES_PER_FOLDER_MAX);
 }
 
 interface Walk {
@@ -76,6 +104,8 @@ interface Walk {
   out: LibraryInstructionFile[];
   /** Files looked for, found or not: the bound on one listing's work. */
   looked: number;
+  /** The working directory, as given and as resolved: what an import must stay in not to need approval. */
+  cwd: string[];
 }
 
 /** One file and, after it, what its imports bring in — depth-first, as they are expanded in place. */
@@ -93,16 +123,29 @@ async function addFile(
   walk.seen.add(candidate.path);
   walk.out.push({ ...read.file, scope: candidate.scope, loads, importedBy });
   if (read.text === null || depth >= IMPORT_DEPTH_MAX) return true;
+  const fromInside = walk.cwd.some((dir) => isInside(dir, candidate.path));
   for (const imported of importsOf(read.text, candidate.path, walk.home).slice(0, IMPORTS_PER_FILE_MAX)) {
-    await addFile(walk, { scope: "import", path: imported }, loads, candidate.path, depth + 1);
+    if (isNetworkPath(imported)) continue;
+    // A file in the project importing one outside it: Claude Code asks before loading that.
+    const external = fromInside && !walk.cwd.some((dir) => isInside(dir, imported));
+    await addFile(walk, { scope: "import", path: imported }, external ? "approval" : loads, candidate.path, depth + 1);
   }
   return true;
 }
 
+const ruleLoads = (external: boolean, scoped: boolean): LibraryInstructionFile["loads"] => {
+  if (external) return "approval";
+  return scoped ? "on-demand" : "launch";
+};
+
+/** The user's rules need no approval; a project rule linked in from outside it does, and then only one
+ *  without `paths` loads at all. */
 async function addRules(walk: Walk, candidate: InstructionCandidate): Promise<void> {
-  for (const file of await ruleFiles(candidate.path)) {
-    const text = (await readInstruction(file))?.text ?? "";
-    await addFile(walk, { scope: candidate.scope, path: file }, isPathScopedRule(text) ? "on-demand" : "launch", null, 0);
+  const within = candidate.scope === "rule" ? (walk.cwd.at(-1) ?? null) : null;
+  for (const file of await ruleFiles(candidate.path, within)) {
+    const scoped = isPathScopedRule((await readInstruction(file.path))?.text ?? "");
+    if (file.external && scoped) continue;
+    await addFile(walk, { scope: candidate.scope, path: file.path }, ruleLoads(file.external, scoped), null, 0);
   }
 }
 
@@ -114,7 +157,8 @@ export async function readInstructions(
   home: string,
   platform: NodeJS.Platform = process.platform,
 ): Promise<LibraryInstructions> {
-  const walk: Walk = { home, seen: new Set(), out: [], looked: 0 };
+  const real = await fs.realpath(cwd).catch(() => cwd);
+  const walk: Walk = { home, seen: new Set(), out: [], looked: 0, cwd: [cwd, real] };
   const candidates = launchCandidates(cwd, configDir, platform);
   const claudeMd = await Promise.all(candidates.filter(countsAsClaudeMd).map((candidate) => readInstruction(candidate.path)));
   const agentsMd = claudeMd.every((read) => read === null);

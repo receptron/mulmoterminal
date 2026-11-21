@@ -11,8 +11,9 @@ export const INSTRUCTION_FILE_MAX_BYTES = 4 * 1024 * 1024;
 export interface LibraryInstructionFile {
   scope: LibraryInstructionScope;
   path: string;
-  /** "launch": read at session start; "on-demand": only when Claude works with matching files. */
-  loads: "launch" | "on-demand";
+  /** "launch": read at session start; "on-demand": only when Claude works with matching files;
+   *  "approval": outside the directory, read only once external imports are approved for it. */
+  loads: "launch" | "on-demand" | "approval";
   /** The file whose `@path` import brought this one in, for an import. */
   importedBy: string | null;
   lines: number;
@@ -36,7 +37,7 @@ const isInstructionFile = (value: unknown): value is LibraryInstructionFile =>
   isRecord(value) &&
   isScope(value.scope) &&
   typeof value.path === "string" &&
-  (value.loads === "launch" || value.loads === "on-demand") &&
+  (value.loads === "launch" || value.loads === "on-demand" || value.loads === "approval") &&
   (value.importedBy === null || typeof value.importedBy === "string") &&
   typeof value.lines === "number" &&
   typeof value.bytes === "number" &&
