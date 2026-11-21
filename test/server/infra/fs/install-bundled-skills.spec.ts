@@ -206,7 +206,8 @@ describe("mulmoterminal-config routes to skills that exist", () => {
     // would put "make a survey" in a list of places to change fonts and keybindings, and the agent
     // finds it the way it finds any skill: by what the user asked for. `mulmoterminal-data-analysis` is the
     // same: it writes the user's spreadsheets and charts, not a setting, and so does `mulmoterminal-video-edit`
-    // with the user's videos, and `mulmoterminal-html-plan` with a plan the user decides on.
+    // with the user's videos, and `mulmoterminal-html-plan` with a plan the user decides on, and
+    // `mulmoterminal-library` with what a conversation is promoted to.
     const notSettings = [
       "mulmoterminal-config",
       "mulmoterminal-bug-report",
@@ -216,6 +217,7 @@ describe("mulmoterminal-config routes to skills that exist", () => {
       "mulmoterminal-data-analysis",
       "mulmoterminal-video-edit",
       "mulmoterminal-html-plan",
+      "mulmoterminal-library",
     ];
     const writers = BUNDLED_SKILL_NAMES.filter((name) => !notSettings.some((excluded) => excluded === name));
     expect(writers.filter((name) => !routed().includes(name))).toEqual([]);

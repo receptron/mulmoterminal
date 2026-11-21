@@ -159,6 +159,7 @@ beforeEach(() => {
   hits = [];
   opened.length = 0;
   openIds.length = 0;
+
   resumableList = { sessions: [], cwd: null };
   loadGate = Promise.resolve();
   statusGate = Promise.resolve();
@@ -376,8 +377,9 @@ describe("LibraryOverlay pins and names", () => {
     expect(document.activeElement).toBe(items[0]?.element);
     await wrapper.find("[role=menu]").trigger("keydown", { key: "ArrowDown" });
     expect(document.activeElement).toBe(items[1]?.element);
-    await wrapper.find("[role=menu]").trigger("keydown", { key: "ArrowDown" });
-    expect(document.activeElement).toBe(items[0]?.element); // wraps
+    await wrapper.find("[role=menu]").trigger("keydown", { key: "ArrowUp" });
+    await wrapper.find("[role=menu]").trigger("keydown", { key: "ArrowUp" });
+    expect(document.activeElement).toBe(items.at(-1)?.element); // wraps
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toContain("Burn subtitles"); // the list did not move
     await wrapper.find("[role=menu]").trigger("keydown", { key: "Tab" });
     expect(wrapper.find("[role=menu]").exists()).toBe(false);

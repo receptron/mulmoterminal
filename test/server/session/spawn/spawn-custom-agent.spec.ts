@@ -67,6 +67,15 @@ vi.mock("../../../../server/session/registry.js", () => ({
   claimFullGuiMcp,
 }));
 
+// The per-session permission mode, in memory: the real one appends to ~/.mulmoterminal.
+const permissionModes = vi.hoisted(() => new Map<string, string>());
+vi.mock("../../../../server/session/spawn/agents/session-permission-mode.js", () => ({
+  sessionPermissionMode: (sessionId: string, asked: string | undefined) => {
+    if (asked !== undefined) permissionModes.set(sessionId, asked);
+    return permissionModes.get(sessionId) ?? null;
+  },
+}));
+
 // Whether the session being asked for has a transcript — which is what makes a spawn a RESUME
 // rather than a fresh start, and the two follow opposite rules about the picker.
 let onDisk = false;
@@ -333,5 +342,37 @@ describe("spawnClaudePty limited to some GUI tool groups (#3033)", () => {
     expect(claimFullGuiMcp).toHaveBeenCalledTimes(1);
     expect(releaseAllToolsSession).not.toHaveBeenCalled();
     expect(argAfter("--allowedTools")).toBe("mcp__mt");
+  });
+});
+
+// A spawn can start in its own --permission-mode (#3334: a Library promotion starts in plan mode,
+// so what it read cannot write before the person approves). Absent, the server's mode, as before.
+describe("spawnClaudePty with a permission mode of its own", () => {
+  const argAfter = (flag: string): string | undefined => {
+    const at = spawnedArgs.indexOf(flag);
+    return at < 0 ? undefined : spawnedArgs[at + 1];
+  };
+
+  it("passes it to claude and to the pre-flight check, instead of the server's", () => {
+    refuseUnsupportedPermissionMode.mockClear();
+    spawn({ permissionMode: "plan" }, freshId());
+    expect(argAfter("--permission-mode")).toBe("plan");
+    const preflight = spawnedOptions.preflight;
+    if (typeof preflight === "function") preflight({});
+    expect(refuseUnsupportedPermissionMode).toHaveBeenCalledWith("claude", "plan", {});
+  });
+
+  it("uses the server's mode when the spawn names none", () => {
+    spawn({}, freshId());
+    expect(argAfter("--permission-mode")).toBe("acceptEdits");
+  });
+
+  // A resume arrives as a plain reconnect, naming no mode; the promotion still holds what it read.
+  it("keeps the mode for a later spawn of the same id, a resume included", () => {
+    const id = freshId();
+    spawn({ permissionMode: "plan" }, id);
+    resume({}, id);
+    expect(argAfter("--permission-mode")).toBe("plan");
+    expect(spawnedArgs).toContain("--resume");
   });
 });

@@ -9,6 +9,8 @@ import { IMPORTS_PER_FILE_MAX, readInstructions, RULE_ENTRIES_MAX, RULES_PER_FOL
 import { INSTRUCTION_FILE_MAX_BYTES } from "../../../../common/libraryTools";
 
 const dirs: string[] = [];
+/** The specs that write hundreds or thousands of files: a loaded runner (or Windows) needs longer than the default. */
+const FILE_HEAVY_TIMEOUT_MS = 60_000;
 /** A path under the tree, written with `/` on every system, so one expectation holds on Windows too. */
 const posixRelative = (from: string, to: string): string => path.relative(from, to).split(path.sep).join("/");
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
@@ -105,21 +107,25 @@ describe("readInstructions", () => {
     ]);
   });
 
-  it("follows at most so many imports from one file, and says when the listing stopped at its bound", async () => {
-    const imports = Array.from({ length: IMPORTS_PER_FILE_MAX + 20 }, (_, n) => `@i${String(n)}.md`).join("\n");
-    const files: Record<string, string> = { "w/app/CLAUDE.md": imports };
-    Array.from({ length: IMPORTS_PER_FILE_MAX + 20 }, (_, n) => (files[`w/app/i${String(n)}.md`] = "x"));
-    const { read } = tree(files);
-    const result = await read();
-    expect(result.files.filter((file) => file.scope === "import")).toHaveLength(IMPORTS_PER_FILE_MAX);
-    expect(result.truncated).toBe(true); // the imports past the cap are not listed, and it says so
-    const many: Record<string, string> = {};
-    Array.from({ length: RULES_PER_FOLDER_MAX }, (_, n) => {
-      many[`h/.claude/rules/u${String(n)}.md`] = "u";
-      many[`w/app/.claude/rules/p${String(n)}.md`] = "p";
-    });
-    expect((await tree(many).read()).truncated).toBe(true);
-  });
+  it(
+    "follows at most so many imports from one file, and says when the listing stopped at its bound",
+    async () => {
+      const imports = Array.from({ length: IMPORTS_PER_FILE_MAX + 20 }, (_, n) => `@i${String(n)}.md`).join("\n");
+      const files: Record<string, string> = { "w/app/CLAUDE.md": imports };
+      Array.from({ length: IMPORTS_PER_FILE_MAX + 20 }, (_, n) => (files[`w/app/i${String(n)}.md`] = "x"));
+      const { read } = tree(files);
+      const result = await read();
+      expect(result.files.filter((file) => file.scope === "import")).toHaveLength(IMPORTS_PER_FILE_MAX);
+      expect(result.truncated).toBe(true); // the imports past the cap are not listed, and it says so
+      const many: Record<string, string> = {};
+      Array.from({ length: RULES_PER_FOLDER_MAX }, (_, n) => {
+        many[`h/.claude/rules/u${String(n)}.md`] = "u";
+        many[`w/app/.claude/rules/p${String(n)}.md`] = "p";
+      });
+      expect((await tree(many).read()).truncated).toBe(true);
+    },
+    FILE_HEAVY_TIMEOUT_MS,
+  );
 
   it.skipIf(process.platform === "win32")(
     "marks what is linked or imported from outside the directory as needing approval, and never follows a network path",
@@ -199,13 +205,17 @@ describe("readInstructions", () => {
     ]);
   });
 
-  it("says the listing stopped when one rules folder holds more than its cap", async () => {
-    const many: Record<string, string> = {};
-    Array.from({ length: RULES_PER_FOLDER_MAX + 1 }, (_, n) => (many[`w/app/.claude/rules/r${String(n)}.md`] = "r"));
-    const result = await tree(many).read();
-    expect(result.files.filter((file) => file.scope === "rule")).toHaveLength(RULES_PER_FOLDER_MAX);
-    expect(result.truncated).toBe(true);
-  });
+  it(
+    "says the listing stopped when one rules folder holds more than its cap",
+    async () => {
+      const many: Record<string, string> = {};
+      Array.from({ length: RULES_PER_FOLDER_MAX + 1 }, (_, n) => (many[`w/app/.claude/rules/r${String(n)}.md`] = "r"));
+      const result = await tree(many).read();
+      expect(result.files.filter((file) => file.scope === "rule")).toHaveLength(RULES_PER_FOLDER_MAX);
+      expect(result.truncated).toBe(true);
+    },
+    FILE_HEAVY_TIMEOUT_MS,
+  );
 
   it.skipIf(process.platform === "win32")("lists nothing, looking nothing up, for a directory that leads to a network path", async () => {
     const { at } = tree({ "h/.claude/CLAUDE.md": "user" });
@@ -231,11 +241,15 @@ describe("readInstructions", () => {
     expect([loads["mine.md"], loads["theirs.md"]]).toEqual(["launch", "approval"]);
   });
 
-  it("says the listing stopped only when a rules folder really holds more than it reads", async () => {
-    const exactly: Record<string, string> = { "w/app/.claude/rules/a.md": "a" };
-    Array.from({ length: RULE_ENTRIES_MAX - 1 }, (_, n) => (exactly[`w/app/.claude/rules/n${String(n)}.txt`] = ""));
-    expect((await tree(exactly).read()).truncated).toBe(false);
-    const over = { ...exactly, "w/app/.claude/rules/extra.txt": "" };
-    expect((await tree(over).read()).truncated).toBe(true);
-  });
+  it(
+    "says the listing stopped only when a rules folder really holds more than it reads",
+    async () => {
+      const exactly: Record<string, string> = { "w/app/.claude/rules/a.md": "a" };
+      Array.from({ length: RULE_ENTRIES_MAX - 1 }, (_, n) => (exactly[`w/app/.claude/rules/n${String(n)}.txt`] = ""));
+      expect((await tree(exactly).read()).truncated).toBe(false);
+      const over = { ...exactly, "w/app/.claude/rules/extra.txt": "" };
+      expect((await tree(over).read()).truncated).toBe(true);
+    },
+    FILE_HEAVY_TIMEOUT_MS,
+  );
 });

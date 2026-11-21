@@ -75,7 +75,7 @@ is where to go read why, not a gap nobody noticed.
 | 9 | **working / waiting flags** | **hooks** (`--settings`) — both | **rollout tail** (1s poll) for working, **`PermissionRequest` hook** (`-c`, trusted once per machine) for waiting — **both** | **hooks** (`.agents/hooks.json` in the directory) — **both**, not on Windows | — | — | **hooks** (a machine-global file) — **working only** | **hooks** (a machine-global file) — **both** |
 | 10 | **Attention sound / Web Push** | yes — finished **and** blocked | yes — finished **and** blocked (the latter once its hook is trusted) | yes — finished only | — | — | yes — finished only | yes — finished only |
 | 11 | Tool-call history (Tools pane) + work phase | yes (from `Pre`/`PostToolUse`) | — | — | — | — | yes (from `preToolUse` / `postToolUse`) | yes (from `preToolUse` / `postToolUse`) |
-| 12 | Last turn → header prompt, handoff, round table, prompts pane | yes | yes | — | — | — | — (its `turns` table would give it) | yes, from the transcript `.jsonl` |
+| 12 | Last turn → header prompt, handoff, round table, prompts pane | yes | yes | — | yes, from `chat_history.jsonl` — **only `user` messages with a `prompt_index` are the user's; the rest is context grok injects** | — | — (its `turns` table would give it) | yes, from the transcript `.jsonl` |
 | 13 | AI-generated session title | yes | — (shows codex's own `/rename` name in the list) | — | — | — | — (the list shows copilot's own `summary`) | — (the list shows the first user message) |
 | 14 | Decision log (`AskUserQuestion`) | yes | — | — | — | — | — | — |
 | 15 | `ctx %` + token badges | yes | yes | yes | yes | yes | — (its `assistant_usage_events` table would give it) | token badge yes, from `stop` (in memory — it writes them to no file); no `ctx %`, because its `model` is `"default"` unless pinned |
@@ -244,7 +244,9 @@ row 9, not from row 18, and an agent with the whole GUI MCP and no hooks gets ne
 **11–14 · Transcript reading.** Requires a **machine-readable, per-session conversation log** with
 user turns and assistant turns distinguishable — and, for the AI title and the decision log,
 claude's specific record shapes. `server/session/transcript/last-turn.ts` normalizes claude and codex into one
-`LastTurn`; a third agent means a third reader there, and until it exists the header shows no
+`LastTurn`; cursor and grok have their own readers beside their other files (`cursor-last-turn.ts`,
+`grok-last-turn.ts`), and share the `<user_query>` unwrapping (`server/agents/user-query.ts`) because
+neither escapes the marker. An agent without a reader answers `EMPTY_TURN`: the header shows no
 prompt, handoff has nothing to copy, and a round-table seat contributes nothing.
 
 **15–17 · Accounting.** Needs a file where token counts can be found — at **whatever granularity the

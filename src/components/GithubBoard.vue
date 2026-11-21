@@ -35,6 +35,7 @@ const isRepoBoard = (row: unknown): row is RepoBoard => isRecord(row) && typeof 
 
 async function load(): Promise<void> {
   const id = ++requestId;
+  const startedAt = readStarted();
   loading.value = true;
   try {
     const res = await fetchWithTimeout("/api/github/board", {}, SLOW_COMMAND_TIMEOUT_MS);
@@ -44,7 +45,10 @@ async function load(): Promise<void> {
     failed.value = rows === null;
     // A failed read keeps the cards on screen: with the board reading itself every minute, one
     // dropped request would otherwise blank it until the next.
-    if (rows) repos.value = rows.filter(isRepoBoard);
+    if (rows) {
+      repos.value = rows.filter(isRepoBoard);
+      readApplied(startedAt);
+    }
   } catch {
     if (id === requestId) failed.value = true;
   } finally {
@@ -53,7 +57,7 @@ async function load(): Promise<void> {
 }
 
 // The cards with their cells' state as it is now, which is what every view below reads.
-const liveRepos = useGithubBoardLive(repos, () => void load());
+const { liveRepos, readStarted, readApplied } = useGithubBoardLive(repos, () => void load());
 const shownRepos = computed(() => (boardOpenWorkOnly.value ? openWorkOnly(liveRepos.value) : liveRepos.value));
 const onOpenWorkOnlyChange = (event: Event): void => {
   if (event.target instanceof HTMLInputElement) setBoardOpenWorkOnly(event.target.checked);

@@ -84,6 +84,7 @@ import { codexSessionRoot, resolveClaudeWithAccount, resolveCodexWithAccount } f
 import { accountDirectoryMcpGroups } from "../session/accounts/account-mcp.js";
 import { createKeySerializer } from "../infra/async/serialize-per-key.js";
 import { killPty } from "../session/pty/pty-kill.js";
+import { sessionPermissionModesHydrated } from "../session/spawn/agents/session-permission-mode.js";
 
 const sessionConnects = createKeySerializer();
 
@@ -530,9 +531,10 @@ export async function handleClaudeConnection(deps: WsRouteDeps, ws: WebSocket, r
   // conversation on plain claude — a different model, mid-thread. Same guard the antigravity
   // conversation map takes, for the same restart case.
   await customAgentSessionsHydrated;
-  // And which GUI tool groups it was limited to (#3033), read by the spawn: a resume that ran ahead
-  // of the log would hand a restricted session its directory's whole registration.
-  await guiGroupRestrictionsHydrated;
+  // And which GUI tool groups it was limited to (#3033) and the permission mode it was started in
+  // (#3334), read by the spawn: a resume that ran ahead of either log would hand a restricted session
+  // its directory's whole registration, or bring a Library promotion back out of plan mode.
+  await Promise.all([guiGroupRestrictionsHydrated, sessionPermissionModesHydrated]);
   // The account, before resolving too: resolving asks whether the transcript exists, and a session
   // started on a second login has it in THAT home. A requested session runs wherever its transcript
   // already is; only a newly minted one takes the picked account.

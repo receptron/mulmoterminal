@@ -19,7 +19,8 @@ import {
   type LibrarySearchHit,
 } from "../../common/library";
 import { jsonBody } from "../jsonBody";
-import { fetchWithTimeout } from "../utils/fetchWithTimeout";
+import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
+import type { PromoteTarget } from "../../common/libraryPromote";
 
 /** The index answers a page from what it holds, but a first open also starts the worker. */
 const LIBRARY_READ_TIMEOUT_MS = 15_000;
@@ -190,6 +191,23 @@ const postJson = (body: Record<string, unknown>): RequestInit => ({
   headers: { "content-type": "application/json" },
   body: JSON.stringify(body),
 });
+
+/** The session started to promote a conversation; or why none was: it is no longer in the index
+ *  ("gone"), the directory it ran in is not on this machine ("no-dir"), or the start failed. */
+export type LibraryPromoteResult = { kind: "started"; chatId: string } | { kind: "gone" | "no-dir" | "failed" };
+
+/** Starts a Claude session in the conversation's directory, asking the bundled skill to promote it. */
+export async function promoteLibraryConversation(id: string, cwd: string | null, target: PromoteTarget): Promise<LibraryPromoteResult> {
+  try {
+    const response = await fetchWithTimeout(`/api/library/conversations/${encodeURIComponent(id)}/promote`, postJson({ cwd, target }), SLOW_COMMAND_TIMEOUT_MS);
+    if (response.status === 404) return { kind: "gone" };
+    if (response.status === 409) return { kind: "no-dir" };
+    const body = await jsonBody(response);
+    return response.ok && typeof body.chatId === "string" ? { kind: "started", chatId: body.chatId } : { kind: "failed" };
+  } catch {
+    return { kind: "failed" };
+  }
+}
 
 /** The conversation that made each of these PRs in `repository`, for those the Library knows. */
 export async function loadPrCreators(repository: string, numbers: readonly number[]): Promise<LibraryPrCreator[] | null> {
