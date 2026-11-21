@@ -15,11 +15,22 @@ describe("linkTargets", () => {
   });
 });
 
+describe("linkTargets, written as a browser reads them", () => {
+  it("drops a query and decodes percent escapes, keeping a target that does not decode", () => {
+    expect(linkTargets("[raw](docs/readme.md?raw=1) [spaced](docs/my%20file.md) [odd](docs/100%.md)")).toEqual([
+      "docs/readme.md",
+      "docs/my file.md",
+      "docs/100%.md",
+    ]);
+  });
+});
+
 describe("namedPaths", () => {
   it("names links and code-span paths, each in the file's folder and the working directory", () => {
-    expect(namedPaths("[a](docs/a.md) and `src/b.ts`", "/w/app/sub/CLAUDE.md", "/w/app", "/h", false)).toEqual([
-      { reference: "docs/a.md", candidates: ["/w/app/sub/docs/a.md", "/w/app/docs/a.md"] },
-      { reference: "src/b.ts", candidates: ["/w/app/sub/src/b.ts", "/w/app/src/b.ts"] },
+    const at = (...parts: string[]) => path.resolve("/w/app", ...parts);
+    expect(namedPaths("[a](docs/a.md) and `src/b.ts`", at("sub", "CLAUDE.md"), at(), "/h", process.platform === "win32")).toEqual([
+      { reference: "docs/a.md", candidates: [at("sub", "docs", "a.md"), at("docs", "a.md")] },
+      { reference: "src/b.ts", candidates: [at("sub", "src", "b.ts"), at("src", "b.ts")] },
     ]);
   });
   it("leaves out placeholders and a tool's own dot-folder, as examples rather than this project's files", () => {

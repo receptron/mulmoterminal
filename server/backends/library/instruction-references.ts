@@ -22,6 +22,17 @@ interface LinkToken {
 
 const isToken = (value: unknown): value is LinkToken => typeof value === "object" && value !== null && "type" in value && typeof value.type === "string";
 
+/** The file a link target names: without its `#section` or `?query`, and with `%20` and the like decoded
+ *  (a target that does not decode is kept as written). */
+function linkPath(href: string): string {
+  const bare = href.split("#")[0]?.split("?")[0] ?? "";
+  try {
+    return decodeURIComponent(bare);
+  } catch {
+    return bare;
+  }
+}
+
 /** Relative targets of Markdown links, outside code — read by marked's own lexer, as the renderer reads
  *  them: `[guide](docs/guide.md)`. Not a web address, a mail link, or an anchor on the same page; a
  *  `#section` after a path is dropped. */
@@ -34,7 +45,7 @@ export function linkTargets(text: string): string[] {
       walk([...(token.tokens ?? []), ...(token.items ?? [])]);
     });
   walk(new Lexer().lex(text));
-  return hrefs.map((href) => href.split("#")[0] ?? "").filter((target) => target !== "" && !/^[a-z][a-z0-9+.-]*:/i.test(target));
+  return hrefs.map(linkPath).filter((target) => target !== "" && !/^[a-z][a-z0-9+.-]*:/i.test(target));
 }
 
 /** A path written as an example or a convention rather than as this project's file: a placeholder name
