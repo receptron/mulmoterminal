@@ -13,6 +13,10 @@ import {
 import type { LibraryIndex } from "./library-index.js";
 import { inReadSnapshot, readLease } from "./index-store.js";
 import { searchLibrary } from "./library-search.js";
+import type { RepeatCandidate, RepeatDetail } from "../../../common/libraryRepeats.js";
+import { candidateOf, occurrencesOf, repeatCandidates, repeatGroups, type RepeatPrompt, type RepeatRules } from "./repeat-detect.js";
+import { automatedSessions, promptLogReader } from "./repeat-source.js";
+import { isTemporaryCwd } from "./temporary-path.js";
 
 export interface LibraryTranscript {
   path: string;
@@ -33,15 +37,27 @@ export interface LibraryService {
   prCreators(repository: string, numbers: number[]): Promise<LibraryPrCreator[]>;
   /** The conversation that last wrote a memory file, by its path, when the index knows one. */
   memorySource(file: string): Promise<LibraryConversation | null>;
+  /** Instructions typed again and again, most typed first (#3334). */
+  repeats(): Promise<RepeatCandidate[]>;
+  /** One of them with each time it was typed, or null when no candidate has that id now. */
+  repeat(id: string): Promise<RepeatDetail | null>;
+}
+
+/** Where the repeated-instruction check reads from, and its clock. */
+export interface LibraryServiceOptions {
+  historyFile?: string;
+  temporaryRoots?: readonly string[];
+  now?: () => number;
 }
 
 /** Every call also asks the index to catch up — in the background, so the answer is what the
  *  index holds now. */
-export function createLocalLibraryService(index: LibraryIndex): LibraryService {
+export function createLocalLibraryService(index: LibraryIndex, options: LibraryServiceOptions = {}): LibraryService {
   const answer = <T>(read: () => T): Promise<T> => {
     index.refresh();
     return Promise.resolve(read());
   };
+  const repeats = repeatReader(index, options);
   return {
     status: () => answer(() => index.status()),
     list: (filter, offset, limit) =>
@@ -74,6 +90,30 @@ export function createLocalLibraryService(index: LibraryIndex): LibraryService {
         const row = memorySource(index.db, file);
         return row === null ? null : conversationOfRow(row);
       }),
+    repeats: async () => {
+      const { prompts, rules } = await repeats();
+      return repeatCandidates(prompts, rules);
+    },
+    repeat: async (id) => {
+      const { prompts, rules } = await repeats();
+      const members = repeatGroups(prompts, rules).find((group) => candidateOf(group).id === id);
+      return members === undefined ? null : { ...candidateOf(members), occurrences: occurrencesOf(members) };
+    },
+  };
+}
+
+/** The prompts and the rules the repeated-instruction check runs on, read when asked. */
+function repeatReader(index: LibraryIndex, options: LibraryServiceOptions): () => Promise<{ prompts: RepeatPrompt[]; rules: RepeatRules }> {
+  const readLog = options.historyFile === undefined ? async () => [] : promptLogReader(options.historyFile);
+  const roots = options.temporaryRoots ?? [];
+  return async () => {
+    const automated = automatedSessions(index.db);
+    const rules: RepeatRules = {
+      now: (options.now ?? Date.now)(),
+      isAutomatedSession: (sessionId) => automated.has(sessionId),
+      isTemporaryProject: (project) => isTemporaryCwd(project, roots),
+    };
+    return { prompts: await readLog(), rules };
   };
 }
 

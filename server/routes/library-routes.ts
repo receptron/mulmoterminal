@@ -14,6 +14,7 @@ import { mountMemoryRoutes } from "./library-memory-routes.js";
 import { mountToolsRoutes, type ToolsRouteDeps } from "./library-tools-routes.js";
 import { mountLibraryPromoteRoute, type LibraryPromoteDeps } from "./library-promote-routes.js";
 import { mountStorageRoutes, type LibraryStorageDeps } from "./library-storage-routes.js";
+import { mountRepeatRoutes } from "./library-repeat-routes.js";
 import { claudeProjectsRoot } from "../session/project-dir.js";
 import type { TrashLayout } from "../files/tree-ops.js";
 
@@ -96,6 +97,7 @@ export function mountLibraryRoutes(app: Express, deps: LibraryRouteDeps = {}): v
   mountToolsRoutes(app, call, deps.tools);
   if (deps.promote !== undefined) mountLibraryPromoteRoute(app, call, deps.promote);
   mountStorageRoutes(app, call, deps.storage);
+  mountRepeatRoutes(app, call, deps.promote);
   app.get("/api/library/search", async (req, res) => {
     const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
     if (query === "" || query.length > MAX_QUERY_CHARS) {

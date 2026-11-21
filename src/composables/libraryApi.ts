@@ -23,6 +23,7 @@ import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
 import type { PromoteTarget } from "../../common/libraryPromote";
 import { isLibraryStorageAnswer, type LibraryStorageAnswer } from "../../common/libraryStorage";
+import { isRepeatCandidate, isRepeatDetail, type RepeatCandidate, type RepeatDetail, type RepeatTarget } from "../../common/libraryRepeats";
 
 /** The index answers a page from what it holds, but a first open also starts the worker. */
 const LIBRARY_READ_TIMEOUT_MS = 15_000;
@@ -200,12 +201,33 @@ export type LibraryPromoteResult = { kind: "started"; chatId: string } | { kind:
 
 /** Starts a Claude session in the conversation's directory, asking the bundled skill to promote it. */
 export async function promoteLibraryConversation(id: string, cwd: string | null, target: PromoteTarget): Promise<LibraryPromoteResult> {
+  return postPromote(`/api/library/conversations/${encodeURIComponent(id)}/promote`, { cwd, target });
+}
+
+/** The session started to make a repeated instruction a rule or a skill (#3334); or why none was. */
+export async function promoteLibraryRepeat(id: string, target: RepeatTarget): Promise<LibraryPromoteResult> {
+  return postPromote(`/api/library/repeats/${encodeURIComponent(id)}/promote`, { target });
+}
+
+/** One repeated instruction with each time it was typed, newest first; null when it is gone. */
+export async function loadLibraryRepeat(id: string): Promise<RepeatDetail | null> {
+  const body = await readJson(`/api/library/repeats/${encodeURIComponent(id)}`);
+  return isRepeatDetail(body) ? body : null;
+}
+
+/** Instructions typed again and again, most typed first (#3334). */
+export async function loadLibraryRepeats(): Promise<RepeatCandidate[] | null> {
+  const body = await readJson("/api/library/repeats");
+  return body !== null && isUnknownArray(body.candidates) ? body.candidates.filter(isRepeatCandidate) : null;
+}
+
+async function postPromote(url: string, body: Record<string, unknown>): Promise<LibraryPromoteResult> {
   try {
-    const response = await fetchWithTimeout(`/api/library/conversations/${encodeURIComponent(id)}/promote`, postJson({ cwd, target }), SLOW_COMMAND_TIMEOUT_MS);
+    const response = await fetchWithTimeout(url, postJson(body), SLOW_COMMAND_TIMEOUT_MS);
     if (response.status === 404) return { kind: "gone" };
     if (response.status === 409) return { kind: "no-dir" };
-    const body = await jsonBody(response);
-    return response.ok && typeof body.chatId === "string" ? { kind: "started", chatId: body.chatId } : { kind: "failed" };
+    const answer = await jsonBody(response);
+    return response.ok && typeof answer.chatId === "string" ? { kind: "started", chatId: answer.chatId } : { kind: "failed" };
   } catch {
     return { kind: "failed" };
   }

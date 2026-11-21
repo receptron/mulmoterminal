@@ -30,6 +30,7 @@ import { conversationKey, groupConversations, listedInOrder } from "./libraryRow
 import { useLibraryMarks } from "../../composables/useLibraryMarks";
 import type { LibraryConversation } from "../../../common/library";
 import LibraryStorage from "./LibraryStorage.vue";
+import LibraryRepeats from "./LibraryRepeats.vue";
 import { useLibraryStorage } from "../../composables/useLibraryStorage";
 
 const { t } = useI18n();
@@ -46,22 +47,25 @@ const {
 } = useLibraryMemory(isOpen);
 const memoryCount = computed(() => filterMemory(memoryProjects.value, query.value).reduce((sum, project) => sum + project.files.length, 0));
 /** Which kind the list shows: the conversations, Claude Code's memory, its tools, or what its home takes. */
-const kind = ref<"conversations" | "memory" | "tools" | "storage">("conversations");
+const kind = ref<"conversations" | "memory" | "repeats" | "tools" | "storage">("conversations");
 const SHORTCUTS = {
   conversations: "libraryView.shortcuts",
   memory: "libraryView.memory.shortcuts",
+  repeats: "libraryView.repeats.shortcuts",
   tools: "libraryView.tools.shortcuts",
   storage: "libraryView.storage.shortcuts",
 } as const;
 const SEARCH_LABELS = {
   conversations: "libraryView.search",
   memory: "libraryView.memory.search",
+  repeats: "libraryView.repeats.search",
   tools: "libraryView.tools.search",
   storage: "libraryView.storage.search",
 } as const;
 const searchLabel = computed(() => t(SEARCH_LABELS[kind.value]));
 const memoryView = useTemplateRef<{ move(by: number): Promise<void>; startEdit(): void }>("memoryView");
 const toolsView = useTemplateRef<{ move(by: number): Promise<void> }>("toolsView");
+const repeatsView = useTemplateRef<{ move(by: number): Promise<void> }>("repeatsView");
 const storageView = useTemplateRef<{ move(by: number): Promise<void> }>("storageView");
 const storage = useLibraryStorage(
   computed(() => isOpen.value && kind.value === "storage"),
@@ -288,8 +292,12 @@ function onKey(event: KeyboardEvent): void {
   });
   // In Memory, Enter on a focused row is the row's own (it presses); elsewhere it edits.
   const onMemoryRow = target?.closest("[data-memory-row]") != null;
-  // Tools and Storage have no primary action: Enter stays the focused control's own.
-  if (action === null || (action === "primary" && ((kind.value === "memory" && onMemoryRow) || kind.value === "tools" || kind.value === "storage"))) return;
+  // Repeats, Tools and Storage have no primary action: Enter stays the focused control's own.
+  if (
+    action === null ||
+    (action === "primary" && ((kind.value === "memory" && onMemoryRow) || kind.value === "repeats" || kind.value === "tools" || kind.value === "storage"))
+  )
+    return;
   event.preventDefault();
   runKeyAction(action);
 }
@@ -302,6 +310,8 @@ function runKeyAction(action: NonNullable<ReturnType<typeof libraryKeyAction>>):
   } else if (kind.value === "memory") {
     if (action === "primary") memoryView.value?.startEdit();
     else void memoryView.value?.move(by);
+  } else if (kind.value === "repeats") {
+    if (action !== "primary") void repeatsView.value?.move(by);
   } else if (kind.value === "tools") {
     void toolsView.value?.move(by);
   } else if (action === "primary") void resume();
@@ -361,6 +371,16 @@ onBeforeUnmount(() => {
           </button>
           <button
             type="button"
+            data-testid="library-kind-repeats"
+            class="cursor-pointer rounded border-0 px-2 py-1"
+            :class="kind === 'repeats' ? 'bg-hover text-fg' : 'bg-transparent text-secondary hover:text-fg'"
+            :aria-pressed="kind === 'repeats'"
+            @click="kind = 'repeats'"
+          >
+            {{ t("libraryView.repeats.kind") }}
+          </button>
+          <button
+            type="button"
             data-testid="library-kind-tools"
             class="cursor-pointer rounded border-0 px-2 py-1"
             :class="kind === 'tools' ? 'bg-hover text-fg' : 'bg-transparent text-secondary hover:text-fg'"
@@ -384,7 +404,8 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <LibraryTools v-if="kind === 'tools'" ref="toolsView" :query="query" :initial-cwd="selected?.cwd ?? null" />
+      <LibraryRepeats v-if="kind === 'repeats'" ref="repeatsView" :query="query" :now="now" @open-conversation="openFromMemory" />
+      <LibraryTools v-else-if="kind === 'tools'" ref="toolsView" :query="query" :initial-cwd="selected?.cwd ?? null" />
       <LibraryStorage
         v-else-if="kind === 'storage'"
         ref="storageView"

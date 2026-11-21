@@ -143,6 +143,14 @@ follows is a refusal to add one of those, and the reason sits next to it.
 
 ![Memory with an issue](library-design/memory.png)
 
+## Repeats
+
+- Instructions typed again and again (#3334): read from Claude Code's prompt log, the counted ones
+  being what a person typed in a conversation (no commands, pastes, automated runs or one-prompt
+  sessions), grouped by their words and, for short ones in one project, by most of their letters.
+  Nothing shows until the kind is opened. A candidate becomes a rule or a skill through the same
+  skill and plan-mode cell as Promote, by its id.
+
 ## Tools and storage
 
 - Tools: pick one directory (the project filter becomes a directory picker) and list its rules,
