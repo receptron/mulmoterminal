@@ -5,7 +5,7 @@ import { promises as fsPromises } from "node:fs";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { IMPORTS_PER_FILE_MAX, readInstructions, RULES_PER_FOLDER_MAX } from "../../../../server/backends/library/instruction-files-read";
+import { IMPORTS_PER_FILE_MAX, readInstructions, RULE_ENTRIES_MAX, RULES_PER_FOLDER_MAX } from "../../../../server/backends/library/instruction-files-read";
 import { INSTRUCTION_FILE_MAX_BYTES } from "../../../../common/libraryTools";
 
 const dirs: string[] = [];
@@ -229,5 +229,13 @@ describe("readInstructions", () => {
     });
     const loads = Object.fromEntries((await read()).files.map((file) => [path.basename(file.path), file.loads]));
     expect([loads["mine.md"], loads["theirs.md"]]).toEqual(["launch", "approval"]);
+  });
+
+  it("says the listing stopped only when a rules folder really holds more than it reads", async () => {
+    const exactly: Record<string, string> = { "w/app/.claude/rules/a.md": "a" };
+    Array.from({ length: RULE_ENTRIES_MAX - 1 }, (_, n) => (exactly[`w/app/.claude/rules/n${String(n)}.txt`] = ""));
+    expect((await tree(exactly).read()).truncated).toBe(false);
+    const over = { ...exactly, "w/app/.claude/rules/extra.txt": "" };
+    expect((await tree(over).read()).truncated).toBe(true);
   });
 });

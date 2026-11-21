@@ -98,6 +98,13 @@ async function firstEntries(folder: string, count: number): Promise<Dirent[]> {
   return entries;
 }
 
+/** At most `budget` entries of a folder, and whether there were more: one past it is read, so "more"
+ *  means there was one, not that the count came out even. */
+async function entriesWithin(folder: string, budget: number): Promise<{ entries: Dirent[]; cut: boolean }> {
+  const read = await firstEntries(folder, budget + 1);
+  return { entries: read.slice(0, budget), cut: read.length > budget };
+}
+
 /** One entry of a rules folder: a folder to walk, a rule, or nothing. Outside `within`, by where it
  *  really is, it needs approval. */
 async function ruleEntry(full: string, within: string[] | null): Promise<{ kind: "folder" | "rule"; rule: RuleFile; real: string } | null> {
@@ -107,6 +114,20 @@ async function ruleEntry(full: string, within: string[] | null): Promise<{ kind:
   const rule = { path: full, external: within !== null && !within.some((dir) => isInside(dir, real)) };
   if (info.isDirectory()) return { kind: "folder", rule, real };
   return info.isFile() && full.endsWith(".md") ? { kind: "rule", rule, real } : null;
+}
+
+type Seen = NonNullable<Awaited<ReturnType<typeof ruleEntry>>>;
+
+/** A folder's entries into the folders still to walk and the rules found. Inside a folder already
+ *  outside, everything is. */
+async function sortEntries(dir: Seen, entries: Dirent[], within: string[] | null, into: { queue: Seen[]; found: RuleFile[] }): Promise<void> {
+  for (const entry of entries) {
+    const seen = await ruleEntry(path.join(dir.rule.path, entry.name), within);
+    if (seen === null) continue;
+    if (dir.rule.external) seen.rule.external = true;
+    if (seen.kind === "folder") into.queue.push(seen);
+    else into.found.push(seen.rule);
+  }
 }
 
 /** The `.md` files under a rules folder (itself perhaps a link), in path order, at most the cap; `capped`
@@ -119,22 +140,19 @@ async function ruleFiles(folder: string, within: string[] | null): Promise<{ rul
   const queue = [root];
   const walked = new Set<string>();
   let budget = RULE_ENTRIES_MAX;
+  let more = false;
   while (queue.length > 0 && budget > 0) {
     const dir = queue.shift() ?? root;
     if (walked.has(dir.real)) continue;
     walked.add(dir.real);
-    const entries = await firstEntries(dir.rule.path, budget);
+    const { entries, cut } = await entriesWithin(dir.rule.path, budget);
+    more ||= cut;
     budget -= entries.length;
-    for (const entry of entries) {
-      const seen = await ruleEntry(path.join(dir.rule.path, entry.name), within);
-      // Inside a folder already outside, everything is.
-      if (seen !== null && dir.rule.external) seen.rule.external = true;
-      if (seen?.kind === "folder") queue.push(seen);
-      else if (seen?.kind === "rule") found.push(seen.rule);
-    }
+    await sortEntries(dir, entries, within, { queue, found });
   }
   const sorted = found.toSorted((a, b) => a.path.localeCompare(b.path));
-  return { rules: sorted.slice(0, RULES_PER_FOLDER_MAX), capped: sorted.length > RULES_PER_FOLDER_MAX || budget <= 0 };
+  const leftOver = more || (budget <= 0 && queue.length > 0);
+  return { rules: sorted.slice(0, RULES_PER_FOLDER_MAX), capped: sorted.length > RULES_PER_FOLDER_MAX || leftOver };
 }
 
 interface Walk {
