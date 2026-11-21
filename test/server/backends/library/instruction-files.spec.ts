@@ -75,6 +75,9 @@ describe("importsOf", () => {
   ])("trims only the punctuation closing a sentence: %s", (text, imported) => {
     expect(importsOf(text, from, "/h")).toEqual([imported]);
   });
+  it("stops reading imports at the limit, distinct ones in the order written", () => {
+    expect(importsOf("@a.md @a.md @b.md @c.md @d.md", from, "/h", path, 2)).toEqual(["/w/app/a.md", "/w/app/b.md"]);
+  });
   it("reads Windows imports whole, backslashes and all", () => {
     expect(importsOf("@C:\\shared\\guide.md and @docs\\guide.md", "C:\\w\\CLAUDE.md", "C:\\h", path.win32)).toEqual([
       "C:\\shared\\guide.md",

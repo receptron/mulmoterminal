@@ -110,7 +110,7 @@ describe("readInstructions", () => {
     const { read } = tree(files);
     const result = await read();
     expect(result.files.filter((file) => file.scope === "import")).toHaveLength(IMPORTS_PER_FILE_MAX);
-    expect(result.truncated).toBe(false);
+    expect(result.truncated).toBe(true); // the imports past the cap are not listed, and it says so
     const many: Record<string, string> = {};
     Array.from({ length: RULES_PER_FOLDER_MAX }, (_, n) => {
       many[`h/.claude/rules/u${String(n)}.md`] = "u";

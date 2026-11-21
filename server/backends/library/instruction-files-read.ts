@@ -170,7 +170,10 @@ async function addFile(
   walk.out.push({ ...read.file, scope: candidate.scope, loads, importedBy });
   if (read.text === null || depth >= IMPORT_DEPTH_MAX) return;
   const fromInside = insideCwd(walk, read.real);
-  for (const imported of importsOf(read.text, candidate.path, walk.home).slice(0, IMPORTS_PER_FILE_MAX)) {
+  // One past the cap is asked for, so a file with more says the listing stopped.
+  const imports = importsOf(read.text, candidate.path, walk.home, path, IMPORTS_PER_FILE_MAX + 1);
+  if (imports.length > IMPORTS_PER_FILE_MAX) walk.truncated = true;
+  for (const imported of imports.slice(0, IMPORTS_PER_FILE_MAX)) {
     const landed = await localTarget(imported);
     if (landed === null) continue;
     // A file in the project importing one really outside it: loaded only once that is approved.

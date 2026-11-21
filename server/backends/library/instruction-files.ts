@@ -80,19 +80,22 @@ export const IMPORT_DEPTH_MAX = 4;
 
 /** The `@path` imports in an instruction file's text, outside code spans and blocks: a backslash keeps
  *  a space in the path, and a quoted path is not an import. Resolved against the file's own folder,
- *  `~/` against the home. An `@` inside a word (an address) is not one. */
+ *  `~/` against the home. An `@` inside a word (an address) is not one. At most `limit`, distinct, in
+ *  the order written: reading stops there, however many more the file holds. */
 export function importsOf(
   text: string,
   fromFile: string,
   home: string,
   flavour: Pick<typeof path, "dirname" | "resolve" | "join" | "isAbsolute"> = path,
+  limit = Number.POSITIVE_INFINITY,
 ): string[] {
-  const found = [...splitCode(text).prose.matchAll(/(?<![\w@])@((?:\\.|[^\s"'`\\])+)/g)].map((match) => (match[1] ?? "").replace(/\\ /g, " "));
-  const paths = found
-    .map(withoutClosingPunctuation)
-    .filter((raw) => raw !== "")
-    .map((raw) => (raw.startsWith("~/") ? flavour.join(home, raw.slice(2)) : flavour.resolve(flavour.dirname(fromFile), raw)));
-  return [...new Set(paths)];
+  const paths = new Set<string>();
+  for (const match of splitCode(text).prose.matchAll(/(?<![\w@])@((?:\\.|[^\s"'`\\])+)/g)) {
+    if (paths.size >= limit) break;
+    const raw = withoutClosingPunctuation((match[1] ?? "").replace(/\\ /g, " "));
+    if (raw !== "") paths.add(raw.startsWith("~/") ? flavour.join(home, raw.slice(2)) : flavour.resolve(flavour.dirname(fromFile), raw));
+  }
+  return [...paths];
 }
 
 /** Whether a rule file loads only for matching files: it has a `paths` field in its frontmatter. */
