@@ -41,21 +41,31 @@ interface RecentReply {
   weight: number;
 }
 
+/** One count of Claude Code's (one `startTime`): the highest overall cost it reached, and each model's
+ *  highest totals. */
+interface RunTotals {
+  costUsd: number;
+  models: Record<string, SpendTotals>;
+}
+
 export interface SpendState {
-  /** The count Claude Code is on (its `startTime`), and each model's highest totals in it. */
-  run: { startTime: number | null; models: Record<string, SpendTotals> } | null;
-  /** What the counts before this one came to, in dollars. */
-  earlierRunsUsd: number;
+  /** Every count, by its `startTime` (`runKey`). A transcript holds as many as Claude Code started over. */
+  runs: Record<string, RunTotals>;
   /** The replies since the last cost record: slot → model → weight. */
   pending: Record<string, Record<string, number>>;
+  /** The last replies seen, kept across cost records so a reply's later records never count again. */
   recent: RecentReply[];
   /** When the last record with a time was written. */
   lastAt: number | null;
+  /** Shared out before this file had any time, by model: placed at the first time it has. */
+  unplaced: Record<string, SpendTotals>;
   /** Shared out since the last commit, by `slot|model`. */
   unwritten: Record<string, SpendRow>;
 }
 
-export const emptySpendState = (): SpendState => ({ run: null, earlierRunsUsd: 0, pending: {}, recent: [], lastAt: null, unwritten: {} });
+export const emptySpendState = (): SpendState => ({ runs: {}, pending: {}, recent: [], lastAt: null, unplaced: {}, unwritten: {} });
+
+const runKey = (startTime: number | null): string => (startTime === null ? "" : String(startTime));
 
 type SpendField = keyof SpendTotals;
 const perField = (value: (field: SpendField) => number): SpendTotals => ({
@@ -76,11 +86,16 @@ export function modelName(key: string): string {
 }
 
 /** What all of a conversation's counts came to, or null before its first cost record. */
-export const spentUsd = (spend: SpendState): number | null =>
-  spend.run === null ? null : spend.earlierRunsUsd + Object.values(spend.run.models).reduce((sum, totals) => sum + totals.costUsd, 0);
+export function spentUsd(spend: SpendState): number | null {
+  const runs = Object.values(spend.runs);
+  return runs.length === 0 ? null : runs.reduce((sum, run) => sum + run.costUsd, 0);
+}
 
 export function foldSpendRecord(spend: SpendState, record: Record<string, unknown>, at_ms: number | null): void {
-  if (at_ms !== null) spend.lastAt = at_ms;
+  if (at_ms !== null) {
+    spend.lastAt = at_ms;
+    placeUnplaced(spend, at_ms);
+  }
   if (record.type === "assistant" && at_ms !== null) foldReply(spend, record, at_ms);
   if (record.type === "cost-state") foldCost(spend, record);
 }
@@ -106,7 +121,9 @@ function foldReply(spend: SpendState, record: Record<string, unknown>, at_ms: nu
   const id = readString(message.id);
   const seen = id === "" ? undefined : spend.recent.find((reply) => reply.id === id);
   if (seen !== undefined) {
-    addPending(spend, seen.slot, seen.model, weight - seen.weight);
+    // Only the change counts: the weight it had may already have been shared out by a cost record.
+    const models = (spend.pending[String(seen.slot)] ??= {});
+    models[seen.model] = Math.max((models[seen.model] ?? 0) + weight - seen.weight, 0);
     seen.weight = weight;
     return;
   }
@@ -136,26 +153,36 @@ export function costRecordTotals(record: Record<string, unknown>): Record<string
   return totals;
 }
 
-// Within one count each total only grows, so a lower one changes nothing; a new `startTime` is a new
-// count, starting from nothing, and the old one's highest is kept.
+/** The count's overall cost as this record tells it: its own total when it gives no breakdown, else every
+ *  model's highest — a model a record leaves out keeps what it reached. */
+function overallCost(run: RunTotals, now: Record<string, SpendTotals>): number {
+  const perModel = Object.keys(now).some((model) => model !== UNKNOWN_MODEL);
+  if (!perModel) return now[UNKNOWN_MODEL]?.costUsd ?? 0;
+  return Object.entries(run.models).reduce((sum, [model, totals]) => (model === UNKNOWN_MODEL ? sum : sum + totals.costUsd), 0);
+}
+
+// Within one count each total only grows, so a lower one changes nothing. The cost is followed as ONE
+// overall total — a record may give it per model or only overall, and the two must not add up twice — and
+// its growth goes to the models whose own cost grew, in proportion. Counts are kept by `startTime`, so a
+// count Claude Code goes back to continues where it was.
 function foldCost(spend: SpendState, record: Record<string, unknown>): void {
   const now = costRecordTotals(record);
   if (Object.keys(now).length === 0) return;
   const startTime = finiteNumber(record.startTime);
-  const sameRun = spend.run !== null && spend.run.startTime === startTime;
-  if (!sameRun) spend.earlierRunsUsd = spentUsd(spend) ?? 0;
-  const before = sameRun && spend.run !== null ? spend.run.models : {};
-  const highest: Record<string, SpendTotals> = { ...before };
-  const grown: Record<string, SpendTotals> = {};
-  Object.entries(now).forEach(([model, totals]) => {
-    const was = before[model] ?? zero();
-    grown[model] = perField((field) => Math.max(totals[field] - was[field], 0));
-    highest[model] = perField((field) => Math.max(totals[field], was[field]));
+  const run = (spend.runs[runKey(startTime)] ??= { costUsd: 0, models: {} });
+  const grown = Object.entries(now).map(([model, totals]): [string, SpendTotals] => {
+    const was = run.models[model] ?? zero();
+    run.models[model] = perField((field) => Math.max(totals[field], was[field]));
+    return [model, perField((field) => Math.max(totals[field] - was[field], 0))];
   });
-  spend.run = { startTime, models: highest };
-  Object.entries(grown).forEach(([model, totals]) => shareOut(spend, model, totals, startTime));
+  const costGrowth = Math.max(overallCost(run, now) - run.costUsd, 0);
+  run.costUsd += costGrowth;
+  const modelGrowth = grown.reduce((sum, [, totals]) => sum + totals.costUsd, 0);
+  grown.forEach(([model, totals]) => {
+    const costUsd = modelGrowth === 0 ? 0 : (costGrowth * totals.costUsd) / modelGrowth;
+    shareOut(spend, model, { ...totals, costUsd }, startTime);
+  });
   spend.pending = {};
-  spend.recent = [];
 }
 
 /** Where `model`'s share goes, as slot → weight: its own replies since the last cost record, else every
@@ -172,18 +199,36 @@ function sharesFor(spend: SpendState, model: string, startTime: number | null): 
   return at_ms === null ? [] : [[slotOf(at_ms), 1]];
 }
 
+function addRow(spend: SpendState, slot: number, model: string, share: SpendTotals): void {
+  const row = (spend.unwritten[`${String(slot)}|${model}`] ??= { at_ms: slot, model, ...zero() });
+  Object.assign(
+    row,
+    perField((field) => row[field] + share[field]),
+  );
+}
+
 function shareOut(spend: SpendState, model: string, grown: SpendTotals, startTime: number | null): void {
   if (Object.values(grown).every((value) => value === 0)) return;
   const shares = sharesFor(spend, model, startTime);
+  if (shares.length === 0) {
+    const held = spend.unplaced[model] ?? zero();
+    spend.unplaced[model] = perField((field) => held[field] + grown[field]);
+    return;
+  }
   const whole = shares.reduce((sum, [, weight]) => sum + weight, 0);
-  shares.forEach(([slot, weight]) => {
-    const key = `${String(slot)}|${model}`;
-    const row = (spend.unwritten[key] ??= { at_ms: slot, model, ...zero() });
-    Object.assign(
-      row,
-      perField((field) => row[field] + (grown[field] * weight) / whole),
-    );
-  });
+  shares.forEach(([slot, weight]) =>
+    addRow(
+      spend,
+      slot,
+      model,
+      perField((field) => (grown[field] * weight) / whole),
+    ),
+  );
+}
+
+function placeUnplaced(spend: SpendState, at_ms: number): void {
+  Object.entries(spend.unplaced).forEach(([model, held]) => addRow(spend, slotOf(at_ms), model, held));
+  spend.unplaced = {};
 }
 
 /** What was shared out since the last call, for the index to add; the state keeps none of it. */
@@ -198,19 +243,17 @@ const isTotals = (value: unknown): value is SpendTotals =>
 const isRecent = (value: unknown): value is RecentReply =>
   isRecord(value) && typeof value.id === "string" && typeof value.slot === "number" && typeof value.model === "string" && typeof value.weight === "number";
 const isRun = (value: unknown): boolean =>
-  value === null ||
-  (isRecord(value) &&
-    (value.startTime === null || typeof value.startTime === "number") &&
-    isRecord(value.models) &&
-    Object.values(value.models).every(isTotals));
+  isRecord(value) && typeof value.costUsd === "number" && isRecord(value.models) && Object.values(value.models).every(isTotals);
+const isTotalsByModel = (value: unknown): boolean => isRecord(value) && Object.values(value).every(isTotals);
 const isPending = (value: unknown): boolean =>
   isRecord(value) && Object.values(value).every((models) => isRecord(models) && Object.values(models).every((weight) => typeof weight === "number"));
 
 /** A spend state read back from the index; anything off-shape means "fold the transcript again". */
 export const isSpendState = (value: unknown): value is SpendState =>
   isRecord(value) &&
-  isRun(value.run) &&
-  typeof value.earlierRunsUsd === "number" &&
+  isRecord(value.runs) &&
+  Object.values(value.runs).every(isRun) &&
+  isTotalsByModel(value.unplaced) &&
   isPending(value.pending) &&
   Array.isArray(value.recent) &&
   value.recent.every(isRecent) &&

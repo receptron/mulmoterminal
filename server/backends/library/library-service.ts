@@ -97,7 +97,9 @@ export function createLocalLibraryService(index: LibraryIndex, options: LibraryS
     retrospective: (now_ms) =>
       answer(() => {
         const since_ms = weekStart(now_ms) - (RETROSPECTIVE_WEEKS - 1) * WEEK_MS - DAY_MS;
-        return retrospective(retrospectiveRows(index.db, since_ms), retrospectiveSpends(index.db, since_ms), now_ms);
+        // One snapshot, so a scan committed between the two reads cannot count a conversation's spend without it.
+        const read = inReadSnapshot(index.db, () => ({ rows: retrospectiveRows(index.db, since_ms), spends: retrospectiveSpends(index.db, since_ms) }));
+        return retrospective(read.rows, read.spends, now_ms);
       }),
     memorySource: (file) =>
       answer(() => {
