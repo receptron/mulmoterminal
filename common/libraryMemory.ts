@@ -12,11 +12,7 @@ export const MEMORY_EDIT_MAX_BYTES = 256 * 1024;
 /** The index's own name in a memory folder. */
 export const MEMORY_INDEX_FILE = "MEMORY.md";
 
-/** The folder Claude Code keeps a directory's data under: every character outside `[A-Za-z0-9_-]`
- *  becomes `-` (its own rule, so a directory is matched to its memory without guessing). */
-export const projectSlug = (cwd: string): string => cwd.replace(/[^a-zA-Z0-9\-_]/g, "-") || "unknown";
-
-/** A project folder's name as Claude Code makes them (`projectSlug`). */
+/** A project folder's name as Claude Code makes them (`encodeProjectDirName`, server/session/project-dir.ts). */
 export const isProjectSlug = (slug: string): boolean => /^[A-Za-z0-9_-]{1,255}$/.test(slug);
 
 export interface LibraryMemoryFile {

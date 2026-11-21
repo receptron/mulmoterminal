@@ -5,20 +5,19 @@
 // person approves the plan. Same-origin guarded; the turn is built here from the folder's name alone.
 import path from "node:path";
 import type { Express } from "express";
-import { projectSlug } from "../../common/libraryMemory.js";
 import { tidyTurn } from "../../common/libraryPromote.js";
 import type { LibraryCaller } from "../backends/library/library-service.js";
 import { requestOriginAllowed } from "./same-origin-guard.js";
 import { answer } from "./library-routes.js";
 import { isDirectory, startPromoteSession, type LibraryPromoteDeps } from "./library-promote-routes.js";
+import { directoriesBySlug } from "../backends/library/memory-health-read.js";
 
-/** The directory a conversation ran in whose folder is `slug`, when the index knows one and it is here. */
+/** The one directory the index knows for folder `slug`, when it is here; null when there is none, or
+ *  more than one, which leaves the checkout to start in (and to check the memories against) unknown. */
 async function projectDirectory(slug: string, directories: unknown): Promise<string | null> {
   const known = Array.isArray(directories) ? directories.filter((dir): dir is string => typeof dir === "string") : [];
-  for (const dir of known.filter((cwd) => projectSlug(cwd) === slug)) {
-    if (await isDirectory(dir)) return dir;
-  }
-  return null;
+  const dir = directoriesBySlug(known).get(slug);
+  return dir !== undefined && (await isDirectory(dir)) ? dir : null;
 }
 
 export function mountMemoryTidyRoute(app: Express, call: LibraryCaller, projectsRoot: string, deps: LibraryPromoteDeps): void {

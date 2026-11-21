@@ -9,25 +9,28 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { routeCall } from "../../helpers/routeCall";
 import { mountLibraryRoutes } from "../../../server/routes/library-routes";
-import { projectSlug } from "../../../common/libraryMemory";
+import { encodeProjectDirName } from "../../../server/session/project-dir";
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 
-function setup(options: { allowed?: boolean; withMemory?: boolean; projectHere?: boolean } = {}) {
+function setup(options: { allowed?: boolean; withMemory?: boolean; projectHere?: boolean; name?: string; alsoIndexed?: string[] } = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "mt-tidy-"));
   dirs.push(root);
-  const project = path.join(root, "work", "app");
+  const project = path.join(root, "work", options.name ?? "app");
   if (options.projectHere !== false) mkdirSync(project, { recursive: true });
   const projectsRoot = path.join(root, "projects");
-  const slug = projectSlug(project);
+  const slug = encodeProjectDirName(project);
   if (options.withMemory !== false) mkdirSync(path.join(projectsRoot, slug, "memory"), { recursive: true });
   const spawned: unknown[][] = [];
   const app = express();
   app.use(express.json());
   mountLibraryRoutes(app, {
     projectsRoot,
-    call: (method) => Promise.resolve(method === "directories" ? ["/somewhere/else", project] : null),
+    call: (method) =>
+      Promise.resolve(
+        method === "directories" ? ["/somewhere/else", project, ...(options.alsoIndexed ?? []).map((name) => path.join(root, "work", name))] : null,
+      ),
     promote: {
       spawnSession: (...args) => (spawned.push(args), Promise.resolve({ sessionId: "new-session", agent: "claude", seedRuns: true })),
       isAllowedOrigin: () => options.allowed !== false,
@@ -55,6 +58,19 @@ describe("POST /api/library/memory/:slug/tidy", () => {
     const none = setup({ withMemory: false });
     expect((await none.post(none.slug)).status).toBe(404);
     expect([...spawned, ...refused.spawned, ...none.spawned]).toEqual([]);
+  });
+
+  it("finds a directory whose name has a character Claude Code's folder name folds", async () => {
+    const { post, spawned, slug, project } = setup({ name: "my_app" });
+    expect(slug.endsWith("my-app")).toBe(true);
+    expect((await post(slug)).status).toBe(200);
+    expect(spawned[0]?.[1]).toBe(project);
+  });
+
+  it("refuses when two directories the index knows share the folder's name", async () => {
+    const { post, spawned, slug } = setup({ name: "a_b", alsoIndexed: ["a-b"] });
+    expect((await post(slug)).status).toBe(409);
+    expect(spawned).toEqual([]);
   });
 
   it("refuses when the project's directory is not on this machine", async () => {

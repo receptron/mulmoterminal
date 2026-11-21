@@ -4,7 +4,8 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { MEMORY_INDEX_FILE, projectSlug, type LibraryMemoryHealth } from "../../../common/libraryMemory.js";
+import { MEMORY_INDEX_FILE, type LibraryMemoryHealth } from "../../../common/libraryMemory.js";
+import { encodeProjectDirName } from "../../session/project-dir.js";
 import { readBoundedText } from "./file-history-read.js";
 import { inBatches, indexOf, MEMORY_FILES_AT_ONCE, memoryFileNames, memorySlugs } from "./memory-folders.js";
 import { memoryHealth, pathReferences, resolveReference, topFolder, type MemoryHealthInput } from "./memory-health.js";
@@ -90,12 +91,15 @@ async function missingReferences(input: MemoryHealthInput, cwd: string | null): 
   return new Set(checked.filter((reference): reference is string => reference !== null));
 }
 
-/** The directory each folder belongs to, when only one directory has that folder's name: two that
- *  differ only in a character the name drops (`a.b`, `a-b`) leave it unknown, and its relative paths
- *  are not judged rather than judged against the wrong checkout. */
+/** The directory each folder belongs to, by Claude Code's own folder-name rule (`encodeProjectDirName`),
+ *  when only one directory has that folder's name: two that differ only in a character the name drops
+ *  (`a.b`, `a-b`, `a_b`) leave it unknown, so nothing is judged, or started, in the wrong checkout. */
 export function directoriesBySlug(cwds: readonly string[]): Map<string, string> {
   const found = new Map<string, Set<string>>();
-  cwds.forEach((cwd) => found.set(projectSlug(cwd), (found.get(projectSlug(cwd)) ?? new Set()).add(cwd)));
+  cwds.forEach((cwd) => {
+    const slug = encodeProjectDirName(cwd);
+    found.set(slug, (found.get(slug) ?? new Set()).add(cwd));
+  });
   return new Map([...found].flatMap(([slug, dirs]) => (dirs.size === 1 ? [[slug, [...dirs][0] ?? ""] as const] : [])));
 }
 
