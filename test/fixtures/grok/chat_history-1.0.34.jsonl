@@ -4,20 +4,20 @@
 {"type": "user", "content": [{"type": "text", "text": "(context grok injects)"}], "synthetic_reason": "system_reminder"}
 {"type": "user", "content": [{"type": "text", "text": "<user_query>\nFirst say in one sentence what you are going to do. Then read a.txt and b.txt with your tools. Then answer: what fruits are in them? End with the word FINISHED.\n</user_query>"}], "prompt_index": 0}
 {"type": "reasoning", "content": null, "status": "completed"}
-{"type": "assistant", "content": "I'll read `a.txt` and `b.txt` and list the fruits they contain.", "tool_calls": [{"name": "read_file"}, {"name": "read_file"}]}
+{"type": "assistant", "content": "I'll read `a.txt` and `b.txt` and list the fruits they contain.", "tool_calls": [{"name": "read_file", "arguments": "{\"target_file\":\"/work/probe/a.txt\"}"}, {"name": "read_file", "arguments": "{\"target_file\":\"/work/probe/b.txt\"}"}]}
 {"type": "tool_result", "content": "(tool output)"}
 {"type": "tool_result", "content": "(tool output)"}
 {"type": "reasoning", "content": null, "status": "completed"}
 {"type": "assistant", "content": "`a.txt` contains apple. `b.txt` contains banana.\n\nFINISHED"}
 {"type": "user", "content": [{"type": "text", "text": "<user_query>\nStep by step: read a.txt and comment on it in one sentence, then run the shell command 'ls' and comment on it, then read b.txt. Finally write a 3-line Japanese summary of everything.\n</user_query>"}], "prompt_index": 1}
 {"type": "reasoning", "content": null, "status": "completed"}
-{"type": "assistant", "content": "`a.txt` を読んで、その内容を一文で述べます。", "tool_calls": [{"name": "read_file"}]}
+{"type": "assistant", "content": "`a.txt` を読んで、その内容を一文で述べます。", "tool_calls": [{"name": "read_file", "arguments": "{\"target_file\":\"/work/probe/a.txt\"}"}]}
 {"type": "tool_result", "content": "(tool output)"}
 {"type": "reasoning", "content": null, "status": "completed"}
-{"type": "assistant", "content": "", "tool_calls": [{"name": "run_terminal_command"}]}
+{"type": "assistant", "content": "", "tool_calls": [{"name": "run_terminal_command", "arguments": "{\"command\":\"ls\",\"description\":\"List files in the workspace\"}"}]}
 {"type": "tool_result", "content": "(tool output)"}
 {"type": "reasoning", "content": null, "status": "completed"}
-{"type": "assistant", "content": "このディレクトリには `a.txt` と `b.txt` の2ファイルだけがあります。次に `b.txt` を読みます。", "tool_calls": [{"name": "read_file"}]}
+{"type": "assistant", "content": "このディレクトリには `a.txt` と `b.txt` の2ファイルだけがあります。次に `b.txt` を読みます。", "tool_calls": [{"name": "read_file", "arguments": "{\"target_file\":\"/work/probe/b.txt\"}"}]}
 {"type": "tool_result", "content": "(tool output)"}
 {"type": "reasoning", "content": null, "status": "completed"}
 {"type": "assistant", "content": "`a.txt` contains a single line, the word apple. `ls` shows only two files here, `a.txt` and `b.txt`. `b.txt` contains a single line, the word banana.\n\n`a.txt` にはりんごが一語だけ書いてあった。\n`ls` の結果、この場所には `a.txt` と `b.txt` だけがあった。\n`b.txt` にはバナナが一語だけ書いてあった。"}
@@ -26,6 +26,6 @@
 {"type": "assistant", "content": "OK"}
 {"type": "user", "content": [{"type": "text", "text": "<user_query>\nWrite a 2000-word essay about fruit, reading a.txt and b.txt first.\n</user_query>"}], "prompt_index": 3}
 {"type": "reasoning", "content": null, "status": "completed"}
-{"type": "assistant", "content": "I'll read `a.txt` and `b.txt` first, then write the fruit essay.", "tool_calls": [{"name": "read_file"}, {"name": "read_file"}]}
+{"type": "assistant", "content": "I'll read `a.txt` and `b.txt` first, then write the fruit essay.", "tool_calls": [{"name": "read_file", "arguments": "{\"target_file\":\"/work/probe/a.txt\"}"}, {"name": "read_file", "arguments": "{\"target_file\":\"/work/probe/b.txt\"}"}]}
 {"type": "tool_result", "content": "(tool output)"}
 {"type": "tool_result", "content": "(tool output)"}
