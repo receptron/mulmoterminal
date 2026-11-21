@@ -13,15 +13,16 @@ beforeEach(() => forgetResolvedFolders());
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 
 describe("uniqueByFolder", () => {
-  it("names the one directory a folder has, and none for a folder two directories share", () => {
-    const pairs = [
-      ["-w-a-b", "/w/a.b"],
-      ["-w-a-b", "/w/a_b"],
-      ["-w-app", "/w/app"],
-      ["-w-app", "/w/app"],
-    ] as const;
-    expect([...uniqueByFolder(pairs)]).toEqual([["-w-app", "/w/app"]]);
+  const at = (cwd: string, real: string = cwd) => ({ cwd, real, folder: real.replace(/[^a-zA-Z0-9]/g, "-") });
+
+  it("names the one checkout a folder has, and none for a folder two checkouts share", () => {
+    expect([...uniqueByFolder([at("/w/a.b"), at("/w/a_b"), at("/w/app"), at("/w/app")])]).toEqual([["-w-app", "/w/app"]]);
     expect([...uniqueByFolder([])]).toEqual([]);
+  });
+
+  it("counts a link to a checkout and the checkout as one, naming the real path when the index has it", () => {
+    expect([...uniqueByFolder([at("/w/link", "/w/app"), at("/w/app")])]).toEqual([["-w-app", "/w/app"]]);
+    expect([...uniqueByFolder([at("/w/link", "/w/app"), at("/w/other-link", "/w/app")])]).toEqual([["-w-app", "/w/link"]]);
   });
 });
 
@@ -38,14 +39,25 @@ describe("directoriesByFolder", () => {
     expect([...found.keys()][0]).not.toContain("_");
   });
 
+  it("finds a checkout the index knows both by its path and through a link", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "mt-folders-"));
+    dirs.push(root);
+    const real = path.join(root, "app");
+    mkdirSync(real);
+    const link = path.join(root, "alias");
+    symlinkSync(real, link);
+    const realPath = realpathSync.native(real);
+    expect([...(await directoriesByFolder([link, realPath]))]).toEqual([[encodeProjectDirName(realPath), realPath]]);
+  });
+
   it("names a directory that is gone by its absolute path, as it was named while it was there", async () => {
     const gone = path.join(tmpdir(), "mt-folders-gone", "my_app");
     expect([...(await directoriesByFolder([gone]))]).toEqual([[encodeProjectDirName(gone), gone]]);
   });
 
-  it("leaves a folder unknown when two directories resolve to its name", async () => {
-    const resolve = (absolute: string) => Promise.resolve(absolute.replace("-two", "-one"));
-    expect([...(await directoriesByFolder(["/w/x-one", "/w/x-two"], resolve))]).toEqual([]);
+  it("leaves a folder unknown when two checkouts with different real paths share its name", async () => {
+    const resolve = (absolute: string) => Promise.resolve(absolute.replace("first", "x.one").replace("second", "x_one"));
+    expect([...(await directoriesByFolder(["/w/first", "/w/second"], resolve))]).toEqual([]);
   });
 
   it("resolves a directory once while the last answer is fresh, and again after", async () => {

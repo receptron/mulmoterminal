@@ -19,24 +19,39 @@ const nativeRealpath = promisify(fs.realpath.native);
 
 export type RealPath = (absolutePath: string) => Promise<string>;
 
-/** Folder name → directory, for the names exactly one distinct directory has. Pure. */
-export function uniqueByFolder(pairs: ReadonlyArray<readonly [folder: string, cwd: string]>): Map<string, string> {
-  const found = new Map<string, Set<string>>();
-  pairs.forEach(([folder, cwd]) => found.set(folder, (found.get(folder) ?? new Set()).add(cwd)));
-  return new Map([...found].flatMap(([folder, dirs]) => (dirs.size === 1 ? [[folder, [...dirs][0] ?? ""] as const] : [])));
+/** One indexed directory, where it really is, and the folder Claude Code names after that. */
+export interface ResolvedDirectory {
+  cwd: string;
+  real: string;
+  folder: string;
 }
 
-const held = new Map<string, { folder: string; at_ms: number }>();
+/** Folder name → directory, for the names exactly one checkout has. Spellings of one checkout (a link
+ *  to it, the path itself) are one checkout: they share a real path. The directory named is the real
+ *  path when the index has it, else the first spelling. Pure. */
+export function uniqueByFolder(resolved: readonly ResolvedDirectory[]): Map<string, string> {
+  const found = new Map<string, ResolvedDirectory[]>();
+  resolved.forEach((entry) => found.set(entry.folder, [...(found.get(entry.folder) ?? []), entry]));
+  return new Map(
+    [...found].flatMap(([folder, entries]) => {
+      if (new Set(entries.map((entry) => entry.real)).size !== 1) return [];
+      const named = entries.find((entry) => entry.cwd === entry.real) ?? entries[0];
+      return named === undefined ? [] : [[folder, named.cwd] as const];
+    }),
+  );
+}
 
-/** `cwd`'s folder name as Claude Code makes it: its real path encoded, or its absolute path when it
- *  cannot be resolved (gone, unreadable) — the name it had while it was there. */
-async function folderOf(cwd: string, realpath: RealPath, now_ms: number): Promise<string> {
+const held = new Map<string, { real: string; at_ms: number }>();
+
+/** Where `cwd` really is (links resolved, the disk's case), or its absolute path when it cannot be
+ *  resolved (gone, unreadable) — the name it had while it was there. */
+async function realOf(cwd: string, realpath: RealPath, now_ms: number): Promise<string> {
   const kept = held.get(cwd);
-  if (kept !== undefined && now_ms - kept.at_ms < REALPATH_MEMO_MS) return kept.folder;
+  if (kept !== undefined && now_ms - kept.at_ms < REALPATH_MEMO_MS) return kept.real;
   const absolute = path.resolve(cwd);
-  const folder = encodeProjectDirName(await realpath(absolute).catch(() => absolute));
-  held.set(cwd, { folder, at_ms: now_ms });
-  return folder;
+  const real = await realpath(absolute).catch(() => absolute);
+  held.set(cwd, { real, at_ms: now_ms });
+  return real;
 }
 
 /** Each project folder name the index's directories have, mapped to its one directory. */
@@ -46,13 +61,13 @@ export async function directoriesByFolder(
   now_ms: number = Date.now(),
 ): Promise<Map<string, string>> {
   const distinct = [...new Set(cwds)];
-  const pairs: Array<readonly [string, string]> = [];
+  const resolved: ResolvedDirectory[] = [];
   for (let start = 0; start < distinct.length; start += RESOLVE_AT_ONCE) {
     const batch = distinct.slice(start, start + RESOLVE_AT_ONCE);
-    const folders = await Promise.all(batch.map((cwd) => folderOf(cwd, realpath, now_ms)));
-    folders.forEach((folder, at) => pairs.push([folder, batch[at] ?? ""]));
+    const reals = await Promise.all(batch.map((cwd) => realOf(cwd, realpath, now_ms)));
+    reals.forEach((real, at) => resolved.push({ cwd: batch[at] ?? "", real, folder: encodeProjectDirName(real) }));
   }
-  return uniqueByFolder(pairs);
+  return uniqueByFolder(resolved);
 }
 
 /** Forget the resolved names, for tests. */
