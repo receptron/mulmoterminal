@@ -63,6 +63,8 @@ import { partitionPending } from "./partitionPending.js";
 import { codexRolloutPath } from "../agents/codex/codex-sessions.js";
 import { cursorTranscriptPath } from "../agents/cursor/cursor-sessions.js";
 import { cursorLastTurnFromRecords } from "../agents/cursor/cursor-last-turn.js";
+import { copilotEventsPath, copilotSessionExistsForCwd } from "../agents/copilot/copilot-sessions.js";
+import { copilotCurrentTurnReplyFromEvents, copilotLastTurnFromEvents } from "../agents/copilot/copilot-last-turn.js";
 import type { DiskStat, PendingSession, SessionMeta } from "./types.js";
 import { readString } from "../../common/readString.js";
 import type { TerminalAgent } from "../../common/sessionAgent.js";
@@ -298,6 +300,19 @@ async function cursorLastTurn(cwd: string, id: string): Promise<LastTurn> {
   }
 }
 
+/** A copilot session's records, from its live event log (copilot-last-turn.ts says why not the
+ *  `turns` table). Bound to the directory first, as the resume probe is (#2132): the id comes off a
+ *  request, and a session from another project must not be readable by naming it here. */
+async function copilotEventRecords(cwd: string, id: string): Promise<Record<string, unknown>[]> {
+  if (!(await copilotSessionExistsForCwd(id, cwd))) return [];
+  return readTailRecords(copilotEventsPath(id));
+}
+
+/** The reply to the turn that just ended, for the push — never an older one (#1650). */
+export async function copilotCurrentTurnReply(cwd: string, id: string): Promise<string | null> {
+  return copilotCurrentTurnReplyFromEvents(await copilotEventRecords(cwd, id));
+}
+
 // The tail, not the whole file — which is what #865 said the fix would be and #998 forced.
 //
 // Reading it whole cost its full size: measured over 10,506 real transcripts the median is 0.1 MB,
@@ -311,9 +326,10 @@ async function cursorLastTurn(cwd: string, id: string): Promise<LastTurn> {
 export async function sessionLastTurn(cwd: string, id: string, agent: TerminalAgent): Promise<LastTurn> {
   if (agent === "codex") return codexLastTurn(id);
   if (agent === "cursor") return cursorLastTurn(cwd, id);
+  if (agent === "copilot") return copilotLastTurnFromEvents(await copilotEventRecords(cwd, id));
   // Everything that is not claude answers EMPTY_TURN, rather than the three agents that were true
   // when this was written. Each of them HAS a log — agy's brain directory, grok's
-  // `chat_history.jsonl`, muse's `session.jsonl`, copilot's `turns` table — and none is parsed yet;
+  // `chat_history.jsonl`, muse's `session.jsonl` — and none is parsed yet;
   // EMPTY_TURN is the honest answer until one is, because every caller handles it (a push says
   // nothing rather than something wrong, a handoff carries no reply) and a wrong guess at a format
   // would be worse than silence.
