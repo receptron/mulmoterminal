@@ -63,7 +63,7 @@ const typedCounts = (prompts: readonly RepeatPrompt[]): Map<string, number> => {
 export function countedInstructions(prompts: readonly RepeatPrompt[], rules: RepeatRules): Array<RepeatPrompt & { key: string }> {
   const typed = typedCounts(prompts);
   return prompts
-    .filter((prompt) => rules.now - prompt.at <= REPEAT_WINDOW_MS)
+    .filter((prompt) => prompt.at <= rules.now && rules.now - prompt.at <= REPEAT_WINDOW_MS)
     .map((prompt) => ({ ...prompt, text: prompt.text.trim(), key: instructionKey(prompt.text) }))
     .filter((prompt) => prompt.text !== "" && !isCommand(prompt.text) && !isPastePlaceholder(prompt.text))
     .filter((prompt) => prompt.project === null || !rules.isTemporaryProject(prompt.project))
@@ -158,8 +158,9 @@ export const REPEAT_NAMED_MAX = 10;
 /** How many candidates one answer lists: the most typed ones; `total` says how many there were. */
 export const REPEAT_LISTED_MAX = 200;
 
-/** A group as a candidate: its most typed form, its counts, where and when last. */
-export function candidateOf(members: ReadonlyArray<RepeatPrompt & { key: string }>): RepeatCandidate {
+/** A group as a candidate: its most typed form, its counts, where and when last. `everyProject` keeps
+ *  all the directories it was typed in (for choosing where to start), not only the most typed. */
+export function candidateOf(members: ReadonlyArray<RepeatPrompt & { key: string }>, everyProject = false): RepeatCandidate {
   const variants = mostFirst(members.map((member) => member.text));
   return {
     id: repeatId(mostFirst(members.map((member) => member.key))[0] ?? ""),
@@ -167,7 +168,10 @@ export function candidateOf(members: ReadonlyArray<RepeatPrompt & { key: string 
     variants: variants.slice(0, REPEAT_NAMED_MAX),
     count: members.length,
     sessions: new Set(members.map((member) => member.sessionId)).size,
-    projects: mostFirst(members.flatMap((member) => (member.project === null ? [] : [member.project]))).slice(0, REPEAT_NAMED_MAX),
+    projects: mostFirst(members.flatMap((member) => (member.project === null ? [] : [member.project]))).slice(
+      0,
+      everyProject ? Number.POSITIVE_INFINITY : REPEAT_NAMED_MAX,
+    ),
     lastAt: Math.max(...members.map((member) => member.at)),
   };
 }
@@ -187,7 +191,7 @@ export function repeatGroups(prompts: readonly RepeatPrompt[], rules: RepeatRule
 /** The candidates, most typed first. */
 export function repeatCandidates(prompts: readonly RepeatPrompt[], rules: RepeatRules): RepeatCandidate[] {
   return repeatGroups(prompts, rules)
-    .map(candidateOf)
+    .map((members) => candidateOf(members))
     .sort((a, b) => b.count - a.count || b.lastAt - a.lastAt);
 }
 

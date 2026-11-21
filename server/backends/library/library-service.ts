@@ -111,7 +111,7 @@ export function createLocalLibraryService(index: LibraryIndex, options: LibraryS
     repeat: async (id) => {
       const { prompts, rules } = await repeats();
       const members = repeatGroups(prompts, rules).find((group) => candidateOf(group).id === id);
-      return members === undefined ? null : { ...candidateOf(members), occurrences: occurrencesOf(members) };
+      return members === undefined ? null : { ...candidateOf(members, true), occurrences: occurrencesOf(members) };
     },
   };
 }

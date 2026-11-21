@@ -93,6 +93,12 @@ describe("countedInstructions", () => {
     expect(counted([prompt(atBound, "s1"), prompt(under, "s1"), prompt("はい", "s1")])).toEqual([atBound]);
   });
 
+  it("does not count a prompt from after now", () => {
+    expect(counted([prompt("a note from the future", "s1", "/w", NOW + 1), prompt("and one typed just now", "s1", "/w", NOW)])).toEqual([
+      "and one typed just now",
+    ]);
+  });
+
   it("counts within the window, up to its edge", () => {
     const old = [
       prompt("an instruction from long ago", "s1", "/w", NOW - REPEAT_WINDOW_MS - 1),
@@ -216,6 +222,7 @@ describe("candidateOf", () => {
     expect(candidate.variants).toHaveLength(REPEAT_NAMED_MAX);
     expect(candidate.projects).toHaveLength(REPEAT_NAMED_MAX);
     expect(candidate.count).toBe(REPEAT_NAMED_MAX + 5);
+    expect(candidateOf(members, true).projects).toHaveLength(REPEAT_NAMED_MAX + 5);
   });
 });
 

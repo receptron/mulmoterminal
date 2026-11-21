@@ -46,7 +46,7 @@ export interface RepeatList {
 }
 
 /** One candidate with the latest times it was typed, newest first (for the skill that promotes it);
- *  `count` is how many there were in all. */
+ *  `count` is how many there were in all, and `projects` names every directory it was typed in. */
 export interface RepeatDetail extends RepeatCandidate {
   occurrences: RepeatOccurrence[];
 }

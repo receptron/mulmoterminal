@@ -141,6 +141,27 @@ describe("POST /api/library/repeats/:id/promote", () => {
     expect(spawned).toEqual([]);
   });
 
+  it("starts in a directory past the ones the list names, when only that one is still here", async () => {
+    const { request, post, spawned, root } = setup();
+    const here = path.join(root, "still-here");
+    mkdirSync(here);
+    const gone = Array.from({ length: 12 }, (_, at) => path.join(root, `gone-${String(at)}`));
+    const say = "あとで全部まとめて報告して";
+    const sessionLines = (id: string, dir: string, times: number, at: number): string[] => [
+      ...Array.from({ length: times }, (_, n) => JSON.stringify({ sessionId: id, display: say, project: dir, timestamp: NOW - at * 100 - n })),
+      JSON.stringify({ sessionId: id, display: createHash("sha256").update(id).digest("hex"), project: dir, timestamp: NOW - at * 100 - 9 }),
+    ];
+    const lines = [...gone, here].flatMap((dir, at) => ["p", "q"].flatMap((session) => sessionLines(`${session}${String(at)}`, dir, dir === here ? 1 : 2, at)));
+    writeFileSync(path.join(root, "history.jsonl"), `${lines.join("\n")}\n`);
+    const list = await request("/api/library/repeats");
+    const candidates: unknown = list.body.candidates;
+    const found = Array.isArray(candidates) ? candidates.filter(isRepeatCandidate).find((c) => c.text === say) : undefined;
+    if (found === undefined) throw new Error("expected the instruction to be a candidate");
+    expect(found.projects).not.toContain(here);
+    expect((await post(found.id, { target: "skill" })).status).toBe(200);
+    expect(spawned.at(-1)?.[1]).toBe(here);
+  });
+
   it("refuses when none of the directories it was typed in is on this machine", async () => {
     const { request, post, project, spawned } = setup();
     const id = await mergeId(request);
