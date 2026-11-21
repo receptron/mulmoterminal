@@ -1907,7 +1907,7 @@ narrow and tall for one record you are discussing — and each position keeps it
   **Undo** in the notice puts both back. **⋯** → **Merge into another memory** picks another memory of
   the same project and opens it in the editor with this one's body added at its end; saving writes it
   and moves this one to the Trash with its lines. It also points the `[[links]]` to this memory, in
-  the merged text and in the project's other memories, at the one kept (never one inside code or by
+  the merged text and in the project's other memories (as listed when the merge starts), at the one kept (never one inside code or by
   a name another memory also has; how many is said before saving, and a link that cannot be rewritten exactly stops the merge). **Undo**
   puts all of it back. Design: [`docs/library-design.md`](docs/library-design.md).
 - **Skills viewer** — **More features** → **Skills** lists every Claude skill on disk in three
