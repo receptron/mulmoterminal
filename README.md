@@ -1882,7 +1882,11 @@ narrow and tall for one record you are discussing — and each position keeps it
   **Resume** (or `Enter`) to open it in a terminal in the directory it ran in. `/` focuses the
   search, the arrow keys move. The **⋯** menu pins a conversation to the top of the list or renames
   it; pins and names are MulmoTerminal's own (`~/.mulmoterminal/library/marks.json`) and the
-  conversation's file is never written. `claude -p` and SDK runs, and runs from temp directories, are left
+  conversation's file is never written. **⋯** → **Promote to** turns the conversation into a memory,
+  a `CLAUDE.md` rule, a plan under `plans/`, an issue or a skill: it opens a Claude cell in the
+  directory the conversation ran in, running the bundled `mulmoterminal-library` skill, which reads
+  the conversation, shows the change as a diff, and writes nothing until you approve (it backs up a
+  file outside a repository first, and says how to undo). `claude -p` and SDK runs, and runs from temp directories, are left
   out. The index behind it is built in the background the first time you open it and kept up to
   date from what is appended; it is `~/.mulmoterminal/library/index.db` and can be deleted at any
   time (it is rebuilt). `marks.json` beside it holds your pins and names and is not rebuilt.

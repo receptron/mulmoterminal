@@ -23,6 +23,8 @@ import { cellForPanelResume } from "../launchCell";
 import { isEditableTarget } from "../../composables/gridShortcut";
 import { libraryKeyAction, movedFromGap, movedIndex } from "./libraryKeys";
 import { libraryResume, type LibraryResume } from "./libraryResume";
+import { startPromote } from "./libraryPromoteStart";
+import type { PromoteTarget } from "../../../common/libraryPromote";
 import { conversationKey, groupConversations, listedInOrder } from "./libraryRows";
 import { useLibraryMarks } from "../../composables/useLibraryMarks";
 import type { LibraryConversation } from "../../../common/library";
@@ -151,6 +153,21 @@ const RESUME_REFUSALS: Record<Exclude<LibraryResume["kind"], "open">, string> = 
   "no-cwd": "libraryView.resumeNoCwd",
   unchecked: "libraryView.resumeUnchecked",
 };
+
+/** One promote at a time: a second press while the first is starting would open two sessions. */
+let promoting = false;
+async function promoteSelected(target: PromoteTarget): Promise<void> {
+  const conversation = selected.value;
+  if (conversation === null || promoting) return;
+  promoting = true;
+  const key = conversationKey(conversation);
+  try {
+    const refused = await startPromote(conversation, target);
+    if (refused !== null && selectedKey.value === key) notice.value = t(refused);
+  } finally {
+    promoting = false;
+  }
+}
 
 function pinSelected(pin: boolean): void {
   const conversation = selected.value;
@@ -382,6 +399,7 @@ onBeforeUnmount(() => {
             @resume="resume"
             @pin="pinSelected"
             @rename="renameConversation"
+            @promote="promoteSelected"
           />
           <p v-else class="m-0 p-6 font-sans text-[13px] text-dim">{{ t("libraryView.pick") }}</p>
         </div>

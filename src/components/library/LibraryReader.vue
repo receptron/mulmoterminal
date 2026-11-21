@@ -8,10 +8,11 @@ import TranscriptPane from "../TranscriptPane.vue";
 import LibraryChangedFiles from "./LibraryChangedFiles.vue";
 import LibraryMoreMenu from "./LibraryMoreMenu.vue";
 import { LIBRARY_NAME_MAX, type LibraryConversation } from "../../../common/library";
+import { PROMOTE_TARGETS, type PromoteTarget } from "../../../common/libraryPromote";
 import { conversationKey, costLabel, readerMetaParts, type ReaderMetaPart } from "./libraryRows";
 
 const props = defineProps<{ conversation: LibraryConversation; now: number; notice: string | null; name: string | null; pinned: boolean }>();
-const emit = defineEmits<{ resume: []; pin: [pinned: boolean]; rename: [id: string, name: string | null] }>();
+const emit = defineEmits<{ resume: []; pin: [pinned: boolean]; rename: [id: string, name: string | null]; promote: [target: PromoteTarget] }>();
 const { t, locale } = useI18n();
 
 const moreMenu = useTemplateRef<{ close: () => void }>("moreMenu");
@@ -54,6 +55,13 @@ function finishRename(): void {
   draft.value = null;
   renaming = null;
 }
+const PROMOTE_ICONS: Record<PromoteTarget, string> = { memory: "psychology", rule: "gavel", plan: "map", issue: "bug_report", skill: "construction" };
+
+function pickPromote(target: PromoteTarget): void {
+  moreMenu.value?.close();
+  emit("promote", target);
+}
+
 function pickPin(): void {
   moreMenu.value?.close();
   emit("pin", !props.pinned);
@@ -133,6 +141,19 @@ const lines = computed(() => {
           @click="startRename"
         >
           <span class="material-symbols-outlined text-[18px]">edit</span>{{ t("libraryView.rename") }}
+        </button>
+        <!-- Promote: each target its own item, so one press starts it and the arrows reach them all. -->
+        <p class="m-0 border-t border-border px-3 pb-1 pt-2 font-sans text-[11px] text-dim" role="presentation">{{ t("libraryView.promote.heading") }}</p>
+        <button
+          v-for="target in PROMOTE_TARGETS"
+          :key="target"
+          type="button"
+          role="menuitem"
+          :data-testid="`library-promote-${target}`"
+          class="flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 py-1.5 text-left font-sans text-[13px] text-fg hover:bg-hover"
+          @click="pickPromote(target)"
+        >
+          <span class="material-symbols-outlined text-[18px]">{{ PROMOTE_ICONS[target] }}</span>{{ t(`libraryView.promote.${target}`) }}
         </button>
       </LibraryMoreMenu>
       <span v-if="notice" class="min-w-0 max-w-[44ch] flex-1 basis-[16rem] font-sans text-[12px] text-secondary" role="status">{{ notice }}</span>
