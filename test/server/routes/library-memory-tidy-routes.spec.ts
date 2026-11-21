@@ -4,7 +4,7 @@
 // for a name that is not a folder name, a project with no memory, or a directory not on this machine.
 import { describe, it, expect, afterEach } from "vitest";
 import express from "express";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { routeCall } from "../../helpers/routeCall";
@@ -19,8 +19,9 @@ function setup(options: { allowed?: boolean; withMemory?: boolean; projectHere?:
   dirs.push(root);
   const project = path.join(root, "work", options.name ?? "app");
   if (options.projectHere !== false) mkdirSync(project, { recursive: true });
+  (options.alsoIndexed ?? []).forEach((name) => mkdirSync(path.join(root, "work", name), { recursive: true }));
   const projectsRoot = path.join(root, "projects");
-  const slug = encodeProjectDirName(project);
+  const slug = encodeProjectDirName(existsSync(project) ? realpathSync.native(project) : project);
   if (options.withMemory !== false) mkdirSync(path.join(projectsRoot, slug, "memory"), { recursive: true });
   const spawned: unknown[][] = [];
   const app = express();

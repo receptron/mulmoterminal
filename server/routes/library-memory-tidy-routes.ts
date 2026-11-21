@@ -10,13 +10,13 @@ import type { LibraryCaller } from "../backends/library/library-service.js";
 import { requestOriginAllowed } from "./same-origin-guard.js";
 import { answer } from "./library-routes.js";
 import { isDirectory, startPromoteSession, type LibraryPromoteDeps } from "./library-promote-routes.js";
-import { directoriesBySlug } from "../backends/library/memory-health-read.js";
+import { directoriesByFolder } from "../backends/library/project-folders.js";
 
 /** The one directory the index knows for folder `slug`, when it is here; null when there is none, or
  *  more than one, which leaves the checkout to start in (and to check the memories against) unknown. */
 async function projectDirectory(slug: string, directories: unknown): Promise<string | null> {
   const known = Array.isArray(directories) ? directories.filter((dir): dir is string => typeof dir === "string") : [];
-  const dir = directoriesBySlug(known).get(slug);
+  const dir = (await directoriesByFolder(known)).get(slug);
   return dir !== undefined && (await isDirectory(dir)) ? dir : null;
 }
 

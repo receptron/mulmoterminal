@@ -100,6 +100,21 @@ describe("/api/library/memory", () => {
   });
 });
 
+describe("naming a folder by its directory", () => {
+  it("uses Claude Code's folder rule, and names no directory when two share the folder", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "mt-memory-naming-"));
+    dirs.push(root);
+    ["-w-my-app", "-w-a-b"].forEach((slug) => {
+      mkdirSync(path.join(root, slug, "memory"), { recursive: true });
+      writeFileSync(path.join(root, slug, "memory", "x.md"), "x");
+    });
+    const projects = await listMemoryProjects(root, ["/w/my_app", "/w/a.b", "/w/a_b"], 0);
+    const cwdOf = (slug: string) => projects.find((project) => project.slug === slug)?.cwd;
+    expect(cwdOf("-w-my-app")).toBe("/w/my_app");
+    expect(cwdOf("-w-a-b")).toBeNull();
+  });
+});
+
 describe("the index gauge", () => {
   it("counts an index far past what is read whole, and one with no final newline", async () => {
     const { call, root } = setup();
