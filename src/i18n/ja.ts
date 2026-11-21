@@ -613,7 +613,7 @@ export const ja: Messages = {
       skills: { label: "Skills", detail: "~/.claude/skills と各フォルダのスキルを一覧・検索" },
       processes: { label: "プロセス", detail: "各セッションで動いているプロセスと、消せる worktree" },
       worklog: { label: "Worklog", detail: "wiki にある開発作業ログ（#worklog）" },
-      usage: { label: "トークンの使用量", detail: "ローテーションの各トークンに残っている 5 時間枠と週の枠" },
+      usage: { label: "使用量", detail: "この数週間に何へ使ったか（週・プロジェクト・エージェント別）と、ローテーションの各トークンの残り" },
     },
   },
   usageView: usageViewJa,

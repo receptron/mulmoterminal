@@ -1,8 +1,8 @@
 // The token usage screen (#2919).
 export const usageViewJa = {
-  title: "トークンの使用量",
-  region: "トークンの使用量",
-  close: "トークンの使用量を閉じる",
+  title: "使用量",
+  region: "使用量",
+  close: "使用量を閉じる",
   intro: "tokenRotation に登録した各契約の残りです。新しいセッションは、週の枠の残りをリセットまでの時間で割った値が最も大きい契約で始まります。",
   column: { subscription: "契約", fiveHour: "5 時間枠", sevenDay: "週の枠" },
   left: "残り {percent}",
@@ -13,4 +13,18 @@ export const usageViewJa = {
   },
   limitReset: "{window}: {at} ごろにリセット（最後に確認した値）",
   empty: "トークンが登録されていません。",
+  retro: {
+    title: "この数週間",
+    loading: "ライブラリの索引を読んでいます…",
+    failed: "ライブラリの索引を読めませんでした。",
+    total: "会話 {conversations} 件で {cost}、PR {prs} 件",
+    week: "週の始まり",
+    cost: "金額",
+    conversations: "会話",
+    prs: "PR",
+    project: "プロジェクト",
+    agent: "エージェント",
+    noProject: "（ディレクトリなし）",
+    note: "ライブラリが一覧に出す会話について、各会話が記録した金額を足したものです。会話は始まった週に数えます。",
+  },
 };

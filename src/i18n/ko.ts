@@ -610,7 +610,7 @@ export const ko: Messages = {
       skills: { label: "Skills", detail: "~/.claude/skills 와 각 폴더의 스킬을 목록·검색" },
       processes: { label: "프로세스", detail: "각 세션에서 실행 중인 프로세스와 지울 수 있는 worktree" },
       worklog: { label: "Worklog", detail: "wiki에 있는 개발 작업 로그 (#worklog)" },
-      usage: { label: "토큰 사용량", detail: "로테이션의 각 토큰에 남은 5시간 창과 주간 창" },
+      usage: { label: "사용량", detail: "최근 몇 주에 무엇에 썼는지(주·프로젝트·에이전트별)와 로테이션 각 토큰의 남은 양" },
     },
   },
   usageView: usageViewKo,

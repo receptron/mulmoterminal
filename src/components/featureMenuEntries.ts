@@ -1,5 +1,5 @@
 // What the toolbar's feature menu lists, in order. An entry for a feature that is not set up opens
-// onto an empty screen, so it is left out. The Library, Blueprints, Skills and Processes need no setup, so the menu is never empty.
+// onto an empty screen, so it is left out. The Library, Blueprints, Skills, Processes and Usage need no setup, so the menu is never empty.
 import type { GatedEntry } from "./gatedToolbarEntries";
 
 export type FeatureMenuEntry = "rooms" | "library" | "blueprints" | "skills" | "processes" | "worklog" | "usage";
@@ -19,6 +19,7 @@ export function featureMenuEntries(gated: Record<GatedEntry, boolean>): FeatureM
   if (gated.rooms) entries.push("rooms");
   entries.push("library", "blueprints", "skills", "processes");
   if (gated.worklog) entries.push("worklog");
-  if (gated.usage) entries.push("usage");
+  // Usage needs no setup since the retrospective (#3335): the tokens' windows show only where rotation is on.
+  entries.push("usage");
   return entries;
 }

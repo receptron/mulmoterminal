@@ -601,7 +601,7 @@ export const zhTW: Messages = {
       skills: { label: "Skills", detail: "列出並搜尋 ~/.claude/skills 與各資料夾中的技能" },
       processes: { label: "處理程序", detail: "各工作階段中執行的處理程序，以及可刪除的 worktree" },
       worklog: { label: "Worklog", detail: "wiki 中的開發工作紀錄（#worklog）" },
-      usage: { label: "權杖用量", detail: "輪換中每個權杖剩餘的 5 小時視窗與每週視窗" },
+      usage: { label: "用量", detail: "最近幾週用在了什麼上（依週、專案、代理）以及輪換中每個權杖的剩餘" },
     },
   },
   usageView: usageViewZhTW,
