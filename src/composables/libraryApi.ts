@@ -186,6 +186,12 @@ export async function loadLibraryConversation(id: string, cwd: string | null = n
   return isLibraryConversation(body) ? body : null;
 }
 
+/** The conversation that last wrote a memory, when the index knows one the Library lists. */
+export async function loadLibraryMemorySource(slug: string, file: string): Promise<LibraryConversation | null> {
+  const body = await readJson(`${memoryFileUrl(slug, file)}/source`);
+  return isLibraryConversation(body?.conversation) ? body.conversation : null;
+}
+
 export async function loadLibraryMarks(): Promise<LibraryMarks | null> {
   const body = await readJson("/api/library/marks");
   return isLibraryMarks(body) ? body : null;

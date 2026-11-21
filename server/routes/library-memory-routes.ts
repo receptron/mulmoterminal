@@ -41,6 +41,7 @@ const UNDO_ID = /^[0-9a-f-]{36}$/;
 
 export function mountMemoryRoutes(app: Express, call: LibraryCaller, projectsRoot: string, trash: () => TrashLayout = systemTrash): void {
   mountMemoryReads(app, call, projectsRoot);
+  mountMemorySource(app, call);
   mountMemoryEdit(app, projectsRoot);
   mountMemoryTrash(app, projectsRoot, trash);
   mountMemoryMerge(app, projectsRoot, trash);
@@ -186,5 +187,19 @@ function mountMemoryMerge(app: Express, projectsRoot: string, trash: () => Trash
     } catch {
       res.status(500).json({ error: "the memories could not be merged" });
     }
+  });
+}
+
+/** The conversation that last wrote a memory, for the reader to link to. It names no path: the index is
+ *  asked by folder and name, checked as every memory route checks them. */
+function mountMemorySource(app: Express, call: LibraryCaller): void {
+  app.get("/api/library/memory/:slug/:file/source", async (req, res) => {
+    const { slug, file } = req.params;
+    if (!isProjectSlug(slug) || !isMemoryFileName(file)) {
+      res.status(400).json({ error: "not a memory file" });
+      return;
+    }
+    const conversation = await answer(res, call, "memorySource", [`${slug}/${file}`]);
+    if (conversation !== undefined) res.json({ conversation });
   });
 }

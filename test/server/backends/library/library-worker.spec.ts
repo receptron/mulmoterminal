@@ -116,6 +116,7 @@ describe("dispatchLibraryRequest", () => {
     transcript: (...args) => (calls.push(["transcript", ...args]), Promise.resolve(null)),
     directories: () => (calls.push(["directories"]), Promise.resolve([])),
     search: (...args) => (calls.push(["search", ...args]), Promise.resolve([])),
+    memorySource: (...args) => (calls.push(["memorySource", ...args]), Promise.resolve(null)),
   };
 
   it("passes well-formed arguments through, and replaces malformed ones with safe values", async () => {
@@ -130,6 +131,8 @@ describe("dispatchLibraryRequest", () => {
     await dispatchLibraryRequest(service, { id: "8", method: "prCreators", args: [null, "1,2"] });
     await dispatchLibraryRequest(service, { id: "9", method: "transcript", args: ["s1", "/w"] });
     await dispatchLibraryRequest(service, { id: "10", method: "transcript", args: ["s1", 3] });
+    await dispatchLibraryRequest(service, { id: "11", method: "memorySource", args: ["-w-app/a.md"] });
+    await dispatchLibraryRequest(service, { id: "12", method: "memorySource", args: [7] });
     expect(calls).toEqual([
       ["list", { cwd: "/w", includeTemporary: true, includeSidechains: false, includeAutomated: false }, 5, 10],
       ["list", {}, 0, 0],
@@ -141,6 +144,8 @@ describe("dispatchLibraryRequest", () => {
       ["prCreators", "", []],
       ["transcript", "s1", "/w"],
       ["transcript", "s1", null],
+      ["memorySource", "-w-app/a.md"],
+      ["memorySource", ""],
     ]);
   });
 

@@ -99,6 +99,7 @@ export const libraryViewJa = {
       tidy: "{count} 件を整えられます",
       tidyShow: "見る",
       tidyAll: "すべて表示",
+      source: "書いた会話:",
       copySame: "{name}（同じ）",
       copyDiffers: "{name}（違う）",
       issues: {

@@ -22,7 +22,8 @@ import LibraryMemoryWorkCopies from "./LibraryMemoryWorkCopies.vue";
 import { useMemoryTrash } from "../../composables/useMemoryTrash";
 import { hasMemoryDraft, memoryDraftKey } from "./memoryDrafts";
 import type { LibraryFileText } from "../../../common/libraryFiles";
-import { loadLibraryMemoryFile } from "../../composables/libraryApi";
+import { loadLibraryMemoryFile, loadLibraryMemorySource } from "../../composables/libraryApi";
+import type { LibraryConversation } from "../../../common/library";
 import { projectName, whenLabel } from "./libraryRows";
 import { movedIndex } from "./libraryKeys";
 import { fileIssues, filterMemory, filterTidy, indexFill, linkTarget, memoryKey, memoryTitle, tidyCount } from "./memoryRows";
@@ -38,7 +39,7 @@ const props = defineProps<{
   /** The check itself failed: say so, rather than look as if all were tidy. */
   healthFailed?: boolean;
 }>();
-const emit = defineEmits<{ (e: "changed"): void }>();
+const emit = defineEmits<{ (e: "changed"): void; (e: "open-conversation", conversation: LibraryConversation): void }>();
 const { t, locale } = useI18n();
 
 /** Only what can be tidied, when "Show" was pressed on the line above the list. */
@@ -100,6 +101,23 @@ watch(
     if (row === null) return;
     const read = await loadLibraryMemoryFile(row.project.slug, row.memory.file);
     if (mine === reads) text.value = read ?? { text: null, reason: "unreadable" };
+  },
+  { immediate: true },
+);
+
+/** The conversation that last wrote the memory read, when the index knows it: asked again as another
+ *  is chosen, and as the list is read again (a memory may have been written since). */
+const source = ref<LibraryConversation | null>(null);
+let sourceReads = 0;
+watch(
+  () => [selected.value?.key ?? null, props.projects] as const,
+  async () => {
+    const row = selected.value;
+    const mine = ++sourceReads;
+    source.value = null;
+    if (row === null) return;
+    const found = await loadLibraryMemorySource(row.project.slug, row.memory.file);
+    if (mine === sourceReads) source.value = found;
   },
   { immediate: true },
 );
@@ -386,6 +404,17 @@ defineExpose({ move, startEdit });
           <span class="font-mono">{{ selected.memory.file }}</span>
           <span>{{ projectLabel(selected.project) }}</span>
           <span v-if="meta(selected.memory)">{{ meta(selected.memory) }}</span>
+          <span v-if="source" class="flex min-w-0 items-baseline gap-1">
+            {{ t("libraryView.memory.source") }}
+            <button
+              type="button"
+              class="min-w-0 cursor-pointer truncate border-0 bg-transparent p-0 font-sans text-[12px] text-accent hover:underline"
+              data-testid="memory-source"
+              @click="emit('open-conversation', source)"
+            >
+              {{ source.title ?? t("libraryView.untitled") }}
+            </button>
+          </span>
         </p>
         <template v-for="issue in fileIssues(health, selected.project.slug, selected.memory.file)" :key="issue.kind">
           <LibraryMemoryWorkCopies

@@ -403,3 +403,35 @@ describe("POST /api/library/memory/:slug/:file/merge", () => {
     expect(readFileSync(path.join(root, "-w-app", "memory", "b.md"), "utf8")).toBe(B_TEXT);
   });
 });
+
+describe("GET /api/library/memory/:slug/:file/source", () => {
+  const asked: unknown[][] = [];
+  const conversation = { id: "s1", title: "wrote it" };
+  const app = express();
+  mountLibraryRoutes(app, {
+    call: (method, args) => (asked.push([method, ...args]), Promise.resolve(args[0] === "-w-app/a.md" ? conversation : null)),
+    projectsRoot: "/nowhere",
+  });
+  const call = routeCall(app);
+
+  it("asks the index for the conversation that wrote the memory, by folder and name", async () => {
+    asked.length = 0;
+    expect((await call("/api/library/memory/-w-app/a.md/source")).body).toEqual({ conversation });
+    expect((await call("/api/library/memory/-w-app/b.md/source")).body).toEqual({ conversation: null });
+    expect(asked).toEqual([
+      ["memorySource", "-w-app/a.md"],
+      ["memorySource", "-w-app/b.md"],
+    ]);
+  });
+  it("refuses what is not a memory's folder and name, asking nothing", async () => {
+    asked.length = 0;
+    for (const url of [
+      "/api/library/memory/-w-app/notes.txt/source",
+      "/api/library/memory/bad%20slug/a.md/source",
+      "/api/library/memory/-w-app/..%2Fa.md/source",
+    ]) {
+      expect((await call(url)).status, url).toBe(400);
+    }
+    expect(asked).toEqual([]);
+  });
+});

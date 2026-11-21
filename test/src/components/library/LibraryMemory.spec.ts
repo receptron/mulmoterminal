@@ -14,6 +14,7 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
   trashLibraryMemoryFile: (...args: unknown[]) => trashCalls.push(args) && Promise.resolve(trashAnswer),
   undoLibraryMemoryTrash: (undo: string) => undoCalls.push(undo) && Promise.resolve(undoAnswer),
   mergeLibraryMemoryFiles: (request: unknown) => mergeCalls.push(request) && Promise.resolve(mergeAnswer),
+  loadLibraryMemorySource: (slug: string, file: string) => Promise.resolve(sources[`${slug}/${file}`] ?? null),
 }));
 let running = false;
 vi.mock("../../../../src/composables/useDirLists", () => ({
@@ -26,6 +27,7 @@ let undoCalls: string[] = [];
 let trashAnswer: { kind: string; undo?: string } = { kind: "trashed", undo: "u-1" };
 let undoAnswer = "restored";
 let mergeCalls: unknown[] = [];
+let sources: Record<string, unknown> = {};
 let mergeAnswer: { kind: string; version?: string; undo?: string; file?: string } = { kind: "merged", version: "v3", undo: "u-m" };
 
 const LibraryMemory = (await import("../../../../src/components/library/LibraryMemory.vue")).default;
@@ -53,6 +55,7 @@ beforeEach(() => {
   trashAnswer = { kind: "trashed", undo: "u-1" };
   undoAnswer = "restored";
   mergeCalls = [];
+  sources = {};
   mergeAnswer = { kind: "merged", version: "v3", undo: "u-m" };
   texts = {
     "-w-app/reply.md": "---\nname: reply-in-japanese\n---\nAlways Japanese. See [[codex-sandbox]] and [[gone]].",
@@ -170,6 +173,18 @@ describe("LibraryMemory", () => {
     await wrapper.find("[data-testid=memory-row]").trigger("click");
     await flushPromises();
     expect(wrapper.find("[data-testid=memory-issue]").text()).toBe("It links to [[gone]], but no memory here has that name.");
+  });
+
+  it("links the memory read to the conversation that wrote it, and asks the Library to open it", async () => {
+    const wrote = { id: "s9", title: "Set up the reply style" };
+    sources["-w-app/reply.md"] = wrote;
+    const wrapper = await mountMemory();
+    expect(wrapper.find("[data-testid=memory-source]").text()).toBe("Set up the reply style");
+    await wrapper.find("[data-testid=memory-source]").trigger("click");
+    expect(wrapper.emitted("open-conversation")).toEqual([[wrote]]);
+    await wrapper.findAll("[data-testid=memory-row]")[1]?.trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-source]").exists()).toBe(false); // codex.md: no source known
   });
 
   describe("work copies", () => {

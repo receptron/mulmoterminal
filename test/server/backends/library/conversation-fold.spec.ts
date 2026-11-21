@@ -164,6 +164,22 @@ describe("foldConversationRecord: records that are wrong", () => {
   });
 });
 
+describe("memory writes", () => {
+  const writes = (file: string) => ({
+    type: "assistant",
+    message: { content: [{ type: "tool_use", id: "t", name: "Write", input: { file_path: `/h/.claude/projects/-w-app/memory/${file}` } }] },
+  });
+
+  it("keeps each memory once, the most recently written last, and drops the longest ago past the cap", () => {
+    expect(fold([writes("a.md"), writes("b.md"), writes("a.md")]).state.memoryWrites).toEqual(["-w-app/b.md", "-w-app/a.md"]);
+    const many = Array.from({ length: LIST_FIELD_CAP + 1 }, (_, at) => writes(`m${String(at)}.md`));
+    const kept = fold([writes("first.md"), ...many, writes("first.md")]).state.memoryWrites;
+    expect(kept).toHaveLength(LIST_FIELD_CAP);
+    expect(kept.at(-1)).toBe("-w-app/first.md");
+    expect(kept).not.toContain("-w-app/m0.md");
+  });
+});
+
 describe("isConversationState", () => {
   const full = (): ConversationState =>
     fold([user("a", { cwd: "/w", timestamp: "2026-11-18T08:00:00.000Z" }), { type: "pr-link", prNumber: 1, prUrl: "u", prRepository: "o/r" }]).state;
@@ -184,6 +200,8 @@ describe("isConversationState", () => {
     ["a PR without a repository", { ...emptyConversationState(), prs: [{ number: 1, url: "u" }] }],
     ["a non-string skill", { ...emptyConversationState(), skills: [1] }],
     ["a non-boolean sidechain flag", { ...emptyConversationState(), isSidechain: 1 }],
+    ["a state from before memory writes were folded", (({ memoryWrites: _omit, ...rest }) => rest)(emptyConversationState())],
+    ["a non-string memory write", { ...emptyConversationState(), memoryWrites: [1] }],
   ])("rejects %s", (_label, value) => {
     expect(isConversationState(value)).toBe(false);
   });

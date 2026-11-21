@@ -35,7 +35,9 @@ let pageFinished: number | null = 1;
 /** First pages that fail before one succeeds. */
 let pageFailures = 0;
 let firstHasMore = false;
+const memorySourceAnswer: unknown = null;
 vi.mock("../../../../src/composables/libraryApi", () => ({
+  loadLibraryMemorySource: () => Promise.resolve(memorySourceAnswer),
   LIBRARY_PAGE: 50,
   // The reader's changed-files strip, which these specs do not look at.
   loadLibraryFiles: () => Promise.resolve([]),
