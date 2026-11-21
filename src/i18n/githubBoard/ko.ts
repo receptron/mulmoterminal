@@ -16,6 +16,8 @@ export const githubBoardKo = {
     openWorkOnly: "터미널이 열린 작업만",
     nothingOpen: "어떤 작업에서도 터미널이 열려 있지 않습니다.",
     showAll: "모두 표시",
+    unregistered: "미등록",
+    unregisteredTip: "Pull request repos 에 없는 저장소입니다. 터미널이 열려 있어 표시합니다",
     draft: "초안",
     ci: { passing: "CI 통과", failing: "CI 실패", pending: "CI 실행 중", none: "CI 없음" },
     changesRequested: "수정 요청됨",

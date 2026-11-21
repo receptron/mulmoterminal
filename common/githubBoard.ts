@@ -64,6 +64,8 @@ export interface RepoBoard {
   repo: string;
   cards?: BoardCard[];
   error?: string;
+  /** Read only because a live cell is in it: not in `prRepos`. */
+  unregistered?: boolean;
 }
 
 export interface BoardResponse {

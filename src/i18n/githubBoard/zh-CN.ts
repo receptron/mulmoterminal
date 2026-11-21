@@ -16,6 +16,8 @@ export const githubBoardZhCN = {
     openWorkOnly: "仅显示已打开终端的工作",
     nothingOpen: "没有任何工作打开了终端。",
     showAll: "显示全部",
+    unregistered: "未登记",
+    unregisteredTip: "不在 Pull request repos 中；因为有终端在其中打开而显示",
     draft: "草稿",
     ci: { passing: "CI 通过", failing: "CI 失败", pending: "CI 运行中", none: "无 CI" },
     changesRequested: "要求修改",
