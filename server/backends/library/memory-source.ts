@@ -9,12 +9,13 @@ const WRITING_TOOLS: ReadonlySet<string> = new Set(["Write", "Edit", "MultiEdit"
 
 const MEMORY_FILE = /[\\/]projects[\\/]([A-Za-z0-9_-]{1,255})[\\/]memory[\\/](\w[\w.-]{0,199}\.md)$/;
 
-/** `<slug>/<file>` for a path into a project's memory folder, or null — the index (`MEMORY.md`, in any
- *  case: a case-insensitive disk writes it by either name) is not a memory. */
+/** `<slug>/<file>` for a path into a project's memory folder, or null — `MEMORY.md` is the index, not a
+ *  memory. Only that spelling: on a case-sensitive disk `memory.md` is a memory of its own, and on one
+ *  that is not, the list never shows the index as a memory, so a link recorded for it is never asked for. */
 export function memoryWriteKey(filePath: string): string | null {
   const match = MEMORY_FILE.exec(filePath);
   const [, slug, file] = match ?? [];
-  if (slug === undefined || file === undefined || file.toLowerCase() === MEMORY_INDEX_FILE.toLowerCase()) return null;
+  if (slug === undefined || file === undefined || file === MEMORY_INDEX_FILE) return null;
   return `${slug}/${file}`;
 }
 

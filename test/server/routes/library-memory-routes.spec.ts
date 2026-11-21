@@ -429,6 +429,7 @@ describe("GET /api/library/memory/:slug/:file/source", () => {
       "/api/library/memory/-w-app/notes.txt/source",
       "/api/library/memory/bad%20slug/a.md/source",
       "/api/library/memory/-w-app/..%2Fa.md/source",
+      "/api/library/memory/-w-app/MEMORY.md/source",
     ]) {
       expect((await call(url)).status, url).toBe(400);
     }

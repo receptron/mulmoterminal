@@ -195,7 +195,7 @@ function mountMemoryMerge(app: Express, projectsRoot: string, trash: () => Trash
 function mountMemorySource(app: Express, call: LibraryCaller): void {
   app.get("/api/library/memory/:slug/:file/source", async (req, res) => {
     const { slug, file } = req.params;
-    if (!isProjectSlug(slug) || !isMemoryFileName(file)) {
+    if (!isProjectSlug(slug) || !isMemoryFileName(file) || file === MEMORY_INDEX_FILE) {
       res.status(400).json({ error: "not a memory file" });
       return;
     }

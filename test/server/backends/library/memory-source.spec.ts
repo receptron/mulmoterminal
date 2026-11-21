@@ -7,12 +7,13 @@ describe("memoryWriteKey", () => {
     ["/Users/me/.claude/projects/-Users-me-app/memory/reply-style.md", "-Users-me-app/reply-style.md"],
     ["C:\\Users\\me\\.claude\\projects\\C--Users-me-app\\memory\\notes.md", "C--Users-me-app/notes.md"],
     ["/custom/config/projects/-w-app/memory/a_b.c-d.md", "-w-app/a_b.c-d.md"],
+    // a memory of its own on a case-sensitive disk; the index is only ever `MEMORY.md`
+    ["/h/.claude/projects/-w-app/memory/memory.md", "-w-app/memory.md"],
   ])("%s → %s", (filePath, key) => {
     expect(memoryWriteKey(filePath)).toBe(key);
   });
   it.each([
     "/Users/me/.claude/projects/-w-app/memory/MEMORY.md",
-    "/Users/me/.claude/projects/-w-app/memory/memory.md",
     "/Users/me/.claude/projects/-w-app/memory/sub/a.md",
     "/Users/me/.claude/projects/-w-app/notes/a.md",
     "/Users/me/.claude/projects/-w-app/memory/a.txt",
