@@ -62,14 +62,15 @@ not on (the session was started some other way), ask for the yes explicitly inst
 
 ## 4. Write, so it can be undone
 
-- A file **outside a git repository** (`~/.claude/CLAUDE.md`, the memory folder, `~/.claude/skills/`):
-  copy it first to `~/.mulmoterminal/library/backups/<YYYYmmdd-HHMMSS>/` under its full path, then
-  write it. A new file has nothing to copy; note that it is new.
-- A file **inside a git repository**: write it; `git restore` (or deleting a new file) undoes it.
-  Do not commit.
+- **Every file that already exists**, inside a git repository or not: copy it first to
+  `~/.mulmoterminal/library/backups/<YYYYmmdd-HHMMSS>/` under its full path, then write it. Copying
+  the backup back undoes exactly this write. Never offer `git restore` for it: that also throws away
+  whatever the user had not committed in the file.
+- A **new file** has nothing to copy; list it as new. Deleting it undoes it.
+- Inside a repository, do not commit.
 - A memory: write its file and its `MEMORY.md` line together, so the two never disagree.
 - An issue: `gh issue create` only after approval, then give its URL. (An issue cannot be uncreated;
   say how to close it.)
 
-Afterwards, say in a few lines what you wrote, where, and **how to undo it** (the backup's path, or
-the `git restore` command).
+Afterwards, say in a few lines what you wrote, where, and **how to undo it**: the `cp` from the
+backup for each changed file, and the path of each new one to delete.

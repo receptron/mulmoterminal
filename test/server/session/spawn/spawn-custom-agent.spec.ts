@@ -67,6 +67,15 @@ vi.mock("../../../../server/session/registry.js", () => ({
   claimFullGuiMcp,
 }));
 
+// The per-session permission mode, in memory: the real one appends to ~/.mulmoterminal.
+const permissionModes = vi.hoisted(() => new Map<string, string>());
+vi.mock("../../../../server/session/spawn/agents/session-permission-mode.js", () => ({
+  sessionPermissionMode: (sessionId: string, asked: string | undefined) => {
+    if (asked !== undefined) permissionModes.set(sessionId, asked);
+    return permissionModes.get(sessionId) ?? null;
+  },
+}));
+
 // Whether the session being asked for has a transcript — which is what makes a spawn a RESUME
 // rather than a fresh start, and the two follow opposite rules about the picker.
 let onDisk = false;
@@ -356,5 +365,14 @@ describe("spawnClaudePty with a permission mode of its own", () => {
   it("uses the server's mode when the spawn names none", () => {
     spawn({}, freshId());
     expect(argAfter("--permission-mode")).toBe("acceptEdits");
+  });
+
+  // A resume arrives as a plain reconnect, naming no mode; the promotion still holds what it read.
+  it("keeps the mode for a later spawn of the same id, a resume included", () => {
+    const id = freshId();
+    spawn({ permissionMode: "plan" }, id);
+    resume({}, id);
+    expect(argAfter("--permission-mode")).toBe("plan");
+    expect(spawnedArgs).toContain("--resume");
   });
 });

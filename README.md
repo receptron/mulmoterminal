@@ -1885,8 +1885,8 @@ narrow and tall for one record you are discussing — and each position keeps it
   conversation's file is never written. **⋯** → **Promote to** turns the conversation into a memory,
   a `CLAUDE.md` rule, a plan under `plans/`, an issue or a skill: it opens a Claude cell in plan mode in the
   directory the conversation ran in, running the bundled `mulmoterminal-library` skill, which reads
-  the conversation, shows the change as a diff, and writes nothing until you approve its plan (it backs up a
-  file outside a repository first, and says how to undo). `claude -p` and SDK runs, and runs from temp directories, are left
+  the conversation, shows the change as a diff, and writes nothing until you approve its plan (it backs up every
+  file it changes first, and says how to undo). `claude -p` and SDK runs, and runs from temp directories, are left
   out. The index behind it is built in the background the first time you open it and kept up to
   date from what is appended; it is `~/.mulmoterminal/library/index.db` and can be deleted at any
   time (it is rebuilt). `marks.json` beside it holds your pins and names and is not rebuilt.
