@@ -9,6 +9,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { setImmediate as yieldToLoop } from "node:timers/promises";
 import { isRecord } from "../../../common/isRecord.js";
 import { emptyConversationState, foldConversationRecord, type IndexedTurn } from "./conversation-fold.js";
+import { takeReplies } from "./spend-fold.js";
 import { historyPromptOf, type HistoryPrompt } from "./history-fold.js";
 import {
   applyHistoryScan,
@@ -114,6 +115,7 @@ export async function scanTranscript(deps: IndexPassDeps, file: TranscriptFile):
         return applyTranscriptScan(deps.db, {
           ...{ path: file.path, id: file.id, agent: "claude", parentId: file.parentId, isTemporary, owner: deps.owner, stamp, head, state },
           ...{ expectedScannedTo: batch.expectedScannedTo, to: batch.to, restart: batch.restart, turns: isTemporary ? [] : batch.items },
+          replies: takeReplies(state.spend),
         });
       },
     );
