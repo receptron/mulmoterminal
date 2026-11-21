@@ -167,6 +167,8 @@ function renameConversation(id: string, name: string | null): void {
 
 /** A memory's source, opened from the memory reader: the conversations, on that one. */
 function openFromMemory(conversation: LibraryConversation): void {
+  // A search typed for memory would hide the conversation among its results: leave it, as a request does.
+  query.value = "";
   kind.value = "conversations";
   select(conversation);
 }

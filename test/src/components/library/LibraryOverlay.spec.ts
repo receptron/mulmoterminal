@@ -540,11 +540,14 @@ describe("LibraryOverlay", () => {
     const wrapper = await mountLibrary();
     await wrapper.find("[data-testid=library-kind-memory]").trigger("click");
     await flushPromises();
+    await wrapper.find("[data-testid=library-search]").setValue("one"); // a memory search, left behind
+    await flushPromises();
     await wrapper.find("[data-testid=memory-source]").trigger("click");
     await flushPromises();
     expect(wrapper.find("[data-testid=library-memory]").exists()).toBe(false);
     expect(wrapper.find("[data-testid=library-kind-conversations]").attributes("aria-pressed")).toBe("true");
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toBe("The one that wrote it");
+    expect(wrapper.find<HTMLInputElement>("[data-testid=library-search]").element.value).toBe("");
     memorySourceAnswer = null;
   });
 
