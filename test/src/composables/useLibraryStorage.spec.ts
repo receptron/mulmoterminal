@@ -183,6 +183,23 @@ describe("useLibraryStorage", () => {
     expect(measures).toBe(before);
   });
 
+  it("asks for one measurement when hidden and shown again while the first read was out", async () => {
+    const pending: Array<(value: LibraryStorageAnswer) => void> = [];
+    answers = [];
+    loadOverride = () => new Promise((resolve) => pending.push(resolve));
+    const { shown } = start(true);
+    await nextTick();
+    shown.value = false;
+    await nextTick();
+    shown.value = true;
+    await nextTick();
+    loadOverride = null;
+    answers = [answer(Date.now(), { done: 0, of: 0 })];
+    pending.forEach((resolve) => resolve(answer(Date.now() - STORAGE_STALE_MS - 1)));
+    await flushPromises();
+    expect(measures).toBe(1);
+  });
+
   it("reads again for a new query, once it settles", async () => {
     answers = [answer(Date.now())];
     const { query } = start(true);

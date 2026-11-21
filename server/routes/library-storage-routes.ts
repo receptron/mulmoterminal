@@ -60,18 +60,24 @@ async function knownDirectories(call: LibraryCaller): Promise<string[] | null> {
 const slugOf = (cwd: string): string => encodeProjectDirName(claudeProjectPath(cwd));
 
 /** A measurement's projects matched to their directories, once per measurement: matching resolves the
- *  real path of every directory the index knows, which is too much to repeat on every read. When the
- *  index does not answer, the sizes are still shown, unmatched, and the next read tries again. */
+ *  real path of every directory the index knows, which is too much to repeat on every read. Reads that
+ *  overlap share the match in flight. When the index does not answer, the sizes are still shown,
+ *  unmatched, and the next read tries again. */
 function projectMatcher(call: LibraryCaller): (measure: HomeMeasure) => Promise<StorageProject[]> {
   // Keyed by the measurement itself: two can finish within one millisecond.
-  let matched: { measure: HomeMeasure; projects: StorageProject[] } | null = null;
-  return async (measure) => {
+  let matched: { measure: HomeMeasure; projects: Promise<StorageProject[]> } | null = null;
+  return (measure) => {
     if (matched?.measure === measure) return matched.projects;
-    const directories = await knownDirectories(call);
-    const projects = matchProjects(measure.projects, directories ?? [], { slugOf, temporaryRoots: temporaryRoots() });
-    if (directories !== null) matched = { measure, projects };
-    return projects;
+    const entry = { measure, projects: matchMeasure(measure, call, () => matched === entry && (matched = null)) };
+    matched = entry;
+    return entry.projects;
   };
+}
+
+async function matchMeasure(measure: HomeMeasure, call: LibraryCaller, forget: () => void): Promise<StorageProject[]> {
+  const directories = await knownDirectories(call);
+  if (directories === null) forget();
+  return matchProjects(measure.projects, directories ?? [], { slugOf, temporaryRoots: temporaryRoots() });
 }
 
 function measureFor(measure: HomeMeasure, projects: readonly StorageProject[], query: string): StorageMeasure {

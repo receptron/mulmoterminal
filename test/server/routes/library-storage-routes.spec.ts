@@ -135,6 +135,27 @@ describe("GET /api/library/storage", () => {
     expect(asked).toHaveLength(4);
   });
 
+  it("matches once for reads that overlap", async () => {
+    const asked: string[] = [];
+    let answerIndex: (dirs: string[]) => void = () => {};
+    const home = mkdtempSync(path.join(tmpdir(), "mt-storage-overlap-"));
+    dirs.push(home);
+    const app = express();
+    mountLibraryRoutes(app, {
+      call: (method) => (asked.push(method), new Promise((resolve) => (answerIndex = resolve))),
+      storage: { home, measurer: { measure: () => {}, state: () => ({ measure: MEASURE, measuring: null, failed: false }) } },
+    });
+    const request = routeCall(app);
+    const reads = [request("/api/library/storage"), request("/api/library/storage?q=app")];
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    answerIndex(["/work/app"]);
+    const answers = await Promise.all(reads);
+    expect(asked).toEqual(["directories"]);
+    answers.forEach((answer) =>
+      expect(answer.body).toMatchObject({ measure: { projects: expect.arrayContaining([expect.objectContaining({ cwd: "/work/app" })]) } }),
+    );
+  });
+
   it("reads cleanupPeriodDays from the settings file, and says when it cannot", async () => {
     const set = setup();
     writeFileSync(path.join(set.home, "settings.json"), JSON.stringify({ cleanupPeriodDays: 9 }));

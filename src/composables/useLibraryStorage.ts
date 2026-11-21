@@ -15,8 +15,11 @@ export function useLibraryStorage(shown: Ref<boolean>, query: Ref<string>) {
   const failed = ref(false);
   /** The last ask for a measurement was refused; what is shown is the older answer. */
   const startRefused = ref(false);
-  // Set when the owner goes away: a read or a timer still out must not act for it afterwards.
-  let disposed = false;
+  // Which showing of the view owns the work in flight. Hiding it, showing it again and its owner going
+  // away each start a new one, and anything that resumes after an await acts only for the showing it
+  // began in — one rule, rather than a check per way the view can stop wanting the answer.
+  let showing = 0;
+  const owns = (mine: number): boolean => mine === showing && shown.value;
   let reads = 0;
   let poll: ReturnType<typeof setTimeout> | null = null;
   let debounce: ReturnType<typeof setTimeout> | null = null;
@@ -27,9 +30,10 @@ export function useLibraryStorage(shown: Ref<boolean>, query: Ref<string>) {
   };
 
   async function read(): Promise<void> {
-    const mine = ++reads;
+    const mine = showing;
+    const thisRead = ++reads;
     const found = await loadLibraryStorage(query.value);
-    if (disposed || mine !== reads || !shown.value) return;
+    if (!owns(mine) || thisRead !== reads) return;
     failed.value = found === null;
     if (found !== null) answer.value = found;
     loaded.value = true;
@@ -42,8 +46,9 @@ export function useLibraryStorage(shown: Ref<boolean>, query: Ref<string>) {
 
   /** Measure again now, whatever the age of the last one. */
   async function remeasure(): Promise<void> {
+    const mine = showing;
     const started = await measureLibraryStorage();
-    if (disposed) return;
+    if (!owns(mine)) return;
     startRefused.value = !started;
     await read();
   }
@@ -51,11 +56,11 @@ export function useLibraryStorage(shown: Ref<boolean>, query: Ref<string>) {
   watch(
     shown,
     async (isShown) => {
+      const mine = ++showing;
       stopPolling();
       if (!isShown) return;
       await read();
-      // Hidden (or gone) while that read was out: the view no longer wants a measurement.
-      if (!disposed && shown.value && answer.value !== null && answer.value.measuring === null && isStale(answer.value)) await remeasure();
+      if (owns(mine) && answer.value !== null && answer.value.measuring === null && isStale(answer.value)) await remeasure();
     },
     { immediate: true },
   );
@@ -68,7 +73,7 @@ export function useLibraryStorage(shown: Ref<boolean>, query: Ref<string>) {
   });
 
   onScopeDispose(() => {
-    disposed = true;
+    showing += 1;
     stopPolling();
     if (debounce !== null) clearTimeout(debounce);
   });
