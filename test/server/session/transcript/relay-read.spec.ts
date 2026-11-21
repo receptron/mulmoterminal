@@ -69,6 +69,22 @@ describe("readRelay", () => {
     expect(selection).toMatchObject({ markLost: true });
   });
 
+  it("does not let a huge running turn spend the budget and hide older finished turns", async () => {
+    const huge: TranscriptTurn = {
+      at: null,
+      rows: [
+        { kind: "user", text: "running" },
+        { kind: "assistant", text: "x".repeat(500) },
+      ],
+    };
+    const readPage = async (before: string | null): Promise<TranscriptPage> =>
+      before === null
+        ? { view: { status: "ok", turns: [huge], truncated: true }, older: "1" }
+        : { view: { status: "ok", turns: ["p0"].map(viewTurn), truncated: false }, older: null };
+    const selection = await readRelay({ readPage, lastCompletedPrompt: async () => "p0" }, null, { promptMaxChars: 600, totalMaxChars: 100 });
+    expect(promptsOf(selection)).toEqual(["p0"]);
+  });
+
   it("does not call the marker lost when an older page is too large to read", async () => {
     const readPage = async (before: string | null): Promise<TranscriptPage> =>
       before === null

@@ -31,29 +31,34 @@ interface Collected {
 const pageTurns = (page: TranscriptPage): RelayTurn[] =>
   page.view.status === "ok" ? page.view.turns.map(relayTurnOf).filter((turn): turn is RelayTurn => turn !== null) : [];
 
-function enough(turns: readonly RelayTurn[], mark: string | null, limits: RelayLimits): boolean {
-  if (mark !== null && turns.some((turn) => relayFingerprint(turn) === mark)) return true;
-  return turns.reduce((n, turn) => n + relayTurnChars(turn, limits), 0) >= limits.totalMaxChars;
+interface Walk {
+  deps: RelayReadDeps;
+  mark: string | null;
+  lastPrompt: string | null;
+  limits: RelayLimits;
 }
 
-async function collect(
-  deps: RelayReadDeps,
-  mark: string | null,
-  limits: RelayLimits,
-  before: string | null,
-  pagesLeft: number,
-  newer: RelayTurn[],
-): Promise<Collected> {
-  const page = await deps.readPage(before);
+// Only COMPLETED turns spend the budget: a huge turn still running is never sent, and letting it
+// stop the walk would hide the older finished turns that are.
+function enough(turns: readonly RelayTurn[], walk: Walk): boolean {
+  const complete = turns.slice(0, completedCount(turns, walk.lastPrompt));
+  if (walk.mark !== null && complete.some((turn) => relayFingerprint(turn) === walk.mark)) return true;
+  return complete.reduce((n, turn) => n + relayTurnChars(turn, walk.limits), 0) >= walk.limits.totalMaxChars;
+}
+
+async function collect(walk: Walk, before: string | null, pagesLeft: number, newer: RelayTurn[]): Promise<Collected> {
+  const page = await walk.deps.readPage(before);
   const turns = [...pageTurns(page), ...newer];
   // A page that is not `ok` (too-large) also ends the walk, but the marker may sit in what it could
   // not read — so it is not the start, and a marker not yet seen is not lost.
   if (page.older === null) return { turns, reachedStart: page.view.status === "ok" };
-  if (pagesLeft <= 1 || enough(turns, mark, limits)) return { turns, reachedStart: false };
-  return collect(deps, mark, limits, page.older, pagesLeft - 1, turns);
+  if (pagesLeft <= 1 || enough(turns, walk)) return { turns, reachedStart: false };
+  return collect(walk, page.older, pagesLeft - 1, turns);
 }
 
+// The last completed prompt is read FIRST, because the walk needs it to know which turns count.
 export async function readRelay(deps: RelayReadDeps, mark: string | null, limits: RelayLimits): Promise<RelaySelection> {
-  const [collected, lastPrompt] = await Promise.all([collect(deps, mark, limits, null, RELAY_MAX_PAGES, []), deps.lastCompletedPrompt()]);
+  const lastPrompt = await deps.lastCompletedPrompt();
+  const collected = await collect({ deps, mark, lastPrompt, limits }, null, RELAY_MAX_PAGES, []);
   return selectRelay({ turns: collected.turns, completed: completedCount(collected.turns, lastPrompt), mark, reachedStart: collected.reachedStart, limits });
 }
