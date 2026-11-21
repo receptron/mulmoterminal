@@ -103,6 +103,7 @@ export const libraryViewZhTW = {
       tidy: "有 {count} 項可以整理",
       tidyShow: "查看",
       tidyAll: "顯示全部",
+      source: "寫入的對話：",
       copySame: "{name}（相同）",
       copyDiffers: "{name}（不同）",
       issues: {

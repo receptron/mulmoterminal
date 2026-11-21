@@ -1,7 +1,15 @@
 // What the Library's routes ask of the index (#3328), as one async interface: the worker answers it
 // in production, and the specs answer it in-thread over an in-memory database.
 import type { LibraryConversation, LibraryConversationPage, LibraryIndexStatus, LibraryPrCreator, LibrarySearchHit } from "../../../common/library.js";
-import { conversationDirectories, conversationOfRow, findConversation, listConversations, prCreators, type ConversationFilter } from "./index-queries.js";
+import {
+  conversationDirectories,
+  conversationOfRow,
+  findConversation,
+  listConversations,
+  memorySource,
+  prCreators,
+  type ConversationFilter,
+} from "./index-queries.js";
 import type { LibraryIndex } from "./library-index.js";
 import { inReadSnapshot, readLease } from "./index-store.js";
 import { searchLibrary } from "./library-search.js";
@@ -23,6 +31,8 @@ export interface LibraryService {
   directories(): Promise<string[]>;
   /** The conversation that made each of these PRs in one repository, for those the index knows. */
   prCreators(repository: string, numbers: number[]): Promise<LibraryPrCreator[]>;
+  /** The conversation that last wrote a memory file, by its path, when the index knows one. */
+  memorySource(file: string): Promise<LibraryConversation | null>;
 }
 
 /** Every call also asks the index to catch up — in the background, so the answer is what the
@@ -59,6 +69,11 @@ export function createLocalLibraryService(index: LibraryIndex): LibraryService {
     directories: () => answer(() => conversationDirectories(index.db)),
     prCreators: (repository, numbers) =>
       answer(() => prCreators(index.db, repository, numbers).map((row) => ({ number: Number(row.pr_number), conversation: conversationOfRow(row) }))),
+    memorySource: (file) =>
+      answer(() => {
+        const row = memorySource(index.db, file);
+        return row === null ? null : conversationOfRow(row);
+      }),
   };
 }
 

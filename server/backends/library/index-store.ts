@@ -13,7 +13,7 @@ import { conversationTitle, isConversationState, type ConversationState, type In
 import type { HistoryPrompt } from "./history-fold.js";
 
 /** Bump when a column or what a column means changes: the next open drops and rebuilds. */
-export const LIBRARY_SCHEMA_VERSION = 5;
+export const LIBRARY_SCHEMA_VERSION = 6;
 // A write that meets another process's lock waits SYNCHRONOUSLY, with the event loop stopped, for up
 // to this long; a reader in WAL mode never waits. So it stays short: a write that gives up is a pass
 // that runs again later, while a long wait is a frozen server.
@@ -30,12 +30,15 @@ create table if not exists files (path text primary key, kind text not null, siz
 create table if not exists conversations (
   key integer primary key, path text not null unique, id text not null, agent text not null, parent_id text, title text, cwd text, git_branch text, prs text not null,
   cost_usd real, lines_added integer, lines_removed integer, started_at integer, ended_at integer, skills text not null,
-  hook_errors integer not null, user_turns integer not null, is_sidechain integer not null, is_temporary integer not null, entrypoint text);
+  hook_errors integer not null, user_turns integer not null, is_sidechain integer not null, is_temporary integer not null, entrypoint text,
+  memory_writes text not null default '[]');
 create index if not exists conversations_id on conversations (id);
 create index if not exists conversations_ended on conversations (ended_at);
 create index if not exists conversations_cwd on conversations (cwd);
 -- Only the few rows that recorded a PR: a PR lookup otherwise reads every conversation's links.
 create index if not exists conversations_with_prs on conversations (started_at) where prs != '[]';
+-- Likewise only the rows that wrote memory: looking up who wrote one reads just those.
+create index if not exists conversations_with_memory on conversations (ended_at) where memory_writes != '[]';
 create virtual table if not exists titles_fts using fts5 (title, content = 'conversations', content_rowid = 'key', tokenize = 'trigram');
 create trigger if not exists conversations_ai after insert on conversations begin insert into titles_fts (rowid, title) values (new.key, new.title); end;
 create trigger if not exists conversations_ad after delete on conversations begin
@@ -194,14 +197,14 @@ function writeFileMark(db: DatabaseSync, path: string, kind: string, mark: Omit<
 
 const CONVERSATION_COLUMNS = [
   ...["path", "id", "agent", "parent_id", "title", "cwd", "git_branch", "prs", "cost_usd", "lines_added", "lines_removed"],
-  ...["started_at", "ended_at", "skills", "hook_errors", "user_turns", "is_sidechain", "is_temporary", "entrypoint"],
+  ...["started_at", "ended_at", "skills", "hook_errors", "user_turns", "is_sidechain", "is_temporary", "entrypoint", "memory_writes"],
 ];
 
 function writeConversation(db: DatabaseSync, scan: TranscriptScan): void {
   const s = scan.state;
   const values: SQLInputValue[] = [scan.path, scan.id, scan.agent, scan.parentId, conversationTitle(s), s.cwd, s.gitBranch, JSON.stringify(s.prs)];
   values.push(s.costUsd, s.linesAdded, s.linesRemoved, s.startedAt, s.endedAt, JSON.stringify(s.skills), s.hookErrors, s.userTurns);
-  values.push(s.isSidechain || scan.parentId !== null ? 1 : 0, scan.isTemporary ? 1 : 0, s.entrypoint);
+  values.push(s.isSidechain || scan.parentId !== null ? 1 : 0, scan.isTemporary ? 1 : 0, s.entrypoint, JSON.stringify(s.memoryWrites));
   // An upsert rather than `insert or replace`: a replace deletes the row without firing the delete
   // trigger, which would leave its old title in the title index.
   const updates = CONVERSATION_COLUMNS.slice(1).map((column) => `${column} = excluded.${column}`);

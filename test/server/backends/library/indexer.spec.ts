@@ -8,7 +8,15 @@ import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { prepareLibraryStore, readFileMark, takeLease } from "../../../../server/backends/library/index-store";
-import { conversationOfRow, findConversation, listConversations, prCreators, prCreatorsQuery } from "../../../../server/backends/library/index-queries";
+import {
+  conversationOfRow,
+  findConversation,
+  listConversations,
+  memorySource,
+  memorySourceQuery,
+  prCreators,
+  prCreatorsQuery,
+} from "../../../../server/backends/library/index-queries";
 import { searchLibrary } from "../../../../server/backends/library/library-search";
 import { runIndexPass, type IndexPassDeps } from "../../../../server/backends/library/indexer";
 import { HEAD_BYTES } from "../../../../server/backends/library/opened-file";
@@ -109,6 +117,45 @@ describe("runIndexPass", () => {
       .all(...query.params)
       .map((row) => String(row.detail));
     expect(plan.join("\n")).toContain("USING INDEX conversations_with_prs");
+  });
+
+  it("finds the conversation that last wrote a memory, of those the Library lists, and follows what is appended", async () => {
+    const { db, deps, transcript } = setup();
+    const opened = (day: number, entrypoint = "cli"): string =>
+      line({ type: "user", cwd: "/w/app", entrypoint, timestamp: `2026-11-${String(day)}T08:00:00.000Z`, message: { content: "x" } });
+    const writes = (file: string, tool = "Write"): string =>
+      line({
+        type: "assistant",
+        message: { content: [{ type: "tool_use", id: "t", name: tool, input: { file_path: `/h/.claude/projects/-w-app/memory/${file}` } }] },
+      });
+    transcript("early", opened(10) + writes("a.md"));
+    const late = transcript("late", opened(12) + writes("a.md", "Edit"));
+    transcript("scripted", opened(14, "sdk-cli") + writes("a.md"));
+    const elsewhere = line({
+      type: "assistant",
+      message: { content: [{ type: "tool_use", id: "t", name: "Write", input: { file_path: "/tmp/projects/-w-app/memory/c.md" } }] },
+    });
+    transcript("lookalike", opened(13) + elsewhere);
+    await runIndexPass(deps);
+    const source = (file: string) => memorySource(db, `/h/.claude/projects/-w-app/memory/${file}`)?.id ?? null;
+    expect(source("a.md")).toBe("late");
+    expect([source("b.md"), source("MEMORY.md")]).toEqual([null, null]);
+    // A folder elsewhere that only looks like a memory folder is not this one.
+    expect(source("c.md")).toBeNull();
+    expect(memorySource(db, "/tmp/projects/-w-app/memory/c.md")?.id).toBe("lookalike");
+    appendFileSync(late, writes("b.md"));
+    await runIndexPass(deps);
+    expect(source("b.md")).toBe("late");
+  });
+
+  it("looks a memory's writer up through the partial index", () => {
+    const { db } = setup();
+    const query = memorySourceQuery("/h/.claude/projects/-w-app/memory/a.md");
+    const plan = db
+      .prepare(`explain query plan ${query.sql}`)
+      .all(...query.params)
+      .map((row) => String(row.detail));
+    expect(plan.join("\n")).toContain("conversations_with_memory");
   });
 
   it("does not prefer a copy with no project recorded when no project is asked for", async () => {

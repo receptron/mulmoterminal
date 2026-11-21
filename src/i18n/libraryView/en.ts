@@ -103,6 +103,7 @@ export const libraryViewEn = {
       tidy: "{count} can be tidied",
       tidyShow: "Show",
       tidyAll: "Show all",
+      source: "Written in",
       copySame: "{name} (the same)",
       copyDiffers: "{name} (different)",
       issues: {

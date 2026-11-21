@@ -103,6 +103,7 @@ export const libraryViewKo = {
       tidy: "{count}건을 정리할 수 있습니다",
       tidyShow: "보기",
       tidyAll: "모두 보기",
+      source: "작성한 대화:",
       copySame: "{name}(같음)",
       copyDiffers: "{name}(다름)",
       issues: {
