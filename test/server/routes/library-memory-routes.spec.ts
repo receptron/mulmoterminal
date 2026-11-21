@@ -3,13 +3,14 @@
 // memory file in a memory folder.
 import { describe, it, expect, afterEach } from "vitest";
 import express from "express";
-import { existsSync, mkdirSync, readFileSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, mkdtempSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { routeCall } from "../../helpers/routeCall";
 import { mountLibraryRoutes } from "../../../server/routes/library-routes";
 import { MEMORY_EDIT_MAX_BYTES } from "../../../common/libraryMemory";
 import { memoryVersion } from "../../../server/backends/library/memory-write";
+import { encodeProjectDirName } from "../../../server/session/project-dir";
 import {
   inBatches,
   isSameFile,
@@ -26,6 +27,10 @@ afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, f
 const json = (body: unknown) => ({ method: "PUT" as const, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
 const INDEX = "- [A](a.md) — one\n- [B](b.md) — two\n";
+
+// A made-up directory as this platform spells it absolutely (`D:\w\app` on Windows), and its folder.
+const absolute = (posix: string): string => path.resolve(posix);
+const folderOf = (posix: string): string => encodeProjectDirName(absolute(posix));
 
 function setup(directories: string[] = ["/w/app"], trash: "here" | "none" = "here") {
   const root = mkdtempSync(path.join(tmpdir(), "mt-memory-routes-"));
@@ -57,12 +62,13 @@ function setup(directories: string[] = ["/w/app"], trash: "here" | "none" = "her
 
 describe("/api/library/memory", () => {
   it("lists the folders that hold memory, named by their directory, the newest written first", async () => {
-    const { call } = setup();
+    const { call, root } = setup([absolute("/w/app")]);
+    if (folderOf("/w/app") !== "-w-app") renameSync(path.join(root, "-w-app"), path.join(root, folderOf("/w/app")));
     const projects = (await call("/api/library/memory")).body.projects;
     expect(projects).toEqual([
       {
-        slug: "-w-app",
-        cwd: "/w/app",
+        slug: folderOf("/w/app"),
+        cwd: absolute("/w/app"),
         index: { lines: 2, bytes: Buffer.byteLength(INDEX) },
         files: [
           { file: "b.md", name: null, description: null, type: null, updatedAt: 1_700_000_100_000 },
@@ -97,6 +103,21 @@ describe("/api/library/memory", () => {
       expect.objectContaining({ slug: "-w-app", files: [expect.objectContaining({ file: "b.md" }), expect.objectContaining({ file: "a.md" })] }),
       expect.objectContaining({ slug: "-w-other" }),
     ]);
+  });
+});
+
+describe("naming a folder by its directory", () => {
+  it("uses Claude Code's folder rule, and names no directory when two share the folder", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "mt-memory-naming-"));
+    dirs.push(root);
+    [folderOf("/w/my-app"), folderOf("/w/a-b")].forEach((slug) => {
+      mkdirSync(path.join(root, slug, "memory"), { recursive: true });
+      writeFileSync(path.join(root, slug, "memory", "x.md"), "x");
+    });
+    const projects = await listMemoryProjects(root, ["/w/my_app", "/w/a.b", "/w/a_b"].map(absolute), 0);
+    const cwdOf = (slug: string) => projects.find((project) => project.slug === slug)?.cwd;
+    expect(cwdOf(folderOf("/w/my-app"))).toBe(absolute("/w/my_app"));
+    expect(cwdOf(folderOf("/w/a-b"))).toBeNull();
   });
 });
 

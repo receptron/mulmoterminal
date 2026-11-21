@@ -2,7 +2,7 @@
 // The Library's memory kind (#3331): every project's memory, grouped by project with how full its
 // MEMORY.md is, and one memory read beside the list — its frontmatter apart from its body, and its
 // `[[name]]` links followed. Edited in place, moved to the Trash or merged into another, with Undo.
-import { computed, nextTick, ref, useTemplateRef, watch } from "vue";
+import { computed, nextTick, reactive, ref, useTemplateRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   MEMORY_INDEX_BYTES_MAX,
@@ -16,6 +16,7 @@ import {
 } from "../../../common/libraryMemory";
 import { renderWikiHtml } from "../../wikiMarkdown";
 import LibraryMemoryEditor from "./LibraryMemoryEditor.vue";
+import LibraryMemoryTidy from "./LibraryMemoryTidy.vue";
 import LibraryMoreMenu from "./LibraryMoreMenu.vue";
 import LibraryMemoryMergeChooser from "./LibraryMemoryMergeChooser.vue";
 import LibraryMemoryWorkCopies from "./LibraryMemoryWorkCopies.vue";
@@ -281,6 +282,8 @@ function onMerged(saved: string, version: string, undoId: string, links: number)
 }
 
 const moreMenu = useTemplateRef<{ close: () => void }>("moreMenu");
+/** Why a project's tidy-up was refused, by project, said under its heading. */
+const tidyRefusals = reactive(new Map<string, string | null>());
 const { available: trashOffered, notice: trashNotice, trash, merged: mergedNotice, undo, dismiss: dismissTrashNotice } = useMemoryTrash(() => emit("changed"));
 
 /** The memory being read, to the Trash; the reader moves on to the next one in the list. */
@@ -358,7 +361,15 @@ defineExpose({ move, startEdit });
           >
             {{ gaugeLabel(project) }}
           </span>
+          <LibraryMemoryTidy
+            :slug="project.slug"
+            :class="indexFill(project.index) ? '' : 'ml-auto'"
+            @refused="(sentence) => tidyRefusals.set(project.slug, sentence)"
+          />
         </h3>
+        <p v-if="tidyRefusals.get(project.slug)" class="m-0 px-4 pb-1 font-sans text-[12px] text-err-text" role="status" data-testid="memory-tidy-refused">
+          {{ tidyRefusals.get(project.slug) }}
+        </p>
         <p
           v-for="issue in health.get(project.slug)?.issues ?? []"
           :key="issue.kind"

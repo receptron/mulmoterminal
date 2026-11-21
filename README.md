@@ -1906,7 +1906,11 @@ narrow and tall for one record you are discussing — and each position keeps it
   memory only) and **Write this text there** (writes this memory's text over that copy, refused if
   it changed since it was read, with **Undo**), so the copies can be made one. Under a memory's title,
   **Written in** names the conversation that last wrote it (from the file writes its transcript
-  recorded) and opens it.
+  recorded) and opens it. Each project heading has a tidy-up button: it opens Claude in plan mode in
+  the project's directory with the `mulmoterminal-library` skill, which proposes merging duplicate
+  memories, removing ones the code shows no longer hold, fixing what the health check found and
+  moving standing rules into a `CLAUDE.md` or a skill, backs up every file it changes, and writes
+  nothing until you approve.
   **Edit** (`Enter`) changes a memory's whole text in place (`⌘Enter` saves, `Esc` cancels); a save
   is refused when the file changed on disk since it was opened, and a running session there is warned of.
   **⋯** → **Move to Trash** moves a memory to the system Trash with its lines in `MEMORY.md`, and

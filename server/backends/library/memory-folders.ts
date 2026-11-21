@@ -7,18 +7,17 @@ import {
   MEMORY_INDEX_FILE,
   memoryType,
   parseMemoryFrontmatter,
-  projectSlug,
   type LibraryMemoryFile,
   type LibraryMemoryProject,
+  isProjectSlug,
 } from "../../../common/libraryMemory.js";
+import { directoriesByFolder } from "./project-folders.js";
 
 /** Folders read at once: a machine has thousands of project folders, most with no memory at all. */
 const FOLDERS_AT_ONCE = 64;
 
 /** A memory file's name as the folder holds it: a plain `.md` name, never a path. */
 export const isMemoryFileName = (name: string): boolean => /^\w[\w.-]{0,199}\.md$/.test(name);
-/** A project folder's name as Claude Code makes them (`projectSlug`). */
-export const isProjectSlug = (slug: string): boolean => /^[A-Za-z0-9_-]{1,255}$/.test(slug);
 
 async function entriesOf(dir: string): Promise<Dirent[]> {
   try {
@@ -190,7 +189,7 @@ export function memorySlugs(projectsRoot: string, now_ms: number): Promise<strin
 /** Every project folder that holds memory, the most recently written first, each named by the
  *  directory a conversation there ran in (`cwds`, from the index) when one is known. */
 export async function listMemoryProjects(projectsRoot: string, cwds: readonly string[], now_ms: number = Date.now()): Promise<LibraryMemoryProject[]> {
-  const bySlug = new Map(cwds.map((cwd) => [projectSlug(cwd), cwd] as const));
+  const bySlug = await directoriesByFolder(cwds);
   const slugs = await memorySlugs(projectsRoot, now_ms);
   const projects: LibraryMemoryProject[] = [];
   for (let start = 0; start < slugs.length; start += FOLDERS_AT_ONCE) {

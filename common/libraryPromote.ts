@@ -2,6 +2,7 @@
 // bundled skill to make it. Both sides decide from these — the reader lists the targets, the server
 // refuses any other and writes the turn — so they are named once, here.
 import type { BundledSkillName } from "./bundledSkills.js";
+import { isProjectSlug } from "./libraryMemory.js";
 
 /** What a conversation can be promoted to: a memory, a `CLAUDE.md` rule, a plan under `plans/`, an
  *  issue, or a skill. */
@@ -22,4 +23,10 @@ const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 /** The first turn of the session that promotes `sessionId`, or null for an id that is not one. */
 export function promoteTurn(target: PromoteTarget, sessionId: string): string | null {
   return SESSION_ID.test(sessionId) ? `/${PROMOTE_SKILL} promote ${target} ${sessionId}` : null;
+}
+
+/** The first turn of the session that proposes how to tidy one project's memory, or null for a
+ *  folder name that is not one Claude Code makes. */
+export function tidyTurn(slug: string): string | null {
+  return isProjectSlug(slug) ? `/${PROMOTE_SKILL} tidy ${slug}` : null;
 }

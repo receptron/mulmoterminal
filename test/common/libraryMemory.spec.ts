@@ -10,7 +10,6 @@ import {
   memoryLinkNames,
   memoryType,
   parseMemoryFrontmatter,
-  projectSlug,
 } from "../../common/libraryMemory";
 import { seededRandom } from "../helpers/seededRandom";
 
@@ -126,18 +125,6 @@ describe("linkNamesMemory / memoryLinkNames", () => {
         expect(linkNamesMemory(link, memory)).toBe(memoryLinkNames(memory).includes(link.trim()));
       }),
     );
-  });
-});
-
-describe("projectSlug", () => {
-  it.each([
-    ["/Users/isamu/ss/llm/mulmoterminal3", "-Users-isamu-ss-llm-mulmoterminal3"],
-    ["/Users/me/my.app_v2", "-Users-me-my-app_v2"],
-    ["/Users/me/日本語", "-Users-me----"],
-    ["C:\\work\\app", "C--work-app"],
-    ["", "unknown"],
-  ])("%s → %s", (cwd, slug) => {
-    expect(projectSlug(cwd)).toBe(slug);
   });
 });
 

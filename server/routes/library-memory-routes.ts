@@ -8,7 +8,8 @@
 import path from "node:path";
 import type { Express, Response } from "express";
 import { MEMORY_EDIT_MAX_BYTES, MEMORY_INDEX_FILE } from "../../common/libraryMemory.js";
-import { isMemoryFileName, isProjectSlug, isSpeltAsOnDisk, isTheIndex, listMemoryProjects } from "../backends/library/memory-folders.js";
+import { isMemoryFileName, isSpeltAsOnDisk, isTheIndex, listMemoryProjects } from "../backends/library/memory-folders.js";
+import { isProjectSlug } from "../../common/libraryMemory.js";
 import { readBoundedText } from "../backends/library/file-history-read.js";
 import { readMemoryHealth } from "../backends/library/memory-health-read.js";
 import { isFaithfulText, memoryVersion, writeMemory } from "../backends/library/memory-write.js";

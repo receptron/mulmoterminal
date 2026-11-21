@@ -23,7 +23,9 @@ follows is a refusal to add one of those, and the reason sits next to it.
 4. **Nothing is destroyed.** Every removal moves to the trash and shows a toast with Undo. Files of
    a running session are read-only — except memory, which the agent shares with the person by
    design: changing a project's memory while a session runs there is warned of, not refused, since
-   the projects most worth tidying are the ones in use.
+   the projects most worth tidying are the ones in use. The one exception to the trash is what the
+   bundled skill changes after a plan is approved (Promote, Repeats, a memory tidy-up): it backs up
+   every file first under `~/.mulmoterminal/library/backups/` and says how to copy each back.
 5. **Warnings do not shout.** A small dot at the start of the row and one sentence in the reader.
    No red bars, no badge counts.
 6. **Numbers only when asked for.** The list is never a report. The retrospective lives in `/usage`
@@ -142,6 +144,12 @@ follows is a refusal to add one of those, and the reason sits next to it.
 - Editing happens in place: `⌘ Enter` saves, `Esc` cancels.
 
 ![Memory with an issue](library-design/memory.png)
+
+## Tidying memory
+
+- Each project in Memory has a tidy-up button (#3334): the same skill, in plan mode in the project's
+  directory, proposes merges, removals (checked against the code), health-check fixes and moves to a
+  rule or a skill, backing up every file it changes. The turn carries the project's folder name only.
 
 ## Repeats
 

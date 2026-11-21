@@ -2,7 +2,8 @@
 // What can be tidied in memory (#3331): every rule both ways — what it reports, and what it must leave
 // alone — then the reader over a real folder, where existence is asked of the disk.
 import { describe, it, expect, afterEach } from "vitest";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { encodeProjectDirName } from "../../../../server/session/project-dir.js";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -14,7 +15,7 @@ import {
   topFolder,
   type MemoryHealthInput,
 } from "../../../../server/backends/library/memory-health";
-import { directoriesBySlug, MEMORY_CHECK_MAX_BYTES, readMemoryHealth } from "../../../../server/backends/library/memory-health-read";
+import { MEMORY_CHECK_MAX_BYTES, readMemoryHealth } from "../../../../server/backends/library/memory-health-read";
 import { MEMORY_INDEX_BYTES_MAX, MEMORY_INDEX_LINES_MAX } from "../../../../common/libraryMemory";
 
 const memory = (name: string, body = "", extra = ""): string =>
@@ -164,6 +165,9 @@ describe("memoryHealth", () => {
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 
+/** A project folder's name as Claude Code makes it: the real path when the directory is here. */
+const folderOf = (dir: string): string => encodeProjectDirName(existsSync(dir) ? realpathSync.native(dir) : path.resolve(dir));
+
 describe("readMemoryHealth", () => {
   it("judges each folder, asking the disk which named paths exist, and lists only projects with something to tidy", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "mt-memory-health-"));
@@ -171,7 +175,7 @@ describe("readMemoryHealth", () => {
     const project = path.join(root, "work");
     mkdirSync(path.join(project, "src"), { recursive: true });
     writeFileSync(path.join(project, "src", "here.ts"), "");
-    const slug = project.replace(/[^a-zA-Z0-9\-_]/g, "-");
+    const slug = folderOf(project);
     const write = (relative: string, text: string): void => {
       mkdirSync(path.dirname(path.join(root, "projects", relative)), { recursive: true });
       writeFileSync(path.join(root, "projects", relative), text);
@@ -222,11 +226,6 @@ describe("readMemoryHealth", () => {
     expect(await read()).toEqual({});
   });
 
-  it("leaves a folder's directory unknown when two directories share its name", () => {
-    expect([...directoriesBySlug(["/tmp/a.b", "/tmp/a-b", "/w/app"])]).toEqual([["-w-app", "/w/app"]]);
-    expect([...directoriesBySlug(["/w/app", "/w/app"])]).toEqual([["-w-app", "/w/app"]]);
-  });
-
   it("judges a relative path when the project is here, and none when it is not", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "mt-memory-health-"));
     dirs.push(root);
@@ -234,7 +233,7 @@ describe("readMemoryHealth", () => {
     mkdirSync(here, { recursive: true });
     const away = path.join(root, "away-not-on-this-disk");
     const write = (project: string, text: string): void => {
-      const folder = path.join(root, "projects", project.replace(/[^a-zA-Z0-9\-_]/g, "-"), "memory");
+      const folder = path.join(root, "projects", folderOf(project), "memory");
       mkdirSync(folder, { recursive: true });
       writeFileSync(path.join(folder, "MEMORY.md"), "- [A](a.md)\n");
       writeFileSync(path.join(folder, "a.md"), text);
@@ -242,6 +241,6 @@ describe("readMemoryHealth", () => {
     write(here, memory("a", "`src/gone.ts`"));
     write(away, memory("a", "`src/gone.ts`"));
     const health = await readMemoryHealth(path.join(root, "projects"), [here, away], 0);
-    expect(health.map((project) => project.slug)).toEqual([here.replace(/[^a-zA-Z0-9\-_]/g, "-")]);
+    expect(health.map((project) => project.slug)).toEqual([folderOf(here)]);
   });
 });

@@ -39,6 +39,7 @@ let mergeAnswer: { kind: string; version?: string; undo?: string; file?: string;
 let linksAnswer: { count: number; unplaceable: string[] } | null = { count: 0, unplaceable: [] };
 
 const LibraryMemory = (await import("../../../../src/components/library/LibraryMemory.vue")).default;
+const LibraryMemoryTidy = (await import("../../../../src/components/library/LibraryMemoryTidy.vue")).default;
 const { MEMORY_TRASH_NOTICE_MS } = await import("../../../../src/composables/useMemoryTrash");
 
 const NOW = Date.UTC(2026, 10, 20, 12);
@@ -82,8 +83,23 @@ const mountMemory = async (query = "", health: ReadonlyMap<string, LibraryMemory
 describe("LibraryMemory", () => {
   it("groups by project, named by its directory or else its folder, with the index gauge warning past nine tenths", async () => {
     const wrapper = await mountMemory();
-    expect(wrapper.findAll("h3").map((heading) => heading.text())).toEqual(["appMEMORY.md 190 / 200 lines", "-w-libMEMORY.md 3 / 200 lines"]);
+    // The heading's last control is the tidy-up button, whose icon is its text.
+    expect(wrapper.findAll("h3").map((heading) => heading.text())).toEqual([
+      "appMEMORY.md 190 / 200 linesauto_fix_high",
+      "-w-libMEMORY.md 3 / 200 linesauto_fix_high",
+    ]);
     expect(wrapper.findAll("[data-testid=memory-index-fill]").map((gauge) => gauge.classes().includes("text-warn"))).toEqual([true, false]);
+  });
+
+  it("says under a project's heading why its tidy-up was refused, and clears it on the next ask", async () => {
+    const wrapper = await mountMemory();
+    const tidy = wrapper.findAllComponents(LibraryMemoryTidy)[0];
+    tidy?.vm.$emit("refused", "nowhere to start");
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findAll("[data-testid=memory-tidy-refused]").map((line) => line.text())).toEqual(["nowhere to start"]);
+    tidy?.vm.$emit("refused", null);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find("[data-testid=memory-tidy-refused]").exists()).toBe(false);
   });
 
   it("names the byte limit when an index is nearer to it than to the line limit", async () => {

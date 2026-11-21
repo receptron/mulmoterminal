@@ -216,6 +216,11 @@ export async function loadLibraryRepeat(id: string): Promise<RepeatDetail | null
   return isRepeatDetail(body) ? body : null;
 }
 
+/** The session started to propose how to tidy one project's memory (#3334); or why none was. */
+export async function askLibraryMemoryTidy(slug: string): Promise<LibraryPromoteResult> {
+  return postPromote(`/api/library/memory/${encodeURIComponent(slug)}/tidy`, {});
+}
+
 /** Instructions typed again and again, the most typed first, and how many there are (#3334). */
 export async function loadLibraryRepeats(): Promise<RepeatList | null> {
   const body = await readJson("/api/library/repeats");

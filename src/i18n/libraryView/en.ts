@@ -157,6 +157,12 @@ export const libraryViewEn = {
       noDir: "None of the directories it was typed in is on this machine, so there is nowhere to start.",
     },
     memory: {
+      tidyAsk: {
+        label: "Ask for a tidy-up of this project's memory",
+        tip: "Ask Claude for a tidy-up: it proposes merging, removing, fixing or moving these memories, in plan mode, and writes nothing until you approve",
+        gone: "This project's memory is no longer there.",
+        noDir: "The project's directory is not on this machine, so there is nowhere to start.",
+      },
       copies: {
         intro: "Also kept in other work copies of this repository:",
         add: "Add its text here",

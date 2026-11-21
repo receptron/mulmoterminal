@@ -1,7 +1,7 @@
 // What a conversation can be promoted to, and the turn that asks the skill to do it (#3334).
 import { describe, it, expect } from "vitest";
 import { BUNDLED_SKILL_NAMES } from "../../common/bundledSkills";
-import { isPromoteTarget, PROMOTE_SKILL, PROMOTE_TARGETS, promoteTurn } from "../../common/libraryPromote";
+import { isPromoteTarget, PROMOTE_SKILL, PROMOTE_TARGETS, promoteTurn, tidyTurn } from "../../common/libraryPromote";
 
 const ID = "0b9f6a1e-3c4d-4e5f-8a9b-0c1d2e3f4a5b";
 
@@ -21,5 +21,13 @@ describe("isPromoteTarget", () => {
   it("is the five targets and nothing else", () => {
     expect(PROMOTE_TARGETS.every(isPromoteTarget)).toBe(true);
     for (const value of ["Memory", "rules", "", null, undefined, 3, {}, ["memory"]]) expect(isPromoteTarget(value), String(value)).toBe(false);
+  });
+});
+
+describe("tidyTurn", () => {
+  it("is the skill's tidy command for a project folder name, and null for anything else", () => {
+    expect(tidyTurn("-Users-me-app")).toBe("/mulmoterminal-library tidy -Users-me-app");
+    expect(tidyTurn("a_b-C9")).toBe("/mulmoterminal-library tidy a_b-C9");
+    ["", "../etc", "a/b", "a b", "a;rm", "x".repeat(256), "-Users-me-app\n"].forEach((slug) => expect(tidyTurn(slug)).toBeNull());
   });
 });
