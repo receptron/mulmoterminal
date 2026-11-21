@@ -59,10 +59,11 @@ function mergedDraft(body: string): string {
   const ending = added.endsWith("\n") ? "" : "\n";
   return [kept, "\n\n", added, ending].join("");
 }
+// Indexed by UTF-16 unit, as `slice` is: spreading the string would count an emoji once and cut the end.
 const withoutTrailingBreaks = (text: string): string =>
   text.slice(
     0,
-    [...text].reduce((end, char, at) => (char === "\n" ? end : at + 1), 0),
+    text.split("").reduce((end, char, at) => (char === "\n" ? end : at + 1), 0),
   );
 const draft = ref(seeded ? mergedDraft(seeded.body) : (kept?.text ?? props.text).replace(/\r\n?/g, "\n"));
 /** The draft as it goes to disk: an untouched draft is the file exactly as it was (mixed line endings
