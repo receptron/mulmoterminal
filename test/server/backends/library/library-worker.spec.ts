@@ -117,6 +117,8 @@ describe("dispatchLibraryRequest", () => {
     directories: () => (calls.push(["directories"]), Promise.resolve([])),
     search: (...args) => (calls.push(["search", ...args]), Promise.resolve([])),
     memorySource: (...args) => (calls.push(["memorySource", ...args]), Promise.resolve(null)),
+    repeats: () => (calls.push(["repeats"]), Promise.resolve({ candidates: [], total: 0 })),
+    repeat: (...args) => (calls.push(["repeat", ...args]), Promise.resolve(null)),
     retrospective: (...args) => (
       calls.push(["retrospective", ...args]),
       Promise.resolve({ weeks: [], projects: [], agents: [], total: { costUsd: 0, conversations: 0, prs: 0 } })
@@ -137,6 +139,9 @@ describe("dispatchLibraryRequest", () => {
     await dispatchLibraryRequest(service, { id: "10", method: "transcript", args: ["s1", 3] });
     await dispatchLibraryRequest(service, { id: "11", method: "memorySource", args: ["-w-app/a.md"] });
     await dispatchLibraryRequest(service, { id: "12", method: "memorySource", args: [7] });
+    await dispatchLibraryRequest(service, { id: "13", method: "repeats", args: [] });
+    await dispatchLibraryRequest(service, { id: "14", method: "repeat", args: ["0123456789abcdef"] });
+    await dispatchLibraryRequest(service, { id: "15", method: "repeat", args: [{}] });
     expect(calls).toEqual([
       ["list", { cwd: "/w", includeTemporary: true, includeSidechains: false, includeAutomated: false }, 5, 10],
       ["list", {}, 0, 0],
@@ -150,6 +155,9 @@ describe("dispatchLibraryRequest", () => {
       ["transcript", "s1", null],
       ["memorySource", "-w-app/a.md"],
       ["memorySource", ""],
+      ["repeats"],
+      ["repeat", "0123456789abcdef"],
+      ["repeat", ""],
     ]);
   });
 

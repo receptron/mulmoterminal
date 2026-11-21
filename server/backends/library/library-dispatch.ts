@@ -14,6 +14,8 @@ const METHODS: readonly LibraryMethod[] = [
   "directories",
   "prCreators",
   "memorySource",
+  "repeats",
+  "repeat",
   "retrospective",
 ];
 
@@ -55,6 +57,10 @@ export function dispatchLibraryRequest(service: LibraryService, request: Library
       return service.prCreators(text(first), prNumbers(second));
     case "memorySource":
       return service.memorySource(text(first));
+    case "repeats":
+      return service.repeats();
+    case "repeat":
+      return service.repeat(text(first));
     case "retrospective":
       return service.retrospective(typeof first === "number" && Number.isFinite(first) ? first : Date.now());
   }

@@ -5,7 +5,7 @@
 import { parentPort, workerData } from "node:worker_threads";
 import { isRecord } from "../../../common/isRecord.js";
 import { readString } from "../../../common/readString.js";
-import { openLibraryIndex } from "./library-index.js";
+import { openLibraryIndex, temporaryRoots } from "./library-index.js";
 import { createLocalLibraryService, type LibraryReply, type LibraryRequest, type LibraryService } from "./library-service.js";
 import { dispatchLibraryRequest, isLibraryRequest } from "./library-dispatch.js";
 
@@ -17,7 +17,7 @@ function openService(): Promise<LibraryService> {
   service ??= openLibraryIndex(readString(config.file), readString(config.owner), {
     projectsRoot: readString(config.projectsRoot),
     historyFile: readString(config.historyFile),
-  }).then(createLocalLibraryService);
+  }).then((index) => createLocalLibraryService(index, { historyFile: readString(config.historyFile), temporaryRoots: temporaryRoots() }));
   service.catch(() => (service = null));
   return service;
 }

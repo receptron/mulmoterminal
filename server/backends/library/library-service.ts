@@ -16,6 +16,10 @@ import {
 import type { LibraryIndex } from "./library-index.js";
 import { inReadSnapshot, readLease } from "./index-store.js";
 import { searchLibrary } from "./library-search.js";
+import type { RepeatDetail, RepeatList } from "../../../common/libraryRepeats.js";
+import { candidateOf, occurrencesOf, repeatCandidates, repeatGroups, REPEAT_LISTED_MAX, type RepeatPrompt, type RepeatRules } from "./repeat-detect.js";
+import { automatedSessions, promptLogReader } from "./repeat-source.js";
+import { isTemporaryCwd } from "./temporary-path.js";
 
 export interface LibraryTranscript {
   path: string;
@@ -36,8 +40,19 @@ export interface LibraryService {
   prCreators(repository: string, numbers: number[]): Promise<LibraryPrCreator[]>;
   /** The conversation that last wrote a memory file, by its path, when the index knows one. */
   memorySource(file: string): Promise<LibraryConversation | null>;
+  /** Instructions typed again and again, the most typed first, and how many there are (#3334). */
+  repeats(): Promise<RepeatList>;
+  /** One of them with each time it was typed, or null when no candidate has that id now. */
+  repeat(id: string): Promise<RepeatDetail | null>;
   /** The retrospective's totals for the weeks up to now. */
   retrospective(now_ms: number): Promise<LibraryRetrospective>;
+}
+
+/** Where the repeated-instruction check reads from, and its clock. */
+export interface LibraryServiceOptions {
+  historyFile?: string;
+  temporaryRoots?: readonly string[];
+  now?: () => number;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -45,11 +60,12 @@ const WEEK_MS = 7 * DAY_MS;
 
 /** Every call also asks the index to catch up — in the background, so the answer is what the
  *  index holds now. */
-export function createLocalLibraryService(index: LibraryIndex): LibraryService {
+export function createLocalLibraryService(index: LibraryIndex, options: LibraryServiceOptions = {}): LibraryService {
   const answer = <T>(read: () => T): Promise<T> => {
     index.refresh();
     return Promise.resolve(read());
   };
+  const repeats = repeatReader(index, options);
   return {
     status: () => answer(() => index.status()),
     list: (filter, offset, limit) =>
@@ -87,6 +103,31 @@ export function createLocalLibraryService(index: LibraryIndex): LibraryService {
         const row = memorySource(index.db, file);
         return row === null ? null : conversationOfRow(row);
       }),
+    repeats: async () => {
+      const { prompts, rules } = await repeats();
+      const candidates = repeatCandidates(prompts, rules);
+      return { candidates: candidates.slice(0, REPEAT_LISTED_MAX), total: candidates.length };
+    },
+    repeat: async (id) => {
+      const { prompts, rules } = await repeats();
+      const members = repeatGroups(prompts, rules).find((group) => candidateOf(group).id === id);
+      return members === undefined ? null : { ...candidateOf(members, true), occurrences: occurrencesOf(members) };
+    },
+  };
+}
+
+/** The prompts and the rules the repeated-instruction check runs on, read when asked. */
+function repeatReader(index: LibraryIndex, options: LibraryServiceOptions): () => Promise<{ prompts: RepeatPrompt[]; rules: RepeatRules }> {
+  const readLog = options.historyFile === undefined ? async () => [] : promptLogReader(options.historyFile);
+  const roots = options.temporaryRoots ?? [];
+  return async () => {
+    const automated = automatedSessions(index.db);
+    const rules: RepeatRules = {
+      now: (options.now ?? Date.now)(),
+      isAutomatedSession: (sessionId) => automated.has(sessionId),
+      isTemporaryProject: (project) => isTemporaryCwd(project, roots),
+    };
+    return { prompts: await readLog(), rules };
   };
 }
 

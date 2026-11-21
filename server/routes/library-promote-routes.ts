@@ -10,7 +10,7 @@
 // conversation, which may carry instructions planted in it, so the skill's "ask before writing" is
 // held by Claude Code itself — nothing is written until the person approves the plan.
 import { stat } from "node:fs/promises";
-import type { Express } from "express";
+import type { Express, Response } from "express";
 import { isPromoteTarget, promoteTurn } from "../../common/libraryPromote.js";
 import { isLibraryConversation } from "../../common/library.js";
 import type { LibraryCaller } from "../backends/library/library-service.js";
@@ -26,7 +26,17 @@ export interface LibraryPromoteDeps {
 
 const PROMOTE_PERMISSION_MODE = "plan";
 
-const isDirectory = async (dir: string): Promise<boolean> => (await stat(dir).catch(() => null))?.isDirectory() === true;
+export const isDirectory = async (dir: string): Promise<boolean> => (await stat(dir).catch(() => null))?.isDirectory() === true;
+
+/** Starts the session that promotes something, in plan mode in `cwd`, and answers with it. */
+export async function startPromoteSession(res: Response, deps: LibraryPromoteDeps, cwd: string, turn: string): Promise<void> {
+  try {
+    const spawned = await deps.spawnSession("claude", cwd, turn, true, null, { claudePermissionMode: PROMOTE_PERMISSION_MODE });
+    res.json({ chatId: spawned.sessionId, agent: spawned.agent });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "the session could not be started" });
+  }
+}
 
 export function mountLibraryPromoteRoute(app: Express, call: LibraryCaller, deps: LibraryPromoteDeps): void {
   app.post("/api/library/conversations/:id/promote", async (req, res) => {
@@ -42,11 +52,6 @@ export function mountLibraryPromoteRoute(app: Express, call: LibraryCaller, deps
     if (found.cwd === null || !(await isDirectory(found.cwd))) {
       return res.status(409).json({ error: "the directory this conversation ran in is not on this machine" });
     }
-    try {
-      const spawned = await deps.spawnSession("claude", found.cwd, turn, true, null, { claudePermissionMode: PROMOTE_PERMISSION_MODE });
-      res.json({ chatId: spawned.sessionId, agent: spawned.agent });
-    } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : "the session could not be started" });
-    }
+    await startPromoteSession(res, deps, found.cwd, turn);
   });
 }
