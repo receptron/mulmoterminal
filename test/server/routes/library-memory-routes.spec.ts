@@ -431,3 +431,55 @@ describe("POST /api/library/memory/:slug/:file/merge", () => {
     expect(readFileSync(path.join(root, "-w-app", "memory", "b.md"), "utf8")).toBe(B_TEXT);
   });
 });
+
+describe("GET /api/library/memory/:slug/:file/source", () => {
+  const asked: unknown[][] = [];
+  const conversation = { id: "s1", title: "wrote it" };
+  const app = express();
+  mountLibraryRoutes(app, {
+    call: (method, args) => (
+      asked.push([method, ...args]),
+      Promise.resolve(args[0] === path.join("/nowhere", "-w-app", "memory", "a.md") ? conversation : null)
+    ),
+    projectsRoot: "/nowhere",
+  });
+  const call = routeCall(app);
+
+  it("asks the index for the conversation that wrote the memory, by its path under the projects root", async () => {
+    asked.length = 0;
+    expect((await call("/api/library/memory/-w-app/a.md/source")).body).toEqual({ conversation });
+    expect((await call("/api/library/memory/-w-app/b.md/source")).body).toEqual({ conversation: null });
+    expect(asked).toEqual([
+      ["memorySource", path.join("/nowhere", "-w-app", "memory", "a.md")],
+      ["memorySource", path.join("/nowhere", "-w-app", "memory", "b.md")],
+    ]);
+  });
+  it("refuses what is not a memory's folder and name, asking nothing", async () => {
+    asked.length = 0;
+    for (const url of [
+      "/api/library/memory/-w-app/notes.txt/source",
+      "/api/library/memory/bad%20slug/a.md/source",
+      "/api/library/memory/-w-app/..%2Fa.md/source",
+      "/api/library/memory/-w-app/MEMORY.md/source",
+    ]) {
+      expect((await call(url)).status, url).toBe(400);
+    }
+    expect(asked).toEqual([]);
+  });
+});
+describe("GET /api/library/memory/:slug/:file/source, on the disk", () => {
+  it("refuses a name that is the index on this disk, and asks nothing", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "mt-memory-source-"));
+    dirs.push(root);
+    mkdirSync(path.join(root, "-w-app", "memory"), { recursive: true });
+    writeFileSync(path.join(root, "-w-app", "memory", "MEMORY.md"), "- [A](a.md)\n");
+    const asked: unknown[] = [];
+    const app = express();
+    mountLibraryRoutes(app, { call: (method) => (asked.push(method), Promise.resolve(null)), projectsRoot: root });
+    const lower = (await routeCall(app)("/api/library/memory/-w-app/memory.md/source")).status;
+    // On a case-insensitive disk `memory.md` IS the index; elsewhere it is a memory, asked for.
+    const caseInsensitive = existsSync(path.join(root, "-w-app", "memory", "memory.md"));
+    expect(lower).toBe(caseInsensitive ? 400 : 200);
+    expect(asked).toEqual(caseInsensitive ? [] : ["memorySource"]);
+  });
+});

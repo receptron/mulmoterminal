@@ -114,6 +114,7 @@ export const libraryViewZhCN = {
       tidy: "有 {count} 项可以整理",
       tidyShow: "查看",
       tidyAll: "显示全部",
+      source: "写入的会话：",
       copySame: "{name}（相同）",
       copyDiffers: "{name}（不同）",
       issues: {

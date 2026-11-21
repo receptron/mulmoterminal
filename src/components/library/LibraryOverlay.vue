@@ -182,6 +182,14 @@ function renameConversation(id: string, name: string | null): void {
   void changeMark(id, { name });
 }
 
+/** A memory's source, opened from the memory reader: the conversations, on that one. */
+function openFromMemory(conversation: LibraryConversation): void {
+  // A search typed for memory would hide the conversation among its results: leave it, as a request does.
+  query.value = "";
+  kind.value = "conversations";
+  select(conversation);
+}
+
 function select(conversation: LibraryConversation): void {
   focusRequests += 1; // the user's own pick outranks a request still loading
   chosenKey.value = conversationKey(conversation);
@@ -343,6 +351,7 @@ onBeforeUnmount(() => {
         :health="memoryHealth"
         :health-failed="memoryHealthFailed"
         @changed="refreshMemory"
+        @open-conversation="openFromMemory"
       />
       <p v-else-if="loadFailed" class="m-0 px-4 py-6 font-sans text-[13px] text-err-text">{{ t("libraryView.loadFailed") }}</p>
       <p v-else-if="!loaded" class="m-0 px-4 py-6 font-sans text-[13px] text-dim">{{ t("libraryView.loading") }}</p>

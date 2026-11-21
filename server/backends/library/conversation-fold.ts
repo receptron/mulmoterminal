@@ -11,6 +11,7 @@ import { readString } from "../../../common/readString.js";
 import { finiteNumber } from "../../../common/finiteNumber.js";
 import type { LibraryConversation, LibraryPrLink } from "../../../common/library.js";
 import { conversationTurnsFromParsed, customTitleOfRecord } from "../../session/transcript/transcript.js";
+import { memoryWritesOf } from "./memory-source.js";
 
 /** A turn's text is searched from its start; past this it is long pasted material, not the ask. */
 export const TURN_TEXT_CAP = 1000;
@@ -32,6 +33,8 @@ export type ConversationState = Omit<LibraryConversation, "id" | "agent" | "titl
   aiTitle: string | null;
   customTitle: string | null;
   firstPrompt: string | null;
+  /** The memory files this conversation wrote, by the path written, the most recently written last. */
+  memoryWrites: string[];
 };
 
 export interface IndexedTurn {
@@ -44,6 +47,7 @@ export const emptyConversationState = (): ConversationState => ({
   aiTitle: null,
   customTitle: null,
   firstPrompt: null,
+  memoryWrites: [],
   cwd: null,
   gitBranch: null,
   prs: [],
@@ -77,6 +81,7 @@ export function foldConversationRecord(state: ConversationState, record: Record<
   foldPr(state, record);
   foldCost(state, record);
   foldActivity(state, record);
+  foldMemoryWrites(state, record);
   return foldTurn(state, record);
 }
 
@@ -128,6 +133,15 @@ function foldActivity(state: ConversationState, record: Record<string, unknown>)
   if (Array.isArray(record.hookErrors)) state.hookErrors += record.hookErrors.length;
 }
 
+// Written again later moves it last, so the cap drops the memories this conversation touched longest ago.
+function foldMemoryWrites(state: ConversationState, record: Record<string, unknown>): void {
+  memoryWritesOf(record).forEach((written) => {
+    const at = state.memoryWrites.indexOf(written);
+    if (at >= 0) state.memoryWrites.splice(at, 1);
+    pushCapped(state.memoryWrites, written, (a, b) => a === b);
+  });
+}
+
 function foldTurn(state: ConversationState, record: Record<string, unknown>): IndexedTurn | null {
   if (record.isMeta === true) return null;
   const turn = conversationTurnsFromParsed([record])[0];
@@ -161,6 +175,8 @@ export function isConversationState(value: unknown): value is ConversationState 
     value.prs.every(isPrLink) &&
     Array.isArray(value.skills) &&
     value.skills.every((skill) => typeof skill === "string") &&
+    Array.isArray(value.memoryWrites) &&
+    value.memoryWrites.every((key) => typeof key === "string") &&
     typeof value.hookErrors === "number" &&
     typeof value.userTurns === "number" &&
     typeof value.isSidechain === "boolean"

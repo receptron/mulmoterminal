@@ -32,7 +32,9 @@ let pageFinished: number | null = 1;
 /** First pages that fail before one succeeds. */
 let pageFailures = 0;
 let firstHasMore = false;
+let memorySourceAnswer: unknown = null;
 vi.mock("../../../../src/composables/libraryApi", () => ({
+  loadLibraryMemorySource: () => Promise.resolve(memorySourceAnswer),
   LIBRARY_PAGE: 50,
   // The reader's changed-files strip, which these specs do not look at.
   loadLibraryFiles: () => Promise.resolve([]),
@@ -528,6 +530,25 @@ describe("LibraryOverlay", () => {
       "https://github.com/o/four/pull/1",
       "https://github.com/o/three/pull/1",
     ]);
+  });
+
+  it("opens the conversation that wrote a memory from the memory reader, on the conversations", async () => {
+    const memory = (file: string) => ({ file, name: file.replace(".md", ""), description: null, type: null, updatedAt: NOW });
+    memoryProjects = [{ slug: "-w-app", cwd: "/w/app", index: null, files: [memory("one.md")] }];
+    memoryTexts = { "-w-app/one.md": { text: "first" } };
+    memorySourceAnswer = conversation("wrote", "The one that wrote it");
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-kind-memory]").trigger("click");
+    await flushPromises();
+    await wrapper.find("[data-testid=library-search]").setValue("one"); // a memory search, left behind
+    await flushPromises();
+    await wrapper.find("[data-testid=memory-source]").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-memory]").exists()).toBe(false);
+    expect(wrapper.find("[data-testid=library-kind-conversations]").attributes("aria-pressed")).toBe("true");
+    expect(wrapper.find("[data-testid=library-reader] h2").text()).toBe("The one that wrote it");
+    expect(wrapper.find<HTMLInputElement>("[data-testid=library-search]").element.value).toBe("");
+    memorySourceAnswer = null;
   });
 
   it("switches to memory and back, the arrows moving through the memories there", async () => {
