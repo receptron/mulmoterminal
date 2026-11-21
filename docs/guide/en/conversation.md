@@ -52,9 +52,9 @@ pick. With none, it says so on the cell. After a send, the partner comes forward
 keyboard; nothing is ever submitted for you.
 
 ```json
-{ "header": { "buttons": [
+{ "buttons": [
   { "id": "send", "icon": "send", "label": "Send this turn to my partner", "run": "action", "action": "terminal-send-turn" }
-] } }
+] }
 ```
 
 Two things the text does for the reader. The origin line names the branch as well as the directory,

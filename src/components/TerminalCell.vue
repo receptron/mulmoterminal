@@ -84,7 +84,7 @@ import { headerStatusStyleFor } from "./cellHeaderStyle";
 import { mergeHeaderStatusColors } from "../../common/headerStatusColors";
 import { globalHeaderStatusColors, globalHeaderStatusTint } from "../composables/headerStatusColors";
 import { handoffTargets, pullLastTurn, pullSinceRelay, slotLabel, type HandoffTarget } from "../composables/useHandoff";
-import { findPartner, isSendAction, runRelay, type RelayAction, type RelaySelf } from "../composables/useRelayActions";
+import { findPartner, isSendAction, relayPasted, runRelay, type RelayAction, type RelaySelf } from "../composables/useRelayActions";
 import { gridSessionJump } from "../composables/gridSessionJump";
 import { menuPlacement } from "../composables/menuPlacement";
 import { runOneExchange, liveCrossTalkDeps } from "../composables/useCrossTalk";
@@ -770,8 +770,8 @@ async function relayWithPartner(action: RelayAction, self: RelaySelf) {
 
 async function finishRelay(action: RelayAction, self: RelaySelf, partner: HandoffTarget) {
   const error = await runRelay(action, self, partner);
-  if (error) return showAskMsg(error);
-  if (isSendAction(action)) gridSessionJump.value?.goToSlot(partner.key);
+  if (error) showAskMsg(error);
+  if (relayPasted(error) && isSendAction(action)) gridSessionJump.value?.goToSlot(partner.key);
 }
 
 function sendFromMenu(target: HandoffTarget, action: RelayAction) {

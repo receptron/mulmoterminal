@@ -78,8 +78,11 @@ const fetchHandoffText = async (source: HandoffSource): Promise<string> => (awai
 export interface HandoffDeps {
   fetchText: (source: HandoffSource) => Promise<string>;
   paste: (destKey: string, text: string) => boolean;
+  /** Does `destKey` still run the conversation the user aimed at? Asked at paste time, because the
+   *  reads before it can outlast a session switch in that cell. Absent means "nothing to check". */
+  holds?: (destKey: string) => boolean;
 }
-const defaultDeps: HandoffDeps = { fetchText: fetchHandoffText, paste: pasteText };
+export const defaultDeps: HandoffDeps = { fetchText: fetchHandoffText, paste: pasteText };
 
 // The same outcomes read from either end: pulling, the source is "that" terminal and the paste lands
 // "here"; sending, the other way round.
@@ -111,8 +114,12 @@ async function pasteLastTurn(source: HandoffSource, destKey: string, words: Hand
     return `Could not read ${words.source} last turn`;
   }
   if (!text) return `${words.Source} no completed turn yet`;
+  if (deps.holds && !deps.holds(destKey)) return `${words.Dest} in a different conversation now`;
   return deps.paste(destKey, text) ? null : `${words.Dest} not connected`;
 }
+
+/** The one failure that still pasted: a caller that moves to the destination after a paste moves on this too. */
+export const RELAY_MARK_UNSAVED = "Pasted, but where it ended could not be saved — the next relay will repeat it";
 
 // Every exchange since the last relay to `destCwd` (#3389). The marker is recorded only after the
 // paste succeeded, so a failed paste brings the same exchanges again next time.
@@ -149,8 +156,9 @@ export interface RelayDeps {
   fetchRelay: (source: HandoffSource, destCwd: string) => Promise<RelayFetched>;
   paste: (destKey: string, text: string) => boolean;
   recordMark: (source: HandoffSource, destCwd: string, mark: string) => Promise<void>;
+  holds?: (destKey: string) => boolean;
 }
-const defaultRelayDeps: RelayDeps = { fetchRelay, paste: pasteText, recordMark: recordRelayMark };
+export const defaultRelayDeps: RelayDeps = { fetchRelay, paste: pasteText, recordMark: recordRelayMark };
 
 // Null on success, or a short message for the cell — like pullLastTurn.
 export const pullSinceRelay = (target: HandoffTarget, ownKey: string, destCwd: string | null, deps: RelayDeps = defaultRelayDeps): Promise<string | null> =>
@@ -170,11 +178,12 @@ async function pasteSinceRelay(source: HandoffSource, destKey: string, destCwd: 
   }
   if (relay.status === "nothing-new") return "Nothing new since the last relay";
   if (relay.status === "no-turn" || !relay.text || relay.mark === null) return `${words.Source} no completed turn yet`;
+  if (deps.holds && !deps.holds(destKey)) return `${words.Dest} in a different conversation now`;
   if (!deps.paste(destKey, relay.text)) return `${words.Dest} not connected`;
   try {
     await deps.recordMark(source, destCwd, relay.mark);
   } catch {
-    return "Pasted, but where it ended could not be saved — the next relay will repeat it";
+    return RELAY_MARK_UNSAVED;
   }
   return null;
 }

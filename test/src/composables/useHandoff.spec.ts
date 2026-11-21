@@ -240,3 +240,42 @@ describe("sendLastTurn / sendSinceRelay", () => {
     expect(await sendSinceRelay(self, partner, relay({ paste: () => false }))).toBe("That terminal is not connected");
   });
 });
+
+// A session switch in the destination cell while the reads were in flight: nothing is pasted, and a
+// since-relay records no mark, because the mark must describe the conversation that received it.
+describe("the destination must still hold the conversation the action aimed at", () => {
+  const self = { sessionId: "sess-self", cwd: "/src", agent: "claude" as const };
+  const partner: HandoffTarget = { key: "cell-9", label: "#9", source: { sessionId: "sess-9", cwd: "/partner", agent: "codex" } };
+
+  it("sendLastTurn refuses to paste into a partner that moved on", async () => {
+    let pasted = 0;
+    const error = await sendLastTurn(self, partner, deps({ paste: () => (pasted++, true), holds: () => false }));
+    expect(error).toBe("That terminal is in a different conversation now");
+    expect(pasted).toBe(0);
+  });
+
+  it("pullLastTurn says it of THIS cell", async () => {
+    expect(await pullLastTurn(target(), "cell-1", deps({ holds: () => false }))).toBe("This terminal is in a different conversation now");
+  });
+
+  it("sendSinceRelay neither pastes nor records the mark", async () => {
+    let pasted = 0;
+    let recorded = 0;
+    const error = await sendSinceRelay(self, partner, {
+      fetchRelay: async () => ({ status: "ok", text: "t", mark: "c".repeat(64) }),
+      paste: () => (pasted++, true),
+      recordMark: async () => {
+        recorded++;
+      },
+      holds: () => false,
+    });
+    expect(error).toBe("That terminal is in a different conversation now");
+    expect([pasted, recorded]).toEqual([0, 0]);
+  });
+
+  it("asks about the destination key, and pastes when it still holds", async () => {
+    const asked: string[] = [];
+    expect(await sendLastTurn(self, partner, deps({ holds: (key) => (asked.push(key), true) }))).toBeNull();
+    expect(asked).toEqual(["cell-9"]);
+  });
+});

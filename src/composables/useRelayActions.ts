@@ -7,7 +7,18 @@ import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import { listSlots } from "./useTerminalConnections";
 import type { SlotInfo } from "./readableSlot";
 import { relayPartners } from "./relayPartners";
-import { pullLastTurn, pullSinceRelay, sendLastTurn, sendSinceRelay, toHandoffTarget, type HandoffSource, type HandoffTarget } from "./useHandoff";
+import {
+  defaultDeps,
+  defaultRelayDeps,
+  pullLastTurn,
+  pullSinceRelay,
+  RELAY_MARK_UNSAVED,
+  sendLastTurn,
+  sendSinceRelay,
+  toHandoffTarget,
+  type HandoffSource,
+  type HandoffTarget,
+} from "./useHandoff";
 
 export const RELAY_ACTIONS = [
   "terminal-send-turn",
@@ -63,10 +74,20 @@ export interface RelaySelf {
   source: HandoffSource;
 }
 
-/** Null on success, or the message to show on the cell. */
-export function runRelay(action: RelayAction, self: RelaySelf, partner: HandoffTarget): Promise<string | null> {
-  if (action === "terminal-send-turn") return sendLastTurn(self.source, partner);
-  if (action === "terminal-send-since") return sendSinceRelay(self.source, partner);
-  if (action === "terminal-bring-turn") return pullLastTurn(partner, self.key);
-  return pullSinceRelay(partner, self.key, self.source.cwd);
+const runsSession = (key: string, sessionId: string): boolean => listSlots().some((slot) => slot.key === key && slot.sessionId === sessionId);
+
+/** Null on success, or the message to show on the cell. The paste lands only while the destination
+ *  still runs the session it ran when the action started — the partner's for a send, this cell's for
+ *  a bring — the same check useCrossTalk makes before every submit. */
+export function runRelay(action: RelayAction, self: RelaySelf, partner: HandoffTarget, holds: typeof runsSession = runsSession): Promise<string | null> {
+  const into = (session: string) => ({ holds: (key: string) => holds(key, session) });
+  const toPartner = into(partner.source.sessionId);
+  const toSelf = into(self.source.sessionId);
+  if (action === "terminal-send-turn") return sendLastTurn(self.source, partner, { ...defaultDeps, ...toPartner });
+  if (action === "terminal-send-since") return sendSinceRelay(self.source, partner, { ...defaultRelayDeps, ...toPartner });
+  if (action === "terminal-bring-turn") return pullLastTurn(partner, self.key, { ...defaultDeps, ...toSelf });
+  return pullSinceRelay(partner, self.key, self.source.cwd, { ...defaultRelayDeps, ...toSelf });
 }
+
+/** Whether the text reached the destination, so a send may move there. */
+export const relayPasted = (message: string | null): boolean => message === null || message === RELAY_MARK_UNSAVED;

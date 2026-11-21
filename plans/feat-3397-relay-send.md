@@ -16,8 +16,13 @@ Names, not a parameter: header actions, keymap and palette share one list of bar
 
 ## Partner
 
-Another readable agent cell whose directory is this cell's, or inside another worktree of the same
-repo (`/api/worktrees?cwd=` lists them). Pure rule in `src/composables/relayPartners.ts`.
+Another readable agent cell in the same repo: this cell's directory, or anywhere inside any of the
+repo's worktrees (`/api/worktrees?cwd=` lists them), this cell's own checkout included — "another
+directory of the same repo" was the ask, and a subdirectory of the same checkout is one. Outside git,
+only the same directory. Pure rule in `src/composables/relayPartners.ts`.
+
+The paste lands only while the destination still runs the session it ran when the action started
+(the check useCrossTalk makes); a since-relay that is refused records no mark.
 
 - one candidate: act on it
 - several: open the Talk menu, where every row now has send buttons too

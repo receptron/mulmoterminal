@@ -224,7 +224,7 @@ choice rows):
 | `"terminal-insert-path"` / `"terminal-reveal"` | **Insert a file path** at the prompt / **open the directory** in the file manager (the path menu's items) |
 | `"terminal-voice"` | **Voice input** on / off (the mic) |
 | `"terminal-diff"` / `"terminal-note"` | Open the **changes panel** (worktree with changes) / write or edit the **note** |
-| `"terminal-send-turn"` / `"terminal-send-since"` | **Send** this terminal's last exchange / every exchange since the last relay to its partner, and go there — [details](conversation.md#send) |
+| `"terminal-send-turn"` / `"terminal-send-since"` | **Send** this terminal's last exchange / every exchange since the last relay to its partner, and go there — [details](conversation.html#send) |
 | `"terminal-bring-turn"` / `"terminal-bring-since"` | **Bring** the partner's last exchange / every exchange since the last relay here |
 | `"pane-files"` | The **files pane** beside this cell |
 | `"pane-prompts"` / `"pane-transcript"` | The **prompts you sent** / the **conversation** pane |

@@ -216,7 +216,7 @@ Actions** が並びます。GitLab（gitlab.com、または `gitlabHosts` に書
 | `"terminal-insert-path"` / `"terminal-reveal"` | 入力欄に**ファイルのパスを挿入**する / **ディレクトリをファイルマネージャで開く**（パスメニューの項目と同じ） |
 | `"terminal-voice"` | **音声入力**のオン / オフ（マイク） |
 | `"terminal-diff"` / `"terminal-note"` | **変更パネル**を開く（変更のある worktree） / **メモ**を書く・直す |
-| `"terminal-send-turn"` / `"terminal-send-since"` | このターミナルの最後の1往復 / 前回からの分を相手に**送り**、そちらへ移る — [詳しく](conversation.md#send) |
+| `"terminal-send-turn"` / `"terminal-send-since"` | このターミナルの最後の1往復 / 前回からの分を相手に**送り**、そちらへ移る — [詳しく](conversation.html#send) |
 | `"terminal-bring-turn"` / `"terminal-bring-since"` | 相手の最後の1往復 / 前回からの分をここに**持ってくる** |
 | `"pane-files"` | このセルの横に**ファイルペイン**を開く |
 | `"pane-prompts"` / `"pane-transcript"` | **送ったプロンプト** / **会話**のペイン |
