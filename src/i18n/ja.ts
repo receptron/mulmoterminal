@@ -281,6 +281,9 @@ export const ja: Messages = {
       noChips: "チップなし（すべて削除済み）",
       someChips: "チップ {count} 個",
       setUp: "ヘッダーのボタンを設定する…",
+      sendButton: "各ターミナルの送るボタン",
+      sendButtonHint:
+        "ターミナルのヘッダー2段目に、最後の1往復を同じリポの別のエージェントのターミナルへ送るボタンを出します。ボタンには相手の名前が出ます。相手がいるときだけ表示されます。",
     },
 
     models: {

@@ -278,6 +278,9 @@ export const ko: Messages = {
       noChips: "칩 없음(모두 제거됨)",
       someChips: "칩 {count}개",
       setUp: "헤더 버튼 설정하기…",
+      sendButton: "각 터미널의 보내기 버튼",
+      sendButtonHint:
+        "터미널 헤더 두 번째 줄에, 마지막 주고받기를 같은 저장소의 다른 에이전트 터미널로 보내는 버튼을 표시합니다. 버튼에 상대 이름이 나오며, 상대가 있을 때만 나타납니다.",
     },
 
     models: {

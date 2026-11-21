@@ -438,6 +438,7 @@ describe("loadAppConfig / saveAppConfig", () => {
     keymap: {},
     copyOnSelect: false,
     fileLinkOpensPane: true,
+    cellSendButton: true,
     decisionDigest: false,
     questionPaneEnabled: false,
     issueWorkComments: false,
@@ -500,6 +501,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       keymap: { "zoom-next": "PageDown" }, // a bound shortcut must survive the round-trip too
       copyOnSelect: true,
       fileLinkOpensPane: false, // opt-out, so only `false` proves it persisted rather than defaulted
+      cellSendButton: false,
       decisionDigest: true, // opt-in, so only `true` proves it persisted rather than defaulted
       questionPaneEnabled: false,
       issueWorkComments: false, // opt-in, so only `true` proves it persisted rather than defaulted
@@ -593,6 +595,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       tmuxPrefix: "none",
       copyOnSelect: false,
       fileLinkOpensPane: true,
+      cellSendButton: true,
       decisionDigest: false,
       questionPaneEnabled: false,
       issueWorkComments: false,
@@ -727,6 +730,7 @@ describe("#741 corrupt config is not silently wiped by a partial update", () => 
     keymap: {},
     copyOnSelect: false,
     fileLinkOpensPane: true,
+    cellSendButton: true,
     decisionDigest: false,
     questionPaneEnabled: false,
     issueWorkComments: false,
@@ -829,6 +833,7 @@ describe("mergeConfigUpdate", () => {
     keymap: {},
     copyOnSelect: false,
     fileLinkOpensPane: true,
+    cellSendButton: true,
     decisionDigest: false,
     questionPaneEnabled: false,
     issueWorkComments: false,
@@ -888,6 +893,8 @@ describe("mergeConfigUpdate", () => {
     expect(mergeConfigUpdate(baseConfig({ copyOnSelect: true }), { chips: ["git"] }).copyOnSelect).toBe(true);
     expect(mergeConfigUpdate(baseConfig(), { fileLinkOpensPane: false }).fileLinkOpensPane).toBe(false);
     expect(mergeConfigUpdate(baseConfig({ fileLinkOpensPane: false }), { chips: ["git"] }).fileLinkOpensPane).toBe(false);
+    expect(mergeConfigUpdate(baseConfig(), { cellSendButton: false }).cellSendButton).toBe(false);
+    expect(mergeConfigUpdate(baseConfig({ cellSendButton: false }), { chips: ["git"] }).cellSendButton).toBe(false);
     expect(mergeConfigUpdate(baseConfig(), { terminalSubmit: "esc-cr" }).terminalSubmit).toBe("esc-cr");
     expect(mergeConfigUpdate(baseConfig(), { terminalSubmit: "bogus" }).terminalSubmit).toBe("cr"); // invalid => default
     // a chips-only update must not reset the mapping

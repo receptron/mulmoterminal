@@ -42,6 +42,8 @@ export const tipsJa: Messages["tips"] = {
     sendTurn: "このターミナルの最後の1往復を {name} に送って、そちらへ移る",
     sendSinceAria: "{name} にこのターミナルの前回以降のやり取りを送る",
     sendSince: "このターミナルの、その場所へ前回送った後のやり取りをまとめて送り、そちらへ移る",
+    sendButtonMany: "{count} 個の相手",
+    sendButtonManyTip: "このターミナルの最後の1往復を送る相手を選ぶ",
     stopExchange: "進行中のやり取りを止める",
     closeDiff: "差分を閉じる",
     commitNothing: "コミットしていない変更はありません",

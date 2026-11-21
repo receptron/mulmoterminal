@@ -68,6 +68,8 @@ import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
 import {
   CELL_ACTIONS,
   CELL_BTN,
+  CELL_BTN_BOX,
+  CELL_BTN_INK,
   CELL_CHIP_BTN,
   CELL_CHIP_ICON,
   CELL_DIR_PATH,
@@ -86,6 +88,10 @@ import { globalHeaderStatusColors, globalHeaderStatusTint } from "../composables
 import { handoffTargets, pullLastTurn, pullSinceRelay, slotLabel, type HandoffTarget } from "../composables/useHandoff";
 import { findPartner, isSendAction, relayPasted, runRelay, type RelayAction, type RelaySelf } from "../composables/useRelayActions";
 import { gridSessionJump } from "../composables/gridSessionJump";
+import { useRelayButton } from "../composables/useRelayButton";
+import { slotsChanged } from "../composables/slotsVersion";
+import { relayButtonLabel } from "../composables/relayButtonLabel";
+import { cellSendButton } from "../composables/cellSendButton";
 import { menuPlacement } from "../composables/menuPlacement";
 import { runOneExchange, liveCrossTalkDeps } from "../composables/useCrossTalk";
 import { runRoundTable, liveRoundTableDeps, memberFromTarget, type TableMember } from "../composables/useRoundTable";
@@ -773,6 +779,22 @@ async function finishRelay(action: RelayAction, self: RelaySelf, partner: Handof
   if (error) showAskMsg(error);
   if (relayPasted(error) && isSendAction(action)) gridSessionJump.value?.goToSlot(partner.key);
 }
+
+// The cell's own send button (#3399): shown, without any config, while this cell can send and some
+// partner is open, and named after the partner so the user learns the two can hand turns over.
+const livePartners = useRelayButton(() => `cell-${props.uid}`, cwd);
+// This cell's part of what every cell's partner list reads: its session, directory and connection.
+watch([sessionId, cwd, () => connView.get(`cell-${props.uid}`)?.status], slotsChanged);
+onUnmounted(() => void nextTick(slotsChanged));
+const sendButton = computed(() => (cellSendButton.value && talkStartable.value ? relayButtonLabel(livePartners.value) : null));
+const sendButtonText = computed(() => {
+  const label = sendButton.value;
+  if (label === null) return "";
+  return label.kind === "one" ? label.name : t("tips.cell.sendButtonMany", { count: label.count });
+});
+const sendButtonTip = computed(() =>
+  sendButton.value?.kind === "one" ? t("tips.cell.sendTurn", { name: sendButtonText.value }) : t("tips.cell.sendButtonManyTip"),
+);
 
 function sendFromMenu(target: HandoffTarget, action: RelayAction) {
   askMenuOpen.value = false;
@@ -1917,6 +1939,19 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           </template>
           <template #header-actions>
             <CopyCodeBlock v-if="sessionId" ref="copyCodeRef" :class="CELL_BTN" :session-id="sessionId" :cwd="cwd" :agent="agent" />
+            <button
+              v-if="sendButton"
+              type="button"
+              class="cell-btn h-[26px] gap-1 px-1.5 text-[12px]"
+              :class="[CELL_BTN_BOX, CELL_BTN_INK]"
+              data-testid="cell-send-btn"
+              :data-tip="sendButtonTip"
+              :aria-label="sendButtonTip"
+              @click="relayHere('terminal-send-turn')"
+            >
+              <span class="material-symbols-outlined text-[16px]" aria-hidden="true">send</span>
+              <span>{{ sendButtonText }}</span>
+            </button>
             <!-- Row 2, away from close (#2353): the launch panel on this directory, with the agent to
                  pick — which the path menu's "New terminal here", a plain shell, cannot offer. -->
             <button

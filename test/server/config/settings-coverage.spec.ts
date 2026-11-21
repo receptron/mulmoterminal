@@ -75,6 +75,7 @@ const REACHABLE_BY: Record<string, Reachable> = {
   copyOnSelect: { ui: true, skill: "mulmoterminal-keys" },
   // Beside copy-on-select: both decide what a mouse gesture in the terminal does (#3238).
   fileLinkOpensPane: { ui: true, skill: "mulmoterminal-keys" },
+  cellSendButton: { ui: true, skill: "mulmoterminal-header" },
   tmuxPrefix: { ui: true, skill: "mulmoterminal-keys" },
   questionPaneEnabled: { ui: true, skill: "mulmoterminal-keys" },
   decisionDigest: { ui: true, skill: CONFIG_SKILL },

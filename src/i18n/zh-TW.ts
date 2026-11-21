@@ -275,6 +275,8 @@ export const zhTW: Messages = {
       noChips: "沒有資訊標籤（已全部移除）",
       someChips: "{count} 個資訊標籤",
       setUp: "設定標頭按鈕…",
+      sendButton: "每個終端機的傳送按鈕",
+      sendButtonHint: "在終端機標題列第二行顯示一個按鈕，把最後一輪對話傳送給同一儲存庫中的另一個代理終端機，按鈕上顯示對方名稱。僅在有對方時出現。",
     },
 
     models: {

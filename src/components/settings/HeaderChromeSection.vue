@@ -9,6 +9,7 @@ import HeaderButtonsEditor from "./HeaderButtonsEditor.vue";
 import type { BundledSkillName } from "../../../common/bundledSkills";
 import { HEADER_STATUS_TINTS, sanitizeHeaderStatusTint } from "../../../common/headerStatusColors";
 import { globalHeaderStatusTint, saveHeaderStatusTint } from "../../composables/headerStatusColors";
+import { cellSendButton, saveCellSendButton } from "../../composables/cellSendButton";
 
 // Chips and the two simplest kinds of button are edited here; folders and buttons that open
 // something are still written by the skill, which asks what they should do and where they appear.
@@ -36,6 +37,12 @@ async function onTintChange(e: Event) {
   savingTint.value = false;
   select.value = globalHeaderStatusTint.value;
 }
+
+async function onSendButtonToggle(e: Event) {
+  if (!(e.target instanceof HTMLInputElement)) return;
+  const input = e.target;
+  if (!(await saveCellSendButton(input.checked))) input.checked = cellSendButton.value;
+}
 </script>
 
 <template>
@@ -61,6 +68,19 @@ async function onTintChange(e: Event) {
   >
     <option v-for="mode in HEADER_STATUS_TINTS" :key="mode" :value="mode">{{ t(`settingsControls.headerTint.tints.${mode}`) }}</option>
   </select>
+  <label class="mb-3 flex cursor-pointer items-start gap-2">
+    <input
+      type="checkbox"
+      class="mt-1 cursor-pointer"
+      :checked="cellSendButton"
+      :aria-label="t('settings.headerChrome.sendButton')"
+      data-testid="settings-cell-send-button"
+      @change="(e) => void onSendButtonToggle(e)"
+    />
+    <span class="text-[12px]">
+      <strong>{{ t("settings.headerChrome.sendButton") }}</strong> (<code>cellSendButton</code>) — {{ t("settings.headerChrome.sendButtonHint") }}
+    </span>
+  </label>
   <GlobalHeaderStatusColors />
   <HeaderButtonsEditor />
   <HeaderChipsEditor />

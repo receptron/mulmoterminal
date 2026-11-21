@@ -42,6 +42,8 @@ export const tipsZhCN: Messages["tips"] = {
     sendTurn: "把此终端的最后一轮对话发给 {name} 并切换过去",
     sendSinceAria: "把此终端上次之后的对话发给 {name}",
     sendSince: "把此终端上次转到那个目录之后的所有对话一并发过去，并切换过去",
+    sendButtonMany: "{count} 个对方",
+    sendButtonManyTip: "选择把此终端的最后一轮对话发给谁",
     stopExchange: "停止进行中的交换",
     closeDiff: "关闭差异",
     commitNothing: "没有未提交的更改",

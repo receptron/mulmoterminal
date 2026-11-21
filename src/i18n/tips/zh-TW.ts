@@ -42,6 +42,8 @@ export const tipsZhTW: Messages["tips"] = {
     sendTurn: "把此終端機的最後一輪對話傳給 {name} 並切換過去",
     sendSinceAria: "把此終端機上次之後的對話傳給 {name}",
     sendSince: "把此終端機上次轉到那個目錄之後的所有對話一併傳過去，並切換過去",
+    sendButtonMany: "{count} 個對方",
+    sendButtonManyTip: "選擇把此終端機的最後一輪對話傳給誰",
     stopExchange: "停止進行中的交換",
     closeDiff: "關閉差異",
     commitNothing: "沒有未提交的變更",
