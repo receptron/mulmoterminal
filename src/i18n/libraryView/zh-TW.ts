@@ -55,6 +55,31 @@ export const libraryViewZhTW = {
       folded: "{count} 行未變更",
     },
     tools: {
+      settings: {
+        row: "設定（疊加結果）",
+        rowNote: "權限、環境變數、鉤子，以及各自由哪個檔案決定",
+        order: "Claude Code 依此順序讀取，後面的檔案覆蓋前面的；清單會累加。",
+        failed: "無法讀取設定檔。",
+        none: "無",
+        env: "環境變數",
+        hooks: "鉤子",
+        other: "其他設定",
+        source: {
+          user: "自己的",
+          project: "專案",
+          local: "自己的·僅此處",
+          managed: "組織",
+        },
+        state: {
+          absent: "無",
+          invalid: "不是 JSON，不會讀取",
+        },
+        permissions: {
+          allow: "不詢問即允許",
+          ask: "總是詢問",
+          deny: "拒絕",
+        },
+      },
       shortcuts: "/ 搜尋 · ↑↓ 移動 · Esc 關閉",
       kind: "工具",
       search: "搜尋指示檔案",

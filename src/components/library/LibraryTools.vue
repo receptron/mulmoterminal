@@ -8,6 +8,7 @@ import type { LibraryFileText } from "../../../common/libraryFiles";
 import { loadInstruction, loadInstructions, loadToolDirectories } from "../../composables/libraryApi";
 import { movedIndex } from "./libraryKeys";
 import { instructionLabel } from "./toolRows";
+import LibraryToolsSettings from "./LibraryToolsSettings.vue";
 
 const props = defineProps<{ query: string; initialCwd: string | null }>();
 const { t } = useI18n();
@@ -61,7 +62,10 @@ const shown = computed(() => {
   const files = instructions.value?.files ?? [];
   return needle === "" ? files : files.filter((file) => file.path.toLowerCase().includes(needle));
 });
-const selected = computed(() => shown.value.find((file) => file.path === chosen.value) ?? shown.value[0] ?? null);
+/** The row that reads the settings laid over each other, above the files. */
+const SETTINGS_ROW = "settings";
+const settingsShown = computed(() => chosen.value === SETTINGS_ROW);
+const selected = computed(() => (settingsShown.value ? null : (shown.value.find((file) => file.path === chosen.value) ?? shown.value[0] ?? null)));
 
 let textReads = 0;
 watch(
@@ -94,8 +98,9 @@ function missingText(file: LibraryInstructionFile, read: LibraryFileText): strin
 
 /** The arrow keys, from the overlay. */
 async function move(by: number): Promise<void> {
-  const index = selected.value ? shown.value.indexOf(selected.value) : -1;
-  chosen.value = shown.value[movedIndex(index, by, shown.value.length)]?.path ?? null;
+  const rows = [SETTINGS_ROW, ...shown.value.map((file) => file.path)];
+  const index = rows.indexOf(settingsShown.value ? SETTINGS_ROW : (selected.value?.path ?? ""));
+  chosen.value = rows[movedIndex(index, by, rows.length)] ?? null;
   await nextTick();
   document.querySelector("[data-tool-row][aria-current=true]")?.scrollIntoView?.({ block: "nearest" });
 }
@@ -131,6 +136,19 @@ defineExpose({ move });
       <p v-if="instructions.truncated" class="m-0 px-4 pb-1 font-sans text-[12px] text-secondary" data-testid="library-tools-truncated">
         {{ t("libraryView.tools.truncated") }}
       </p>
+      <button
+        type="button"
+        data-tool-row
+        data-library-row
+        data-testid="tool-settings-row"
+        class="block w-full cursor-pointer border-0 px-4 py-1.5 text-left font-sans"
+        :class="settingsShown ? 'bg-selected' : 'bg-transparent hover:bg-hover'"
+        :aria-current="settingsShown"
+        @click="chosen = SETTINGS_ROW"
+      >
+        <span class="block truncate text-[13px] text-fg">{{ t("libraryView.tools.settings.row") }}</span>
+        <span class="block truncate text-[12px] text-dim">{{ t("libraryView.tools.settings.rowNote") }}</span>
+      </button>
       <p v-if="shown.length === 0" class="m-0 px-4 py-2 font-sans text-[13px] text-dim">{{ t("libraryView.tools.none") }}</p>
       <button
         v-for="file in shown"
@@ -150,7 +168,13 @@ defineExpose({ move });
         </span>
       </button>
     </div>
-    <article v-if="selected" class="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="tool-reader">
+    <article v-if="settingsShown && cwd !== null" class="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="tool-settings-reader">
+      <header class="px-4 pb-2 pt-5">
+        <h2 class="m-0 font-sans text-[20px] font-[650] text-fg">{{ t("libraryView.tools.settings.row") }}</h2>
+      </header>
+      <LibraryToolsSettings :cwd="cwd" />
+    </article>
+    <article v-else-if="selected" class="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="tool-reader">
       <header class="px-4 pb-2 pt-5">
         <h2 class="m-0 break-all font-mono text-[15px] font-[650] text-fg">{{ selected.path }}</h2>
         <p class="m-0 mt-1 font-sans text-[12px] text-dim">{{ [t(`libraryView.tools.scope.${selected.scope}`), ...notes(selected)].join(" · ") }}</p>

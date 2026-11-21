@@ -20,6 +20,18 @@ let directoriesAnswer: string[] | null = ["/w/app", "/w/lib"];
 let textAnswer: { text: string | null; reason?: string } | null = null;
 vi.mock("../../../../src/composables/libraryApi", () => ({
   loadToolDirectories: () => Promise.resolve(directoriesAnswer),
+  loadToolSettings: (cwd: string) =>
+    Promise.resolve({
+      cwd,
+      files: [
+        { source: "user", path: "/h/.claude/settings.json", state: "ok" },
+        { source: "project", path: `${cwd}/.claude/settings.json`, state: "invalid" },
+      ],
+      permissions: { allow: [{ value: "Bash(npm test)", source: "user" }], ask: [], deny: [{ value: "Read(.env)", source: "project" }] },
+      env: [{ name: "A", value: "1", source: "user" }],
+      hooks: [{ event: "Stop", value: "say done", source: "user" }],
+      other: [{ key: "model", value: '"opus"', source: "user" }],
+    }),
   loadInstructions: (cwd: string) => Promise.resolve(listing[cwd] ?? null),
   loadInstruction: (_cwd: string, filePath: string) => (reads.push(filePath), Promise.resolve(textAnswer ?? { text: `text of ${filePath}` })),
 }));
@@ -122,5 +134,20 @@ describe("LibraryTools", () => {
     listing["/w/app"] = { cwd: "/w/app", agentsMd: false, truncated: false, files: [file("directory", "/w/app/CLAUDE.md", { state: "too-large" })] };
     const wrapper = await mountTools("/w/app");
     expect(wrapper.find("[data-testid=tool-text-missing]").text()).toBe("over 4 MiB, so Claude Code skips it");
+  });
+
+  it("reads the settings laid over each other from the row above the files, each value naming its file", async () => {
+    const wrapper = await mountTools("/w/app");
+    await wrapper.find("[data-testid=tool-settings-row]").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-testid=tool-reader]").exists()).toBe(false);
+    expect(wrapper.find("[data-testid=tool-settings-files]").text()).toContain("not JSON, skipped");
+    expect(wrapper.find("[data-testid=tool-settings-allow]").text()).toBe("Bash(npm test)yours");
+    expect(wrapper.find("[data-testid=tool-settings-deny]").text()).toBe("Read(.env)project");
+    expect(wrapper.find("[data-testid=tool-settings-env]").text()).toBe("A=1yours");
+    expect(wrapper.find("[data-testid=tool-settings-hooks]").text()).toBe("Stopsay doneyours");
+    await (wrapper.vm as unknown as { move(by: number): Promise<void> }).move(1);
+    await flushPromises();
+    expect(wrapper.find("[data-testid=tool-reader] h2").text()).toBe("/h/.claude/CLAUDE.md");
   });
 });
