@@ -122,6 +122,12 @@ describe("isNetworkPath", () => {
   );
 });
 
+it("takes the extended forms of a share for network paths too, erring on the side of not looking", () => {
+  ["\\\\?\\UNC\\server\\share\\repo", "//?/UNC/server/share", "\\\\.\\UNC\\server\\share", "\\\\?\\C:\\local"].forEach((target) => {
+    expect(isNetworkPath(target)).toBe(true);
+  });
+});
+
 describe("isInside", () => {
   it("is the directory itself or below it, by either separator, and not a sibling with the same start", () => {
     expect([isInside("/w/app", "/w/app"), isInside("/w/app", "/w/app/a.md"), isInside("C:\\w", "C:\\w\\a.md")]).toEqual([true, true, true]);
