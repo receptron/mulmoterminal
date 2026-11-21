@@ -46,6 +46,10 @@ opening the menu:
 | `terminal-bring-turn` | the partner's last exchange, into this terminal |
 | `terminal-bring-since` | everything since the partner's last relay here, into this terminal |
 
+Without any of that, a terminal already offers the first one: while a partner is open it shows a
+button named after it (**codex #4**) on the second row of its header — see
+[`cellSendButton`](config.html#cell-send-button).
+
 The **partner** is another agent terminal in the same directory, or in another worktree of the same
 repo. With one, the button acts on it. With several, it opens **Talk to another terminal…** so you
 pick. With none, it says so on the cell. After a send, the partner comes forward and takes the
