@@ -44,6 +44,7 @@ export const libraryViewKo = {
       folded: "변경 없는 {count}줄",
     },
     tools: {
+      shortcuts: "/ 검색 · ↑↓ 이동 · Esc 닫기",
       kind: "도구",
       search: "지시 파일 찾기",
       directory: "디렉터리",

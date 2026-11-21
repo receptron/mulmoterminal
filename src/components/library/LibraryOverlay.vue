@@ -43,6 +43,7 @@ const {
 const memoryCount = computed(() => filterMemory(memoryProjects.value, query.value).reduce((sum, project) => sum + project.files.length, 0));
 /** Which kind the list shows: the conversations, or Claude Code's memory. */
 const kind = ref<"conversations" | "memory" | "tools">("conversations");
+const SHORTCUTS = { conversations: "libraryView.shortcuts", memory: "libraryView.memory.shortcuts", tools: "libraryView.tools.shortcuts" } as const;
 const SEARCH_LABELS = { conversations: "libraryView.search", memory: "libraryView.memory.search", tools: "libraryView.tools.search" } as const;
 const searchLabel = computed(() => t(SEARCH_LABELS[kind.value]));
 const memoryView = useTemplateRef<{ move(by: number): Promise<void>; startEdit(): void }>("memoryView");
@@ -253,7 +254,8 @@ function onKey(event: KeyboardEvent): void {
   });
   // In Memory, Enter on a focused row is the row's own (it presses); elsewhere it edits.
   const onMemoryRow = target?.closest("[data-memory-row]") != null;
-  if (action === null || (action === "primary" && kind.value === "memory" && onMemoryRow)) return;
+  // Tools has no primary action: Enter stays the focused control's own.
+  if (action === null || (action === "primary" && ((kind.value === "memory" && onMemoryRow) || kind.value === "tools"))) return;
   event.preventDefault();
   runKeyAction(action);
 }
@@ -265,7 +267,7 @@ function runKeyAction(action: NonNullable<ReturnType<typeof libraryKeyAction>>):
     if (action === "primary") memoryView.value?.startEdit();
     else void memoryView.value?.move(by);
   } else if (kind.value === "tools") {
-    if (action !== "primary") void toolsView.value?.move(by);
+    void toolsView.value?.move(by);
   } else if (action === "primary") void resume();
   else void move(by);
 }
@@ -280,9 +282,7 @@ onBeforeUnmount(() => {
   <FullScreenOverlay v-if="isOpen" :region-label="t('libraryView.region')" :close-label="t('libraryView.close')" @close="close">
     <template #header>
       <span class="font-sans text-[14px] font-[650] text-fg">{{ t("libraryView.title") }}</span>
-      <span class="hidden font-sans text-[12px] text-dim sm:inline">{{
-        kind === "memory" ? t("libraryView.memory.shortcuts") : t("libraryView.shortcuts")
-      }}</span>
+      <span class="hidden font-sans text-[12px] text-dim sm:inline">{{ t(SHORTCUTS[kind]) }}</span>
     </template>
 
     <div class="flex min-h-0 flex-1 flex-col">

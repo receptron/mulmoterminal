@@ -44,6 +44,7 @@ export const libraryViewJa = {
       folded: "変更のない {count} 行",
     },
     tools: {
+      shortcuts: "/ 検索 · ↑↓ 移動 · Esc 閉じる",
       kind: "道具",
       search: "指示ファイルを探す",
       directory: "ディレクトリ",

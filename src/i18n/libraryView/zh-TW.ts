@@ -44,6 +44,7 @@ export const libraryViewZhTW = {
       folded: "{count} 行未變更",
     },
     tools: {
+      shortcuts: "/ 搜尋 · ↑↓ 移動 · Esc 關閉",
       kind: "工具",
       search: "搜尋指示檔案",
       directory: "目錄",

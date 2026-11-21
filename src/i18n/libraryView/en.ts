@@ -44,6 +44,7 @@ export const libraryViewEn = {
       folded: "{count} unchanged lines",
     },
     tools: {
+      shortcuts: "/ search · ↑↓ move · Esc close",
       kind: "Tools",
       search: "Search instruction files",
       directory: "Directory",

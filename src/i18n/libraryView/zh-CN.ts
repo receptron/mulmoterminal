@@ -44,6 +44,7 @@ export const libraryViewZhCN = {
       folded: "{count} 行未更改",
     },
     tools: {
+      shortcuts: "/ 搜索 · ↑↓ 移动 · Esc 关闭",
       kind: "工具",
       search: "搜索指令文件",
       directory: "目录",

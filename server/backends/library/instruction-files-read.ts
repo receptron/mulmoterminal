@@ -61,6 +61,22 @@ async function linkTarget(file: string): Promise<string | null> {
   return target === null ? null : path.resolve(path.dirname(file), target);
 }
 
+/** At most `count` entries of a folder, read one at a time: a folder of millions is never listed whole. */
+async function firstEntries(folder: string, count: number): Promise<Dirent[]> {
+  const opened = await fs.opendir(folder).catch(() => null);
+  if (opened === null) return [];
+  const entries: Dirent[] = [];
+  try {
+    for await (const entry of opened) {
+      entries.push(entry);
+      if (entries.length >= count) break;
+    }
+  } catch {
+    // An entry that cannot be read ends the listing where it stands.
+  }
+  return entries;
+}
+
 /** One entry of a rules folder: a folder to walk, a rule, or nothing (anything else, or a link to a
  *  network path). Through a link, whether its target leaves `within`. */
 async function ruleEntry(dir: RuleFile, entry: Dirent, within: string | null): Promise<{ kind: "folder" | "rule"; rule: RuleFile } | null> {
@@ -87,7 +103,7 @@ async function ruleFiles(folder: string, within: string | null): Promise<RuleFil
     const real = await fs.realpath(dir.path).catch(() => null);
     if (real === null || walked.has(real)) continue;
     walked.add(real);
-    const entries = (await fs.readdir(dir.path, { withFileTypes: true }).catch(() => [])).slice(0, budget);
+    const entries = await firstEntries(dir.path, budget);
     budget -= entries.length;
     for (const entry of entries) {
       const seen = await ruleEntry(dir, entry, within);
@@ -126,8 +142,11 @@ async function addFile(
   const fromInside = walk.cwd.some((dir) => isInside(dir, candidate.path));
   for (const imported of importsOf(read.text, candidate.path, walk.home).slice(0, IMPORTS_PER_FILE_MAX)) {
     if (isNetworkPath(imported)) continue;
-    // A file in the project importing one outside it: Claude Code asks before loading that.
-    const external = fromInside && !walk.cwd.some((dir) => isInside(dir, imported));
+    // A file in the project importing one outside it — by where the import really lands, a link
+    // included — is loaded only once that is approved.
+    const landed = await fs.realpath(imported).catch(() => imported);
+    const inside = (target: string): boolean => walk.cwd.some((dir) => isInside(dir, target));
+    const external = fromInside && !(inside(imported) && inside(landed));
     await addFile(walk, { scope: "import", path: imported }, external ? "approval" : loads, candidate.path, depth + 1);
   }
   return true;

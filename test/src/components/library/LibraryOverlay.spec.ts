@@ -34,6 +34,9 @@ let pageFailures = 0;
 let firstHasMore = false;
 let memorySourceAnswer: unknown = null;
 vi.mock("../../../../src/composables/libraryApi", () => ({
+  loadToolDirectories: () => Promise.resolve(["/w/app"]),
+  loadInstructions: () => Promise.resolve({ cwd: "/w/app", files: [], agentsMd: false, truncated: false }),
+  loadInstruction: () => Promise.resolve({ text: "" }),
   loadLibraryMemorySource: () => Promise.resolve(memorySourceAnswer),
   LIBRARY_PAGE: 50,
   // The reader's changed-files strip, which these specs do not look at.
@@ -549,6 +552,16 @@ describe("LibraryOverlay", () => {
     expect(wrapper.find("[data-testid=library-reader] h2").text()).toBe("The one that wrote it");
     expect(wrapper.find<HTMLInputElement>("[data-testid=library-search]").element.value).toBe("");
     memorySourceAnswer = null;
+  });
+
+  it("in Tools, leaves Enter to the focused control and does not offer it in the keys line", async () => {
+    const wrapper = await mountLibrary();
+    await wrapper.find("[data-testid=library-kind-tools]").trigger("click");
+    await flushPromises();
+    expect(wrapper.text()).not.toContain("Enter resume");
+    const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    window.dispatchEvent(enter);
+    expect(enter.defaultPrevented).toBe(false);
   });
 
   it("switches to memory and back, the arrows moving through the memories there", async () => {

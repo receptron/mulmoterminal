@@ -157,4 +157,11 @@ describe("readInstructions", () => {
     const imported = (await read()).files.find((file) => file.path === at("outside/notes.md"));
     expect(imported?.loads).toBe("approval");
   });
+
+  it.skipIf(process.platform === "win32")("judges an import by where it really lands: one linked out of the directory needs approval", async () => {
+    const { at, read } = tree({ "w/app/CLAUDE.md": "@link.md and @own.md", "w/app/own.md": "own", "outside/secret.md": "elsewhere" });
+    symlinkSync(at("outside/secret.md"), at("w/app/link.md"));
+    const loads = Object.fromEntries((await read()).files.map((file) => [path.basename(file.path), file.loads]));
+    expect([loads["link.md"], loads["own.md"]]).toEqual(["approval", "launch"]);
+  });
 });
