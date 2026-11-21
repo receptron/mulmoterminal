@@ -20,6 +20,9 @@ import { TRANSCRIPT_MAX_BYTES } from "../../session/transcript/transcript-view.j
 export const copilotSessionStatePath = (home: string = copilotHome()): string => path.join(home, "session-state");
 const sessionStorePath = (home: string = copilotHome()): string => path.join(home, "session-store.db");
 
+/** The session's live event log — written as the turn happens, unlike the `turns` table. */
+export const copilotEventsPath = (id: string, home: string = copilotHome()): string => path.join(copilotSessionStatePath(home), id, "events.jsonl");
+
 /** Is there a copilot session by this id ANYWHERE on this machine? The survivor guard's question,
  *  and deliberately a different one from the resume probe below.
  *

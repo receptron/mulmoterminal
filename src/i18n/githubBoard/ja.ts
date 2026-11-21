@@ -16,6 +16,8 @@ export const githubBoardJa = {
     openWorkOnly: "ターミナルを開いている作業だけ",
     nothingOpen: "どの作業でもターミナルは開いていません。",
     showAll: "すべて表示",
+    unregistered: "未登録",
+    unregisteredTip: "Pull request repos に無いリポジトリです。ターミナルを開いているので表示しています",
     draft: "下書き",
     ci: { passing: "CI 成功", failing: "CI 失敗", pending: "CI 実行中", none: "CI なし" },
     changesRequested: "修正依頼あり",

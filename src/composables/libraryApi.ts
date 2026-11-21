@@ -1,6 +1,7 @@
 // The Library's reads (#3329): /api/library/* answered as checked values, or null for any failure —
 // a 503 while the index cannot be opened, a timeout, or a body that is not the wire shape.
 import { isUnknownArray } from "../../common/isUnknownArray";
+import { isLibraryInstructions, type LibraryInstructions } from "../../common/libraryTools";
 import { isLibraryFileText, isLibraryTrackedFile, type LibraryFileText, type LibraryTrackedFile } from "../../common/libraryFiles";
 import { isLibraryMemoryHealth, isLibraryMemoryProject, type LibraryMemoryHealth, type LibraryMemoryProject } from "../../common/libraryMemory";
 import {
@@ -18,7 +19,8 @@ import {
   type LibrarySearchHit,
 } from "../../common/library";
 import { jsonBody } from "../jsonBody";
-import { fetchWithTimeout } from "../utils/fetchWithTimeout";
+import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
+import type { PromoteTarget } from "../../common/libraryPromote";
 
 /** The index answers a page from what it holds, but a first open also starts the worker. */
 const LIBRARY_READ_TIMEOUT_MS = 15_000;
@@ -190,6 +192,23 @@ const postJson = (body: Record<string, unknown>): RequestInit => ({
   body: JSON.stringify(body),
 });
 
+/** The session started to promote a conversation; or why none was: it is no longer in the index
+ *  ("gone"), the directory it ran in is not on this machine ("no-dir"), or the start failed. */
+export type LibraryPromoteResult = { kind: "started"; chatId: string } | { kind: "gone" | "no-dir" | "failed" };
+
+/** Starts a Claude session in the conversation's directory, asking the bundled skill to promote it. */
+export async function promoteLibraryConversation(id: string, cwd: string | null, target: PromoteTarget): Promise<LibraryPromoteResult> {
+  try {
+    const response = await fetchWithTimeout(`/api/library/conversations/${encodeURIComponent(id)}/promote`, postJson({ cwd, target }), SLOW_COMMAND_TIMEOUT_MS);
+    if (response.status === 404) return { kind: "gone" };
+    if (response.status === 409) return { kind: "no-dir" };
+    const body = await jsonBody(response);
+    return response.ok && typeof body.chatId === "string" ? { kind: "started", chatId: body.chatId } : { kind: "failed" };
+  } catch {
+    return { kind: "failed" };
+  }
+}
+
 /** The conversation that made each of these PRs in `repository`, for those the Library knows. */
 export async function loadPrCreators(repository: string, numbers: readonly number[]): Promise<LibraryPrCreator[] | null> {
   const asked = numbers.slice(0, PR_CREATORS_MAX).join(",");
@@ -208,6 +227,24 @@ export async function loadLibraryConversation(id: string, cwd: string | null = n
 export async function loadLibraryMemorySource(slug: string, file: string): Promise<LibraryConversation | null> {
   const body = await readJson(`${memoryFileUrl(slug, file)}/source`);
   return isLibraryConversation(body?.conversation) ? body.conversation : null;
+}
+
+/** Every directory a conversation ran in, for the tools kind to choose among. */
+export async function loadToolDirectories(): Promise<string[] | null> {
+  const body = await readJson("/api/library/tools/directories");
+  return isUnknownArray(body?.directories) ? body.directories.filter((cwd): cwd is string => typeof cwd === "string") : null;
+}
+
+/** The instruction files Claude Code loads in a directory, in its order. */
+export async function loadInstructions(cwd: string): Promise<LibraryInstructions | null> {
+  const body = await readJson(`/api/library/tools/instructions?cwd=${encodeURIComponent(cwd)}`);
+  return isLibraryInstructions(body) ? body : null;
+}
+
+/** One of those files' text. */
+export async function loadInstruction(cwd: string, file: string): Promise<LibraryFileText | null> {
+  const body = await readJson(`/api/library/tools/instruction?cwd=${encodeURIComponent(cwd)}&path=${encodeURIComponent(file)}`);
+  return isLibraryFileText(body) ? body : null;
 }
 
 export async function loadLibraryMarks(): Promise<LibraryMarks | null> {

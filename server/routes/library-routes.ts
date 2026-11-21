@@ -11,6 +11,8 @@ import { isRepositoryName, LIBRARY_NAME_MAX, PR_CREATORS_MAX, type LibraryMarkCh
 import { requestBody } from "./requestBody.js";
 import { claudeFileHistoryRoot, mountFileRoutes } from "./library-file-routes.js";
 import { mountMemoryRoutes } from "./library-memory-routes.js";
+import { mountToolsRoutes, type ToolsRouteDeps } from "./library-tools-routes.js";
+import { mountLibraryPromoteRoute, type LibraryPromoteDeps } from "./library-promote-routes.js";
 import { claudeProjectsRoot } from "../session/project-dir.js";
 import type { TrashLayout } from "../files/tree-ops.js";
 
@@ -32,6 +34,10 @@ export interface LibraryRouteDeps {
   projectsRoot?: string;
   /** Override where a deleted memory goes; the machine's own Trash otherwise. */
   trash?: () => TrashLayout;
+  /** Override Claude Code's config folder and the home, for the tools kind's tests. */
+  tools?: ToolsRouteDeps;
+  /** Starting a session to promote a conversation; the route is left unmounted without it. */
+  promote?: LibraryPromoteDeps;
 }
 
 const flag = (value: unknown): boolean => value === "1" || value === "true";
@@ -84,6 +90,8 @@ export function mountLibraryRoutes(app: Express, deps: LibraryRouteDeps = {}): v
   mountMarkRoutes(app, call, deps.marksFile);
   mountFileRoutes(app, call, deps.fileHistoryRoot ?? claudeFileHistoryRoot());
   mountMemoryRoutes(app, call, deps.projectsRoot ?? claudeProjectsRoot(), deps.trash);
+  mountToolsRoutes(app, call, deps.tools);
+  if (deps.promote !== undefined) mountLibraryPromoteRoute(app, call, deps.promote);
   app.get("/api/library/search", async (req, res) => {
     const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
     if (query === "" || query.length > MAX_QUERY_CHARS) {

@@ -8,6 +8,7 @@ import FullScreenOverlay from "../FullScreenOverlay.vue";
 import LibraryList from "./LibraryList.vue";
 import LibraryReader from "./LibraryReader.vue";
 import LibraryMemory from "./LibraryMemory.vue";
+import LibraryTools from "./LibraryTools.vue";
 import { filterMemory } from "./memoryRows";
 import { useLibraryMemory } from "../../composables/useLibraryMemory";
 import { libraryRequested, useLibraryView } from "../../composables/useLibraryView";
@@ -23,6 +24,8 @@ import { cellForPanelResume } from "../launchCell";
 import { isEditableTarget } from "../../composables/gridShortcut";
 import { libraryKeyAction, movedFromGap, movedIndex } from "./libraryKeys";
 import { libraryResume, type LibraryResume } from "./libraryResume";
+import { startPromote } from "./libraryPromoteStart";
+import type { PromoteTarget } from "../../../common/libraryPromote";
 import { conversationKey, groupConversations, listedInOrder } from "./libraryRows";
 import { useLibraryMarks } from "../../composables/useLibraryMarks";
 import type { LibraryConversation } from "../../../common/library";
@@ -41,9 +44,12 @@ const {
 } = useLibraryMemory(isOpen);
 const memoryCount = computed(() => filterMemory(memoryProjects.value, query.value).reduce((sum, project) => sum + project.files.length, 0));
 /** Which kind the list shows: the conversations, or Claude Code's memory. */
-const kind = ref<"conversations" | "memory">("conversations");
-const searchLabel = computed(() => (kind.value === "memory" ? t("libraryView.memory.search") : t("libraryView.search")));
+const kind = ref<"conversations" | "memory" | "tools">("conversations");
+const SHORTCUTS = { conversations: "libraryView.shortcuts", memory: "libraryView.memory.shortcuts", tools: "libraryView.tools.shortcuts" } as const;
+const SEARCH_LABELS = { conversations: "libraryView.search", memory: "libraryView.memory.search", tools: "libraryView.tools.search" } as const;
+const searchLabel = computed(() => t(SEARCH_LABELS[kind.value]));
 const memoryView = useTemplateRef<{ move(by: number): Promise<void>; startEdit(): void }>("memoryView");
+const toolsView = useTemplateRef<{ move(by: number): Promise<void> }>("toolsView");
 const { marks, pinned, saveFailedFor, loadFailed: marksFailed, change: changeMark } = useLibraryMarks(isOpen);
 
 const searchField = ref<HTMLInputElement | null>(null);
@@ -152,6 +158,21 @@ const RESUME_REFUSALS: Record<Exclude<LibraryResume["kind"], "open">, string> = 
   unchecked: "libraryView.resumeUnchecked",
 };
 
+/** One promote at a time: a second press while the first is starting would open two sessions. */
+let promoting = false;
+async function promoteSelected(target: PromoteTarget): Promise<void> {
+  const conversation = selected.value;
+  if (conversation === null || promoting) return;
+  promoting = true;
+  const key = conversationKey(conversation);
+  try {
+    const refused = await startPromote(conversation, target);
+    if (refused !== null && selectedKey.value === key) notice.value = t(refused);
+  } finally {
+    promoting = false;
+  }
+}
+
 function pinSelected(pin: boolean): void {
   const conversation = selected.value;
   if (conversation === null) return;
@@ -250,7 +271,8 @@ function onKey(event: KeyboardEvent): void {
   });
   // In Memory, Enter on a focused row is the row's own (it presses); elsewhere it edits.
   const onMemoryRow = target?.closest("[data-memory-row]") != null;
-  if (action === null || (action === "primary" && kind.value === "memory" && onMemoryRow)) return;
+  // Tools has no primary action: Enter stays the focused control's own.
+  if (action === null || (action === "primary" && ((kind.value === "memory" && onMemoryRow) || kind.value === "tools"))) return;
   event.preventDefault();
   runKeyAction(action);
 }
@@ -261,6 +283,8 @@ function runKeyAction(action: NonNullable<ReturnType<typeof libraryKeyAction>>):
   else if (kind.value === "memory") {
     if (action === "primary") memoryView.value?.startEdit();
     else void memoryView.value?.move(by);
+  } else if (kind.value === "tools") {
+    void toolsView.value?.move(by);
   } else if (action === "primary") void resume();
   else void move(by);
 }
@@ -275,9 +299,7 @@ onBeforeUnmount(() => {
   <FullScreenOverlay v-if="isOpen" :region-label="t('libraryView.region')" :close-label="t('libraryView.close')" @close="close">
     <template #header>
       <span class="font-sans text-[14px] font-[650] text-fg">{{ t("libraryView.title") }}</span>
-      <span class="hidden font-sans text-[12px] text-dim sm:inline">{{
-        kind === "memory" ? t("libraryView.memory.shortcuts") : t("libraryView.shortcuts")
-      }}</span>
+      <span class="hidden font-sans text-[12px] text-dim sm:inline">{{ t(SHORTCUTS[kind]) }}</span>
     </template>
 
     <div class="flex min-h-0 flex-1 flex-col">
@@ -318,13 +340,24 @@ onBeforeUnmount(() => {
             {{ t("libraryView.memory.kind") }}
             <span class="text-dim">{{ memoryCount }}</span>
           </button>
+          <button
+            type="button"
+            data-testid="library-kind-tools"
+            class="cursor-pointer rounded border-0 px-2 py-1"
+            :class="kind === 'tools' ? 'bg-hover text-fg' : 'bg-transparent text-secondary hover:text-fg'"
+            :aria-pressed="kind === 'tools'"
+            @click="kind = 'tools'"
+          >
+            {{ t("libraryView.tools.kind") }}
+          </button>
           <span v-if="progress" class="text-dim" role="status" data-testid="library-progress">{{ progress }}</span>
           <span v-else-if="searching" class="text-dim">{{ t("libraryView.searching") }}</span>
         </div>
       </div>
 
+      <LibraryTools v-if="kind === 'tools'" ref="toolsView" :query="query" :initial-cwd="selected?.cwd ?? null" />
       <LibraryMemory
-        v-if="kind === 'memory'"
+        v-else-if="kind === 'memory'"
         ref="memoryView"
         :projects="memoryProjects"
         :loaded="memoryLoaded"
@@ -391,6 +424,7 @@ onBeforeUnmount(() => {
             @resume="resume"
             @pin="pinSelected"
             @rename="renameConversation"
+            @promote="promoteSelected"
           />
           <p v-else class="m-0 p-6 font-sans text-[13px] text-dim">{{ t("libraryView.pick") }}</p>
         </div>

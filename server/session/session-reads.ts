@@ -68,6 +68,8 @@ import { cursorLastTurnFromRecords } from "../agents/cursor/cursor-last-turn.js"
 import { antigravityBrainRoot } from "../agents/antigravity/antigravity-session.js";
 import { antigravityTranscriptPath } from "../agents/antigravity/antigravity-sessions.js";
 import { antigravityCurrentTurnReplyFromSteps, antigravityLastTurnFromSteps } from "../agents/antigravity/antigravity-last-turn.js";
+import { copilotEventsPath, copilotSessionExistsForCwd } from "../agents/copilot/copilot-sessions.js";
+import { copilotCurrentTurnReplyFromEvents, copilotLastTurnFromEvents } from "../agents/copilot/copilot-last-turn.js";
 import { grokSessionsRoot, isGrokConversationId } from "../agents/grok/grok-session.js";
 import { grokChatHistoryPath } from "../agents/grok/grok-sessions.js";
 import { grokLastTurnFromMessages } from "../agents/grok/grok-last-turn.js";
@@ -321,6 +323,19 @@ export async function antigravityCurrentTurnReply(sessionKey: string): Promise<s
   return antigravityCurrentTurnReplyFromSteps(await antigravitySteps(sessionKey));
 }
 
+/** A copilot session's records, from its live event log (copilot-last-turn.ts says why not the
+ *  `turns` table). Bound to the directory first, as the resume probe is (#2132): the id comes off a
+ *  request, and a session from another project must not be readable by naming it here. */
+async function copilotEventRecords(cwd: string, id: string): Promise<Record<string, unknown>[]> {
+  if (!(await copilotSessionExistsForCwd(id, cwd))) return [];
+  return readTailRecords(copilotEventsPath(id));
+}
+
+/** The reply to the turn that just ended, for the push — never an older one (#1650). */
+export async function copilotCurrentTurnReply(cwd: string, id: string): Promise<string | null> {
+  return copilotCurrentTurnReplyFromEvents(await copilotEventRecords(cwd, id));
+}
+
 /** A grok conversation's last complete exchange. The id is the one this server handed grok with
  *  `--session-id`, and the conversation lives under its cwd, so the path itself binds the read to
  *  the directory; the id is checked for shape first because it is joined into that path. */
@@ -343,10 +358,10 @@ export async function sessionLastTurn(cwd: string, id: string, agent: TerminalAg
   if (agent === "codex") return codexLastTurn(id);
   if (agent === "cursor") return cursorLastTurn(cwd, id);
   if (agent === "antigravity") return antigravityLastTurnFromSteps(await antigravitySteps(id));
+  if (agent === "copilot") return copilotLastTurnFromEvents(await copilotEventRecords(cwd, id));
   if (agent === "grok") return grokLastTurn(cwd, id);
-  // Everything that is not claude answers EMPTY_TURN, rather than the three agents that were true
-  // when this was written. Each of them HAS a log — muse's `session.jsonl`, copilot's `turns`
-  // table — and none is parsed yet;
+  // Everything that is not claude answers EMPTY_TURN, rather than the agents that were true when
+  // this was written. muse HAS a log — its `session.jsonl` — and it is not parsed yet (#3375);
   // EMPTY_TURN is the honest answer until one is, because every caller handles it (a push says
   // nothing rather than something wrong, a handoff carries no reply) and a wrong guess at a format
   // would be worse than silence.

@@ -1,0 +1,67 @@
+{"type": "user.message", "data": {"content": "First say in one sentence what you are going to do. Then read a.txt and b.txt with your tools. Then answer: what fruits are in them? End with the word FINISHED."}}
+{"type": "assistant.turn_start", "data": {"turnId": "0"}}
+{"type": "assistant.message", "data": {"phase": "commentary", "content": "I’ll read both text files and compare their fruit names.", "toolRequests": [{"name": "view"}, {"name": "view"}]}}
+{"type": "tool.execution_start", "data": {"toolName": "view"}}
+{"type": "tool.execution_start", "data": {"toolName": "view"}}
+{"type": "tool.execution_complete", "data": {"success": true}}
+{"type": "tool.execution_complete", "data": {"success": true}}
+{"type": "assistant.turn_end", "data": {"turnId": "0"}}
+{"type": "assistant.turn_start", "data": {"turnId": "1"}}
+{"type": "assistant.message", "data": {"phase": "final_answer", "content": "The fruits are apple and banana. FINISHED", "toolRequests": []}}
+{"type": "assistant.turn_end", "data": {"turnId": "1"}}
+{"type": "user.message", "data": {"content": "Now just reply with the single word SECOND."}}
+{"type": "assistant.turn_start", "data": {"turnId": "0"}}
+{"type": "assistant.message", "data": {"phase": "final_answer", "content": "SECOND", "toolRequests": []}}
+{"type": "assistant.turn_end", "data": {"turnId": "0"}}
+{"type": "user.message", "data": {"content": "Step by step: read a.txt and comment on it in one sentence, then run the shell command 'ls' and comment on it, then read b.txt. Finally write a 3-line Japanese summary of everything."}}
+{"type": "assistant.turn_start", "data": {"turnId": "0"}}
+{"type": "assistant.message", "data": {"content": "", "toolRequests": [{"name": "view"}]}}
+{"type": "tool.execution_start", "data": {"toolName": "view"}}
+{"type": "tool.execution_complete", "data": {"success": true}}
+{"type": "assistant.turn_end", "data": {"turnId": "0"}}
+{"type": "assistant.turn_start", "data": {"turnId": "1"}}
+{"type": "assistant.message", "data": {"phase": "commentary", "content": "a.txtには「apple」と書かれています。", "toolRequests": [{"name": "bash"}]}}
+{"type": "tool.execution_start", "data": {"toolName": "bash"}}
+{"type": "tool.execution_complete", "data": {"success": true}}
+{"type": "assistant.turn_end", "data": {"turnId": "1"}}
+{"type": "assistant.turn_start", "data": {"turnId": "2"}}
+{"type": "assistant.message", "data": {"phase": "commentary", "content": "lsではa.txtとb.txtの2つのファイルが確認できます。", "toolRequests": [{"name": "view"}]}}
+{"type": "tool.execution_start", "data": {"toolName": "view"}}
+{"type": "tool.execution_complete", "data": {"success": true}}
+{"type": "assistant.turn_end", "data": {"turnId": "2"}}
+{"type": "assistant.turn_start", "data": {"turnId": "3"}}
+{"type": "assistant.message", "data": {"phase": "final_answer", "content": "a.txtには「apple」と書かれています。\nlsではa.txtとb.txtが確認できました。\nb.txtには「banana」と書かれています。", "toolRequests": []}}
+{"type": "assistant.turn_end", "data": {"turnId": "3"}}
+{"type": "user.message", "data": {"content": "Use a subagent (task tool) to count the lines in a.txt and b.txt, then tell me the total."}}
+{"type": "assistant.turn_start", "data": {"turnId": "0"}}
+{"type": "assistant.message", "data": {"content": "", "toolRequests": [{"name": "task"}]}}
+{"type": "tool.execution_start", "data": {"toolName": "task"}}
+{"type": "subagent.started", "data": {"agentName": "task"}, "agentId": "b0c9cda9-5ed5-4ec8-b56d-bcb55525e52f"}
+{"type": "user.message", "data": {"content": "In the current working directory, count the number of lines in a.txt and b.txt. Report each count and their total. Do not modify either file."}, "agentId": "b0c9cda9-5ed5-4ec8-b56d-bcb55525e52f"}
+{"type": "assistant.turn_start", "data": {"turnId": "0"}, "agentId": "b0c9cda9-5ed5-4ec8-b56d-bcb55525e52f"}
+{"type": "assistant.message", "data": {"content": "", "toolRequests": [{"name": "bash"}, {"name": "bash"}]}, "agentId": "b0c9cda9-5ed5-4ec8-b56d-bcb55525e52f"}
+{"type": "tool.execution_start", "data": {"toolName": "bash"}, "agentId": "b0c9cda9-5ed5-4ec8-b56d-bcb55525e52f"}
+{"type": "tool.execution_start", "data": {"toolName": "bash"}, "agentId": "b0c9cda9-5ed5-4ec8-b56d-bcb55525e52f"}
+{"type": "tool.execution_complete", "data": {"success": true}, "agentId": "b0c9cda9-5ed5-4ec8-b56d-bcb55525e52f"}
+{"type": "tool.execution_complete", "data": {"success": true}, "agentId": "b0c9cda9-5ed5-4ec8-b56d-bcb55525e52f"}
+{"type": "assistant.turn_end", "data": {"turnId": "0"}, "agentId": "b0c9cda9-5ed5-4ec8-b56d-bcb55525e52f"}
+{"type": "assistant.turn_start", "data": {"turnId": "1"}, "agentId": "b0c9cda9-5ed5-4ec8-b56d-bcb55525e52f"}
+{"type": "tool.execution_complete", "data": {"success": true}}
+{"type": "assistant.message", "data": {"phase": "final_answer", "content": "- a.txt: 1 line\n- b.txt: 1 line\n- Total: 2 lines", "toolRequests": []}, "agentId": "b0c9cda9-5ed5-4ec8-b56d-bcb55525e52f"}
+{"type": "assistant.turn_end", "data": {"turnId": "0"}}
+{"type": "assistant.turn_start", "data": {"turnId": "1"}}
+{"type": "assistant.turn_end", "data": {"turnId": "1"}, "agentId": "b0c9cda9-5ed5-4ec8-b56d-bcb55525e52f"}
+{"type": "subagent.completed", "data": {"agentName": "task"}, "agentId": "b0c9cda9-5ed5-4ec8-b56d-bcb55525e52f"}
+{"type": "assistant.message", "data": {"phase": "final_answer", "content": "The total is 2 lines.", "toolRequests": []}}
+{"type": "assistant.turn_end", "data": {"turnId": "1"}}
+{"type": "user.message", "data": {"content": "Write a 2000-word essay about fruit, reading a.txt and b.txt first."}}
+{"type": "assistant.turn_start", "data": {"turnId": "0"}}
+{"type": "assistant.message", "data": {"phase": "commentary", "content": "I’ll read both files, use their contents as a starting point, and compose the essay.", "toolRequests": [{"name": "view"}, {"name": "view"}]}}
+{"type": "tool.execution_start", "data": {"toolName": "view"}}
+{"type": "tool.execution_start", "data": {"toolName": "view"}}
+{"type": "tool.execution_complete", "data": {"success": true}}
+{"type": "tool.execution_complete", "data": {"success": true}}
+{"type": "assistant.turn_end", "data": {"turnId": "0"}}
+{"type": "assistant.turn_start", "data": {"turnId": "1"}}
+{"type": "abort", "data": {"reason": "user_initiated"}}
+{"type": "assistant.turn_end", "data": {"turnId": "1"}}

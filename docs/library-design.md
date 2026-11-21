@@ -120,7 +120,11 @@ follows is a refusal to add one of those, and the reason sits next to it.
 - One primary button bottom right: 再開 (conversation), 編集 (memory), 開く (tools), 片付ける
   (storage). `Enter` runs it.
 - The rest live in `more_horiz`. For a conversation: branch from here, pin, rename, promote (to
-  memory, rule, plan or issue), export.
+  memory, rule, plan, issue or skill), export. Promote calls no AI from the Library: it opens a
+  Claude cell in the conversation's directory, in plan mode, running the bundled
+  `mulmoterminal-library` skill, which writes nothing until the person approves its plan (#3334).
+  Plan mode because the cell reads another conversation, which may carry instructions planted in it:
+  the approval is then held by Claude Code, not only by the skill's text.
 - Removing moves to the trash, with a short toast offering Undo.
 - 片付ける confirms what will move inside the reader itself. No modal dialog.
 
@@ -142,7 +146,11 @@ follows is a refusal to add one of those, and the reason sits next to it.
 ## Tools and storage
 
 - Tools: pick one directory (the project filter becomes a directory picker) and list its rules,
-  permissions, hooks and skills, each row naming the file that sets it.
+  permissions, hooks and skills, each row naming the file that sets it. The first part shipped is the
+  instruction files: what Claude Code loads in that directory, in its own order (code.claude.com/docs/en/memory),
+  read only. Which files load and in what order is a pure function (`instruction-files.ts`); the
+  routes take a directory only when a conversation ran there, and a file only when that directory's
+  listing names it.
 - Storage: what can be tidied first, then the size of each location. One sentence explains what
   `cleanupPeriodDays` removes and what it leaves.
 
