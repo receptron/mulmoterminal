@@ -55,6 +55,21 @@ describe("LibraryMemoryEditor", () => {
     expect(wrapper.find<HTMLTextAreaElement>("[data-testid=memory-editor-field]").element.value).toBe("kept line  \n\n    code\nmore\n");
   });
 
+  it("keeps every character of a memory holding an emoji when seeding a merge", async () => {
+    const wrapper = mount(LibraryMemoryEditor, {
+      props: {
+        slug: "-w-app",
+        file: "a.md",
+        text: "note \u{1F642} kept text\n\n",
+        version: "v1",
+        cwd: null,
+        merging: { file: "b.md", version: "v2", title: "b", body: "added" },
+      },
+    });
+    await flushPromises();
+    expect(wrapper.find<HTMLTextAreaElement>("[data-testid=memory-editor-field]").element.value).toBe("note \u{1F642} kept text\n\nadded\n");
+  });
+
   it("seeds a merge onto a memory ending in a great many line breaks", async () => {
     const wrapper = mount(LibraryMemoryEditor, {
       props: {
