@@ -200,17 +200,19 @@ function mountMemoryMerge(app: Express, projectsRoot: string, trash: () => Trash
   });
 }
 
-/** The conversation that last wrote a memory, for the reader to link to. It names no path: the index is
- *  asked by folder and name, checked as every memory route checks them — never the memory index, by
+/** The conversation that last wrote a memory, for the reader to link to. The request names no path: it
+ *  names the folder and the name, checked as every memory route checks them — never the memory index, by
  *  identity as the writes check it (on a case-insensitive disk `memory.md` is that file). */
 function mountMemorySource(app: Express, call: LibraryCaller, projectsRoot: string): void {
   app.get("/api/library/memory/:slug/:file/source", async (req, res) => {
     const { slug, file } = req.params;
-    if (file === MEMORY_INDEX_FILE || (await changeableMemory(projectsRoot, slug, file)) === null) {
+    const memory = file === MEMORY_INDEX_FILE ? null : await changeableMemory(projectsRoot, slug, file);
+    if (memory === null) {
       res.status(400).json({ error: "not a memory file" });
       return;
     }
-    const conversation = await answer(res, call, "memorySource", [`${slug}/${file}`]);
+    // By the path under this server's own projects root: a write the index recorded anywhere else is no memory.
+    const conversation = await answer(res, call, "memorySource", [memory]);
     if (conversation !== undefined) res.json({ conversation });
   });
 }

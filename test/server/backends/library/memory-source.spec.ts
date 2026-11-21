@@ -1,17 +1,17 @@
 // @vitest-environment node
 // Which conversation wrote a memory (#3331): the memory writes in a transcript record, both ways.
 import { describe, it, expect } from "vitest";
-import { memoryWriteKey, memoryWritesOf } from "../../../../server/backends/library/memory-source";
+import { memoryWritePath, memoryWritesOf } from "../../../../server/backends/library/memory-source";
 
-describe("memoryWriteKey", () => {
+describe("memoryWritePath", () => {
   it.each([
-    ["/Users/me/.claude/projects/-Users-me-app/memory/reply-style.md", "-Users-me-app/reply-style.md"],
-    ["C:\\Users\\me\\.claude\\projects\\C--Users-me-app\\memory\\notes.md", "C--Users-me-app/notes.md"],
-    ["/custom/config/projects/-w-app/memory/a_b.c-d.md", "-w-app/a_b.c-d.md"],
+    "/Users/me/.claude/projects/-Users-me-app/memory/reply-style.md",
+    "C:\\Users\\me\\.claude\\projects\\C--Users-me-app\\memory\\notes.md",
+    "/custom/config/projects/-w-app/memory/a_b.c-d.md",
     // a memory of its own on a case-sensitive disk; the index is only ever `MEMORY.md`
-    ["/h/.claude/projects/-w-app/memory/memory.md", "-w-app/memory.md"],
-  ])("%s → %s", (filePath, key) => {
-    expect(memoryWriteKey(filePath)).toBe(key);
+    "/h/.claude/projects/-w-app/memory/memory.md",
+  ])("%s is a memory, kept by the path written", (filePath) => {
+    expect(memoryWritePath(filePath)).toBe(filePath);
   });
   it.each([
     "/Users/me/.claude/projects/-w-app/memory/MEMORY.md",
@@ -23,7 +23,7 @@ describe("memoryWriteKey", () => {
     "/Users/me/app/memory/a.md",
     "",
   ])("%s is no memory", (filePath) => {
-    expect(memoryWriteKey(filePath)).toBeNull();
+    expect(memoryWritePath(filePath)).toBeNull();
   });
 });
 
@@ -38,7 +38,7 @@ describe("memoryWritesOf", () => {
       tool("Edit", { file_path: MEMORY.replace("a.md", "b.md") }),
       tool("MultiEdit", { file_path: MEMORY.replace("a.md", "c.md") }),
     );
-    expect(memoryWritesOf(record)).toEqual(["-w-app/a.md", "-w-app/b.md", "-w-app/c.md"]);
+    expect(memoryWritesOf(record)).toEqual([MEMORY, MEMORY.replace("a.md", "b.md"), MEMORY.replace("a.md", "c.md")]);
   });
   it("leaves out reads, other files, other records and anything malformed", () => {
     expect(memoryWritesOf(assistant(tool("Read", { file_path: MEMORY })))).toEqual([]);

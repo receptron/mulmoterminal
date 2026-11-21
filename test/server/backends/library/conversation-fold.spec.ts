@@ -171,12 +171,13 @@ describe("memory writes", () => {
   });
 
   it("keeps each memory once, the most recently written last, and drops the longest ago past the cap", () => {
-    expect(fold([writes("a.md"), writes("b.md"), writes("a.md")]).state.memoryWrites).toEqual(["-w-app/b.md", "-w-app/a.md"]);
+    const at = (file: string) => `/h/.claude/projects/-w-app/memory/${file}`;
+    expect(fold([writes("a.md"), writes("b.md"), writes("a.md")]).state.memoryWrites).toEqual([at("b.md"), at("a.md")]);
     const many = Array.from({ length: LIST_FIELD_CAP + 1 }, (_, at) => writes(`m${String(at)}.md`));
     const kept = fold([writes("first.md"), ...many, writes("first.md")]).state.memoryWrites;
     expect(kept).toHaveLength(LIST_FIELD_CAP);
-    expect(kept.at(-1)).toBe("-w-app/first.md");
-    expect(kept).not.toContain("-w-app/m0.md");
+    expect(kept.at(-1)).toBe(at("first.md"));
+    expect(kept).not.toContain(at("m0.md"));
   });
 });
 
