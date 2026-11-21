@@ -11,7 +11,7 @@ import type { PushKind } from "../../../common/pushKinds.js";
 import { asTerminalAgent } from "../../../common/sessionAgent.js";
 import { aiTitles, lastResponses, ptys, pushClassification, translationWorkerIds } from "../registry.js";
 import { transcriptIdOf } from "../transcript/cleared-transcripts.js";
-import { claudeCurrentTurnReply, sessionLastTurn, LAST_RESPONSE_MAX } from "../session-reads.js";
+import { antigravityCurrentTurnReply, claudeCurrentTurnReply, sessionLastTurn, LAST_RESPONSE_MAX } from "../session-reads.js";
 import { buildPushDetail, pushWhere, shouldSuppressPush, wantsPushKind } from "./taskPushRules.js";
 
 const PUSH_TITLE_MAX = 80;
@@ -37,14 +37,15 @@ export interface PushHookText {
 // is worse than saying nothing. Which log to read depends on the agent, so it goes
 // through session-reads rather than assuming a claude transcript.
 //
-// Claude is asked for THIS turn's reply rather than the last complete exchange: a turn the user
-// interrupted, or one that ended on a tool call, has no reply, and sessionLastTurn answers such a
-// turn with the PREVIOUS one's (#1650). Every other agent keeps that read, for the reason given at
-// claudeCurrentTurnReply.
+// Claude and Antigravity are asked for THIS turn's reply rather than the last complete exchange: a
+// turn the user interrupted, or one that ended on a tool call, has no reply, and sessionLastTurn
+// answers such a turn with the PREVIOUS one's (#1650). Every other agent keeps that read, for the
+// reason given at claudeCurrentTurnReply.
 async function latestReply(sessionId: string, transcriptId: string, cwd: string): Promise<string | null> {
   const agent = asTerminalAgent(ptys.get(sessionId)?.agent);
-  const turnReply = agent === "claude" ? await claudeCurrentTurnReply(cwd, transcriptId) : (await sessionLastTurn(cwd, sessionId, agent)).reply;
-  return capped(turnReply);
+  if (agent === "claude") return capped(await claudeCurrentTurnReply(cwd, transcriptId));
+  if (agent === "antigravity") return capped(await antigravityCurrentTurnReply(sessionId));
+  return capped((await sessionLastTurn(cwd, sessionId, agent)).reply);
 }
 
 // Capped like every other writer of lastResponses — the map is declared as holding truncated

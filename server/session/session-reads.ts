@@ -31,6 +31,8 @@ import { sessionListTitle } from "./list/sessionListTitle.js";
 import {
   activity,
   aiTitles,
+  antigravityConversations,
+  antigravityConversationsHydrated,
   claudeSessionIds,
   codexRollouts,
   codexRolloutsHydrated,
@@ -63,6 +65,9 @@ import { partitionPending } from "./partitionPending.js";
 import { codexRolloutPath } from "../agents/codex/codex-sessions.js";
 import { cursorTranscriptPath } from "../agents/cursor/cursor-sessions.js";
 import { cursorLastTurnFromRecords } from "../agents/cursor/cursor-last-turn.js";
+import { antigravityBrainRoot } from "../agents/antigravity/antigravity-session.js";
+import { antigravityTranscriptPath } from "../agents/antigravity/antigravity-sessions.js";
+import { antigravityCurrentTurnReplyFromSteps, antigravityLastTurnFromSteps } from "../agents/antigravity/antigravity-last-turn.js";
 import type { DiskStat, PendingSession, SessionMeta } from "./types.js";
 import { readString } from "../../common/readString.js";
 import type { TerminalAgent } from "../../common/sessionAgent.js";
@@ -298,6 +303,21 @@ async function cursorLastTurn(cwd: string, id: string): Promise<LastTurn> {
   }
 }
 
+/** An Antigravity session's transcript steps. Resolved like codex's rollout: agy mints the
+ *  conversation id, so the session key goes through the mapping recorded at spawn, and the key
+ *  itself is the fallback for one that came from the conversation list. */
+async function antigravitySteps(sessionKey: string): Promise<Record<string, unknown>[]> {
+  // Read off disk at startup, so a request served before then would miss the mapping.
+  await antigravityConversationsHydrated;
+  const conversationId = antigravityConversations.get(sessionKey)?.conversationId ?? sessionKey;
+  return readTailRecords(antigravityTranscriptPath(antigravityBrainRoot(), conversationId));
+}
+
+/** The reply to the turn that just ended, for the push — never an older one (#1650). */
+export async function antigravityCurrentTurnReply(sessionKey: string): Promise<string | null> {
+  return antigravityCurrentTurnReplyFromSteps(await antigravitySteps(sessionKey));
+}
+
 // The tail, not the whole file — which is what #865 said the fix would be and #998 forced.
 //
 // Reading it whole cost its full size: measured over 10,506 real transcripts the median is 0.1 MB,
@@ -311,9 +331,10 @@ async function cursorLastTurn(cwd: string, id: string): Promise<LastTurn> {
 export async function sessionLastTurn(cwd: string, id: string, agent: TerminalAgent): Promise<LastTurn> {
   if (agent === "codex") return codexLastTurn(id);
   if (agent === "cursor") return cursorLastTurn(cwd, id);
+  if (agent === "antigravity") return antigravityLastTurnFromSteps(await antigravitySteps(id));
   // Everything that is not claude answers EMPTY_TURN, rather than the three agents that were true
-  // when this was written. Each of them HAS a log — agy's brain directory, grok's
-  // `chat_history.jsonl`, muse's `session.jsonl`, copilot's `turns` table — and none is parsed yet;
+  // when this was written. Each of them HAS a log — grok's `chat_history.jsonl`, muse's
+  // `session.jsonl`, copilot's `turns` table — and none is parsed yet;
   // EMPTY_TURN is the honest answer until one is, because every caller handles it (a push says
   // nothing rather than something wrong, a handoff carries no reply) and a wrong guess at a format
   // would be worse than silence.
