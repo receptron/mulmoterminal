@@ -948,7 +948,8 @@ it again in the same cell on the same conversation, which is how an MCP / config
 takes effect; it costs a resume and asks nothing first. `"terminal-new-here"` opens the launch panel
 on the cell's directory, and `"pane-files"` / `"pane-prompts"` / … / `"terminal-timeline"` /
 `"terminal-talk"` / `"terminal-park"` / `"terminal-copy-code"` / `"terminal-insert-path"` / `"terminal-reveal"` /
-`"terminal-voice"` / `"terminal-diff"` / `"terminal-note"` do what the cell's menus and buttons do, and `"screen-*"` / `"settings-open"` /
+`"terminal-voice"` / `"terminal-diff"` / `"terminal-note"` / `"terminal-send-turn"` / `"terminal-send-since"` /
+`"terminal-bring-turn"` / `"terminal-bring-since"` do what the cell's menus and buttons do, and `"screen-*"` / `"settings-open"` /
 `"sound-toggle"` / `"confetti"` / `"view-toggle"` / `"order-*"` / `"page-next"` / `"page-prev"` do what the toolbar and the page tabs do; the old name `"restart"` still works). An `open` button targets one of `url` / `reveal` (OS file manager) / `files`
 (in-app explorer) / `view` (a built-in overlay) / `terminal` (a dir → a new cell running `$SHELL`,
 opened next to the current one) / `pr: true` (open the current branch's PR — the button is hidden when
