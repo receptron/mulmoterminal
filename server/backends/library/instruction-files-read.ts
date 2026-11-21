@@ -1,6 +1,10 @@
 // Reading the instruction files Claude Code loads for one directory (#3332): which of the candidates
 // exist, their size, the rules in each `.claude/rules` folder, and the files their `@path` imports bring
 // in. Read only; the order and the rules of loading are instruction-files.ts.
+//
+// Every path goes through `localTarget` before anything looks it up: Claude Code never follows a link
+// to a network path (looking one up can contact the host), so neither does this — and the real path
+// that comes back is what a file is known by, what "outside the directory" is judged on, and what is read.
 import { promises as fs, type Dirent } from "node:fs";
 import path from "node:path";
 import { INSTRUCTION_FILE_MAX_BYTES, type LibraryInstructionFile, type LibraryInstructions } from "../../../common/libraryTools.js";
@@ -25,10 +29,33 @@ export const RULE_ENTRIES_MAX = 2000;
  *  not read through to the end. */
 export const INSTRUCTION_FILES_MAX = 300;
 export const IMPORTS_PER_FILE_MAX = 100;
+/** Links followed in a chain at most, as the system's own limit does. */
+const LINK_HOPS_MAX = 40;
+
+/** The real, local path a path leads to, or null: missing, a loop, or a link — at any hop — to a network
+ *  path, which is never looked up. Each hop's target is read from the link itself before the next lookup. */
+export async function localTarget(file: string): Promise<string | null> {
+  let at = file;
+  for (let hop = 0; hop < LINK_HOPS_MAX; hop += 1) {
+    if (isNetworkPath(at)) return null;
+    const info = await fs.lstat(at).catch(() => null);
+    if (info === null) return null;
+    if (!info.isSymbolicLink()) {
+      const real = await fs.realpath(at).catch(() => null);
+      return real === null || isNetworkPath(real) ? null : real;
+    }
+    const target = await fs.readlink(at).catch(() => null);
+    if (target === null) return null;
+    at = path.resolve(path.dirname(at), target);
+  }
+  return null;
+}
 
 interface Read {
   file: Omit<LibraryInstructionFile, "scope" | "loads" | "importedBy">;
   text: string | null;
+  /** The file it really is. */
+  real: string;
 }
 
 function lineCount(text: string): number {
@@ -38,27 +65,21 @@ function lineCount(text: string): number {
 }
 
 /** A regular file's size and text, or null when there is none. Over the size Claude Code reads, it is
- *  listed as skipped and its text is not read. */
+ *  listed as skipped and its text is not read. Listed by the path it was reached by. */
 async function readInstruction(file: string): Promise<Read | null> {
-  const info = await fs.stat(file).catch(() => null);
-  if (info === null || !info.isFile()) return null;
-  if (info.size > INSTRUCTION_FILE_MAX_BYTES) return { file: { path: file, lines: 0, bytes: info.size, state: "too-large" }, text: null };
-  const text = await fs.readFile(file, "utf8").catch(() => null);
-  if (text === null) return { file: { path: file, lines: 0, bytes: info.size, state: "unreadable" }, text: null };
-  return { file: { path: file, lines: lineCount(text), bytes: Buffer.byteLength(text), state: "ok" }, text };
+  const real = await localTarget(file);
+  const info = real === null ? null : await fs.stat(real).catch(() => null);
+  if (real === null || info === null || !info.isFile()) return null;
+  if (info.size > INSTRUCTION_FILE_MAX_BYTES) return { file: { path: file, lines: 0, bytes: info.size, state: "too-large" }, text: null, real };
+  const text = await fs.readFile(real, "utf8").catch(() => null);
+  if (text === null) return { file: { path: file, lines: 0, bytes: info.size, state: "unreadable" }, text: null, real };
+  return { file: { path: file, lines: lineCount(text), bytes: Buffer.byteLength(text), state: "ok" }, text, real };
 }
 
 interface RuleFile {
   path: string;
-  /** Reached through a link whose target is outside `within`: read only once that is approved. */
+  /** Really outside the directory rules must stay in: read only once that is approved. */
   external: boolean;
-}
-
-/** Where a link points, when it is one: its own text, resolved, without looking the target up (a
- *  network target would be contacted). */
-async function linkTarget(file: string): Promise<string | null> {
-  const target = await fs.readlink(file).catch(() => null);
-  return target === null ? null : path.resolve(path.dirname(file), target);
 }
 
 /** At most `count` entries of a folder, read one at a time: a folder of millions is never listed whole. */
@@ -77,52 +98,58 @@ async function firstEntries(folder: string, count: number): Promise<Dirent[]> {
   return entries;
 }
 
-/** One entry of a rules folder: a folder to walk, a rule, or nothing (anything else, or a link to a
- *  network path). Through a link, whether its target leaves `within`. */
-async function ruleEntry(dir: RuleFile, entry: Dirent, within: string | null): Promise<{ kind: "folder" | "rule"; rule: RuleFile } | null> {
-  const full = path.join(dir.path, entry.name);
-  const target = entry.isSymbolicLink() ? await linkTarget(full) : null;
-  if (target !== null && isNetworkPath(target)) return null;
-  const info = target === null ? entry : await fs.stat(full).catch(() => null);
-  const realTarget = target === null ? null : await fs.realpath(full).catch(() => null);
-  const external = dir.external || (within !== null && realTarget !== null && !isInside(within, realTarget));
-  if (info?.isDirectory()) return { kind: "folder", rule: { path: full, external } };
-  return info?.isFile() && entry.name.endsWith(".md") ? { kind: "rule", rule: { path: full, external } } : null;
+/** One entry of a rules folder: a folder to walk, a rule, or nothing. Outside `within`, by where it
+ *  really is, it needs approval. */
+async function ruleEntry(full: string, within: string[] | null): Promise<{ kind: "folder" | "rule"; rule: RuleFile; real: string } | null> {
+  const real = await localTarget(full);
+  const info = real === null ? null : await fs.stat(real).catch(() => null);
+  if (real === null || info === null) return null;
+  const rule = { path: full, external: within !== null && !within.some((dir) => isInside(dir, real)) };
+  if (info.isDirectory()) return { kind: "folder", rule, real };
+  return info.isFile() && full.endsWith(".md") ? { kind: "rule", rule, real } : null;
 }
 
-/** The `.md` files under a rules folder, in path order, at most the cap. Links are followed, as Claude
- *  Code follows a shared rules folder linked in — never to a network path — and each real folder is
- *  walked once, so a loop ends. `within` is the directory a link must stay in not to need approval. */
-async function ruleFiles(folder: string, within: string | null): Promise<RuleFile[]> {
+/** The `.md` files under a rules folder (itself perhaps a link), in path order, at most the cap; `capped`
+ *  when there were more. Each real folder is walked once, so a loop ends. `within` is the directory
+ *  rules must really be in not to need approval — null for the user's, which never do. */
+async function ruleFiles(folder: string, within: string[] | null): Promise<{ rules: RuleFile[]; capped: boolean }> {
+  const root = await ruleEntry(folder, within);
+  if (root?.kind !== "folder") return { rules: [], capped: false };
   const found: RuleFile[] = [];
-  const queue: RuleFile[] = [{ path: folder, external: false }];
+  const queue = [root];
   const walked = new Set<string>();
   let budget = RULE_ENTRIES_MAX;
   while (queue.length > 0 && budget > 0) {
-    const dir = queue.shift() ?? { path: "", external: false };
-    const real = await fs.realpath(dir.path).catch(() => null);
-    if (real === null || walked.has(real)) continue;
-    walked.add(real);
-    const entries = await firstEntries(dir.path, budget);
+    const dir = queue.shift() ?? root;
+    if (walked.has(dir.real)) continue;
+    walked.add(dir.real);
+    const entries = await firstEntries(dir.rule.path, budget);
     budget -= entries.length;
     for (const entry of entries) {
-      const seen = await ruleEntry(dir, entry, within);
-      if (seen?.kind === "folder") queue.push(seen.rule);
+      const seen = await ruleEntry(path.join(dir.rule.path, entry.name), within);
+      // Inside a folder already outside, everything is.
+      if (seen !== null && dir.rule.external) seen.rule.external = true;
+      if (seen?.kind === "folder") queue.push(seen);
       else if (seen?.kind === "rule") found.push(seen.rule);
     }
   }
-  return found.toSorted((a, b) => a.path.localeCompare(b.path)).slice(0, RULES_PER_FOLDER_MAX);
+  const sorted = found.toSorted((a, b) => a.path.localeCompare(b.path));
+  return { rules: sorted.slice(0, RULES_PER_FOLDER_MAX), capped: sorted.length > RULES_PER_FOLDER_MAX || budget <= 0 };
 }
 
 interface Walk {
   home: string;
+  /** Files listed, by what they really are: an alias of one already listed is the same file. */
   seen: Set<string>;
   out: LibraryInstructionFile[];
   /** Files looked for, found or not: the bound on one listing's work. */
   looked: number;
-  /** The working directory, as given and as resolved: what an import must stay in not to need approval. */
+  truncated: boolean;
+  /** The working directory, as given and as resolved: what an import must really stay in not to need approval. */
   cwd: string[];
 }
+
+const insideCwd = (walk: Walk, target: string): boolean => walk.cwd.some((dir) => isInside(dir, target));
 
 /** One file and, after it, what its imports bring in — depth-first, as they are expanded in place. */
 async function addFile(
@@ -131,25 +158,25 @@ async function addFile(
   loads: LibraryInstructionFile["loads"],
   importedBy: string | null,
   depth: number,
-): Promise<boolean> {
-  if (walk.seen.has(candidate.path) || walk.looked >= INSTRUCTION_FILES_MAX) return false;
+): Promise<void> {
+  if (walk.looked >= INSTRUCTION_FILES_MAX) {
+    walk.truncated = true;
+    return;
+  }
   walk.looked += 1;
   const read = await readInstruction(candidate.path);
-  if (read === null) return false;
-  walk.seen.add(candidate.path);
+  if (read === null || walk.seen.has(read.real)) return;
+  walk.seen.add(read.real);
   walk.out.push({ ...read.file, scope: candidate.scope, loads, importedBy });
-  if (read.text === null || depth >= IMPORT_DEPTH_MAX) return true;
-  const fromInside = walk.cwd.some((dir) => isInside(dir, candidate.path));
+  if (read.text === null || depth >= IMPORT_DEPTH_MAX) return;
+  const fromInside = insideCwd(walk, read.real);
   for (const imported of importsOf(read.text, candidate.path, walk.home).slice(0, IMPORTS_PER_FILE_MAX)) {
-    if (isNetworkPath(imported)) continue;
-    // A file in the project importing one outside it — by where the import really lands, a link
-    // included — is loaded only once that is approved.
-    const landed = await fs.realpath(imported).catch(() => imported);
-    const inside = (target: string): boolean => walk.cwd.some((dir) => isInside(dir, target));
-    const external = fromInside && !(inside(imported) && inside(landed));
+    const landed = await localTarget(imported);
+    if (landed === null) continue;
+    // A file in the project importing one really outside it: loaded only once that is approved.
+    const external = fromInside && !insideCwd(walk, landed);
     await addFile(walk, { scope: "import", path: imported }, external ? "approval" : loads, candidate.path, depth + 1);
   }
-  return true;
 }
 
 const ruleLoads = (external: boolean, scoped: boolean): LibraryInstructionFile["loads"] => {
@@ -157,11 +184,12 @@ const ruleLoads = (external: boolean, scoped: boolean): LibraryInstructionFile["
   return scoped ? "on-demand" : "launch";
 };
 
-/** The user's rules need no approval; a project rule linked in from outside it does, and then only one
+/** The user's rules need no approval; a project rule really outside it does, and then only one
  *  without `paths` loads at all. */
 async function addRules(walk: Walk, candidate: InstructionCandidate): Promise<void> {
-  const within = candidate.scope === "rule" ? (walk.cwd.at(-1) ?? null) : null;
-  for (const file of await ruleFiles(candidate.path, within)) {
+  const { rules, capped } = await ruleFiles(candidate.path, candidate.scope === "rule" ? walk.cwd : null);
+  if (capped) walk.truncated = true;
+  for (const file of rules) {
     const scoped = isPathScopedRule((await readInstruction(file.path))?.text ?? "");
     if (file.external && scoped) continue;
     await addFile(walk, { scope: candidate.scope, path: file.path }, ruleLoads(file.external, scoped), null, 0);
@@ -177,7 +205,7 @@ export async function readInstructions(
   platform: NodeJS.Platform = process.platform,
 ): Promise<LibraryInstructions> {
   const real = await fs.realpath(cwd).catch(() => cwd);
-  const walk: Walk = { home, seen: new Set(), out: [], looked: 0, cwd: [cwd, real] };
+  const walk: Walk = { home, seen: new Set(), out: [], looked: 0, truncated: false, cwd: [cwd, real] };
   const candidates = launchCandidates(cwd, configDir, platform);
   const claudeMd = await Promise.all(candidates.filter(countsAsClaudeMd).map((candidate) => readInstruction(candidate.path)));
   const agentsMd = claudeMd.every((read) => read === null);
@@ -189,17 +217,18 @@ export async function readInstructions(
       for (const agents of agentsCandidates(cwd, platform)) await addFile(walk, agents, "launch", null, 0);
     }
   }
-  return { cwd, files: walk.out, agentsMd, truncated: walk.looked >= INSTRUCTION_FILES_MAX };
+  return { cwd, files: walk.out, agentsMd, truncated: walk.truncated };
 }
 
-/** One instruction file's text to show. Through a link, on purpose: Claude Code follows one (a CLAUDE.md
- *  linked to AGENTS.md, a shared rules folder), so the file shown is the file it reads. */
+/** One instruction file's text to show: what it really is, through links — never to a network path —
+ *  as Claude Code reads it. */
 export async function readInstructionText(file: string): Promise<LibraryFileText> {
-  const info = await fs.stat(file).catch(() => null);
-  if (info === null) return { text: null, reason: "absent" };
+  const real = await localTarget(file);
+  const info = real === null ? null : await fs.stat(real).catch(() => null);
+  if (real === null || info === null) return { text: null, reason: "absent" };
   if (!info.isFile()) return { text: null, reason: "unreadable" };
   if (info.size > LIBRARY_FILE_TEXT_MAX) return { text: null, reason: "too-large" };
-  const bytes = await fs.readFile(file).catch(() => null);
+  const bytes = await fs.readFile(real).catch(() => null);
   if (bytes === null) return { text: null, reason: "unreadable" };
   if (bytes.length > LIBRARY_FILE_TEXT_MAX) return { text: null, reason: "too-large" };
   return bytes.includes(0) ? { text: null, reason: "binary" } : { text: bytes.toString("utf8") };

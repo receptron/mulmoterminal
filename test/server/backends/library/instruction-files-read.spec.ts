@@ -99,7 +99,7 @@ describe("readInstructions", () => {
       // linked in from outside the directory: Claude Code loads these once external imports are approved
       "rule w/app/.claude/rules/security.md approval",
       "rule w/app/.claude/rules/shared/more/api.md approval",
-      "rule w/app/.claude/rules/shared/security.md approval",
+      // shared/security.md is the same file as security.md, already listed: one file is read once
     ]);
   });
 
@@ -163,5 +163,45 @@ describe("readInstructions", () => {
     symlinkSync(at("outside/secret.md"), at("w/app/link.md"));
     const loads = Object.fromEntries((await read()).files.map((file) => [path.basename(file.path), file.loads]));
     expect([loads["link.md"], loads["own.md"]]).toEqual(["approval", "launch"]);
+  });
+
+  it.skipIf(process.platform === "win32")("never looks up a network path, however it is reached: a rules root, a link chain, CLAUDE.md itself", async () => {
+    const { at, read } = tree({ "w/app/own.md": "own" });
+    symlinkSync("/net/host/CLAUDE.md", at("w/app/CLAUDE.md"));
+    symlinkSync("/net/host/hop", at("w/app/hop.md"));
+    symlinkSync(at("w/app/hop.md"), at("w/app/alias.md"));
+    writeFileSync(at("w/app/CLAUDE.local.md"), "@alias.md @own.md");
+    mkdirSync(at("w/app/.claude"), { recursive: true });
+    symlinkSync("/net/host/rules", at("w/app/.claude/rules"));
+    const stat = vi.spyOn(fsPromises, "stat");
+    const lstat = vi.spyOn(fsPromises, "lstat");
+    const realpath = vi.spyOn(fsPromises, "realpath");
+    const files = (await read()).files.filter((file) => file.path.startsWith(at("")));
+    const looked = [...stat.mock.calls, ...lstat.mock.calls, ...realpath.mock.calls].map(([target]) => String(target));
+    [stat, lstat, realpath].forEach((spy) => spy.mockRestore());
+    expect(files.map((file) => path.relative(at(""), file.path))).toEqual(["w/app/CLAUDE.local.md", "w/app/own.md"]);
+    expect(looked.filter((target) => target.startsWith("/net"))).toEqual([]);
+  });
+
+  it.skipIf(process.platform === "win32")("treats a rules folder linked in from outside as needing approval, and lists one file once by any name", async () => {
+    const { at, read } = tree({ "shared/a.md": "a", "w/app/CLAUDE.md": "@x.md and @y.md", "w/app/real.md": "real" });
+    mkdirSync(at("w/app/.claude"), { recursive: true });
+    symlinkSync(at("shared"), at("w/app/.claude/rules"));
+    symlinkSync(at("w/app/real.md"), at("w/app/x.md"));
+    symlinkSync(at("w/app/real.md"), at("w/app/y.md"));
+    const files = (await read()).files.filter((file) => file.path.startsWith(at("")));
+    expect(files.map((file) => `${path.relative(at(""), file.path)} ${file.loads}`)).toEqual([
+      "w/app/CLAUDE.md launch",
+      "w/app/x.md launch",
+      "w/app/.claude/rules/a.md approval",
+    ]);
+  });
+
+  it("says the listing stopped when one rules folder holds more than its cap", async () => {
+    const many: Record<string, string> = {};
+    Array.from({ length: RULES_PER_FOLDER_MAX + 1 }, (_, n) => (many[`w/app/.claude/rules/r${String(n)}.md`] = "r"));
+    const result = await tree(many).read();
+    expect(result.files.filter((file) => file.scope === "rule")).toHaveLength(RULES_PER_FOLDER_MAX);
+    expect(result.truncated).toBe(true);
   });
 });

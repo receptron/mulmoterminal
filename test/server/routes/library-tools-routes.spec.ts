@@ -53,8 +53,9 @@ describe("library tools routes", () => {
 
   it.skipIf(process.platform === "win32")("reads an instruction file through a link, as Claude Code does", async () => {
     const { call, app } = setup();
-    symlinkSync(path.join(app, "notes.md"), path.join(app, "CLAUDE.local.md"));
-    expect((await call(`/api/library/tools/instruction${q({ cwd: app, path: path.join(app, "CLAUDE.local.md") })}`)).body).toEqual({ text: "imported\n" });
+    writeFileSync(path.join(app, "mine.md"), "linked\n");
+    symlinkSync(path.join(app, "mine.md"), path.join(app, "CLAUDE.local.md"));
+    expect((await call(`/api/library/tools/instruction${q({ cwd: app, path: path.join(app, "CLAUDE.local.md") })}`)).body).toEqual({ text: "linked\n" });
   });
 
   it("refuses a directory no conversation ran in, and a file the listing does not name", async () => {
