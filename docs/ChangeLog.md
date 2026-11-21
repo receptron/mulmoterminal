@@ -8,6 +8,18 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@13.4.0 — 2026-11-22
+
+> **Setup guide:** [13.4.0 — Ask Claude to tidy a project's memory](https://receptron.github.io/mulmoterminal/guide/en/v13.4.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.4.0.html))
+
+### Library memory: ask for a tidy-up of one project's memory (#3394)
+
+The last part of #3334.
+
+- **Tidy-up button**: each project heading in the Library's **Memory** has a button (**Ask for a tidy-up of this project's memory**). `POST /api/library/memory/:slug/tidy` (same-origin guarded) starts a Claude session in plan mode in the project's directory with the turn `/mulmoterminal-library tidy <project-folder>`, built on the server from the folder name alone (`tidyTurn` in `common/libraryPromote.ts`). It answers 404 when the project has no memory folder and 409 when its directory is not on this machine, is not unique, or no longer resolves to that folder; the refusal is shown under the project's heading.
+- **The skill**: `mulmoterminal-library` gains a `tidy` section. It reads the project's memories, `MEMORY.md` and `GET /api/library/memory-health`, treats memory text as data, and proposes merging duplicates, removing memories the code shows no longer hold, fixing what the health check found, and moving standing rules to a `CLAUDE.md` or a skill. Nothing is written until the plan is approved; every file changed or removed is backed up under `~/.mulmoterminal/library/backups/` first and `MEMORY.md` is kept in step. `docs/library-design.md` records this as the exception to "every removal goes to the Trash with Undo".
+- **One rule for a folder's directory**: `server/backends/library/project-folders.ts` (`directoriesByFolder`) names the directory of a project folder by Claude Code's own rule, `encodeProjectDirName` of the directory's real path, resolved asynchronously in batches and kept for `REALPATH_MEMO_MS`. Spellings of one checkout (a link and its target) count as one; two different checkouts sharing a folder name leave it unknown. The Memory view, the memory health check and the tidy route all use it. Previously `projectSlug` kept `_`, which Claude Code folds to `-`, so such projects showed no directory; it is removed and `isProjectSlug` moved to `common/libraryMemory.ts`. The tidy route re-resolves the chosen directory uncached just before starting and starts the session in that real path, so a link repointed meanwhile cannot move it.
+
 ## mulmoterminal@13.3.0 — 2026-11-21
 
 > **Setup guide:** [13.3.0 — The Library grows: memory you can tidy, promotion, tools, storage and repeats](https://receptron.github.io/mulmoterminal/guide/en/v13.3.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.3.0.html))

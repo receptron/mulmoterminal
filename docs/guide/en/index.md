@@ -8,10 +8,9 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **13.3.0 is out.** In the Library, Claude Code's memory can be edited, merged and tidied, a
-> conversation can be promoted to a rule or a skill, and three new kinds show the instruction files
-> Claude Code loads, what its folder takes on disk and the instructions you keep typing.
-> [Setup guide](v13.3.0.html)
+> **13.4.0 is out.** In the Library's Memory, each project has a tidy-up button: Claude proposes
+> merging, removing, fixing and moving that project's memories, and writes nothing until you
+> approve. [Setup guide](v13.4.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 

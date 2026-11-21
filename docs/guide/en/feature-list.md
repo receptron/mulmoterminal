@@ -4,7 +4,7 @@ nav_title: Feature list
 layout: default
 parent: English
 nav_order: 6.5
-as_of: 13.3.0
+as_of: 13.4.0
 description: "Every capability MulmoTerminal has today, one line each with the release it arrived in, grouped by area (as of 9.1.0)."
 ---
 
@@ -109,6 +109,7 @@ More: [Agents](agents.html)
 More: [Conversations](conversation.html)
 
 - The Library's Memory kind marks what can be tidied — a memory missing from MEMORY.md, missing frontmatter, a [[link]] to no memory, a file it names that is gone, or an index that is missing, overfull or lists a gone file — and Show narrows the list to it (v13.3.0)
+- The Library's Memory kind gets a tidy-up button on each project: Claude opens in plan mode in the project's directory and proposes merging duplicate memories, removing ones the code shows no longer hold, fixing what the health check found and moving standing rules to a CLAUDE.md or a skill, backing up every file and writing nothing until you approve (v13.4.0)
 - A memory can be edited in place in the Library, whole text and frontmatter included; a save is refused if the file changed on disk since it was opened (v13.3.0)
 - A memory can be moved to the system Trash with its MEMORY.md lines, or merged into another memory of the same project with the [[links]] to it pointed at the one kept; Undo puts either back (v13.3.0)
 - The Library reports a memory also kept in another work copy of the same repository, says whether its text is the same, and can bring the copies into one with Add its text here and Write this text there (v13.3.0)
