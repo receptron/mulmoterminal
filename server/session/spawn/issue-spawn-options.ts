@@ -9,9 +9,10 @@ import type { SpawnClaudeOptions } from "./agents/spawn-claude.js";
 /** The seed's spawn options. `run` is the phone's (#1253): it has no Enter key, so text left in the
  *  input box is where the work stops. The desktop keeps the draft — there, the person who opened
  *  the issue and the person about to run it are often not the same. */
-export function issueSpawnOptions(cwd: string, seed: string, run: boolean): SpawnClaudeOptions {
+export function issueSpawnOptions(cwd: string, seed: string, run: boolean, permissionMode?: string): SpawnClaudeOptions {
   return {
     cwd,
+    ...(permissionMode === undefined ? {} : { permissionMode }),
     // A working session in a repository, the same shape as a grid dev terminal: it takes its GUI
     // tools from the project's own MCP config rather than from an all-tools url of ours.
     attachGuiMcp: false,

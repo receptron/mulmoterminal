@@ -465,7 +465,7 @@ function mountSessionFacingRoutes(app: Express, deps: AppRouteDeps): void {
   mountDirSuggestRoute(app);
   mountPlayfulMediaRoutes(app);
   mountSkillCatalogRoutes(app);
-  mountLibraryRoutes(app);
+  mountLibraryRoutes(app, { promote: { spawnSession: deps.spawnIssueSession, isAllowedOrigin: deps.isAllowedOrigin } });
   mountGuiMcpRoutes(app);
 
   // GRID-ONLY (dev_tool): POST /api/open-dir reveals a cell's working directory in the
