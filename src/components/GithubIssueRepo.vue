@@ -3,6 +3,7 @@
 import type { RepoIssues } from "../../common/ghItems";
 import { relativeTimeFromIso } from "./cellDisplay";
 import IssueStartButton from "./IssueStartButton.vue";
+import GithubUnregisteredTag from "./GithubUnregisteredTag.vue";
 
 defineProps<{ repo: RepoIssues }>();
 </script>
@@ -11,6 +12,7 @@ defineProps<{ repo: RepoIssues }>();
   <section class="mb-5">
     <h3 class="my-1.5 flex items-center gap-2 border-b border-border pb-1 font-mono text-[13px] font-semibold text-fg">
       {{ repo.repo }}
+      <GithubUnregisteredTag v-if="repo.unregistered" data-testid="issues-repo-unregistered" />
       <span v-if="repo.issues" class="text-[11px] font-normal text-muted">{{ repo.issues.length }}</span>
     </h3>
     <p v-if="repo.error" class="px-1 py-6 text-[13px] text-err">{{ repo.error }}</p>

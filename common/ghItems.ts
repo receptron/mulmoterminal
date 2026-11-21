@@ -29,6 +29,8 @@ export interface RepoPrs {
   // True when the repo has at least PR_LIMIT open PRs, so the list may be incomplete —
   // surfaced in the UI so a truncated view isn't mistaken for full coverage.
   truncated?: boolean;
+  /** Read only because a live cell is in it: not in `prRepos`. */
+  unregistered?: boolean;
 }
 
 export interface RepoIssues {
@@ -40,4 +42,6 @@ export interface RepoIssues {
   truncated?: boolean;
   // The repo's GitHub issues page, used as the "see the rest" target when truncated.
   url?: string;
+  /** Read only because a live cell is in it: not in `prRepos`. */
+  unregistered?: boolean;
 }
