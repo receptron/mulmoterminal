@@ -23,20 +23,20 @@ beforeEach(() => {
 });
 
 describe("LibraryMemoryTidy", () => {
-  it("asks for the project's folder, and says nothing when it started", async () => {
+  it("asks for the project's folder, and clears any refusal when it started", async () => {
     const wrapper = mount(LibraryMemoryTidy, { props: { slug: "-w-app" } });
     await wrapper.get('[data-testid="memory-tidy-ask--w-app"]').trigger("click");
     await flushPromises();
     expect(asked).toEqual(["-w-app"]);
-    expect(wrapper.find('[data-testid="memory-tidy-refused"]').exists()).toBe(false);
+    expect(wrapper.emitted("refused")).toEqual([[null], [null]]);
   });
 
-  it("says why when it was refused", async () => {
+  it("hands up why it was refused, for the heading's owner to say", async () => {
     answer = "libraryView.memory.tidyAsk.noDir";
     const wrapper = mount(LibraryMemoryTidy, { props: { slug: "-w-app" } });
     await wrapper.get("button").trigger("click");
     await flushPromises();
-    expect(wrapper.get('[data-testid="memory-tidy-refused"]').text()).not.toBe("");
+    expect(wrapper.emitted("refused")?.at(-1)?.[0]).toMatch(/\S/);
   });
 
   it("asks once while one is starting", async () => {
