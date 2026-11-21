@@ -64,9 +64,11 @@ const CLOSING = new Set([".", ",", ";", ":", ")", "]"]);
 const withoutClosingPunctuation = (raw: string): string => trimEndOf(raw, CLOSING);
 
 /** A network path, which Claude Code never follows a link or an import to: looking one up can contact
- *  the host it names (`\\\\server\\share`, `/net/…`, `/Network/…`). `\\\\wsl$` is not one. */
+ *  the host it names (`\\server\share`, `/net/…`, `/Network/…`). */
 export function isNetworkPath(target: string): boolean {
-  if (target.startsWith("\\\\")) return !target.toLowerCase().startsWith("\\\\wsl$");
+  // A share named by two separators of either kind — `\\server\share` or `//server/share` — but not
+  // `\\wsl$`, which is this machine's Linux, nor `///x`, which is just a local path.
+  if (/^[\\/]{2}(?![\\/])/.test(target)) return !/^[\\/]{2}wsl\$/i.test(target);
   return /^\/(?:net|Network)(?:\/|$)/.test(target);
 }
 

@@ -75,6 +75,12 @@ describe("importsOf", () => {
   ])("trims only the punctuation closing a sentence: %s", (text, imported) => {
     expect(importsOf(text, from, "/h")).toEqual([imported]);
   });
+  it("reads Windows imports whole, backslashes and all", () => {
+    expect(importsOf("@C:\\shared\\guide.md and @docs\\guide.md", "C:\\w\\CLAUDE.md", "C:\\h", path.win32)).toEqual([
+      "C:\\shared\\guide.md",
+      "C:\\w\\docs\\guide.md",
+    ]);
+  });
   it("ignores code, quoted paths, addresses and a bare @", () => {
     expect(importsOf('`@README` and\n```\n@inside.md\n```\nmail me@example.com, @"Design Docs/quoted.md", @ alone', from, "/h")).toEqual([]);
   });
@@ -96,12 +102,18 @@ describe("isPathScopedRule", () => {
 });
 
 describe("isNetworkPath", () => {
-  it.each(["\\\\server\\share\\rules", "/net/host/rules", "/Network/Servers/x", "/net"])("%s is one", (target) => {
-    expect(isNetworkPath(target)).toBe(true);
-  });
-  it.each(["\\\\wsl$\\Ubuntu\\home", "\\\\WSL$\\x", "/network/x", "/netlify/x", "/home/me/net/x", "C:\\net\\x"])("%s is not", (target) => {
-    expect(isNetworkPath(target)).toBe(false);
-  });
+  it.each(["\\\\server\\share\\rules", "//server/share/project", "/\\server\\share", "/net/host/rules", "/Network/Servers/x", "/net"])(
+    "%s is one",
+    (target) => {
+      expect(isNetworkPath(target)).toBe(true);
+    },
+  );
+  it.each(["\\\\wsl$\\Ubuntu\\home", "\\\\WSL$\\x", "//wsl$/Ubuntu", "///tmp/x", "/network/x", "/netlify/x", "/home/me/net/x", "C:\\net\\x"])(
+    "%s is not",
+    (target) => {
+      expect(isNetworkPath(target)).toBe(false);
+    },
+  );
 });
 
 describe("isInside", () => {
