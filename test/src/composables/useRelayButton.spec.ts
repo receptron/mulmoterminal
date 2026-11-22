@@ -74,4 +74,29 @@ describe("useRelayButton", () => {
     await flushPromises();
     expect(live.worktreeCalls).toEqual(["/c"]);
   });
+
+  it("drops the old directory's worktrees the moment the cell's directory changes", async () => {
+    live.worktrees = ["/d", "/d-wt"];
+    live.slots = [slot("cell-1", "/d"), slot("cell-2", "/d-wt")];
+    const cwd = ref("/d");
+    const partners = scope.run(() => useRelayButton(() => "cell-1", cwd));
+    if (partners === undefined) throw new Error("scope stopped");
+    await flushPromises();
+    expect(partners.value.map((p) => p.key)).toEqual(["cell-2"]);
+
+    live.worktrees = [];
+    cwd.value = "/unrelated";
+    await nextTick();
+    expect(partners.value).toEqual([]);
+  });
+
+  it("asks again after an empty answer, which a failed read also gives", async () => {
+    live.worktrees = [];
+    live.slots = [slot("cell-1", "/e"), slot("cell-2", "/elsewhere")];
+    mount("cell-1", "/e");
+    await flushPromises();
+    mount("cell-1", "/e");
+    await flushPromises();
+    expect(live.worktreeCalls).toEqual(["/e", "/e"]);
+  });
 });

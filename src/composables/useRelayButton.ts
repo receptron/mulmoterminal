@@ -20,6 +20,10 @@ function worktreePathsOf(cwd: string, now_ms: number): Promise<string[]> {
   if (hit && now_ms - hit.at_ms < WORKTREE_CACHE_MS) return hit.paths;
   const paths = fetchWorktreePaths(cwd);
   worktreeCache.set(cwd, { at_ms: now_ms, paths });
+  // An empty answer is also what a failed read gives, so it is not kept: the next change asks again.
+  void paths.then((found) => {
+    if (found.length === 0 && worktreeCache.get(cwd)?.paths === paths) worktreeCache.delete(cwd);
+  });
   return paths;
 }
 
@@ -35,7 +39,9 @@ export function useRelayButton(selfKey: () => string, cwd: Ref<string | null>): 
   const needsWorktrees = computed(() => someoneElsewhere(slots.value, selfKey(), cwd.value));
   watch(
     [needsWorktrees, cwd],
-    async ([needed, dir]) => {
+    async ([needed, dir], previous) => {
+      // Another directory's worktrees would pair the wrong terminals until this one's arrive.
+      if (previous && previous[1] !== dir) worktreePaths.value = [];
       if (!needed || !dir) return;
       const paths = await worktreePathsOf(dir, Date.now());
       if (cwd.value === dir) worktreePaths.value = paths;
