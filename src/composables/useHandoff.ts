@@ -36,14 +36,14 @@ export const slotLabel = (slot: SlotInfo, home: string | null): string => {
   return slot.cwd ? `${cell} · ${slot.agent} · ${formatCwd(slot.cwd, home, 24)}` : `${cell} · ${slot.agent}`;
 };
 
+export const toHandoffTarget = (slot: SlotInfo, home: string | null): HandoffTarget => ({
+  key: slot.key,
+  label: slotLabel(slot, home),
+  source: { sessionId: slot.sessionId, cwd: slot.cwd, agent: slot.agent },
+});
+
 export function pickHandoffTargets(slots: SlotInfo[], selfKey: string, home: string | null): HandoffTarget[] {
-  return slots
-    .filter((slot) => slot.key !== selfKey)
-    .map((slot) => ({
-      key: slot.key,
-      label: slotLabel(slot, home),
-      source: { sessionId: slot.sessionId, cwd: slot.cwd, agent: slot.agent },
-    }));
+  return slots.filter((slot) => slot.key !== selfKey).map((slot) => toHandoffTarget(slot, home));
 }
 
 export const handoffTargets = (selfKey: string, home: string | null): HandoffTarget[] => pickHandoffTargets(listSlots(), selfKey, home);
@@ -78,23 +78,51 @@ const fetchHandoffText = async (source: HandoffSource): Promise<string> => (awai
 export interface HandoffDeps {
   fetchText: (source: HandoffSource) => Promise<string>;
   paste: (destKey: string, text: string) => boolean;
+  /** Does `destKey` still run the conversation the user aimed at? Asked at paste time, because the
+   *  reads before it can outlast a session switch in that cell. Absent means "nothing to check". */
+  holds?: (destKey: string) => boolean;
+  /** Called the moment the paste lands, before anything slower that follows it. */
+  pasted?: () => void;
 }
-const defaultDeps: HandoffDeps = { fetchText: fetchHandoffText, paste: pasteText };
+export const defaultDeps: HandoffDeps = { fetchText: fetchHandoffText, paste: pasteText };
+
+// The same outcomes read from either end: pulling, the source is "that" terminal and the paste lands
+// "here"; sending, the other way round.
+interface HandoffWords {
+  source: string;
+  Source: string;
+  Dest: string;
+  destDir: string;
+}
+const PULL_WORDS: HandoffWords = { source: "that terminal's", Source: "That terminal has", Dest: "This terminal is", destDir: "This terminal has" };
+const SEND_WORDS: HandoffWords = { source: "this terminal's", Source: "This terminal has", Dest: "That terminal is", destDir: "That terminal has" };
 
 // Returns null on success, or a short message to show on the cell. "Nothing to bring
 // over" is its own outcome because it is the EXPECTED one for a fresh session, and for
 // a codex session whose newest turn hasn't been flushed to its rollout yet — neither is
 // a failure the user should read as broken.
-export async function pullLastTurn(target: HandoffTarget, ownKey: string, deps: HandoffDeps = defaultDeps): Promise<string | null> {
+export const pullLastTurn = (target: HandoffTarget, ownKey: string, deps: HandoffDeps = defaultDeps): Promise<string | null> =>
+  pasteLastTurn(target.source, ownKey, PULL_WORDS, deps);
+
+/** The other direction (#3397): this cell's last exchange into `partner`'s input box. */
+export const sendLastTurn = (self: HandoffSource, partner: HandoffTarget, deps: HandoffDeps = defaultDeps): Promise<string | null> =>
+  pasteLastTurn(self, partner.key, SEND_WORDS, deps);
+
+async function pasteLastTurn(source: HandoffSource, destKey: string, words: HandoffWords, deps: HandoffDeps): Promise<string | null> {
   let text: string;
   try {
-    text = await deps.fetchText(target.source);
+    text = await deps.fetchText(source);
   } catch {
-    return "Could not read that terminal's last turn";
+    return `Could not read ${words.source} last turn`;
   }
-  if (!text) return "That terminal has no completed turn yet";
-  return deps.paste(ownKey, text) ? null : "This terminal is not connected";
+  if (!text) return `${words.Source} no completed turn yet`;
+  if (deps.holds && !deps.holds(destKey)) return `${words.Dest} in a different conversation now`;
+  if (!deps.paste(destKey, text)) return `${words.Dest} not connected`;
+  deps.pasted?.();
+  return null;
 }
+
+const RELAY_MARK_UNSAVED = "Pasted, but where it ended could not be saved — the next relay will repeat it";
 
 // Every exchange since the last relay to `destCwd` (#3389). The marker is recorded only after the
 // paste succeeded, so a failed paste brings the same exchanges again next time.
@@ -131,30 +159,36 @@ export interface RelayDeps {
   fetchRelay: (source: HandoffSource, destCwd: string) => Promise<RelayFetched>;
   paste: (destKey: string, text: string) => boolean;
   recordMark: (source: HandoffSource, destCwd: string, mark: string) => Promise<void>;
+  holds?: (destKey: string) => boolean;
+  pasted?: () => void;
 }
-const defaultRelayDeps: RelayDeps = { fetchRelay, paste: pasteText, recordMark: recordRelayMark };
+export const defaultRelayDeps: RelayDeps = { fetchRelay, paste: pasteText, recordMark: recordRelayMark };
 
 // Null on success, or a short message for the cell — like pullLastTurn.
-export async function pullSinceRelay(
-  target: HandoffTarget,
-  ownKey: string,
-  destCwd: string | null,
-  deps: RelayDeps = defaultRelayDeps,
-): Promise<string | null> {
-  if (!destCwd) return "This terminal has no directory to remember the relay by";
+export const pullSinceRelay = (target: HandoffTarget, ownKey: string, destCwd: string | null, deps: RelayDeps = defaultRelayDeps): Promise<string | null> =>
+  pasteSinceRelay(target.source, ownKey, destCwd, PULL_WORDS, deps);
+
+/** The other direction (#3397): this cell's exchanges since the last relay to `partner`'s directory. */
+export const sendSinceRelay = (self: HandoffSource, partner: HandoffTarget, deps: RelayDeps = defaultRelayDeps): Promise<string | null> =>
+  pasteSinceRelay(self, partner.key, partner.source.cwd, SEND_WORDS, deps);
+
+async function pasteSinceRelay(source: HandoffSource, destKey: string, destCwd: string | null, words: HandoffWords, deps: RelayDeps): Promise<string | null> {
+  if (!destCwd) return `${words.destDir} no directory to remember the relay by`;
   let relay: RelayFetched;
   try {
-    relay = await deps.fetchRelay(target.source, destCwd);
+    relay = await deps.fetchRelay(source, destCwd);
   } catch {
-    return "Could not read that terminal's conversation";
+    return `Could not read ${words.source} conversation`;
   }
   if (relay.status === "nothing-new") return "Nothing new since the last relay";
-  if (relay.status === "no-turn" || !relay.text || relay.mark === null) return "That terminal has no completed turn yet";
-  if (!deps.paste(ownKey, relay.text)) return "This terminal is not connected";
+  if (relay.status === "no-turn" || !relay.text || relay.mark === null) return `${words.Source} no completed turn yet`;
+  if (deps.holds && !deps.holds(destKey)) return `${words.Dest} in a different conversation now`;
+  if (!deps.paste(destKey, relay.text)) return `${words.Dest} not connected`;
+  deps.pasted?.();
   try {
-    await deps.recordMark(target.source, destCwd, relay.mark);
+    await deps.recordMark(source, destCwd, relay.mark);
   } catch {
-    return "Pasted, but where it ended could not be saved — the next relay will repeat it";
+    return RELAY_MARK_UNSAVED;
   }
   return null;
 }

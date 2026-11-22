@@ -6,6 +6,7 @@
 import type { LastTurn } from "./last-turn.js";
 import { sanitizeMultilineText } from "../pty/pty-text.js";
 import { DEFAULT_RELAY_LIMITS, type RelayLimits, type RelayTurn } from "./relay-range.js";
+import { ownWordsOf } from "./relayed-prompt.js";
 
 export interface HandoffSource {
   label: string; // how the other terminal is named to the reader, e.g. "cell #3 · codex"
@@ -42,7 +43,8 @@ export type HandoffShape = "exchange" | "reply";
 // Naming the block as a record is the cheapest available defense — the real guard is
 // that a human chose the destination and presses Enter.
 export function formatHandoff(source: HandoffSource, turn: LastTurn, limits: HandoffLimits = DEFAULT_HANDOFF_LIMITS, shape: HandoffShape = "exchange"): string {
-  const prompt = turn.prompt ? clip(sanitizeMultilineText(turn.prompt), limits.promptMaxChars) : "";
+  const own = turn.prompt ? ownWordsOf(turn.prompt) : "";
+  const prompt = own ? clip(sanitizeMultilineText(own), limits.promptMaxChars) : "";
   const reply = turn.reply ? clip(sanitizeMultilineText(turn.reply), limits.replyMaxChars) : "";
   if (!prompt && !reply) return "";
   const origin = source.cwd ? `${source.label} · ${source.cwd}` : source.label;
@@ -82,10 +84,11 @@ function relayNotes(relay: RelayText): string[] {
 
 function relayTurnBlocks(turn: RelayTurn, index: number, count: number, limits: RelayLimits): string[] {
   const position = count === 1 ? "" : ` (${index + 1}/${count})`;
-  const prompt = clip(sanitizeMultilineText(turn.prompt), limits.promptMaxChars);
-  const promptChars = Math.min([...turn.prompt].length, limits.promptMaxChars);
+  const own = ownWordsOf(turn.prompt);
+  const prompt = clip(sanitizeMultilineText(own), limits.promptMaxChars);
+  const promptChars = Math.min([...own].length, limits.promptMaxChars);
   const reply = clip(sanitizeMultilineText(turn.replies.join("\n\n")), Math.max(0, limits.totalMaxChars - promptChars));
-  return [...quoted(`their prompt${position}`, prompt), ...(reply ? quoted(`their reply${position}`, reply) : [])];
+  return [...(prompt ? quoted(`their prompt${position}`, prompt) : []), ...(reply ? quoted(`their reply${position}`, reply) : [])];
 }
 
 // Every exchange since the last relay to this directory (#3389). Framed like formatHandoff, for the

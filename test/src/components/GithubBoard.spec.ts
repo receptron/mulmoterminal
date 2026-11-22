@@ -121,7 +121,7 @@ describe("GithubBoard", () => {
 
   it("jumps to a cell the grid holds and disables one it does not", async () => {
     const goTo = vi.fn();
-    gridSessionJump.value = { has: (session) => session === "in-grid", goTo };
+    gridSessionJump.value = { has: (session) => session === "in-grid", goTo, goToSlot: () => undefined };
     serve({ repos: [{ repo: "o/r", cards: [prCard] }] });
     const w = mount(GithubBoard);
     await flushPromises();

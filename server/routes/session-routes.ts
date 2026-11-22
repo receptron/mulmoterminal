@@ -50,6 +50,7 @@ import { DEFAULT_RELAY_LIMITS, isRelayMark } from "../session/transcript/relay-r
 import { readRelay } from "../session/transcript/relay-read.js";
 import { isRelayDest, type RelayMarkKey } from "../session/transcript/relay-marks.js";
 import { relayMarkOf, setRelayMark } from "../session/transcript/relay-mark-store.js";
+import { currentBranch } from "../git/git-status.js";
 import { agentHomeChoices, codexSessionsUnder } from "../session/session-home.js";
 import { runningKeyOf, runningSessionKeys, sessionAttached, survivorSnapshot } from "../session/dir-session.js";
 import type { SessionOccupancy } from "../../common/sessionOccupancy.js";
@@ -322,6 +323,13 @@ async function transcriptPage(req: Request, res: Response, agentOfSession: Sessi
   res.json(await sessionTranscriptPage(cwd, session, before, { agentOf: agentOfSession }));
 }
 
+// How a handoff names where it came from. The branch is in it because a reader in another worktree
+// of the same repo does not have the sender's files (#3397).
+async function originLabel(agent: string, cwd: string): Promise<string> {
+  const { branch } = await currentBranch(cwd);
+  return branch ? `${agent} · ${branch}` : agent;
+}
+
 // A session's last completed exchange, already rendered as the text to paste into ANOTHER
 // session's input box (#550). Reading the agent's own log instead of the terminal's screen
 // buffer is the whole point: no ANSI frames, no spinner debris, no lines lost to scrollback,
@@ -340,7 +348,7 @@ async function lastTurn(req: Request, res: Response) {
   // ?as=reply drops the prompt block: the caller is relaying an ANSWER back to whoever
   // asked, and that prompt is the asker's own text coming home.
   const shape: HandoffShape = req.query.as === "reply" ? "reply" : "exchange";
-  res.json({ ...turn, text: formatHandoff({ label: agent, cwd }, turn, undefined, shape) });
+  res.json({ ...turn, text: formatHandoff({ label: await originLabel(agent, cwd), cwd }, turn, undefined, shape) });
 }
 
 // Every exchange since the last relay to the asking cell's directory (#3389). Answers the text and
@@ -358,7 +366,12 @@ async function relaySince(req: Request, res: Response) {
     DEFAULT_RELAY_LIMITS,
   );
   if (selection.status !== "ok") return res.json({ status: selection.status, text: "", mark: null, count: 0 });
-  res.json({ status: "ok", text: formatRelay({ label: key.agent, cwd }, selection), mark: selection.mark, count: selection.turns.length });
+  res.json({
+    status: "ok",
+    text: formatRelay({ label: await originLabel(key.agent, cwd), cwd }, selection),
+    mark: selection.mark,
+    count: selection.turns.length,
+  });
 }
 
 async function relayMark(req: Request, res: Response) {

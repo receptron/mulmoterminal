@@ -84,6 +84,8 @@ import { headerStatusStyleFor } from "./cellHeaderStyle";
 import { mergeHeaderStatusColors } from "../../common/headerStatusColors";
 import { globalHeaderStatusColors, globalHeaderStatusTint } from "../composables/headerStatusColors";
 import { handoffTargets, pullLastTurn, pullSinceRelay, slotLabel, type HandoffTarget } from "../composables/useHandoff";
+import { findPartner, isSendAction, runRelay, type RelayAction, type RelaySelf } from "../composables/useRelayActions";
+import { gridSessionJump } from "../composables/gridSessionJump";
 import { menuPlacement } from "../composables/menuPlacement";
 import { runOneExchange, liveCrossTalkDeps } from "../composables/useCrossTalk";
 import { runRoundTable, liveRoundTableDeps, memberFromTarget, type TableMember } from "../composables/useRoundTable";
@@ -748,6 +750,37 @@ async function relayCell(target: HandoffTarget) {
   if (error) showAskMsg(error);
 }
 
+// The send / bring cell actions (#3397). One partner in this directory or repo is acted on; several
+// open the Talk menu to choose; none says so. After a send the partner comes forward with the
+// keyboard, so the user reads what landed and presses Enter there.
+const relaySelf = (session: string): RelaySelf => ({ key: `cell-${props.uid}`, source: { sessionId: session, cwd: cwd.value, agent: agent.value } });
+
+function relayHere(action: RelayAction): boolean {
+  if (!talkStartable.value || !sessionId.value) return false;
+  void relayWithPartner(action, relaySelf(sessionId.value));
+  return true;
+}
+
+async function relayWithPartner(action: RelayAction, self: RelaySelf) {
+  const pick = await findPartner(self.key, cwd.value, props.home);
+  if (pick.kind === "none") return showAskMsg("No other agent terminal in this directory or repo");
+  if (pick.kind === "choose") return openAskMenu();
+  await finishRelay(action, self, pick.partner);
+}
+
+async function finishRelay(action: RelayAction, self: RelaySelf, partner: HandoffTarget) {
+  const goThere = () => {
+    if (isSendAction(action)) gridSessionJump.value?.goToSlot(partner.key);
+  };
+  const error = await runRelay(action, self, partner, goThere);
+  if (error) showAskMsg(error);
+}
+
+function sendFromMenu(target: HandoffTarget, action: RelayAction) {
+  askMenuOpen.value = false;
+  if (sessionId.value) void finishRelay(action, relaySelf(sessionId.value), target);
+}
+
 // Only ONE automation may type into terminals at a time. Both loops submit with pasteAndSubmit
 // and both decide "is this reply ours" by correlating on the tail of what they sent — so two
 // running together interleave their writes and each can take the other's turn as its own answer.
@@ -957,6 +990,10 @@ const SELF_ACTIONS: Record<CellSelfAction, () => boolean> = {
   "terminal-voice": () => termRef.value?.toggleVoice() ?? false,
   "terminal-diff": () => openDiffIfAny(),
   "terminal-note": () => editNote(),
+  "terminal-send-turn": () => relayHere("terminal-send-turn"),
+  "terminal-send-since": () => relayHere("terminal-send-since"),
+  "terminal-bring-turn": () => relayHere("terminal-bring-turn"),
+  "terminal-bring-since": () => relayHere("terminal-bring-since"),
 };
 // Every one of them but set-aside needs the terminal itself: on the launch form there is no session,
 // no prompt and no directory yet chosen, only the draft the form is showing. Stated as the rule
@@ -1765,6 +1802,26 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                       @click="relayCell(target)"
                     >
                       <span class="material-symbols-outlined" aria-hidden="true">playlist_add</span>
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="cell-send-turn-item"
+                      :aria-label="t('tips.cell.sendTurn', { name: target.label })"
+                      class="cursor-pointer rounded-[4px] border-none bg-transparent px-1.5 py-1.5 font-sans text-[12px] text-dim hover:bg-hover hover:text-fg"
+                      :data-tip="t('tips.cell.sendTurn', { name: target.label })"
+                      @click="sendFromMenu(target, 'terminal-send-turn')"
+                    >
+                      <span class="material-symbols-outlined" aria-hidden="true">send</span>
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="cell-send-since-item"
+                      :aria-label="t('tips.cell.sendSinceAria', { name: target.label })"
+                      class="cursor-pointer rounded-[4px] border-none bg-transparent px-1.5 py-1.5 font-sans text-[12px] text-dim hover:bg-hover hover:text-fg"
+                      :data-tip="t('tips.cell.sendSince')"
+                      @click="sendFromMenu(target, 'terminal-send-since')"
+                    >
+                      <span class="material-symbols-outlined" aria-hidden="true">forward_to_inbox</span>
                     </button>
                     <button
                       type="button"

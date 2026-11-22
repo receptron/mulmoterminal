@@ -186,6 +186,7 @@ button the header used to have:
 | `"mark-unread"` / `"terminal-park"` | Mark unread-read / set aside-wake |
 | `"terminal-timeline"` / `"terminal-talk"` | Activity timeline (Claude only) / talk to another terminal |
 | `"terminal-copy-code"` / `"terminal-insert-path"` / `"terminal-reveal"` / `"terminal-voice"` / `"terminal-diff"` / `"terminal-note"` | Copy the last code block / insert a file path / reveal the directory / mic on-off / changes panel / note |
+| `"terminal-send-turn"` / `"terminal-send-since"` / `"terminal-bring-turn"` / `"terminal-bring-since"` | Send this terminal's last exchange / everything since the last relay to its partner and go there, or bring the partner's here (partner: another agent terminal in the same directory or another worktree of the same repo) |
 | `"pane-files"` | The files PANE beside this cell (not the full-screen view `open.files` gives) |
 | `"pane-prompts"` / `"pane-transcript"` / `"pane-tools"` / `"pane-canvas"` / `"pane-collections"` | The History / Tools menu panes |
 | `"screen-*"` (e.g. `"screen-wiki"`), `"settings-open"`, `"sound-toggle"`, `"confetti"`, `"view-toggle"`, `"order-auto"` / `"-manual"` / `"-priority"`, `"page-next"` / `"page-prev"`, `"terminal-reopen"` | The toolbar's operations — act on the app, not this cell; a screen not set up (prs / rooms / worklog) shows a hint instead |
