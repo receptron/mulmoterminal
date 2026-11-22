@@ -4,7 +4,7 @@ nav_title: Feature list
 layout: default
 parent: English
 nav_order: 6.5
-as_of: 13.5.0
+as_of: 13.6.0
 description: "Every capability MulmoTerminal has today, one line each with the release it arrived in, grouped by area (as of 9.1.0)."
 ---
 
@@ -118,6 +118,9 @@ More: [Conversations](conversation.html)
 - The Library's Repeats kind lists the instructions typed 3 times or more in 2 conversations or more in the last 90 days, and Make a rule / Make a skill turns one into a CLAUDE.md rule or a skill after your approval (v13.3.0)
 - The Library's Tools kind lists the instruction files Claude Code loads in a directory, in its order with their @path imports, says which paths each names that are not there, and shows the settings.json files laid over each other with the file that set each value (v13.3.0)
 - The Library's Storage kind shows what each entry of ~/.claude and each project takes on disk, largest first, with temp-directory projects marked and what cleanupPeriodDays is set to (v13.3.0)
+- Each agent terminal's header shows a send button naming another agent terminal in the same repository (same folder or another worktree); it pastes this terminal's last exchange there and brings that terminal forward without pressing Enter, and Settings can hide it (v13.6.0)
+- Send everything since last time (the inbox icon in Talk to another terminal…) pastes this terminal's exchanges since it last sent to that folder, and a hand-off that was itself pasted is not sent back (v13.6.0)
+- Sending and bringing, the last exchange or everything since last time, are the actions terminal-send-turn, terminal-send-since, terminal-bring-turn and terminal-bring-since for header buttons, keys and the command palette (v13.6.0)
 - Bring everything since last time (the list icon in Talk to another terminal…) pastes every exchange another terminal has had since this directory last received one (v13.3.0)
 - The Library's Memory kind lists Claude Code's auto memory by project, shows how full each MEMORY.md is against what Claude Code loads, and reads each memory as Markdown with its [[links]] working (v13.2.0)
 - The Library's reader shows the files a conversation edited, with the whole change or one turn's change as a diff, from Claude Code's own file history (v13.2.0)

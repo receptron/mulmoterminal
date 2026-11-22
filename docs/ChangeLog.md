@@ -8,6 +8,30 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@13.6.0 — 2026-11-22
+
+> **Setup guide:** [13.6.0 — Send a turn to the terminal beside you](https://receptron.github.io/mulmoterminal/guide/en/v13.6.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.6.0.html))
+
+### Send a turn to a partner terminal, as header / keymap actions (#3398)
+
+For #3397: the SEND direction of the handoff, with the human still the one who presses Enter.
+
+- Four cell actions that a `run: "action"` header button, a `keymap` binding and the command palette can name: `terminal-send-turn` (this cell's last exchange, pasted into the partner), `terminal-send-since` (this cell's exchanges since its last relay to the partner's directory, the #3389 marker store in the other direction), and `terminal-bring-turn` / `terminal-bring-since` (the existing pulls).
+- **Partner** = another readable agent cell in the same directory, or inside any worktree of the same repo (`relayPartners.ts`). One is acted on, several open Talk to another terminal…, none shows a message on the cell. `/api/worktrees` is asked only when some terminal is outside this cell's directory.
+- **After a send** the partner is brought forward and takes the keyboard (`gridSessionJump.goToSlot`), the reason #574 had moved the handoff to pull. Nothing is submitted.
+- **No echo**: a prompt that is itself a pasted handoff is reduced to what the human typed after its last `--- end ---` (`relayed-prompt.ts`), and dropped if empty; applies to bring as well. Fingerprints still hash the raw prompt, so existing marks stay valid.
+- **The origin label carries the branch** (`codex · feat/x`), since a partner in another worktree does not have the sender's files.
+- Talk to another terminal… rows gain the send-turn and send-since buttons.
+
+### A built-in send button on each terminal (#3400, #3401)
+
+For #3399: a button nobody has to configure, so the hand-off is found at all.
+
+- Row 2 of an agent cell's header shows a send button naming its partner (`codex #4`), or how many there are (`2 terminals`, which asks). It runs `terminal-send-turn`, and is shown only while the cell's conversation can be handed on and a partner exists.
+- The partner list follows slots as they open, close and change directory (`slotsVersion`); a repo's worktree list is cached per directory for a short while, failures are not cached, and the paths are cleared when the cell's directory changes.
+- New global flag `cellSendButton` (default on), with a checkbox in Settings → Header buttons and chips.
+- #3400 was merged into the #3398 branch after that had landed; #3401 carried it to main.
+
 ## mulmoterminal@13.5.0 — 2026-11-22
 
 > **Setup guide:** [13.5.0 — Usage counts money when it was spent, by model](https://receptron.github.io/mulmoterminal/guide/en/v13.5.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.5.0.html))

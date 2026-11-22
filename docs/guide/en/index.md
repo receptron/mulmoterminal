@@ -8,9 +8,9 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **13.5.0 is out.** Usage now counts money and tokens in the week they were spent, adds a table by
-> model, and keeps the cost from before Claude Code started counting again.
-> [Setup guide](v13.5.0.html)
+> **13.6.0 is out.** Each terminal has a send button that pastes its last exchange into another
+> agent's terminal in the same repository and takes you there — you press Enter.
+> [Setup guide](v13.6.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 
