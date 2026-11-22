@@ -279,3 +279,35 @@ describe("the destination must still hold the conversation the action aimed at",
     expect(asked).toEqual(["cell-9"]);
   });
 });
+
+// Moving to the destination must not wait for the relay mark: `pasted` fires as the text lands, and
+// only then.
+describe("pasted fires as the paste lands", () => {
+  const self = { sessionId: "sess-self", cwd: "/src", agent: "claude" as const };
+  const partner: HandoffTarget = { key: "cell-9", label: "#9", source: { sessionId: "sess-9", cwd: "/partner", agent: "codex" } };
+
+  it("before the mark is saved, and even when saving it fails", async () => {
+    const order: string[] = [];
+    const error = await sendSinceRelay(self, partner, {
+      fetchRelay: async () => ({ status: "ok", text: "t", mark: "d".repeat(64) }),
+      paste: () => (order.push("paste"), true),
+      recordMark: async () => {
+        order.push("mark");
+        throw new Error("x");
+      },
+      pasted: () => order.push("pasted"),
+    });
+    expect(order).toEqual(["paste", "pasted", "mark"]);
+    expect(error).toMatch(/^Pasted, but/);
+  });
+
+  it("not when the paste is refused or fails", async () => {
+    let fired = 0;
+    await sendLastTurn(self, partner, deps({ holds: () => false, pasted: () => fired++ }));
+    await sendLastTurn(self, partner, deps({ paste: () => false, pasted: () => fired++ }));
+    await sendLastTurn(self, partner, deps({ fetchText: async () => "", pasted: () => fired++ }));
+    expect(fired).toBe(0);
+    await sendLastTurn(self, partner, deps({ pasted: () => fired++ }));
+    expect(fired).toBe(1);
+  });
+});

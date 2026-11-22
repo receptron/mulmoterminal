@@ -86,7 +86,7 @@ import { headerStatusStyleFor } from "./cellHeaderStyle";
 import { mergeHeaderStatusColors } from "../../common/headerStatusColors";
 import { globalHeaderStatusColors, globalHeaderStatusTint } from "../composables/headerStatusColors";
 import { handoffTargets, pullLastTurn, pullSinceRelay, slotLabel, type HandoffTarget } from "../composables/useHandoff";
-import { findPartner, isSendAction, relayPasted, runRelay, type RelayAction, type RelaySelf } from "../composables/useRelayActions";
+import { findPartner, isSendAction, runRelay, type RelayAction, type RelaySelf } from "../composables/useRelayActions";
 import { gridSessionJump } from "../composables/gridSessionJump";
 import { useRelayButton } from "../composables/useRelayButton";
 import { slotsChanged } from "../composables/slotsVersion";
@@ -775,9 +775,11 @@ async function relayWithPartner(action: RelayAction, self: RelaySelf) {
 }
 
 async function finishRelay(action: RelayAction, self: RelaySelf, partner: HandoffTarget) {
-  const error = await runRelay(action, self, partner);
+  const goThere = () => {
+    if (isSendAction(action)) gridSessionJump.value?.goToSlot(partner.key);
+  };
+  const error = await runRelay(action, self, partner, goThere);
   if (error) showAskMsg(error);
-  if (relayPasted(error) && isSendAction(action)) gridSessionJump.value?.goToSlot(partner.key);
 }
 
 // The cell's own send button (#3399): shown, without any config, while this cell can send and some

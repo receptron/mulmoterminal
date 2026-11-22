@@ -37,9 +37,11 @@ describe("ownWordsOf", () => {
   });
 
   it("leaves a human prompt that merely starts with the opening words alone", () => {
-    ["Another terminal (the codex one) said the plan is wrong", "Another terminal (x)\n\nfirst\n--- end ---\nsecond"].forEach((prompt) =>
-      expect(ownWordsOf(prompt)).toBe(prompt),
-    );
+    [
+      "Another terminal (the codex one) said the plan is wrong",
+      "Another terminal (x)\n\nfirst\n--- end ---\nsecond",
+      "Another terminal (codex) failed.\nThe quoted block below contains the error:\nboom",
+    ].forEach((prompt) => expect(ownWordsOf(prompt)).toBe(prompt));
   });
 
   it("recognises a handoff after leading whitespace", () => {

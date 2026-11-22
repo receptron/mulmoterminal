@@ -12,7 +12,6 @@ import {
   defaultRelayDeps,
   pullLastTurn,
   pullSinceRelay,
-  RELAY_MARK_UNSAVED,
   sendLastTurn,
   sendSinceRelay,
   toHandoffTarget,
@@ -78,9 +77,16 @@ const runsSession = (key: string, sessionId: string): boolean => listSlots().som
 
 /** Null on success, or the message to show on the cell. The paste lands only while the destination
  *  still runs the session it ran when the action started — the partner's for a send, this cell's for
- *  a bring — the same check useCrossTalk makes before every submit. */
-export function runRelay(action: RelayAction, self: RelaySelf, partner: HandoffTarget, holds: typeof runsSession = runsSession): Promise<string | null> {
-  const into = (session: string) => ({ holds: (key: string) => holds(key, session) });
+ *  a bring — the same check useCrossTalk makes before every submit. `pasted` fires as it lands, so a
+ *  caller moving there does not wait for the relay mark to be saved. */
+export function runRelay(
+  action: RelayAction,
+  self: RelaySelf,
+  partner: HandoffTarget,
+  pasted: () => void = () => {},
+  holds: typeof runsSession = runsSession,
+): Promise<string | null> {
+  const into = (session: string) => ({ holds: (key: string) => holds(key, session), pasted });
   const toPartner = into(partner.source.sessionId);
   const toSelf = into(self.source.sessionId);
   if (action === "terminal-send-turn") return sendLastTurn(self.source, partner, { ...defaultDeps, ...toPartner });
@@ -88,6 +94,3 @@ export function runRelay(action: RelayAction, self: RelaySelf, partner: HandoffT
   if (action === "terminal-bring-turn") return pullLastTurn(partner, self.key, { ...defaultDeps, ...toSelf });
   return pullSinceRelay(partner, self.key, self.source.cwd, { ...defaultRelayDeps, ...toSelf });
 }
-
-/** Whether the text reached the destination, so a send may move there. */
-export const relayPasted = (message: string | null): boolean => message === null || message === RELAY_MARK_UNSAVED;
