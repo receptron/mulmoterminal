@@ -40,7 +40,7 @@ export const pickOf = (partners: readonly HandoffTarget[]): PartnerPick => {
 
 const WORKTREES_TIMEOUT_MS = 10_000;
 
-async function fetchWorktreePaths(cwd: string): Promise<string[]> {
+export async function fetchWorktreePaths(cwd: string): Promise<string[]> {
   try {
     const res = await fetchWithTimeout(`/api/worktrees?cwd=${encodeURIComponent(cwd)}`, undefined, WORKTREES_TIMEOUT_MS);
     if (!res.ok) return [];

@@ -46,6 +46,10 @@ opening the menu:
 | `terminal-bring-turn` | the partner's last exchange, into this terminal |
 | `terminal-bring-since` | everything since the partner's last relay here, into this terminal |
 
+Without any of that, a terminal already offers the first one: while a partner is open it shows a
+button named after it (**codex #4**) on the second row of its header — see
+[`cellSendButton`](config.html#cell-send-button).
+
 The **partner** is another agent terminal in the same repo: the same directory, or anywhere inside
 one of its worktrees, this checkout's own subdirectories included (outside git, only the same
 directory). With one, the button acts on it. With several, it opens **Talk to another terminal…** so you

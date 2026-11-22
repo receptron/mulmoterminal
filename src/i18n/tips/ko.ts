@@ -42,6 +42,8 @@ export const tipsKo: Messages["tips"] = {
     sendTurn: "이 터미널의 마지막 주고받기를 {name}에게 보내고 그쪽으로 이동",
     sendSinceAria: "{name}에게 이 터미널의 지난번 이후 대화 보내기",
     sendSince: "이 터미널에서 그 디렉터리로 마지막으로 보낸 이후의 대화를 모두 보내고 그쪽으로 이동",
+    sendButtonMany: "상대 {count}개",
+    sendButtonManyTip: "이 터미널의 마지막 주고받기를 보낼 상대 고르기",
     stopExchange: "진행 중인 주고받기 중지",
     closeDiff: "변경 사항 닫기",
     commitNothing: "커밋하지 않은 변경 사항이 없습니다",

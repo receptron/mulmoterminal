@@ -56,7 +56,7 @@ description: MulmoTerminal の設定方法。設定モーダル、プロジェ�
 > |---|---|
 > | **`/mulmoterminal-dirs`** | プロジェクトの色・グリッドとランチャでの位置・名前バッジ・ターミナルの文字サイズ。実際に開いているディレクトリを母集団にし、既にある設定を読んでその規則を、まだ無いディレクトリにも適用します。（Settings → **Configure appearance…** はこれを起動します） |
 > | **`/mulmoterminal-theme`** | 自分の[配色](#custom-themes)を作る。Settings のテーマ選択に並びます（Settings → **Create a theme…**） |
-> | **`/mulmoterminal-header`** | [ヘッダーのボタンとチップ](#header)。global でもプロジェクト単位でも |
+> | **`/mulmoterminal-header`** | [ヘッダーのボタンとチップ](#header)。global でもプロジェクト単位でも。セル自身の[送るボタン](#cell-send-button)（`cellSendButton`）も |
 > | **`/mulmoterminal-keys`** | [`keymap`](#keymap)・[`copyOnSelect`](#copy-on-select)・[`fileLinkOpensPane`](#file-link-opens-pane)・[`terminalSubmit`](#terminal-submit)（「Shift+Enter で改行ではなく送信されてしまう」の対処）・[`questionPaneEnabled`](#question-pane)（Settings → **Set up shortcuts…**） |
 > | **`/mulmoterminal-model`** | [`providers`](#providers)、プロジェクトごとのモデル、[`customAgents`](#custom-agents)、[`accounts`](#accounts) |
 > | **`/mulmoterminal-notify`** | [どの瞬間に鳴らす・通知するか](#sounds)、それぞれ何を鳴らすか（Settings → **Configure notifications…**） |
@@ -128,7 +128,7 @@ git チェックアウトならその横に `commit a1b2c3d` のチップが並�
 | **Directory appearance** | 「Configure appearance…」— ディレクトリの名前バッジ・色・ターミナルのパレット・グリッド上の位置を、`mulmoterminal-dirs` スキルで対話的に設定 |
 | **Directory settings** | 各ディレクトリの `.mulmoterminal.json` が**実際に何をしているか**。行を開くと、効いている値（色は見本付き）・**どのファイル由来か**・**検証で落ちたキー**・**このアプリが読まないキー**が出ます。下の **ここで変える** で名前・色・状態の色・テーマ・配色・フォント・優先順・モデル・終わりの要約・追加のディレクトリ・アイコン・背景・音・ヘッダーのボタン・チップ・コマンドを変えられます（→ [プロジェクトごとの設定](#per-dir)）。「Explain my settings…」で `mulmoterminal-config` スキルが同じものを読み、理由を説明して直します（→ [設定が効かないとき](#dir-settings-preview)） |
 | **Launch commands** | グリッドセルでエージェント以外に起動できるコマンド（`{ label, command }`）。素のシェルは登録不要 — ランチャの **Shell** トグルが無設定で `$SHELL` を開く |
-| **Header buttons and chips** | グローバル設定のヘッダーのボタンとチップを、ここで編集します — 追加・編集・削除、ボタンをフォルダにまとめる操作、状態ごとの色、ヘッダーの状態の色づけも。「Set up header buttons…」で `mulmoterminal-header` スキルを起動（→ [ヘッダーのカスタマイズ](#header)） |
+| **Header buttons and chips** | グローバル設定のヘッダーのボタンとチップを、ここで編集します — 追加・編集・削除、ボタンをフォルダにまとめる操作、状態ごとの色、ヘッダーの状態の色づけ、[各ターミナルの送るボタン](#cell-send-button)（`cellSendButton`、既定 ON）も。「Set up header buttons…」で `mulmoterminal-header` スキルを起動（→ [ヘッダーのカスタマイズ](#header)） |
 | **Terminal keys** | [選ぶだけでコピー](#copy-on-select)（`copyOnSelect`、既定 OFF）、[クリックしたパスをペインに開く](#file-link-opens-pane)（`fileLinkOpensPane`、既定 ON）、[質問ペイン](#question-pane)（`questionPaneEnabled`）、あなたの Claude が**送信**として読むバイト（[Enter — 送信と改行](#terminal-submit)、`terminalSubmit`）、[tmux の prefix キー](#tmux-prefix)（`tmuxPrefix`、既定は無効） |
 | **Keyboard shortcuts** | 全アクションと `send` の行を、割り当ての有無にかかわらず並べる一覧（読み取り専用）。**既定は全部 Not set** — **おすすめのキー** を押すと、このプラットフォーム向けの入門セットが一度に入ります（まだ割り当てのない動作と、使われていないキーにだけ）。それ以外は「Set up shortcuts…」で `mulmoterminal-keys` スキルが `keymap` に書きます（→ [キーボードショートカット](#keymap)） |
 | **Voice input** | 音声入力で**話す言語**（ブラウザの言語 / 発話ごとの自動検出 / 固定）。文字起こしできるマシンでだけ表示されます |
@@ -526,6 +526,18 @@ worktree の `git status` を汚しません。
 
 コピーは作成時に1度だけ取られ、以後は worktree のものです。あとからプロジェクト側の色を変えても、
 既存の worktree は与えられた色のままです。変えたいときは worktree 側のファイルを編集するか削除してください。
+
+### 各ターミナルの送るボタン（`cellSendButton`） {#cell-send-button}
+
+同じリポ（同じディレクトリか、そのどれかのワークツリー）の別のエージェントのターミナルが開いている間、ヘッダーの2段目、コピーボタンの後ろに、相手の名前のボタンが出ます（**codex #4** のように）。押すと、このターミナルの最後の1往復を相手の入力欄に貼り、そちらへ移ります。送信はしません。相手が複数なら、ボタンにその数が出て、押すと **ほかのターミナルと話す…** が開いて選べます。相手がいなければボタンは出ません。受け渡しの詳しい話は[セル同士を会話させる](conversation.html#send)にあります。
+
+**既定で ON です。** 消すには:
+
+```json
+{ "cellSendButton": false }
+```
+
+**Settings → Header buttons and chips** にチェックボックスがあり、すぐ効きます。
 
 ### ヘッダーのカスタマイズ（ボタン / チップ） {#header}
 

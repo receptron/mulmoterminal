@@ -42,6 +42,8 @@ export const tipsEn = {
     sendTurn: "Send this terminal's last exchange to {name} and go there",
     sendSinceAria: "Send {name} this terminal's exchanges since the last relay",
     sendSince: "Send this terminal's exchanges since the last relay to that directory, and go there",
+    sendButtonMany: "{count} terminals",
+    sendButtonManyTip: "Choose which terminal to send this one's last exchange to",
     stopExchange: "Stop the exchange in progress",
     closeDiff: "Close diff",
     commitNothing: "No uncommitted changes",
