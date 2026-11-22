@@ -46,8 +46,9 @@ opening the menu:
 | `terminal-bring-turn` | the partner's last exchange, into this terminal |
 | `terminal-bring-since` | everything since the partner's last relay here, into this terminal |
 
-The **partner** is another agent terminal in the same directory, or in another worktree of the same
-repo. With one, the button acts on it. With several, it opens **Talk to another terminal…** so you
+The **partner** is another agent terminal in the same repo: the same directory, or anywhere inside
+one of its worktrees, this checkout's own subdirectories included (outside git, only the same
+directory). With one, the button acts on it. With several, it opens **Talk to another terminal…** so you
 pick. With none, it says so on the cell. After a send, the partner comes forward and takes the
 keyboard; nothing is ever submitted for you.
 
@@ -59,8 +60,8 @@ keyboard; nothing is ever submitted for you.
 
 Two things the text does for the reader. The origin line names the branch as well as the directory,
 because a partner in another worktree does not have your files. And a prompt that was itself a
-hand-off is not sent back: only what you typed after the pasted block goes, so the partner never
-receives its own words.
+hand-off is not sent back: only what you typed after the pasted block goes. That covers the pasted
+prompt only — if the agent quotes its partner in its reply, the quote travels with the reply.
 
 ---
 

@@ -81,6 +81,8 @@ export interface HandoffDeps {
   /** Does `destKey` still run the conversation the user aimed at? Asked at paste time, because the
    *  reads before it can outlast a session switch in that cell. Absent means "nothing to check". */
   holds?: (destKey: string) => boolean;
+  /** Called the moment the paste lands, before anything slower that follows it. */
+  pasted?: () => void;
 }
 export const defaultDeps: HandoffDeps = { fetchText: fetchHandoffText, paste: pasteText };
 
@@ -115,11 +117,12 @@ async function pasteLastTurn(source: HandoffSource, destKey: string, words: Hand
   }
   if (!text) return `${words.Source} no completed turn yet`;
   if (deps.holds && !deps.holds(destKey)) return `${words.Dest} in a different conversation now`;
-  return deps.paste(destKey, text) ? null : `${words.Dest} not connected`;
+  if (!deps.paste(destKey, text)) return `${words.Dest} not connected`;
+  deps.pasted?.();
+  return null;
 }
 
-/** The one failure that still pasted: a caller that moves to the destination after a paste moves on this too. */
-export const RELAY_MARK_UNSAVED = "Pasted, but where it ended could not be saved — the next relay will repeat it";
+const RELAY_MARK_UNSAVED = "Pasted, but where it ended could not be saved — the next relay will repeat it";
 
 // Every exchange since the last relay to `destCwd` (#3389). The marker is recorded only after the
 // paste succeeded, so a failed paste brings the same exchanges again next time.
@@ -157,6 +160,7 @@ export interface RelayDeps {
   paste: (destKey: string, text: string) => boolean;
   recordMark: (source: HandoffSource, destCwd: string, mark: string) => Promise<void>;
   holds?: (destKey: string) => boolean;
+  pasted?: () => void;
 }
 export const defaultRelayDeps: RelayDeps = { fetchRelay, paste: pasteText, recordMark: recordRelayMark };
 
@@ -180,6 +184,7 @@ async function pasteSinceRelay(source: HandoffSource, destKey: string, destCwd: 
   if (relay.status === "no-turn" || !relay.text || relay.mark === null) return `${words.Source} no completed turn yet`;
   if (deps.holds && !deps.holds(destKey)) return `${words.Dest} in a different conversation now`;
   if (!deps.paste(destKey, relay.text)) return `${words.Dest} not connected`;
+  deps.pasted?.();
   try {
     await deps.recordMark(source, destCwd, relay.mark);
   } catch {

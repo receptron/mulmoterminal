@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { findPartner, isSendAction, pickOf, RELAY_ACTIONS, relayPasted, type PartnerDeps } from "../../../src/composables/useRelayActions";
-import { RELAY_MARK_UNSAVED } from "../../../src/composables/useHandoff";
+import { findPartner, isSendAction, pickOf, RELAY_ACTIONS, type PartnerDeps } from "../../../src/composables/useRelayActions";
 import type { SlotInfo } from "../../../src/composables/readableSlot";
 import type { HandoffTarget } from "../../../src/composables/useHandoff";
 
@@ -52,15 +51,5 @@ describe("findPartner", () => {
     const deps = partnerDeps([slot("cell-1", null), slot("cell-2", "/r")]);
     expect(await findPartner("cell-1", null, null, deps)).toEqual({ kind: "none" });
     expect(deps.worktreePaths).not.toHaveBeenCalled();
-  });
-});
-
-describe("relayPasted", () => {
-  it("counts a paste whose mark could not be saved as pasted, and every other message as not", () => {
-    expect(relayPasted(null)).toBe(true);
-    expect(relayPasted(RELAY_MARK_UNSAVED)).toBe(true);
-    ["That terminal is not connected", "That terminal is in a different conversation now", "Nothing new since the last relay", ""].forEach((message) =>
-      expect(relayPasted(message)).toBe(false),
-    );
   });
 });
