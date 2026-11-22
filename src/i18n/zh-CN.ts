@@ -272,6 +272,8 @@ export const zhCN: Messages = {
       noChips: "没有信息条（已全部移除）",
       someChips: "{count} 个信息条",
       setUp: "设置头部按钮…",
+      sendButton: "每个终端的发送按钮",
+      sendButtonHint: "在终端标题栏第二行显示一个按钮，把最后一轮对话发送给同一仓库中的另一个代理终端，按钮上显示对方名称。仅在有对方时出现。",
     },
 
     models: {

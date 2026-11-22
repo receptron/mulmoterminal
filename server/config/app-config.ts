@@ -202,6 +202,9 @@ export interface AppConfig {
   // grid (#3238). On unless asked off: `false` keeps that click on its old route — a new tab, or the
   // in-app Files view — except where a pane is already up beside that cell.
   fileLinkOpensPane: boolean;
+  // The cell's own "send to <partner>" button on header row 2 (#3399), shown when another agent
+  // terminal of the same repo is open. On unless asked off.
+  cellSendButton: boolean;
   // Leave a comment on the issue a cell is working on: once when the work starts, and again when
   // its PR merges (#979). OFF unless asked for — it writes to GitHub, on issues that are often
   // somebody else's, and the comment names the working directory it happened in.
@@ -532,6 +535,22 @@ export function sanitizeCopyOnSelect(input: unknown): boolean {
 
 export const sanitizeFileLinkOpensPane = (input: unknown): boolean => input !== false;
 
+export const sanitizeCellSendButton = (input: unknown): boolean => input !== false;
+
+// The cell-chrome switches that are on unless the config says `false`, read and merged together so
+// the two key lists below stay inside their length bound.
+type OptOutFlags = Pick<AppConfig, "fileLinkOpensPane" | "cellSendButton">;
+const sanitizeOptOutFlags = (o: Record<string, unknown>): OptOutFlags => ({
+  fileLinkOpensPane: sanitizeFileLinkOpensPane(o.fileLinkOpensPane),
+  cellSendButton: sanitizeCellSendButton(o.cellSendButton),
+});
+// A key the body leaves out keeps the base's value; one it sends, null included, is sanitized.
+const mergeOptOutFlags = (base: AppConfig, body: Record<string, unknown>): OptOutFlags =>
+  sanitizeOptOutFlags({
+    fileLinkOpensPane: body.fileLinkOpensPane !== undefined ? body.fileLinkOpensPane : base.fileLinkOpensPane,
+    cellSendButton: body.cellSendButton !== undefined ? body.cellSendButton : base.cellSendButton,
+  });
+
 export function sanitizeDecisionDigest(input: unknown): boolean {
   return input === true;
 }
@@ -598,6 +617,7 @@ export const emptyConfig = (): AppConfig => ({
   keymap: {},
   copyOnSelect: false,
   fileLinkOpensPane: true,
+  cellSendButton: true,
   decisionDigest: false,
   questionPaneEnabled: false,
   issueWorkComments: false,
@@ -713,7 +733,7 @@ function sanitizeAppConfig(raw: unknown): AppConfig {
     tmuxPrefix: sanitizeTmuxPrefix(o.tmuxPrefix),
     keymap: sanitizeKeymap(o.keymap),
     copyOnSelect: sanitizeCopyOnSelect(o.copyOnSelect),
-    fileLinkOpensPane: sanitizeFileLinkOpensPane(o.fileLinkOpensPane),
+    ...sanitizeOptOutFlags(o),
     decisionDigest: sanitizeDecisionDigest(o.decisionDigest),
     questionPaneEnabled: sanitizeQuestionPaneEnabled(o.questionPaneEnabled),
     issueWorkComments: sanitizeIssueWorkComments(o.issueWorkComments),
@@ -851,7 +871,7 @@ export function mergeConfigUpdate(base: AppConfig, body: Record<string, unknown>
     tmuxPrefix: updated("tmuxPrefix", sanitizeTmuxPrefix, base.tmuxPrefix),
     keymap: updated("keymap", sanitizeKeymap, base.keymap),
     copyOnSelect: updated("copyOnSelect", sanitizeCopyOnSelect, base.copyOnSelect),
-    fileLinkOpensPane: updated("fileLinkOpensPane", sanitizeFileLinkOpensPane, base.fileLinkOpensPane),
+    ...mergeOptOutFlags(base, body),
     decisionDigest: updated("decisionDigest", sanitizeDecisionDigest, base.decisionDigest),
     questionPaneEnabled: updated("questionPaneEnabled", sanitizeQuestionPaneEnabled, base.questionPaneEnabled),
     issueWorkComments: updated("issueWorkComments", sanitizeIssueWorkComments, base.issueWorkComments),
@@ -915,6 +935,7 @@ export function toPublicAppConfig(config: AppConfig): AppConfig {
     keymap: config.keymap,
     copyOnSelect: config.copyOnSelect,
     fileLinkOpensPane: config.fileLinkOpensPane,
+    cellSendButton: config.cellSendButton,
     decisionDigest: config.decisionDigest,
     questionPaneEnabled: config.questionPaneEnabled,
     issueWorkComments: config.issueWorkComments,

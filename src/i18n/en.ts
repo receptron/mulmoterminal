@@ -288,6 +288,9 @@ export const en = {
       noChips: "no chips (all removed)",
       someChips: "{count} chip | {count} chips",
       setUp: "Set up header buttons…",
+      sendButton: "Send button on each terminal",
+      sendButtonHint:
+        "Shows a button on the second row of a terminal's header that sends its last exchange to another agent terminal of the same repo, named on the button. It appears only while there is one.",
     },
 
     models: {

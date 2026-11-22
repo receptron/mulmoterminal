@@ -56,7 +56,7 @@ Settings live in three places: the **settings modal (Settings)**, the **global c
 > |---|---|
 > | **`/mulmoterminal-dirs`** | A project's colours, its position in the grid and launcher, name badge, terminal font size. Starts from the directories you actually open, reads what you already have, and follows the same pattern for the ones that have none. (Settings → **Configure appearance…** starts this one.) |
 > | **`/mulmoterminal-theme`** | Your own [colour scheme](#custom-themes), appearing in Settings' picker. (Settings → **Create a theme…**) |
-> | **`/mulmoterminal-header`** | [Header buttons and chips](#header), global or per project |
+> | **`/mulmoterminal-header`** | [Header buttons and chips](#header), global or per project, and the cell's own [send button](#cell-send-button) (`cellSendButton`) |
 > | **`/mulmoterminal-keys`** | [`keymap`](#keymap), [`copyOnSelect`](#copy-on-select), [`fileLinkOpensPane`](#file-link-opens-pane), [`terminalSubmit`](#terminal-submit) — the fix for "Shift+Enter submits instead of adding a line" — and [`questionPaneEnabled`](#question-pane). (Settings → **Set up shortcuts…**) |
 > | **`/mulmoterminal-model`** | [`providers`](#providers), a per-project model, [`customAgents`](#custom-agents) and [`accounts`](#accounts) |
 > | **`/mulmoterminal-notify`** | [Which moments beep or push](#sounds), and what each plays. (Settings → **Configure notifications…**) |
@@ -131,7 +131,7 @@ English, and the line under the picker says so.
 | **Directory appearance** | "Configure appearance…" — set a directory's name badge, colors, terminal palette, and grid position interactively, through the `mulmoterminal-dirs` skill |
 | **Directory settings** | What each directory's `.mulmoterminal.json` is **actually doing**. Expand a row for the values in force (colors with a swatch), **which file each came from**, **keys dropped in validation**, and **keys this app never reads**. **Change here** below it edits the name, colours, status colours, theme, palette, font, grid priority, model, closing summary, extra directories, icon, background, sounds and header buttons / chips / commands (→ [Per-project settings](#per-dir)). "Explain my settings…" starts the `mulmoterminal-config` skill to say why and fix it (→ [When a setting isn't working](#dir-settings-preview)) |
 | **Launch commands** | Commands you can launch besides the agents in a grid cell (`{ label, command }`). A plain shell needs no entry — the launcher's **Shell** toggle opens `$SHELL` unconfigured |
-| **Header buttons and chips** | Your global header buttons and chips, edited right here — add, edit, remove, and group buttons into folders — plus the colour per status and the status colour on the header. "Set up header buttons…" starts the `mulmoterminal-header` skill (→ [Customizing the header](#header)) |
+| **Header buttons and chips** | Your global header buttons and chips, edited right here — add, edit, remove, and group buttons into folders — plus the colour per status, the status colour on the header, and the [send button on each terminal](#cell-send-button) (`cellSendButton`, on). "Set up header buttons…" starts the `mulmoterminal-header` skill (→ [Customizing the header](#header)) |
 | **Terminal keys** | [Copy on select](#copy-on-select) (`copyOnSelect`, off), [Clicked paths open the pane](#file-link-opens-pane) (`fileLinkOpensPane`, on), the [question pane](#question-pane) (`questionPaneEnabled`), and which bytes your Claude reads as **submit** ([Enter — submit vs. newline](#terminal-submit), `terminalSubmit`), and the [tmux prefix key](#tmux-prefix) (`tmuxPrefix`, off) |
 | **Keyboard shortcuts** | Every action and the `send` row, bound or not, read-only. **Everything starts as Not set** — **Recommended keys** adds a starter set for this platform in one click (only to unbound actions and unused keys), and "Set up shortcuts…" starts the `mulmoterminal-keys` skill to bind anything else in `keymap` (→ [Keyboard shortcuts](#keymap)) |
 | **Voice input** | The language you **dictate in** (your browser's, per-clip detection, or a fixed one). Shown only on a machine that can transcribe |
@@ -546,6 +546,23 @@ Two cases where nothing is written, both deliberate:
 
 The copy is taken at creation and then belongs to the worktree. Recolour the project afterwards and
 existing worktrees keep the shade they were given — edit or delete their own file to change it.
+
+### The send button on each terminal (`cellSendButton`) {#cell-send-button}
+
+While another agent terminal of the same repo is open — the same directory, or any of its worktrees —
+a terminal shows a button on the second row of its header, after the copy button, named after that
+terminal: **codex #4**. Pressing it pastes this terminal's last exchange into that one's input box and
+takes you there; nothing is submitted. With several, the button says how many and opens **Talk to
+another terminal…** to pick. With none, there is no button. More on the hand-off in
+[Cell-to-cell conversation](conversation.html#send).
+
+**On unless you turn it off:**
+
+```json
+{ "cellSendButton": false }
+```
+
+There is a checkbox in **Settings → Header buttons and chips**, applied at once.
 
 ### Customizing the header (buttons / chips) {#header}
 

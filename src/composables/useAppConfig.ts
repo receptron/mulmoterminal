@@ -28,6 +28,7 @@ import { setCockpitCompact } from "./cockpitCompact";
 import { setHeaderStatusDefaults } from "./headerStatusColors";
 import { setCopyOnSelect } from "./copyOnSelect";
 import { setFileLinkOpensPane } from "./fileLinkOpensPane";
+import { setCellSendButton } from "./cellSendButton";
 import { setQuestionPaneEnabled } from "./questionPane";
 import { setIssueWorkComments } from "./issueWorkComments";
 import { setShowLoadAverage } from "./showLoadAverage";
@@ -493,6 +494,7 @@ function applyGlobalSettings(c: Record<string, unknown>, pinsMark: number, jobsM
   setCopyOnSelect(c.copyOnSelect);
   setQuestionPaneEnabled(c.questionPaneEnabled);
   setFileLinkOpensPane(c.fileLinkOpensPane);
+  setCellSendButton(c.cellSendButton);
   // Whether a cell may comment on the issue it is working on (#979). Off unless opted in.
   setIssueWorkComments(c.issueWorkComments);
   // Whether the grid header carries this machine's load average (#1786). On unless opted out.

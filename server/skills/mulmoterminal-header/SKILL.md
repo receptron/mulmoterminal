@@ -218,6 +218,19 @@ Three things to say when you offer it:
 It is also an item in the cell's Tools menu, and the `terminal-restart` shortcut (the
 `mulmoterminal-keys` skill, no default binding) does the same; this button is for one click.
 
+## `cellSendButton` — the send button the cell shows by itself
+
+Not a header button and not in `buttons`: every terminal shows a **send** button on header row 2,
+named after its partner (`codex #4`), while another agent terminal of the same repo is open. It runs
+`terminal-send-turn`. A user who does not want it sets this in `~/.mulmoterminal/config.json`
+(global only), or unticks it in Settings → Header buttons and chips:
+
+```json
+{ "cellSendButton": false }
+```
+
+On unless set to `false`. Listing `buttons` does not hide it, so "remove the send button" is this key.
+
 ## `commands` — entries for the command palette only
 
 `commands` is a list written **exactly like `buttons`** (same `run` types, `when`, `${var}`,
