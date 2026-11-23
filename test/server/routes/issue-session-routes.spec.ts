@@ -3,7 +3,7 @@
 // one in a clone the server did not resolve, or one the caller cannot address afterwards.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Express } from "express";
-import { mountIssueSessionRoutes, type IssueSessionRouteDeps } from "../../../server/routes/issue-session-routes.js";
+import { implementerSpawn, mountIssueSessionRoutes, type IssueSessionRouteDeps } from "../../../server/routes/issue-session-routes.js";
 import type { IssueSession } from "../../../server/routes/issueSessions.js";
 import type { SpawnedSession, StartIssueWorkResult } from "../../../server/git/issue-work.js";
 import { SESSION_HEADER } from "../../../server/backends/files/presentPathRoot.js";
@@ -177,5 +177,15 @@ describe("startIssueSession", () => {
     expect(sessions.size).toBe(0);
     expect(recordSpawn).not.toHaveBeenCalled();
     expect(markVisible).not.toHaveBeenCalled();
+  });
+});
+
+// The wiring app-routes uses: without `allTools` the implementer is a project cell, and the review
+// loop's tools never reach it.
+describe("implementerSpawn", () => {
+  it("runs the seed at once, on the default login, with every GUI tool", async () => {
+    const spawnIssueSession = vi.fn(async () => ({ sessionId: "s-1", agent: "codex" as const, seedRuns: true }));
+    await implementerSpawn(spawnIssueSession)("codex", "/wt/7", "the seed");
+    expect(spawnIssueSession).toHaveBeenCalledWith("codex", "/wt/7", "the seed", true, null, { allTools: true });
   });
 });
