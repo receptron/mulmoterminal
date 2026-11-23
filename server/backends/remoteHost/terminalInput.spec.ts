@@ -456,7 +456,7 @@ describe("clearing the host's input box", () => {
 describe("a send with a blocked check", () => {
   it("writes nothing and rejects when blocked before the paste", async () => {
     const { chunks, send } = recorder();
-    await expect(send("s1", "hello", { blocked: async () => true })).rejects.toBeInstanceOf(InputBlockedError);
+    await expect(send("s1", "hello", { blocked: async () => true })).rejects.toMatchObject({ afterPaste: false });
     expect(chunks).toEqual([]);
   });
 
@@ -469,6 +469,7 @@ describe("a send with a blocked check", () => {
     open = true;
     flushSubmit();
     await expect(sending).rejects.toBeInstanceOf(InputBlockedError);
+    await expect(sending).rejects.toMatchObject({ afterPaste: true });
     expect(chunks).toEqual([paste("hello")]);
   });
 

@@ -37,7 +37,9 @@ export function parseSendRequest(body: unknown): Parsed<{ session: string; messa
   const message = typeof record.message === "string" ? record.message : "";
   if (sanitizeTerminalInput(message) === "") return refuse("`message` is required: the text to type into the session.");
   if (message.length > SEND_MAX_CHARS) return refuse(`\`message\` is longer than ${SEND_MAX_CHARS} characters.`);
-  return { ok: true, session, message };
+  // Sanitised HERE, so the text remembered for the wait is the text the session records as its
+  // prompt: a control byte left in would never match it.
+  return { ok: true, session, message: sanitizeTerminalInput(message) };
 }
 
 /** Appended to each message. The wait recognises the reply by the end of the prompt it answers, so

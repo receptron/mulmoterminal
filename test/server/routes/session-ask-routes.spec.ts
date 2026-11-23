@@ -131,6 +131,14 @@ describe("sendToSession", () => {
     expect(spawned.lastSentTo(CHILD)).toBeUndefined();
   });
 
+  it("says the text is still in the box when the dialog opened between paste and Enter, and remembers it", async () => {
+    nonces.push("late0001");
+    send.mockRejectedValueOnce(new InputBlockedError("blocked before Enter", true));
+    const message = await call(routes().sendRoute, request({ session: CHILD, message: "hi" }));
+    expect(message).toMatch(/in its input box, not submitted/);
+    expect(spawned.lastSentTo(CHILD)).toBe(`hi${askTag("late0001")}`);
+  });
+
   it("reports a session with no live terminal without remembering the text", async () => {
     send.mockRejectedValueOnce(new Error("no live pty"));
     const message = await call(routes().sendRoute, request({ session: CHILD, message: "hi" }));
