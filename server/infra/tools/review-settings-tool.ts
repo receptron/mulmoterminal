@@ -10,7 +10,7 @@ export const REVIEW_SETTINGS: ToolDefinition = {
   prompt:
     "Call `reviewSettings` with the repository (owner/repo) before you run a review loop on one of its PRs. " +
     "When it declares none, do not review automatically: ask the user. " +
-    "Start the reviewer with spawnBackgroundChat using the agent it names, talk to it with sendToSession / waitForSessionReply, and stop for the user once the round limit is reached.",
+    "Start the reviewer with spawnBackgroundChat using the agent it names, then run the rounds with requestReview, which enforces the round limit and tells you when the merge condition is met.",
   parameters: {
     type: "object",
     properties: {

@@ -29,6 +29,17 @@ export interface TmuxRouteDeps {
   armedReapIntervalHours: () => number;
 }
 
+type EndSessionDeps = Pick<TmuxRouteDeps, "requestCellClose" | "reapSession" | "hasTmux" | "killTmux" | "markPlaced">;
+
+/** End a session, and close its cell too when `closeCell`; true once no tmux session is left. */
+export function endTmuxSession(deps: EndSessionDeps, id: string, closeCell: boolean): boolean {
+  if (closeCell) deps.requestCellClose(id);
+  deps.reapSession(id); // live entry → kills pty + tmux + cleanup
+  if (deps.hasTmux(id)) deps.killTmux(id); // orphan (e.g. post-restart) → kill directly
+  deps.markPlaced(id);
+  return !deps.hasTmux(id);
+}
+
 export function mountTmuxRoutes(app: Express, deps: TmuxRouteDeps): void {
   // Explicit close (the cell's close button): reap NOW — kill the pty AND its tmux — instead of
   // leaving it for the disconnect grace. Works even when the WS is down, and kills a tmux
@@ -49,11 +60,7 @@ export function mountTmuxRoutes(app: Express, deps: TmuxRouteDeps): void {
     if (!requestOriginAllowed(req, deps.isAllowedOrigin)) return res.status(403).json({ error: "forbidden origin" });
     const id = req.params.id;
     if (!deps.isValidSessionId(id)) return res.status(400).json({ error: "invalid session id" });
-    if (closeCell) deps.requestCellClose(id);
-    deps.reapSession(id); // live entry → kills pty + tmux + cleanup
-    if (deps.hasTmux(id)) deps.killTmux(id); // orphan (e.g. post-restart) → kill directly
-    deps.markPlaced(id);
-    return res.json({ ok: true, ended: !deps.hasTmux(id) });
+    return res.json({ ok: true, ended: endTmuxSession(deps, id, closeCell) });
   };
   app.post("/api/session/:id/terminate", endSession(false));
   // End a session AND close the cell showing it (#3067) — the counterpart of spawnBackgroundChat for

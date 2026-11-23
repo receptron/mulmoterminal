@@ -718,6 +718,17 @@ reviews automatically until the key is set; a session that drives a review reads
 - The file is the only way to set it. It is read from the clone that work on the repository starts
   in, and a worktree inherits it.
 
+With the key set, the session runs the loop through two tools. It starts a reviewer session with the
+declared agent (`spawnBackgroundChat`) and calls `requestReview` with the repository, the PR number
+and that session. MulmoTerminal sends the reviewer the request, waits for its answer, and types how
+the round ended into the calling session: the verdict, the rounds left, and whether the merge
+condition is met. It refuses a round past `maxRounds`, a second review of a head that had changes
+requested, and a reviewer that is not the declared agent. It never merges; the session does.
+`endReview` closes the reviewer once the PR is merged. The reviewer is asked to open its reply, and
+the comment it posts on the PR, with `REVIEW VERDICT: LGTM (head <sha>)` or
+`REVIEW VERDICT: CHANGES REQUESTED (head <sha>)`, which the GitHub board counts like a
+`CODEX VERDICT:` line. The rounds are kept in memory, so a restart starts the count again.
+
 ### Closing summary for this directory (`appendSystemPrompt`)
 
 ```json

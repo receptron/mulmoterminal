@@ -664,6 +664,8 @@ MulmoTerminal の「**拡張**」の柱がここ。稼働中ターミナルの�
 - どれか一つでも間違っていると（このアプリが動かさないエージェント、範囲外の数、綴りを間違えた項目名）、既定のレビュー役に置き換えるのではなく**キーごと**無視され、設定 → Directory settings の *ignored* に出ます。正しく読めたものは **Review** として表示されます。
 - ファイルにだけ書けます。そのリポジトリの作業を始める clone のものが読まれ、worktree にも引き継がれます。
 
+キーがあれば、セッションは二つの道具で往復を回します。宣言されたエージェントでレビュー役のセッションを起動し（`spawnBackgroundChat`）、リポジトリと PR の番号とそのセッションを渡して `requestReview` を呼びます。MulmoTerminal がレビュー役に依頼を送り、返事を待ち、往復の結果（判定、残りの往復の数、merge の条件を満たしたか）を呼んだセッションに打ち込みます。`maxRounds` を超える往復、修正を求められた head の再レビュー、宣言と違うエージェントのレビュー役は断ります。merge はしません。merge するのはセッションです。PR を merge したら `endReview` でレビュー役を閉じます。レビュー役には、返事と PR に投稿するコメントを `REVIEW VERDICT: LGTM (head <sha>)` か `REVIEW VERDICT: CHANGES REQUESTED (head <sha>)` で始めるよう頼みます。GitHub ボードはこの行を `CODEX VERDICT:` の行と同じように数えます。往復の記録はメモリ上にだけあり、再起動すると数え直しになります。
+
 ### このディレクトリの返信まとめ（`appendSystemPrompt`）
 
 ```json

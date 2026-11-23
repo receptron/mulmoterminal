@@ -16,6 +16,7 @@ import { MANAGE_SHAPE_SCRIPT } from "./shapescript-manage-tool.js";
 import { REQUEST_CHECK, SHOW_IN_PANE } from "./pane-tools.js";
 import { SEND_TO_SESSION, WAIT_FOR_SESSION_REPLY } from "./session-ask-tools.js";
 import { REVIEW_SETTINGS } from "./review-settings-tool.js";
+import { END_REVIEW, REQUEST_REVIEW } from "./review-loop-tools.js";
 import { TERMINAL_AGENTS } from "../../../common/sessionAgent.js";
 
 // Mirrors MulmoClaude's spawnBackgroundChat signature (message/role/hidden) so the
@@ -99,4 +100,6 @@ export const HOST_TOOL_DEFINITIONS: ToolDefinition[] = [
   SEND_TO_SESSION,
   WAIT_FOR_SESSION_REPLY,
   REVIEW_SETTINGS,
+  REQUEST_REVIEW,
+  END_REVIEW,
 ];
