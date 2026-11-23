@@ -60,7 +60,9 @@ them. If nothing is open, say what you assumed and go on.
 5. On **LGTM**: the message says whether the merge condition is met — the declared number of LGTMs
    on the current head AND every CI check passing. When the LGTMs are there but CI is still running,
    the message says so instead; do not call `requestReview` again (it refuses a head that already has
-   its LGTMs). Wait for CI (`gh pr checks <PR> -R <repo> --watch`).
+   its LGTMs). Wait for CI (`gh pr checks <PR> -R <repo> --watch`). If the head moved meanwhile (a
+   push, a merge of the default branch), the LGTMs were for the old head: call `requestReview` for the
+   new one.
 
 Stop and ask the user when: the round limit is reached (`requestReview` refuses past it), the
 reviewer raises the same finding again after you answered it, or a finding needs a decision the issue
@@ -72,7 +74,8 @@ did not make.
   **Merge condition met**, or it said the LGTMs were there and CI was still running and CI has since
   passed. Either way, check first that the head has not moved since the round
   (`gh pr view <PR> -R <repo> --json headRefOid`) and that every check passes. Use the
-  repository's merge method; without a rule, a merge commit (`gh pr merge <PR> -R <repo> --merge`).
+  repository's merge method — it wins over the "merge commit" the `requestReview` message and tool
+  description mention; without a rule, a merge commit (`gh pr merge <PR> -R <repo> --merge`).
   If a permission check or hook blocks the merge, report it and wait for the user — do not route
   around it.
 - Call `endReview { repo, pr }` to close the reviewer session.
