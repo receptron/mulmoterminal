@@ -422,7 +422,7 @@ default and renders nothing where no `worktreeEnv` is declared, so there is noth
 A managed git worktree (`~/.mulmoterminal/worktrees/<repo>-<hash>/<task>`) gets its own
 `.mulmoterminal.local.json` when MulmoTerminal creates it, derived from the project's: identity keys
 (`name` / `icon` / `theme` / `colors` / `fontSize` / `fontFamily` / `provider` / `model` /
-`worktreeEnv`) as written, the seven chrome colours rotated **12° further per worktree**, and
+`worktreeEnv` / `review`) as written, the seven chrome colours rotated **12° further per worktree**, and
 `orderPriority` at the project's rank **+ 1**. `sound` / `sounds` / `addDirs` are not carried.
 
 Two consequences for this skill:
@@ -442,8 +442,8 @@ Two consequences for this skill:
 
 `buttons` / `chips` → `mulmoterminal-header`. `provider` / `model` → `mulmoterminal-model`.
 `sound` / `sounds` → `mulmoterminal-notify`. `skills` (the header Skill menu's allowlist and order),
-`decks` (the header Mulmo menu's decks), `mobileFiles` (files the phone may open) and `appendSystemPrompt`
-(this directory's closing-summary override) → `mulmoterminal-config`.
+`decks` (the header Mulmo menu's decks), `mobileFiles` (files the phone may open), `appendSystemPrompt`
+(this directory's closing-summary override) and `review` (how its PRs are reviewed) → `mulmoterminal-config`.
 **Preserve them when you merge** — this skill writes appearance keys and must not drop the rest.
 
 ## Example — continuing a convention

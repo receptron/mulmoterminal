@@ -164,6 +164,8 @@ function extraRows(extras: Record<string, unknown>): DirConfigRow[] {
   if (commands.length) rows.push({ key: "commands", label: "Palette commands", value: commands.join(", "), color: null });
   const worktreeEnv = stringList(extras.worktreeEnvNames);
   if (worktreeEnv.length) rows.push({ key: "worktreeEnv", label: "Per-worktree env", value: worktreeEnv.join(", "), color: null });
+  const review = asString(extras.reviewSummary);
+  if (review) rows.push({ key: "review", label: "Review", value: review, color: null });
   return rows;
 }
 

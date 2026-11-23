@@ -11,7 +11,7 @@ import { toolSummaries } from "../../../server/infra/tools/plugins-registry.js";
 describe("the group map against the real registry", () => {
   it("leaves exactly the tools we meant to leave ungrouped", () => {
     const ungrouped = toolSummaries.map((t) => t.toolName).filter((name) => groupOfTool(name) === null);
-    expect(ungrouped).toEqual(["spawnBackgroundChat", "sendToSession", "waitForSessionReply"]);
+    expect(ungrouped).toEqual(["spawnBackgroundChat", "sendToSession", "waitForSessionReply", "reviewSettings"]);
   });
 
   it("classifies every tool it does classify into a real group", () => {

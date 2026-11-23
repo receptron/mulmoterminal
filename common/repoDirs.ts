@@ -5,6 +5,8 @@
 // clones of one repo commonly run side by side here, so "the directory for owner/repo" is a
 // CHOICE rather than a lookup — which is why a candidate carries what it takes to choose.
 
+import { repoIdentity } from "./repoEntry.js";
+
 export interface RepoDirCandidate {
   /** Absolute path of the clone (the canonical spelling `cwdPresets` stores). */
   path: string;
@@ -54,4 +56,11 @@ export function parseRepoDirsResponse(data: unknown): RepoDirs[] {
     const primary = typeof entry.primary === "string" && dirs.some((d) => d.path === entry.primary) ? entry.primary : null;
     return [{ repo: entry.repo, dirs, primary }];
   });
+}
+
+/** The clone work on `repo` starts in when nobody is asked: the recorded choice, else the first
+ *  candidate (they arrive ordered). Null when this machine has no clone of it. */
+export function defaultCloneOf(entries: readonly RepoDirs[], repo: string): string | null {
+  const entry = entries.find((candidate) => repoIdentity(candidate.repo) === repoIdentity(repo));
+  return entry ? (entry.primary ?? entry.dirs[0]?.path ?? null) : null;
 }

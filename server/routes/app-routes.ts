@@ -21,7 +21,9 @@ import { noteMovedFrom, takeMovedFrom } from "../session/credentials/rotation-no
 import { rotationLoginLabel } from "../../common/tokenRotation.js";
 import { survivingSessions } from "../session/reaping/surviving-sessions.js";
 import { armedReapIntervalHours } from "../session/reaping/reap-schedule.js";
-import { getSessionIdleReapDays, getQuestionPaneEnabled, getTokenRotation, getUsageGauge } from "../config/config-routes.js";
+import { getCwdPresets, getRepoDirs, getSessionIdleReapDays, getQuestionPaneEnabled, getTokenRotation, getUsageGauge } from "../config/config-routes.js";
+import { loadDirConfig } from "../config/dir/dir-config.js";
+import { repoDirsFromPresets } from "../git/repo-dirs.js";
 import { sweepIdleSessions } from "../session/reaping/reap-idle-sessions.js";
 import { mountHookRoute } from "../routes/hook-routes.js";
 import { mountPluginRoutes } from "../routes/plugin-routes.js";
@@ -39,6 +41,8 @@ import { mountIssueWorkRoutes } from "../routes/issue-work-routes.js";
 import { mountTerminalReplyRoutes } from "./terminal-reply-routes.js";
 import { randomUUID } from "node:crypto";
 import { mountSessionAskRoutes } from "./session-ask-routes.js";
+import { mountReviewSettingsRoute } from "./review-settings-route.js";
+import { defaultCloneOf } from "../../common/repoDirs.js";
 import { spawnedSessions } from "../session/spawned-sessions.js";
 import { liveTurnReader } from "../session/live-last-turn.js";
 import { mountRequestGates } from "./request-gates.js";
@@ -197,8 +201,13 @@ function openQuestionIn(deps: AppRouteDeps): (sessionId: string) => Promise<AskQ
 // Enough of a uuid to tell one send from the next to the same session.
 const ASK_NONCE_CHARS = 8;
 
-// The routes an agent talks to a session it started through (#3404).
-function mountSessionAsk(app: Express, deps: AppRouteDeps): void {
+// The routes an agent runs a review through: talking to a session it started (#3404), and reading
+// how a repository wants reviews done (#3407).
+function mountReviewLoopRoutes(app: Express, deps: AppRouteDeps): void {
+  mountReviewSettingsRoute(app, {
+    cloneOf: async (repo) => defaultCloneOf(await repoDirsFromPresets(getCwdPresets(), getRepoDirs()), repo),
+    reviewOf: (dir) => loadDirConfig(dir).review,
+  });
   mountSessionAskRoutes(app, {
     spawned: spawnedSessions,
     send: (sessionId, text, options) => sendToSession(sessionId, text, options),
@@ -242,8 +251,8 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
     registerBackgroundSession: deps.registerBackgroundSession,
   });
 
-  // sendToSession / waitForSessionReply (#3404): host tools, before the catch-all.
-  mountSessionAsk(app, deps);
+  // sendToSession / waitForSessionReply / reviewSettings (#3404, #3407): host tools, before the catch-all.
+  mountReviewLoopRoutes(app, deps);
 
   // showInPane / requestCheck (#3022): host tools too, so before the catch-all like the ones above.
   mountPaneToolRoutes(app, { publish: (channel, data) => deps.publish(channel, data) });

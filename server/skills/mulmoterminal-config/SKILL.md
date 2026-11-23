@@ -1,6 +1,6 @@
 ---
 name: mulmoterminal-config
-description: The way into configuring MulmoTerminal, and the way to find out how it is configured now. Use for a broad or unsure request — "configure MulmoTerminal", "set this up", "customize this", "what can I change?", first-run setup — and route to the skill that owns the area. Also answers "how is this set up right now?", "why isn't my setting working?", "did that take effect?" by reading the live config — the global `~/.mulmoterminal/config.json`, each project's `.mulmoterminal.json`, and what the app ACTUALLY parsed from them — including keys it dropped in validation, which is the difference between a setting you never made and one that silently never applied. Owns the global settings that have no skill of their own — work comments on an issue (issueWorkComments), the PR clone footer (prWorkdirFooter), the closing summary (appendSystemPrompt), the decision digest (decisionDigest), the periodic dev-work log (worklogEnabled), roster row length (cockpitLines, cockpitCompact), the grid header's usage gauge and how often it measures Claude (usageGauge, usageProbeIntervalMinutes), the grid header's load read-out (showLoadAverage), a search box in the middle of the top bar (paletteSearchBox), an experimental switch for a server on another machine (remoteServer), the occasional terminal theatre (playfulEffects), confetti and when it falls (confetti), pinned collections on the toolbar (toolbarPins), Python a remote bot may run on this machine (botJobs, and the bot tokens for it), a self-hosted GitLab (gitlabHosts), a project's Skill menu (skills), a project's Mulmo menu (decks), and the files a project shows on the phone (mobileFiles). When the request names another area, go straight to that skill instead — mulmoterminal-dirs (colours, grid order, project names, font size), mulmoterminal-theme (your own colour scheme), mulmoterminal-header (buttons and chips), mulmoterminal-keys (shortcuts, copy-on-select, Enter behaviour), mulmoterminal-model (other models and backends, and your own command for starting Claude Code), mulmoterminal-notify (sounds and push).
+description: The way into configuring MulmoTerminal, and the way to find out how it is configured now. Use for a broad or unsure request — "configure MulmoTerminal", "set this up", "customize this", "what can I change?", first-run setup — and route to the skill that owns the area. Also answers "how is this set up right now?", "why isn't my setting working?", "did that take effect?" by reading the live config — the global `~/.mulmoterminal/config.json`, each project's `.mulmoterminal.json`, and what the app ACTUALLY parsed from them — including keys it dropped in validation, which is the difference between a setting you never made and one that silently never applied. Owns the global settings that have no skill of their own — work comments on an issue (issueWorkComments), the PR clone footer (prWorkdirFooter), the closing summary (appendSystemPrompt), the decision digest (decisionDigest), the periodic dev-work log (worklogEnabled), roster row length (cockpitLines, cockpitCompact), the grid header's usage gauge and how often it measures Claude (usageGauge, usageProbeIntervalMinutes), the grid header's load read-out (showLoadAverage), a search box in the middle of the top bar (paletteSearchBox), an experimental switch for a server on another machine (remoteServer), the occasional terminal theatre (playfulEffects), confetti and when it falls (confetti), pinned collections on the toolbar (toolbarPins), Python a remote bot may run on this machine (botJobs, and the bot tokens for it), a self-hosted GitLab (gitlabHosts), a project's Skill menu (skills), a project's Mulmo menu (decks), the files a project shows on the phone (mobileFiles), and how a repository's PRs are reviewed (review). When the request names another area, go straight to that skill instead — mulmoterminal-dirs (colours, grid order, project names, font size), mulmoterminal-theme (your own colour scheme), mulmoterminal-header (buttons and chips), mulmoterminal-keys (shortcuts, copy-on-select, Enter behaviour), mulmoterminal-model (other models and backends, and your own command for starting Claude Code), mulmoterminal-notify (sounds and push).
 ---
 
 # Configuring MulmoTerminal — start here
@@ -145,7 +145,7 @@ State these when they matter; they are the ones that cost people an afternoon.
 
 ## The settings that live here
 
-None is big enough to warrant its own skill. **All of them but `mobileFiles` also have a Settings control** (`skills` and `decks` per project, in Settings → Directory settings → Change here) — offer that first, and use these when the user would rather be told the key, or is
+None is big enough to warrant its own skill. **All of them but `mobileFiles` and `review` also have a Settings control** (`skills` and `decks` per project, in Settings → Directory settings → Change here) — offer that first, and use these when the user would rather be told the key, or is
 setting up a machine without opening the browser.
 
 ### `skills` — the header's Skill menu, per project
@@ -206,6 +206,24 @@ until this key is set** — the workspace included.
 - A worktree does not inherit it — a worktree shares nothing until its own file says so.
 - Files that do not fit a command document are put in the user's own Storage area for an hour and
   deleted. Images a document names are embedded only when they sit in a declared directory.
+
+### `review` — how a repository's PRs are reviewed
+
+Read by a session that drives a review, through the `reviewSettings` tool (given `owner/repo`).
+**Nothing reviews automatically until this key is set.**
+
+```json
+{ "review": { "reviewer": "codex", "maxRounds": 10, "requiredLgtm": 1 } }
+```
+
+- `reviewer` — `claude`, `codex`, `antigravity`, `grok`, `copilot` or `cursor` (default `codex`).
+  Not `muse`: its replies cannot be read back.
+- `maxRounds` — review rounds before a person is asked, 1-50 (default 10).
+- `requiredLgtm` — LGTMs naming the current head that make a PR mergeable, 1-5 (default 1). Every
+  CI check passing is required on top.
+- Any wrong field drops the **whole key** (shown under *ignored*); it never falls back to a default
+  reviewer. Write it to the clone the repository's work starts in; worktrees inherit it.
+- No Settings control: the file is the only way to set it. Settings shows it as **Review**.
 
 ### `appendSystemPrompt` — the closing summary
 

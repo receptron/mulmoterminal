@@ -15,6 +15,7 @@ import { EXPORT_SHAPE_SCRIPT_STL } from "./shapescript-stl-tool.js";
 import { MANAGE_SHAPE_SCRIPT } from "./shapescript-manage-tool.js";
 import { REQUEST_CHECK, SHOW_IN_PANE } from "./pane-tools.js";
 import { SEND_TO_SESSION, WAIT_FOR_SESSION_REPLY } from "./session-ask-tools.js";
+import { REVIEW_SETTINGS } from "./review-settings-tool.js";
 import { TERMINAL_AGENTS } from "../../../common/sessionAgent.js";
 
 // Mirrors MulmoClaude's spawnBackgroundChat signature (message/role/hidden) so the
@@ -97,4 +98,5 @@ export const HOST_TOOL_DEFINITIONS: ToolDefinition[] = [
   REQUEST_CHECK,
   SEND_TO_SESSION,
   WAIT_FOR_SESSION_REPLY,
+  REVIEW_SETTINGS,
 ];
