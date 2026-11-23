@@ -12,8 +12,8 @@ A saved directory that does not exist is one of two things, told apart by its pa
 
 | path | parent | meaning | action |
 |---|---|---|---|
-| absent | present, and not a mount root | deleted | remove from `cwdPresets` on disk |
-| absent | absent, a dangling symlink, or a mount root (`/Volumes`, `/media`, `/mnt`, `/run/media`, `/media/<user>`, `/run/media/<user>`) | could be an unplugged drive | keep on disk, hide |
+| absent | present, not empty, and not a mount root | deleted | remove from `cwdPresets` on disk |
+| absent | absent, EMPTY (a mount point left behind by an unmount looks like this), a dangling symlink, or a mount root (`/Volumes`, `/media`, `/mnt`, `/run/media`, `/media/<user>`, `/run/media/<user>`) | could be an unplugged drive | keep on disk, hide |
 | a dangling symlink itself | — | link onto something not mounted | keep on disk, hide |
 | present / not ENOENT | — | there, or unknown (EACCES) | nothing |
 
@@ -35,7 +35,8 @@ Relative entries and filesystem roots are left alone (nothing to judge them by).
   out-of-reach directory. Settings is handed `savedPresets` instead, so a hidden entry is still
   listed somewhere — the chip's close button is hidden with it. `pruneMissingPresets()` is serialized with the
   other preset writes.
-- Triggers: `loadConfigThenPruneMissing` on GridView mount (the check runs after the read, never
+- Triggers: `loadConfigThenPruneMissing` on GridView mount turns on a check after EVERY adopted read,
+  a background retry included (the check runs after the read, never
   racing it — it counts as a local write, so a failed check landing first would make the read
   discard its list), and LaunchPanel emits `opened` on mount, which GridView answers with the check.
   `loadConfig` itself is unchanged: its retry contract counts requests.

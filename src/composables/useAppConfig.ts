@@ -700,6 +700,8 @@ interface ConfigReaderDeps {
   snapshotVersion: () => number;
   adoptServerPresets: (list: unknown, capturedVersion: number) => void;
   migrateLegacyRecents: () => Promise<void>;
+  /** Runs after every read whose answer was adopted — the first attempt or a background retry. */
+  afterRead: () => Promise<void>;
 }
 
 /** What one attempt is given: the signal that cancels it when it is no longer wanted, and the
@@ -720,7 +722,7 @@ type ConfigRead = (attempt: ReadAttempt) => Promise<boolean>;
  *  adopting it. Asking such a server nine more times returns the same body, so the reload is the
  *  user's move. Keeping one `try` around both halves quietly made a malformed body retryable —
  *  Codex caught exactly that on #1771. */
-function createConfigReader({ defaultCwd, snapshotVersion, adoptServerPresets, migrateLegacyRecents }: ConfigReaderDeps): ConfigRead {
+function createConfigReader({ defaultCwd, snapshotVersion, adoptServerPresets, migrateLegacyRecents, afterRead }: ConfigReaderDeps): ConfigRead {
   return async function readConfig({ signal, stale }: ReadAttempt): Promise<boolean> {
     const version = snapshotVersion();
     // Taken BEFORE the request, like `version` above and for a sibling reason: this answer must not
@@ -756,6 +758,7 @@ function createConfigReader({ defaultCwd, snapshotVersion, adoptServerPresets, m
       applyGlobalSettings(c, pinsMark, jobsMark);
       adoptServerSideSettings(c);
       await migrateLegacyRecents();
+      await afterRead();
     } catch {
       // Unreadable, or an adoption step that failed. The screen keeps whatever it already had —
       // and this still counts as answered, so no retry is armed.
@@ -853,6 +856,20 @@ function createConfigLoader(loadOnce: ConfigRead, unavailable: Ref<boolean>): ()
   };
 }
 
+// The missing-directory check runs after each adopted read — a background retry included, so a
+// first attempt lost to a restart still gets its check — and never alongside one. Off for a plain
+// `loadConfig`, whose callers count its requests.
+function createPruningConfigLoader(deps: Omit<ConfigReaderDeps, "afterRead">, unavailable: Ref<boolean>, pruneMissingPresets: () => Promise<void>) {
+  let pruneAfterRead = false;
+  const afterRead = () => (pruneAfterRead ? pruneMissingPresets() : Promise.resolve());
+  const loadConfig = createConfigLoader(createConfigReader({ ...deps, afterRead }), unavailable);
+  const loadConfigThenPruneMissing = (): Promise<void> => {
+    pruneAfterRead = true;
+    return loadConfig();
+  };
+  return { loadConfig, loadConfigThenPruneMissing };
+}
+
 // Server config (default workspace dir, home, directory presets, custom sound)
 // shared by both the single view and the grid view so each can open the settings
 // modal without duplicating the fetch/save logic.
@@ -880,13 +897,11 @@ export function useAppConfig() {
   // shows instead of pretending the user has no saved directories. Per-call like `presets`, and
   // filled in for the caller that loads.
   const configUnavailable = ref(false);
-  const loadConfig = createConfigLoader(createConfigReader({ defaultCwd, snapshotVersion, adoptServerPresets, migrateLegacyRecents }), configUnavailable);
-  // The missing-directory check follows the read rather than racing it: it counts as a local write,
-  // so a failed check landing first would make the read discard the list it brought.
-  const loadConfigThenPruneMissing = async (): Promise<void> => {
-    await loadConfig();
-    await pruneMissingPresets();
-  };
+  const { loadConfig, loadConfigThenPruneMissing } = createPruningConfigLoader(
+    { defaultCwd, snapshotVersion, adoptServerPresets, migrateLegacyRecents },
+    configUnavailable,
+    pruneMissingPresets,
+  );
 
   return {
     defaultCwd,

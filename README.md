@@ -887,7 +887,7 @@ The Settings modal (the gear button) persists per-user UI choices to `~/.mulmote
 
 | Field        | Meaning |
 | ------------ | ------- |
-| `cwdPresets` | Quick-pick directories offered when launching a terminal. A deleted directory is dropped when the launcher opens; one that could be on an unplugged drive (parent missing too, a volume root, or a dangling symlink) is kept but hidden. |
+| `cwdPresets` | Quick-pick directories offered when launching a terminal. A deleted directory is dropped when the launcher opens; one that could be on an unplugged drive (parent missing too or empty, a volume root, or a dangling symlink) is kept but hidden. |
 | `soundFile`  | Absolute path to a custom **attention sound**, the fallback for every kind. Empty/unset uses the built-in synthesized chime. |
 | `soundKinds` | Which moments beep — see [Notification sounds](#notification-sounds). Defaults to `["finished","waiting"]`; the other kinds are opt-in. |
 | `sounds`     | Per-kind sound: `{ "waiting": "preset:coin" }`. A `preset:<id>` reference or an absolute path; a kind with no entry falls back to `soundFile`. |

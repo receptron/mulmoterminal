@@ -22,13 +22,23 @@ function isMountContainer(dir: string): boolean {
   return MOUNT_ROOTS.includes(dir) || PER_USER_MOUNT_ROOTS.includes(path.dirname(dir));
 }
 
-/** Classify saved directory paths by presence. `probe` must answer `absent` only for a definite
+/** What the classifier asks of the filesystem. `presence` must answer `absent` only for a definite
  *  "not there" (ENOENT/ENOTDIR) — anything uncertain has to read as present, or a permission error
- *  would delete a saved entry. Relative paths and filesystem roots are skipped: there is nothing to
- *  resolve the first against, and the second has no parent to judge by. */
-export function classifyMissingPresets(paths: readonly string[], probe: (dir: string) => DirPresence): MissingPresets {
-  const missing = paths.filter((dir) => path.isAbsolute(dir) && path.dirname(dir) !== dir && probe(dir) !== "present");
-  const isGone = (dir: string) => probe(dir) === "absent" && !isMountContainer(path.dirname(dir)) && probe(path.dirname(dir)) === "present";
+ *  would delete a saved entry. `hasEntries` must answer false when unsure, for the same reason. */
+export interface DirProbe {
+  presence: (dir: string) => DirPresence;
+  hasEntries: (dir: string) => boolean;
+}
+
+/** Classify saved directory paths by presence. Relative paths and filesystem roots are skipped:
+ *  there is nothing to resolve the first against, and the second has no parent to judge by.
+ *
+ *  An EMPTY parent never proves a deletion: a mount point that stays behind as an empty folder after
+ *  an unmount (an fstab `/mnt/nas`, a share mounted under home) looks exactly like that. */
+export function classifyMissingPresets(paths: readonly string[], probe: DirProbe): MissingPresets {
+  const missing = paths.filter((dir) => path.isAbsolute(dir) && path.dirname(dir) !== dir && probe.presence(dir) !== "present");
+  const parentProvesDeletion = (parent: string) => !isMountContainer(parent) && probe.presence(parent) === "present" && probe.hasEntries(parent);
+  const isGone = (dir: string) => probe.presence(dir) === "absent" && parentProvesDeletion(path.dirname(dir));
   return {
     gone: missing.filter(isGone),
     unreachable: missing.filter((dir) => !isGone(dir)),

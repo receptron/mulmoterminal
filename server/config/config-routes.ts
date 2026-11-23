@@ -61,7 +61,7 @@ import { mountConfigReloadRoute } from "./config-reload.js";
 import { mountKeymapBindingRoute } from "./keymap/keymap-binding-route.js";
 import { lastSegment } from "../../common/pathSegments.js";
 import { classifyMissingPresets, type MissingPresets } from "./dir/missing-presets.js";
-import { probeDir } from "./dir/cwd-presets.js";
+import { presetDirProbe } from "./dir/cwd-presets.js";
 
 export const APP_CONFIG_FILE = path.join(os.homedir(), ".mulmoterminal", "config.json");
 const CONFIG_FILE = APP_CONFIG_FILE;
@@ -444,7 +444,7 @@ function mountPruneMissingPresetsRoute(app: Express, onCwdPresetsChanged?: CwdPr
   const classify = (presets: readonly CwdPreset[]) =>
     classifyMissingPresets(
       presets.map((preset) => preset.path),
-      probeDir,
+      presetDirProbe,
     );
   const answerWith = (res: Response, presets: CwdPreset[]) => res.json({ cwdPresets: presets, unreachable: classify(presets).unreachable });
   const pruneGone = (res: Response) =>

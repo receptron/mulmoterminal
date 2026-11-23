@@ -3,15 +3,16 @@ import { describe, it, expect, afterAll } from "vitest";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { classifyMissingPresets, type DirPresence } from "../../../../server/config/dir/missing-presets";
-import { probeDir } from "../../../../server/config/dir/cwd-presets";
+import { classifyMissingPresets, type DirPresence, type DirProbe } from "../../../../server/config/dir/missing-presets";
+import { dirHasEntries, probeDir } from "../../../../server/config/dir/cwd-presets";
 
 const at = (posixPath: string) => path.resolve(posixPath);
-/** A probe over a fixed picture of the filesystem: listed paths answer as given, the rest are present. */
-const fsWith =
-  (entries: Record<string, DirPresence>) =>
-  (dir: string): DirPresence =>
-    entries[dir] ?? "present";
+/** A probe over a fixed picture of the filesystem: listed paths answer as given, the rest are present
+ *  and hold something, except the directories named in `empty`. */
+const fsWith = (entries: Record<string, DirPresence>, empty: readonly string[] = []): DirProbe => ({
+  presence: (dir) => entries[dir] ?? "present",
+  hasEntries: (dir) => !empty.includes(dir),
+});
 
 describe("classifyMissingPresets", () => {
   it("calls a directory gone when its parent is still there", () => {
@@ -47,6 +48,19 @@ describe("classifyMissingPresets", () => {
     expect(classifyMissingPresets([dir], fsWith({ [dir]: "absent" }))).toEqual({ gone: [dir], unreachable: [] });
   });
 
+  // A mount point that stays behind as an empty folder after an unmount.
+  it("never forgets a directory whose parent is present but empty", () => {
+    const dir = at("/mnt/nas/project");
+    expect(classifyMissingPresets([dir], fsWith({ [dir]: "absent" }, [at("/mnt/nas")]))).toEqual({ gone: [], unreachable: [dir] });
+  });
+
+  it.skipIf(process.platform === "win32").each(["/Volumes/USB/project", "/media/me/USB/project", "/run/media/me/USB/project"])(
+    "never forgets %s while its volume is unplugged",
+    (dir) => {
+      expect(classifyMissingPresets([dir], fsWith({ [dir]: "absent", [path.dirname(dir)]: "absent" }))).toEqual({ gone: [], unreachable: [dir] });
+    },
+  );
+
   it("leaves present directories out of both lists, keeping the saved order for the rest", () => {
     const [a, b, c, d] = ["/w/a", "/w/b", "/v/x/c", "/w/d"].map(at);
     const result = classifyMissingPresets([a, b, c, d], fsWith({ [b]: "absent", [c]: "absent", [at("/v/x")]: "absent", [d]: "absent" }));
@@ -56,16 +70,19 @@ describe("classifyMissingPresets", () => {
   it("never asks about a relative path or a filesystem root", () => {
     const asked: string[] = [];
     const root = path.parse(process.cwd()).root;
-    const result = classifyMissingPresets(["relative/dir", "", root], (dir) => {
-      asked.push(dir);
-      return "absent";
+    const result = classifyMissingPresets(["relative/dir", "", root], {
+      presence: (dir) => {
+        asked.push(dir);
+        return "absent";
+      },
+      hasEntries: () => true,
     });
     expect(result).toEqual({ gone: [], unreachable: [] });
     expect(asked).toEqual([]);
   });
 
   it("answers empty lists for an empty input", () => {
-    expect(classifyMissingPresets([], () => "absent")).toEqual({ gone: [], unreachable: [] });
+    expect(classifyMissingPresets([], { presence: () => "absent", hasEntries: () => true })).toEqual({ gone: [], unreachable: [] });
   });
 });
 
@@ -92,6 +109,14 @@ describe("probeDir", () => {
     const link = path.join(root, "link");
     symlinkSync(path.join(root, "nowhere"), link);
     expect(probeDir(link)).toBe("dangling");
+  });
+
+  it("dirHasEntries is true only for a readable directory that holds something", () => {
+    expect(dirHasEntries(root)).toBe(true);
+    const empty = path.join(root, "empty");
+    mkdirSync(empty);
+    expect(dirHasEntries(empty)).toBe(false);
+    expect(dirHasEntries(path.join(root, "missing"))).toBe(false);
   });
 
   // The caller deletes saved entries on `true`, so a permission error must read as present.

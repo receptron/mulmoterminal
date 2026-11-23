@@ -1,9 +1,9 @@
 // Directory presets the launch form offers, persisted at config.json. Extracted
 // from index.ts so the sanitize/load/save logic is unit-testable.
-import { existsSync, lstatSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { type CwdPreset } from "../config-schema.js";
-import type { DirPresence } from "./missing-presets.js";
+import type { DirPresence, DirProbe } from "./missing-presets.js";
 import { readJsonFile } from "../../infra/fs/read-text-file.js";
 import { writeFileAtomicSync } from "../../files/atomic-write.js";
 import { isRecord } from "../../../common/isRecord.js";
@@ -76,6 +76,18 @@ export function probeDir(dir: string): DirPresence {
     return isAbsentError(err) ? "absent" : "present";
   }
 }
+
+// False when unsure (unreadable, gone): the caller deletes saved entries only on a true here.
+export function dirHasEntries(dir: string): boolean {
+  try {
+    return readdirSync(dir).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** The filesystem as `classifyMissingPresets` asks about it. */
+export const presetDirProbe: DirProbe = { presence: probeDir, hasEntries: dirHasEntries };
 
 // Persist; returns false on any write failure so the caller can surface it
 // instead of reporting a false success.
