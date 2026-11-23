@@ -293,13 +293,15 @@ describe("POST /api/config/cwd-presets/prune-missing", () => {
   it("brings this process's own view in line with the file it answered from", async () => {
     const { kept } = scratchTree();
     const { app, onChanged } = await mountAgainstTempHome({ cwdPresets: [] });
-    const { APP_CONFIG_FILE, getCwdPresets } = await import("../../../../server/config/config-routes.js");
-    writeFileSync(APP_CONFIG_FILE, JSON.stringify({ cwdPresets: [{ label: "kept", path: kept }] }));
+    const { APP_CONFIG_FILE, getCwdPresets, getPrRepos } = await import("../../../../server/config/config-routes.js");
+    writeFileSync(APP_CONFIG_FILE, JSON.stringify({ cwdPresets: [{ label: "kept", path: kept }], prRepos: ["acme/web"] }));
     expect(getCwdPresets()).toEqual([]);
     const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
     expect(pathsOf(res.body)).toEqual([kept]);
     expect(getCwdPresets().map((preset) => preset.path)).toEqual([kept]);
     expect(onChanged).toHaveBeenCalledTimes(1);
+    // Only the list: a prune is not a config reload, so another setting in the file is not applied.
+    expect(getPrRepos()).toEqual([]);
   });
 
   it("answers an empty list for a config with no saved directories", async () => {
