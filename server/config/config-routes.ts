@@ -468,6 +468,9 @@ function pruneUnderLock(res: Response, onCwdPresetsChanged?: CwdPresetsChanged) 
   // back), and would confirm its next absence at once. So nothing is removed on it — only hidden.
   const recorded = saveMissingSince(MISSING_SINCE_FILE, decision.missingSince);
   if (!recorded || decision.gone.length === 0) {
+    // The client adopts this list as the whole truth, so this process must serve the same one — as
+    // every write path does. Another mulmoterminal may have changed the file since we last read it.
+    if (loaded.status === "ok") adoptReloaded(loaded.config, onCwdPresetsChanged);
     const hidden = new Set([...decision.unreachable, ...decision.gone]);
     return res.json({ cwdPresets: onDisk, unreachable: onDisk.map((preset) => preset.path).filter((dir) => hidden.has(dir)) });
   }

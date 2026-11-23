@@ -288,6 +288,20 @@ describe("POST /api/config/cwd-presets/prune-missing", () => {
     expect(readFileSync(APP_CONFIG_FILE, "utf8")).toBe("{ not json");
   });
 
+  // Another process wrote the file since this one loaded it. The answer is adopted by the client as
+  // the whole list, so this process must start serving the same list.
+  it("brings this process's own view in line with the file it answered from", async () => {
+    const { kept } = scratchTree();
+    const { app, onChanged } = await mountAgainstTempHome({ cwdPresets: [] });
+    const { APP_CONFIG_FILE, getCwdPresets } = await import("../../../../server/config/config-routes.js");
+    writeFileSync(APP_CONFIG_FILE, JSON.stringify({ cwdPresets: [{ label: "kept", path: kept }] }));
+    expect(getCwdPresets()).toEqual([]);
+    const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    expect(pathsOf(res.body)).toEqual([kept]);
+    expect(getCwdPresets().map((preset) => preset.path)).toEqual([kept]);
+    expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
   it("answers an empty list for a config with no saved directories", async () => {
     const { app } = await mountAgainstTempHome({});
     const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
