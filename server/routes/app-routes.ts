@@ -109,7 +109,7 @@ import { mountFilesRoutes } from "../backends/files/files.js";
 import { mountFilesPageRoute } from "../backends/files/filesPage.js";
 import { mountFileGrantRoutes } from "../backends/files/fileGrants.js";
 import {
-  activity,
+  lastHookEvent,
   hookedSessions,
   markSessionPlaced,
   markUnplacedSession,
@@ -273,7 +273,7 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     sessions: issueSessions,
     isRunning,
     prOf: fetchBranchPr,
-    blocked: async (session) => waitingOnPermission(activity.get(session)) || (await ask.openQuestion(session)) !== null,
+    blocked: async (session) => waitingOnPermission(lastHookEvent.get(session)) || (await ask.openQuestion(session)) !== null,
     deliver: (parent, text, ended) => deliverWhenFree(ask, parent, text, ended, "startIssueSession"),
     limit: getMaxIssueSessions,
   });

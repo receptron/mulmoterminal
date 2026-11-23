@@ -9,9 +9,12 @@ Every `ISSUE_WATCH_INTERVAL_MS`, for each implementer not yet finished, the serv
 
 - the newest PR from its branch (`gh pr list --head <branch> --state all`);
 - whether its session still runs here;
-- whether it stopped on the user: an open question dialog, or the agent's `Notification` hook (claude's,
-  and codex's PermissionRequest, which arrives under that name). A turn that merely ended (`Stop`) is
-  not this: the implementer may be waiting for its review round, which the server types in.
+- whether it stopped on the user: an open question dialog, or its newest hook event being `Notification`
+  (claude's, and codex's PermissionRequest, which arrives under that name). Read from `lastHookEvent`, kept
+  on every hook whether or not it moved a flag — not from `activity`, whose `waiting` is also the unread
+  mark: an unviewed cell keeps it from its first `Stop`, after which a `Notification` moves nothing there.
+  A turn that merely ended is not a stop on the user: the implementer may be waiting for its review round,
+  which the server types in.
 
 and types one `[startIssueSession]` line into the starter on news: merged, closed, ended, or waiting
 for the user. Merged, closed and ended finish the implementer: it stops holding a place against

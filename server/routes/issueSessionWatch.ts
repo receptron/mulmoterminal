@@ -5,12 +5,12 @@ import type { IssueSession, IssueSessionEnd } from "./issueSessions.js";
 
 export type PrState = "OPEN" | "MERGED" | "CLOSED";
 
-/** The agent reported it is blocked on the user: claude's Notification hook, and codex's
- *  PermissionRequest, which arrives under the same name (agents/codex/codex-hook.ts). A turn that
- *  merely ended (Stop) also sets `waiting`, and is not this — the implementer may be waiting on its
+/** The agent's newest hook says it is blocked on the user: claude's Notification, and codex's
+ *  PermissionRequest, which arrives under the same name (agents/codex/codex-hook.ts). Any later hook —
+ *  the tool running once answered, the turn ending — moves it on. Not the `waiting` flag: that is also
+ *  the unread mark, set by a turn that merely ended, while the implementer may be waiting on its
  *  review round, which the server types in. */
-export const waitingOnPermission = (activity: { waiting?: boolean; event?: string | null } | undefined): boolean =>
-  activity?.waiting === true && activity.event === "Notification";
+export const waitingOnPermission = (newestHookEvent: string | undefined): boolean => newestHookEvent === "Notification";
 
 export interface ImplementerObservation {
   running: boolean;

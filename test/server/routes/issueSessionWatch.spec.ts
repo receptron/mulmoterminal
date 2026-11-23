@@ -46,12 +46,11 @@ describe("watchStep", () => {
 });
 
 describe("waitingOnPermission", () => {
-  it("is a reported block, not a turn that ended", () => {
-    expect(waitingOnPermission({ waiting: true, event: "Notification" })).toBe(true);
-    expect(waitingOnPermission({ waiting: true, event: "Stop" })).toBe(false);
-    expect(waitingOnPermission({ waiting: false, event: "Notification" })).toBe(false);
-    expect(waitingOnPermission({ event: "Notification" })).toBe(false);
-    expect(waitingOnPermission(undefined)).toBe(false);
+  it("is a newest hook that reports a block, not a turn that ended or moved on", () => {
+    expect(waitingOnPermission("Notification")).toBe(true);
+    ["Stop", "UserPromptSubmit", "PreToolUse", "PostToolUse", "StopFailure", undefined].forEach((event) =>
+      expect(waitingOnPermission(event), String(event)).toBe(false),
+    );
   });
 });
 
