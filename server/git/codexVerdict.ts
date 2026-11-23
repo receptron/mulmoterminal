@@ -65,5 +65,6 @@ export function codexReviewOf(comments: unknown, reviews: unknown, headOid: stri
     more: reachedCap(comments) || reachedCap(reviews),
     latest: latest.verdict,
     head: headState(latest.sha, headOid),
+    lgtmOnHead: verdicts.filter((verdict) => verdict.verdict === "lgtm" && headState(verdict.sha, headOid) === "current").length,
   };
 }

@@ -25,7 +25,9 @@ export const githubBoardZhCN = {
     changesRequested: "要求修改",
     approved: "已批准",
     reviewRound: "第 {count} 轮评审",
-    codex: { lgtm: "Codex {count} 次：LGTM", changes: "Codex {count} 次：要求修改", stale: "针对较早的 push", unknown: "未注明针对哪个 push" },
+    codex: { lgtm: "判定 {count} 次：LGTM", changes: "判定 {count} 次：要求修改", stale: "针对较早的 push", unknown: "未注明针对哪个 push" },
+    mergeReady: "可以合并",
+    mergeReadyTip: "最新的 push 已有本仓库要求数量的 LGTM，且 CI 已通过",
     awaitingReview: "最新的 push 尚未评审",
     noCell: "没有终端在此分支上运行",
     cell: { working: "工作中", waiting: "等待你确认", idle: "空闲" },
@@ -59,6 +61,6 @@ export const githubBoardZhCN = {
       noReviews: "还没有评审",
       noBody: "没有描述",
     },
-    rule: "评审轮数是获得评审的 push 数量。Codex 次数是以评论发布的 codex 判定数量。待 QA 表示 CI 已通过且最新的 push 已评审。",
+    rule: "评审轮数是获得评审的 push 数量。判定次数是以评论发布的交叉评审判定（CODEX VERDICT 或 REVIEW VERDICT 行）数量。可以合并表示最新的 push 已有仓库在 review 设置中声明数量的 LGTM，且 CI 已通过。待 QA 表示 CI 已通过且最新的 push 已评审。",
   },
 };

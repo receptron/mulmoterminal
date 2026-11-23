@@ -52,7 +52,7 @@ const closesInRepo = (refs: unknown, repo: string): BoardIssue[] => {
 };
 
 /** One `gh pr list --json` row, or null when it lacks the identity fields. */
-export function parseBoardPr(raw: unknown, repo: string): BoardPrRow | null {
+export function parseBoardPr(raw: unknown, repo: string, requiredLgtm: number | null = null): BoardPrRow | null {
   if (!isRecord(raw) || typeof raw.number !== "number" || typeof raw.url !== "string") return null;
   const reviewed = reviewedCommits(raw.reviews);
   const pr: BoardPr = {
@@ -66,6 +66,7 @@ export function parseBoardPr(raw: unknown, repo: string): BoardPrRow | null {
     reviewRounds: reviewed.size,
     headReviewed: reviewed.has(readString(raw.headRefOid)),
     codex: codexReviewOf(raw.comments, raw.reviews, readString(raw.headRefOid)),
+    requiredLgtm,
   };
   return { pr, closes: closesInRepo(raw.closingIssuesReferences, repo) };
 }

@@ -25,7 +25,9 @@ export const githubBoardZhTW = {
     changesRequested: "要求修改",
     approved: "已核准",
     reviewRound: "第 {count} 輪審查",
-    codex: { lgtm: "Codex {count} 次：LGTM", changes: "Codex {count} 次：要求修改", stale: "針對較早的 push", unknown: "未註明針對哪個 push" },
+    codex: { lgtm: "判定 {count} 次：LGTM", changes: "判定 {count} 次：要求修改", stale: "針對較早的 push", unknown: "未註明針對哪個 push" },
+    mergeReady: "可以合併",
+    mergeReadyTip: "最新的 push 已有本儲存庫要求數量的 LGTM，且 CI 已通過",
     awaitingReview: "最新的 push 尚未審查",
     noCell: "沒有終端機在此分支上執行",
     cell: { working: "工作中", waiting: "等待你確認", idle: "閒置" },
@@ -59,6 +61,6 @@ export const githubBoardZhTW = {
       noReviews: "尚無審查",
       noBody: "沒有描述",
     },
-    rule: "審查輪數是獲得審查的 push 數量。Codex 次數是以留言發布的 codex 判定數量。待 QA 表示 CI 已通過且最新的 push 已審查。",
+    rule: "審查輪數是獲得審查的 push 數量。判定次數是以留言發布的交叉審查判定（CODEX VERDICT 或 REVIEW VERDICT 行）數量。可以合併表示最新的 push 已有儲存庫在 review 設定中宣告數量的 LGTM，且 CI 已通過。待 QA 表示 CI 已通過且最新的 push 已審查。",
   },
 };
