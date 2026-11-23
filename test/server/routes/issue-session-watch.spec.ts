@@ -17,6 +17,7 @@ const entry = (session: string, issue: number, parent = "parent"): IssueSession 
   branch: `issue/${issue}`,
   finished: null,
   blockedTold: false,
+  prUnreadable: 0,
 });
 
 let sessions: Map<string, IssueSession>;
@@ -71,6 +72,18 @@ describe("watchIssueSessions", () => {
     expect(prOf.mock.calls.map(([, branch]) => branch)).toEqual(["issue/8"]);
   });
 
+  it("does not finish an ended implementer on a pass gh could not answer, and sees its merge later", async () => {
+    running.delete("s-2");
+    prOf.mockImplementation(async (_repo, branch) => (branch === "issue/8" ? "unreadable" : null));
+    await watchIssueSessions(deps());
+    expect(sessions.get("s-2")?.finished).toBeNull();
+    expect(deliver).not.toHaveBeenCalled();
+    prOf.mockImplementation(async (_repo, branch) => (branch === "issue/8" ? { number: 11, state: "MERGED" } : null));
+    await watchIssueSessions(deps());
+    expect(sessions.get("s-2")?.finished).toBe("merged");
+    expect(told()[0]?.[1]).toContain("PR #11 was merged");
+  });
+
   it("records an implementer whose session ended", async () => {
     running.delete("s-2");
     await watchIssueSessions(deps());
@@ -110,6 +123,7 @@ describe("watchIssueSessions", () => {
   });
 
   it("keeps looking at the others when one look fails, or a delivery throws", async () => {
+    // A gh that threw outright, not one that answered nothing readable.
     prOf.mockImplementation(async (_repo, branch) => {
       if (branch === "issue/7") throw new Error("gh down");
       return { number: 10, state: "CLOSED" };

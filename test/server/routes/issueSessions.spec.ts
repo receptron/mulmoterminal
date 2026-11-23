@@ -21,6 +21,7 @@ const entry = (session: string, issue = 7, repo = "owner/repo"): IssueSession =>
   branch: `issue/${issue}`,
   finished: null,
   blockedTold: false,
+  prUnreadable: 0,
 });
 
 describe("parseStartRequest", () => {

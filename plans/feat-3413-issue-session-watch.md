@@ -24,6 +24,16 @@ for the user. Merged, closed and ended finish the implementer: it stops holding 
 
 ## Decisions
 
+- **`idle_prompt` is not a block.** Claude Code sends that Notification after its input box sat idle; it is
+  actionable for the attention mark, but no dialog holds the input — an implementer waiting for its
+  review round sends it. It is kept apart (`IDLE_PROMPT_EVENT`) so it neither reads as a block nor leaves
+  an earlier one standing.
+- **A PR gh could not read is not "no PR".** It never finishes a running implementer, and finishes an
+  ended one only after `ENDED_UNREADABLE_PASSES` in a row — a merge gh missed once is still seen.
+- **No sender types into a permission prompt.** Its Enter would answer it. `inputHeld` (a question dialog,
+  or the newest hook being a dialog Notification) is asked by `sendToSession`, the review request to the
+  reviewer, and `deliverWhenFree` alike; before this, all three asked about question dialogs only.
+
 - **The PR decides first.** A merge that also ended the session is a merge.
 - **A stop on the user is told once while it lasts**, and again only after the implementer moved on.
 - **A starter that is gone is not typed into**, but its implementers are still followed, so their places

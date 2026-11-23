@@ -24,6 +24,8 @@ export interface IssueSession {
   finished: IssueSessionEnd | null;
   /** The caller was told it is waiting on the user, and is not told again until that changes. */
   blockedTold: boolean;
+  /** Passes in a row on which gh could not say how its PR stands (routes/issueSessionWatch.ts). */
+  prUnreadable: number;
 }
 
 export interface StartRequest {

@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   activityHookEffects,
   buildPushText,
+  IDLE_PROMPT_EVENT,
   nextHookEvent,
   pushKindFor,
   resolveHookCwd,
@@ -273,6 +274,16 @@ describe("nextHookEvent", () => {
     expect(nextHookEvent("Notification", "PostToolUse")).toBe("PostToolUse");
     expect(nextHookEvent("Stop", "UserPromptSubmit")).toBe("UserPromptSubmit");
     expect(nextHookEvent("UserPromptSubmit", "Notification")).toBe("Notification");
+  });
+
+  // Sent after the input box has sat idle: the user is wanted, but no dialog holds the input — so it
+  // must neither read as a block nor leave an earlier one standing.
+  it("keeps an idle-prompt Notification apart from one that may hold a dialog", () => {
+    expect(nextHookEvent("Stop", "Notification", "idle_prompt")).toBe(IDLE_PROMPT_EVENT);
+    expect(nextHookEvent("Notification", "Notification", "idle_prompt")).toBe(IDLE_PROMPT_EVENT);
+    expect(nextHookEvent(IDLE_PROMPT_EVENT, "Notification", "permission_prompt")).toBe("Notification");
+    expect(nextHookEvent(IDLE_PROMPT_EVENT, "Notification", "elicitation_dialog")).toBe("Notification");
+    expect(nextHookEvent(IDLE_PROMPT_EVENT, "Notification")).toBe("Notification");
   });
 
   it("is not moved by a Notification that only reports something that already happened", () => {

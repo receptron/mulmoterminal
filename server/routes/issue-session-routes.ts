@@ -71,6 +71,7 @@ async function startImplementer(deps: IssueSessionRouteDeps, parent: string, req
     branch: work.branch ?? null,
     finished: null,
     blockedTold: false,
+    prUnreadable: 0,
   };
   deps.sessions.set(entry.session, entry);
   deps.recordSpawn(entry.session, parent);

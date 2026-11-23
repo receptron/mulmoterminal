@@ -52,7 +52,7 @@ import { startIssueWork } from "../git/issue-work.js";
 import { forgeFromRepoEntry } from "../git/forge-host.js";
 import { startIssueSessionWatch } from "./issue-session-watch.js";
 import { fetchBranchPr } from "../git/pr-of-branch.js";
-import { deliverWhenFree } from "./deliverWhenFree.js";
+import { deliverWhenFree, inputHeld } from "./deliverWhenFree.js";
 import { waitingOnPermission } from "./issueSessionWatch.js";
 import { mountTerminalReplyRoutes } from "./terminal-reply-routes.js";
 import { randomUUID } from "node:crypto";
@@ -242,6 +242,7 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     spawned: spawnedSessions,
     send: (sessionId: string, text: string, options: SendOptions) => sendToSession(sessionId, text, options),
     openQuestion: openQuestionIn(deps),
+    permissionPending: (session: string) => waitingOnPermission(lastHookEvent.get(session)),
     turnReader: liveTurnReader,
     sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
     now: () => Date.now(),
@@ -273,7 +274,7 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     sessions: issueSessions,
     isRunning,
     prOf: fetchBranchPr,
-    blocked: async (session) => waitingOnPermission(lastHookEvent.get(session)) || (await ask.openQuestion(session)) !== null,
+    blocked: (session) => inputHeld(ask, session),
     deliver: (parent, text, ended) => deliverWhenFree(ask, parent, text, ended, "startIssueSession"),
     limit: getMaxIssueSessions,
   });

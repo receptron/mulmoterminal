@@ -8,17 +8,29 @@ import type { AskQuestionEvent } from "../../common/askQuestion.js";
 export const DELIVERY_RETRY_MS = 5000;
 export const DELIVERY_ATTEMPTS = 120;
 
-export interface DeliveryDeps {
+/** What says a session's input is held by a dialog, so a line typed now would land in it. */
+export interface InputHoldDeps {
+  openQuestion: (sessionId: string) => Promise<AskQuestionEvent | null>;
+  /** The agent reported a permission prompt it is still waiting on. Its Enter would answer it. */
+  permissionPending: (sessionId: string) => boolean;
+}
+
+/** A question dialog or a permission prompt holds the session's input. Asked by every sender that
+ *  types into a session on its own, before the paste and again before the Enter. */
+export async function inputHeld(deps: InputHoldDeps, session: string): Promise<boolean> {
+  return deps.permissionPending(session) || (await deps.openQuestion(session)) !== null;
+}
+
+export interface DeliveryDeps extends InputHoldDeps {
   /** Resolves once the Enter has gone out; rejects with InputBlockedError when `blocked` says no. */
   send: (sessionId: string, text: string, options: SendOptions) => Promise<unknown>;
-  openQuestion: (sessionId: string) => Promise<AskQuestionEvent | null>;
   sleep: (ms: number) => Promise<void>;
 }
 
 /** `label` names the sender in the log when a dialog outlasts every attempt. */
 export async function deliverWhenFree(deps: DeliveryDeps, session: string, text: string, ended: () => boolean, label: string): Promise<void> {
   // Asked before the paste and again before the Enter, like every other send.
-  const blocked = async (): Promise<boolean> => ended() || (await deps.openQuestion(session)) !== null;
+  const blocked = async (): Promise<boolean> => ended() || (await inputHeld(deps, session));
   for (let attempt = 1; attempt <= DELIVERY_ATTEMPTS; attempt += 1) {
     if (ended()) return;
     try {
