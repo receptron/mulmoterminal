@@ -35,6 +35,11 @@ is refused for the limit (`maxIssueSessions`). Keep the rest as the queue. A ref
 (the issue already has a session in its worktree, no clone, not on GitHub) is that issue's answer: report
 it and go on with the next.
 
+The limit counts every implementer on this machine, not only yours, and you are told only about the ones
+you started. So when the limit refuses while **none of yours is running**, nothing will arrive to start
+the queue: tell the user the places are taken by other sessions, and try the next issue again when the
+user asks you to.
+
 Then tell the user, in one short message: which issue runs in which cell (its session id), which are
 queued, and that **each implementer asks its questions in its own cell — answer them there**.
 
@@ -48,6 +53,9 @@ says what happened:
   one. Do not restart the same issue on your own; ask the user.
 - **waiting for the user** — tell the user which issue and which cell needs them. Do not answer its
   question, and do not `sendToSession` an answer on the user's behalf.
+
+A start the limit refuses here (another session took the place) stays queued, and is tried again at your
+next line — or, when none of yours is running any more, when the user asks, as in step 3.
 
 When the user asks for an issue to be added or dropped, change the queue; an implementer already started
 keeps running until it finishes, or until the user closes its cell.
