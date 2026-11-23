@@ -40,6 +40,13 @@ export function isActionableNotification(notificationType?: string): boolean {
   return !notificationType || !INFORMATIONAL_NOTIFICATIONS.has(notificationType);
 }
 
+/** The newest hook event to keep for a session (#3413): every hook moves it on, whatever flag it
+ *  moves, except a Notification that only reports something that already happened — that is not
+ *  progress, and must not read as a new block or clear one. */
+export function nextHookEvent(previous: string | undefined, event: string, notificationType?: string): string | undefined {
+  return event === "Notification" && !isActionableNotification(notificationType) ? previous : event;
+}
+
 export function activityHookEffects(event: string, active: boolean, notificationType?: string): ActivityEffect[] {
   if (WORKING_EVENTS.has(event)) return [{ kind: "working", value: true }];
   // A finished turn (Stop) has unseen output; a paused turn (Notification) waits on the
