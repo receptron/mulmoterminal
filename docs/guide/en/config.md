@@ -712,7 +712,7 @@ reviews automatically until the key is set; a session that drives a review reads
 - **`requiredLgtm`** — how many LGTMs naming the PR's current head make it mergeable, 1 to 5.
   Default 1. Every CI check passing is always required as well.
 - Omit any field for its default; `"review": {}` takes all three defaults.
-- If any field is wrong (an agent this app does not run, a number out of range), the **whole key**
+- If any field is wrong (an agent this app does not run, a number out of range, a misspelt field name), the **whole key**
   is ignored rather than falling back to a default reviewer, and Settings → Directory settings lists
   it under *ignored*. Settings shows a valid one as **Review**.
 - The file is the only way to set it. It is read from the clone that work on the repository starts

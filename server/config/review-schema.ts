@@ -3,11 +3,15 @@
 import { z } from "zod";
 import { MAX_REQUIRED_LGTM, MAX_REVIEW_ROUNDS, REVIEW_DEFAULTS, REVIEWER_AGENTS, type ReviewSettings } from "../../common/reviewSettings.js";
 
-export const reviewSchema = z.object({
-  reviewer: z.enum(REVIEWER_AGENTS).optional(),
-  maxRounds: z.number().int().min(1).max(MAX_REVIEW_ROUNDS).optional(),
-  requiredLgtm: z.number().int().min(1).max(MAX_REQUIRED_LGTM).optional(),
-});
+// Strict: a misspelt field (`requiredLGTM`) would otherwise be stripped and its default taken — a
+// looser merge condition than the one written.
+export const reviewSchema = z
+  .object({
+    reviewer: z.enum(REVIEWER_AGENTS).optional(),
+    maxRounds: z.number().int().min(1).max(MAX_REVIEW_ROUNDS).optional(),
+    requiredLgtm: z.number().int().min(1).max(MAX_REQUIRED_LGTM).optional(),
+  })
+  .strict();
 
 // All or nothing, unlike the lenient fields beside it: a typo in `reviewer` must not quietly become
 // the default reviewer, because that runs an agent the author did not choose. A block that does not

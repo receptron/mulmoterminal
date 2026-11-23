@@ -221,8 +221,8 @@ Read by a session that drives a review, through the `reviewSettings` tool (given
 - `maxRounds` — review rounds before a person is asked, 1-50 (default 10).
 - `requiredLgtm` — LGTMs naming the current head that make a PR mergeable, 1-5 (default 1). Every
   CI check passing is required on top.
-- Any wrong field drops the **whole key** (shown under *ignored*); it never falls back to a default
-  reviewer. Write it to the clone the repository's work starts in; worktrees inherit it.
+- Any wrong field, including a misspelt field name, drops the **whole key** (shown under *ignored*);
+  it never falls back to a default. Write it to the clone the repository's work starts in; worktrees inherit it.
 - No Settings control: the file is the only way to set it. Settings shows it as **Review**.
 
 ### `appendSystemPrompt` — the closing summary

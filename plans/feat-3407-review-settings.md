@@ -15,8 +15,8 @@ can read it.
 - `requiredLgtm`: LGTMs naming the current head that make a PR mergeable. CI passing is always
   required on top, so it is not an option.
 - Omitted fields take `REVIEW_DEFAULTS`; `{}` is all defaults.
-- **All or nothing.** Any wrong field drops the block (`dirReviewField`), so a typo never becomes a
-  default reviewer the author did not pick. The key then shows as ignored in Settings.
+- **All or nothing.** Any wrong field, or a field name it does not know, drops the block
+  (`dirReviewField`), so a typo never becomes a default the author did not pick. The key then shows as ignored in Settings.
 
 ## Reading it
 

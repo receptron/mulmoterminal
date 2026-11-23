@@ -43,8 +43,9 @@ describe("dirReviewField", () => {
     expect(dirReviewField.parse(value)).toBeNull();
   });
 
-  it("ignores keys it does not know rather than refusing the block", () => {
-    expect(dirReviewField.parse({ reviewer: "claude", note: "x" })).toEqual({ ...REVIEW_DEFAULTS, reviewer: "claude" });
+  it("drops the whole block for a field it does not know, so a misspelling never takes the default", () => {
+    expect(dirReviewField.parse({ reviewer: "claude", requiredLGTM: 2 })).toBeNull();
+    expect(dirReviewField.parse({ note: "x" })).toBeNull();
   });
 });
 
