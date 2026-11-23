@@ -10,6 +10,7 @@ import { createSessionLifecycle } from "../../../server/session/lifecycle.js";
 import type { WorkPhase } from "../../../server/session/activity/workPhase.js";
 import {
   activity,
+  lastHookEvent,
   aiTitles,
   hiddenSessions,
   knownSessions,
@@ -55,7 +56,7 @@ const makeDeps = (workPhase: WorkPhase | null = null) => ({
 const fakeEntry = (over: Record<string, unknown> = {}) => ({ term: { kill: vi.fn() }, ws: null, cwd: "/work", tmux: false, agent: "claude", ...over }) as never;
 
 const clearRegistry = () => {
-  for (const map of [ptys, activity, knownSessions, lastPrompts, lastResponses, aiTitles, launchChoices]) map.clear();
+  for (const map of [ptys, activity, lastHookEvent, knownSessions, lastPrompts, lastResponses, aiTitles, launchChoices]) map.clear();
   hiddenSessions.clear();
   clearedTranscripts.clear();
 };
@@ -157,6 +158,25 @@ describe("reap", () => {
 });
 
 describe("setWorking / setWaiting", () => {
+  // #3413: an unviewed cell keeps `waiting` from its first Stop, so a later Notification moves no flag —
+  // and the watch over implementers still has to see it, and see it go once the session moves on.
+  it("records the newest hook event even when it moves no flag, and forgets it on reap", () => {
+    const lifecycle = createSessionLifecycle(makeDeps());
+    lifecycle.setWaiting(ID, true, "Stop");
+    lifecycle.setWorking(ID, false, "Stop");
+    lifecycle.setWorking(ID, true, "UserPromptSubmit");
+    lifecycle.setWaiting(ID, true, "Notification");
+    expect(activity.get(ID)?.event).toBe("UserPromptSubmit");
+    expect(lastHookEvent.get(ID)).toBe("Notification");
+    lifecycle.setWorking(ID, true, "PostToolUse");
+    expect(lastHookEvent.get(ID)).toBe("PostToolUse");
+    lifecycle.setWaiting(ID, false);
+    expect(lastHookEvent.get(ID)).toBe("PostToolUse");
+    ptys.set(ID, fakeEntry());
+    lifecycle.reap(ID);
+    expect(lastHookEvent.has(ID)).toBe(false);
+  });
+
   it("publishes a row when the flag actually changes", () => {
     const deps = makeDeps();
     ptys.set(ID, fakeEntry({ ws: {} }));

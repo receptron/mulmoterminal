@@ -16,6 +16,7 @@
 // Everything else is the shared session registry, which is imported directly.
 import {
   activity,
+  lastHookEvent,
   aiTitles,
   claudeSessionIds,
   hiddenSessions,
@@ -192,6 +193,7 @@ function reap(deps: SessionLifecycleDeps, id: string) {
   deps.forgetTerminalSize(id);
   deps.forgetPaneMode(id);
   titleInFlight.delete(id);
+  lastHookEvent.delete(id);
   lastTitledUserTurns.delete(id);
   lastTitleAttemptMs.delete(id);
   if (shouldForgetActivity(activity.get(id))) {
@@ -257,6 +259,7 @@ function publishActivity(deps: SessionLifecycleDeps, id: string) {
 // A no-op when the flag's value did not actually move — flagEffect returns null and every
 // hook calls through here, so an unchanged publish would flood the socket.
 function setFlag(deps: SessionLifecycleDeps, id: string, flag: ActivityFlag, value: boolean, event?: string) {
+  if (event !== undefined) lastHookEvent.set(id, event);
   const effect = flagEffect(activity.get(id), flag, value, event, Date.now());
   if (!effect.next) return;
   activity.set(id, effect.next);
