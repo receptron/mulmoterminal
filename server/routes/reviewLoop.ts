@@ -139,6 +139,7 @@ export function reviewPrompt({ repo, pr, head, round, maxRounds }: PromptFacts):
 }
 
 export interface PrNow {
+  open: boolean;
   head: string;
   ci: CiState;
 }
@@ -161,6 +162,7 @@ const LAST_ROUND = "That was the last round this repository allows: ask the user
 
 function lgtmNext(loop: ReviewLoop, settings: ReviewSettings, now: PrNow | null): string {
   if (now === null) return "The PR could not be read to check the merge condition; check it with gh pr view before merging.";
+  if (!now.open) return "The PR is no longer open, so there is nothing to merge: call endReview.";
   const count = lgtmCountOn(loop.rounds, now.head);
   const lgtm = `${count}/${settings.requiredLgtm} LGTM on the current head`;
   if (count < settings.requiredLgtm) {

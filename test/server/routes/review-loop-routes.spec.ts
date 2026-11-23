@@ -33,7 +33,7 @@ type Handler = (req: Req, res: { json: (body: { message?: string }) => void }) =
 
 const send = vi.fn<(sessionId: string, text: string, options: SendOptions) => Promise<unknown>>(async () => undefined);
 const openQuestion = vi.fn<(sessionId: string) => Promise<AskQuestionEvent | null>>(async () => null);
-const close = vi.fn<(session: string) => void>();
+const close = vi.fn<(session: string) => boolean>(() => true);
 let reply: string | null;
 let settings: ReviewSettings | string;
 let pr: PrReviewState | string;
@@ -108,6 +108,7 @@ beforeEach(() => {
   openQuestion.mockReset();
   openQuestion.mockImplementation(async () => null);
   close.mockReset();
+  close.mockImplementation(() => true);
   reply = "REVIEW VERDICT: LGTM (head aaaaaaa)\n- nothing";
   settings = SETTINGS;
   pr = { open: true, head: HEAD, ci: "passing" };
@@ -323,6 +324,16 @@ describe("endReview", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(typedToAuthor()).toEqual([]);
     expect(loops.size).toBe(0);
+  });
+
+  it("says so when the reviewer is still running after the close", async () => {
+    close.mockImplementation(() => false);
+    const { requestRoute, endRoute } = routes();
+    await call(requestRoute, req(BODY));
+    await roundsEnded(1);
+    const message = await call(endRoute, req({ repo: "owner/repo", pr: 7 }));
+    expect(message).toMatch(/could not be closed: it is still running/);
+    expect(message).not.toMatch(/and closed reviewer/);
   });
 
   it("refuses another session's loop, and a PR with none", async () => {

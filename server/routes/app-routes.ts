@@ -236,9 +236,7 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     settingsOf: reviewSettingsOf,
     prState: fetchPrReviewState,
     agentOf: (session) => ptys.get(session)?.agent,
-    close: (session) => {
-      endTmuxSession(tmuxRouteDeps(deps), session, true);
-    },
+    close: (session) => endTmuxSession(tmuxRouteDeps(deps), session, true),
   });
 }
 

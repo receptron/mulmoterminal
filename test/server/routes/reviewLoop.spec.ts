@@ -184,8 +184,18 @@ describe("reviewPrompt", () => {
 });
 
 describe("roundEndMessage", () => {
-  const ended = (rounds: ReviewRound[], now: { head: string; ci: "passing" | "pending" | "failing" | "none" } | null, timedOut = false, settings = SETTINGS) =>
-    roundEndMessage({ loop: loopWith(rounds), settings, now, timedOut });
+  const ended = (
+    rounds: ReviewRound[],
+    now: { open?: boolean; head: string; ci: "passing" | "pending" | "failing" | "none" } | null,
+    timedOut = false,
+    settings = SETTINGS,
+  ) => roundEndMessage({ loop: loopWith(rounds), settings, now: now && { open: true, ...now }, timedOut });
+
+  it("never invites a merge of a PR that closed or merged during the round", () => {
+    const message = ended([{ head: HEAD, verdict: "lgtm" }], { open: false, head: HEAD, ci: "passing" });
+    expect(message).toMatch(/no longer open.*endReview/);
+    expect(message).not.toMatch(/Merge condition met|You may merge/);
+  });
 
   it("says the merge condition is met only with the LGTMs on the current head and CI passing", () => {
     const message = ended([{ head: HEAD, verdict: "lgtm" }], { head: HEAD, ci: "passing" });

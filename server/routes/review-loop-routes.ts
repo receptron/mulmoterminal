@@ -39,8 +39,8 @@ export interface ReviewLoopRouteDeps extends SessionAskRouteDeps {
   prState: (repo: string, pr: number) => Promise<PrReviewState | string>;
   /** The agent a session running here is, or undefined when it is not running here. */
   agentOf: (session: string) => string | undefined;
-  /** End the session and close its cell. */
-  close: (session: string) => void;
+  /** End the session and close its cell; false when its tmux session is still there. */
+  close: (session: string) => boolean;
 }
 
 function callerOf(req: Request, res: Response, tool: string): string | null {
@@ -119,7 +119,7 @@ function liveLoop(deps: ReviewLoopRouteDeps, key: string): ReviewLoop | undefine
   if (loop === undefined || deps.agentOf(loop.author) !== undefined) return loop;
   deps.loops.delete(key);
   try {
-    deps.close(loop.reviewer);
+    if (!deps.close(loop.reviewer)) console.error(`[requestReview] reviewer session ${loop.reviewer} of ${key} is still running after close.`);
   } catch (err) {
     console.error(`[requestReview] could not close reviewer session ${loop.reviewer} of ${key}: ${messageOf(err)}`);
   }
@@ -219,10 +219,11 @@ function mountEnd(app: Express, deps: ReviewLoopRouteDeps): void {
     if (loop === undefined) return res.json({ message: `No review of ${request.repo}#${request.pr} is running.` });
     if (loop.author !== caller) return res.json({ message: `Another session is running the review of ${loop.repo}#${loop.pr}.` });
     deps.loops.delete(key);
+    const notClosed = `Ended the review of ${loop.repo}#${loop.pr}, but reviewer session ${loop.reviewer} could not be closed`;
     try {
-      deps.close(loop.reviewer);
+      if (!deps.close(loop.reviewer)) return res.json({ message: `${notClosed}: it is still running. Close its cell by hand.` });
     } catch (err) {
-      return res.json({ message: `Ended the review of ${loop.repo}#${loop.pr}, but reviewer session ${loop.reviewer} could not be closed: ${messageOf(err)}` });
+      return res.json({ message: `${notClosed}: ${messageOf(err)}` });
     }
     return res.json({
       message: `Ended the review of ${loop.repo}#${loop.pr} after ${loop.rounds.length} rounds and closed reviewer session ${loop.reviewer}.`,
