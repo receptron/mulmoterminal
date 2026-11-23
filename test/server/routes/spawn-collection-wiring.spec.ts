@@ -46,6 +46,8 @@ vi.mock("../../../server/session/spawn/spawn-collection.js", () => ({
 
 const { mountPluginRoutes } = await import("../../../server/routes/plugin-routes.js");
 const { sessionCollections } = await import("../../../server/session/registry.js");
+const { spawnedSessions } = await import("../../../server/session/spawned-sessions.js");
+const { SESSION_HEADER } = await import("../../../server/backends/files/presentPathRoot.js");
 
 const app = express();
 app.use(express.json());
@@ -178,5 +180,22 @@ describe("recording the collection a spawn was started from", () => {
     await settleAppends();
     expect(appendedCollectionLines()).toContainEqual({ id: next, slug: "tasks", icon: "task", title: "Tasks" });
     logged.mockRestore();
+  });
+});
+
+// The parentage sendToSession is limited by (#3404): recorded from the broker's session header,
+// under the id the spawn answers with, and not at all for a spawn no terminal asked for.
+describe("recording which session started a spawn", () => {
+  const CALLER = "0b7d2c1e-1111-4222-8333-944455556666";
+
+  it("records the calling session as the parent", async () => {
+    const res = await call("/api/plugin/spawnBackgroundChat", jsonPost({ message: "review this", agent: "codex" }, { [SESSION_HEADER]: CALLER }));
+    const chatId = (res.body as { jsonData?: { chatId?: string } }).jsonData?.chatId ?? "";
+    expect(spawnedSessions.parentOf(chatId)).toBe(CALLER);
+  });
+
+  it("records no parent when no terminal asked", async () => {
+    const chatId = await spawn({});
+    expect(spawnedSessions.parentOf(chatId)).toBeUndefined();
   });
 });

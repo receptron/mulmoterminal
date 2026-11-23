@@ -79,7 +79,8 @@ export const TOOL_GROUP_HEADINGS: Record<ToolGroup, string> = {
 //
 // `spawnBackgroundChat` is absent ON PURPOSE, not by omission: it starts another session,
 // which is neither drawing, data, media, nor an external call, and a grid cell has no
-// business doing it silently.
+// business doing it silently. `sendToSession` / `waitForSessionReply` drive the sessions it
+// starts, so they are absent for the same reason.
 // A Map, not a plain object — the same reason the plugin dispatch map is one: object index
 // access reads through the prototype chain, so `constructor` / `__proto__` / `toString` would
 // resolve to an Object.prototype member and report a truthy "group". Map.get only ever returns

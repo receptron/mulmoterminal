@@ -14,6 +14,8 @@ import { EXPORT_SHAPE_SCRIPT_USDZ } from "./shapescript-usdz-tool.js";
 import { EXPORT_SHAPE_SCRIPT_STL } from "./shapescript-stl-tool.js";
 import { MANAGE_SHAPE_SCRIPT } from "./shapescript-manage-tool.js";
 import { REQUEST_CHECK, SHOW_IN_PANE } from "./pane-tools.js";
+import { SEND_TO_SESSION, WAIT_FOR_SESSION_REPLY } from "./session-ask-tools.js";
+import { TERMINAL_AGENTS } from "../../../common/sessionAgent.js";
 
 // Mirrors MulmoClaude's spawnBackgroundChat signature (message/role/hidden) so the
 // tool is a drop-in from the model's point of view — but the implementation is
@@ -23,6 +25,8 @@ import { REQUEST_CHECK, SHOW_IN_PANE } from "./pane-tools.js";
 // ignored (MulmoTerminal has no roles). `hidden:true` marks the session a background
 // worker: it still lists in the sidebar but never renders bold/unread when it
 // finishes (so a background helper doesn't pull the user's attention).
+// `agent` is a deliberate divergence: MulmoClaude hosts one agent, this host seven, and a
+// reviewer on another agent is what sendToSession / waitForSessionReply are for (#3404).
 export const SPAWN_BACKGROUND_CHAT: ToolDefinition = {
   type: "function",
   name: "spawnBackgroundChat",
@@ -46,7 +50,13 @@ export const SPAWN_BACKGROUND_CHAT: ToolDefinition = {
       },
       hidden: {
         type: "boolean",
-        description: "Accepted for compatibility; currently ignored — the spawned session is always visible to the user.",
+        description:
+          "true keeps the session behind the sidebar's Background filter and never marks it unread. false (the usual choice) gives it a grid cell the user sees.",
+      },
+      agent: {
+        type: "string",
+        enum: [...TERMINAL_AGENTS],
+        description: "Which agent CLI runs the session (default claude). A session you start can be talked to with sendToSession and waitForSessionReply.",
       },
     },
     required: ["message", "role", "hidden"],
@@ -85,4 +95,6 @@ export const HOST_TOOL_DEFINITIONS: ToolDefinition[] = [
   MANAGE_SHAPE_SCRIPT,
   SHOW_IN_PANE,
   REQUEST_CHECK,
+  SEND_TO_SESSION,
+  WAIT_FOR_SESSION_REPLY,
 ];
