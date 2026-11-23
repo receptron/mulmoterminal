@@ -21,7 +21,15 @@ import { noteMovedFrom, takeMovedFrom } from "../session/credentials/rotation-no
 import { rotationLoginLabel } from "../../common/tokenRotation.js";
 import { survivingSessions } from "../session/reaping/surviving-sessions.js";
 import { armedReapIntervalHours } from "../session/reaping/reap-schedule.js";
-import { getCwdPresets, getRepoDirs, getSessionIdleReapDays, getQuestionPaneEnabled, getTokenRotation, getUsageGauge } from "../config/config-routes.js";
+import {
+  getCwdPresets,
+  getMaxIssueSessions,
+  getRepoDirs,
+  getSessionIdleReapDays,
+  getQuestionPaneEnabled,
+  getTokenRotation,
+  getUsageGauge,
+} from "../config/config-routes.js";
 import { loadDirConfig } from "../config/dir/dir-config.js";
 import { repoDirsFromPresets } from "../git/repo-dirs.js";
 import { sweepIdleSessions } from "../session/reaping/reap-idle-sessions.js";
@@ -38,6 +46,10 @@ import { mountRepoRoutes } from "../routes/repo-routes.js";
 import { mountAgentAvailabilityRoutes } from "../routes/agent-availability-routes.js";
 import type { AgentAvailability } from "../../common/agentAvailability.js";
 import { mountIssueWorkRoutes } from "../routes/issue-work-routes.js";
+import { implementerSpawn, mountIssueSessionRoutes } from "./issue-session-routes.js";
+import type { IssueSession } from "./issueSessions.js";
+import { startIssueWork } from "../git/issue-work.js";
+import { forgeFromRepoEntry } from "../git/forge-host.js";
 import { mountTerminalReplyRoutes } from "./terminal-reply-routes.js";
 import { randomUUID } from "node:crypto";
 import { mountSessionAskRoutes } from "./session-ask-routes.js";
@@ -95,6 +107,7 @@ import { mountFileGrantRoutes } from "../backends/files/fileGrants.js";
 import {
   hookedSessions,
   markSessionPlaced,
+  markUnplacedSession,
   ptys,
   sessionToolGroups,
   sessionToolGroupsHydrated,
@@ -237,6 +250,17 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     prState: fetchPrReviewState,
     agentOf: (session) => ptys.get(session)?.agent,
     close: (session) => endTmuxSession(tmuxRouteDeps(deps), session, true),
+  });
+  mountIssueSessionRoutes(app, {
+    sessions: new Map<string, IssueSession>(),
+    isRunning: (session) => ptys.has(session),
+    isGitHub: (repo) => forgeFromRepoEntry(repo)?.kind === "github",
+    limit: getMaxIssueSessions,
+    cloneOf: cloneOfRepo,
+    startWork: (repo, issue, dir, spawnSeeded) => startIssueWork(repo, issue, dir, { spawnSeeded }),
+    spawn: implementerSpawn(deps.spawnIssueSession),
+    recordSpawn: (child, parent) => spawnedSessions.recordSpawn(child, parent),
+    markVisible: (session, agent) => markUnplacedSession(session, agent),
   });
 }
 

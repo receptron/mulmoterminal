@@ -432,6 +432,7 @@ describe("loadAppConfig / saveAppConfig", () => {
     worklogIntervalHours: 6,
     sessionIdleReapDays: 7,
     sessionReapIntervalHours: 0,
+    maxIssueSessions: 2,
     providers: [],
     terminalSubmit: "cr",
     tmuxPrefix: "none",
@@ -495,6 +496,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       worklogIntervalHours: 12,
       sessionIdleReapDays: 7,
       sessionReapIntervalHours: 12, // opt-in (#2165): defaults to 0/off, so only a non-zero proves it persisted
+      maxIssueSessions: 4, // a non-default limit must round-trip through the file (#3413)
       providers: [],
       terminalSubmit: "esc-cr" as const, // a non-default value must round-trip through the file
       tmuxPrefix: "C-]", // a non-default key must round-trip through the file (#2981)
@@ -590,6 +592,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       worklogIntervalHours: 6,
       sessionIdleReapDays: 7,
       sessionReapIntervalHours: 0,
+      maxIssueSessions: 2,
       providers: [],
       terminalSubmit: "cr",
       tmuxPrefix: "none",
@@ -724,6 +727,7 @@ describe("#741 corrupt config is not silently wiped by a partial update", () => 
     worklogIntervalHours: 6,
     sessionIdleReapDays: 7,
     sessionReapIntervalHours: 0,
+    maxIssueSessions: 2,
     providers: [],
     terminalSubmit: "cr" as const,
     tmuxPrefix: "none",
@@ -827,6 +831,7 @@ describe("mergeConfigUpdate", () => {
     worklogIntervalHours: 6,
     sessionIdleReapDays: 7,
     sessionReapIntervalHours: 0,
+    maxIssueSessions: 2,
     providers: [],
     terminalSubmit: "cr",
     tmuxPrefix: "none",

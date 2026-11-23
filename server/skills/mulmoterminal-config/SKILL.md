@@ -1,6 +1,6 @@
 ---
 name: mulmoterminal-config
-description: The way into configuring MulmoTerminal, and the way to find out how it is configured now. Use for a broad or unsure request — "configure MulmoTerminal", "set this up", "customize this", "what can I change?", first-run setup — and route to the skill that owns the area. Also answers "how is this set up right now?", "why isn't my setting working?", "did that take effect?" by reading the live config — the global `~/.mulmoterminal/config.json`, each project's `.mulmoterminal.json`, and what the app ACTUALLY parsed from them — including keys it dropped in validation, which is the difference between a setting you never made and one that silently never applied. Owns the global settings that have no skill of their own — work comments on an issue (issueWorkComments), the PR clone footer (prWorkdirFooter), the closing summary (appendSystemPrompt), the decision digest (decisionDigest), the periodic dev-work log (worklogEnabled), roster row length (cockpitLines, cockpitCompact), the grid header's usage gauge and how often it measures Claude (usageGauge, usageProbeIntervalMinutes), the grid header's load read-out (showLoadAverage), a search box in the middle of the top bar (paletteSearchBox), an experimental switch for a server on another machine (remoteServer), the occasional terminal theatre (playfulEffects), confetti and when it falls (confetti), pinned collections on the toolbar (toolbarPins), Python a remote bot may run on this machine (botJobs, and the bot tokens for it), a self-hosted GitLab (gitlabHosts), a project's Skill menu (skills), a project's Mulmo menu (decks), the files a project shows on the phone (mobileFiles), and how a repository's PRs are reviewed (review). When the request names another area, go straight to that skill instead — mulmoterminal-dirs (colours, grid order, project names, font size), mulmoterminal-theme (your own colour scheme), mulmoterminal-header (buttons and chips), mulmoterminal-keys (shortcuts, copy-on-select, Enter behaviour), mulmoterminal-model (other models and backends, and your own command for starting Claude Code), mulmoterminal-notify (sounds and push).
+description: The way into configuring MulmoTerminal, and the way to find out how it is configured now. Use for a broad or unsure request — "configure MulmoTerminal", "set this up", "customize this", "what can I change?", first-run setup — and route to the skill that owns the area. Also answers "how is this set up right now?", "why isn't my setting working?", "did that take effect?" by reading the live config — the global `~/.mulmoterminal/config.json`, each project's `.mulmoterminal.json`, and what the app ACTUALLY parsed from them — including keys it dropped in validation, which is the difference between a setting you never made and one that silently never applied. Owns the global settings that have no skill of their own — work comments on an issue (issueWorkComments), the PR clone footer (prWorkdirFooter), the closing summary (appendSystemPrompt), the decision digest (decisionDigest), the periodic dev-work log (worklogEnabled), roster row length (cockpitLines, cockpitCompact), the grid header's usage gauge and how often it measures Claude (usageGauge, usageProbeIntervalMinutes), the grid header's load read-out (showLoadAverage), a search box in the middle of the top bar (paletteSearchBox), an experimental switch for a server on another machine (remoteServer), the occasional terminal theatre (playfulEffects), confetti and when it falls (confetti), pinned collections on the toolbar (toolbarPins), Python a remote bot may run on this machine (botJobs, and the bot tokens for it), a self-hosted GitLab (gitlabHosts), a project's Skill menu (skills), a project's Mulmo menu (decks), the files a project shows on the phone (mobileFiles), how a repository's PRs are reviewed (review), and how many issues a session may hand to implementers at once (maxIssueSessions). When the request names another area, go straight to that skill instead — mulmoterminal-dirs (colours, grid order, project names, font size), mulmoterminal-theme (your own colour scheme), mulmoterminal-header (buttons and chips), mulmoterminal-keys (shortcuts, copy-on-select, Enter behaviour), mulmoterminal-model (other models and backends, and your own command for starting Claude Code), mulmoterminal-notify (sounds and push).
 ---
 
 # Configuring MulmoTerminal — start here
@@ -145,7 +145,7 @@ State these when they matter; they are the ones that cost people an afternoon.
 
 ## The settings that live here
 
-None is big enough to warrant its own skill. **All of them but `mobileFiles` and `review` also have a Settings control** (`skills` and `decks` per project, in Settings → Directory settings → Change here) — offer that first, and use these when the user would rather be told the key, or is
+None is big enough to warrant its own skill. **All of them but `mobileFiles`, `review` and `maxIssueSessions` also have a Settings control** (`skills` and `decks` per project, in Settings → Directory settings → Change here) — offer that first, and use these when the user would rather be told the key, or is
 setting up a machine without opening the browser.
 
 ### `skills` — the header's Skill menu, per project
@@ -227,6 +227,19 @@ Read by a session that drives a review, through the `reviewSettings` tool (given
 - With it set, `requestReview { repo, pr, reviewer }` runs one round at a time against a reviewer
   session the caller started, and types each round's result into the caller; `endReview` closes the
   reviewer. Verdicts are `REVIEW VERDICT: …` lines, counted by the board like `CODEX VERDICT:`.
+
+### `maxIssueSessions` — how many issues run at once
+
+Global (`~/.mulmoterminal/config.json`). How many implementers `startIssueSession` may have running
+at once, across every repository; a start past it is refused until one of them finishes.
+
+```json
+{ "maxIssueSessions": 3 }
+```
+
+- 1-8, default 2. Anything else is the default, never "no limit".
+- Each implementer starts a reviewer of its own, so the sessions it costs are double this.
+- No Settings control. Reload config file applies it to the next start.
 
 ### `appendSystemPrompt` — the closing summary
 
