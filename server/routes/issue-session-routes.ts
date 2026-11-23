@@ -25,6 +25,8 @@ type StartedWork = StartIssueWorkResult & Partial<SpawnedSession>;
 export interface IssueSessionRouteDeps {
   sessions: Map<string, IssueSession>;
   isRunning: (session: string) => boolean;
+  /** Whether the repository is on GitHub: the skill the implementer runs reads issues and PRs with gh. */
+  isGitHub: (repo: string) => boolean;
   /** maxIssueSessions, read at each start. */
   limit: () => number;
   /** The repository's default clone here, or null when none is configured. */
@@ -80,6 +82,8 @@ export function mountIssueSessionRoutes(app: Express, deps: IssueSessionRouteDep
     if (!request.ok) return res.json({ message: `startIssueSession: ${request.error}` });
     const parent = sessionIdFromHeader(req.get(SESSION_HEADER));
     if (!parent) return res.json({ message: "startIssueSession works only from a MulmoTerminal terminal." });
+    if (!deps.isGitHub(request.repo))
+      return res.json({ message: `${request.repo} is not a GitHub repository; the implementer's skill reads issues and pull requests with gh.` });
     const already = runningFor(deps.sessions.values(), request, deps.isRunning);
     if (already) return res.json({ message: `${request.repo}#${request.issue} is already being worked on by session ${already.session}.` });
     const limit = deps.limit();

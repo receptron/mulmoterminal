@@ -49,6 +49,7 @@ import { mountIssueWorkRoutes } from "../routes/issue-work-routes.js";
 import { mountIssueSessionRoutes } from "./issue-session-routes.js";
 import type { IssueSession } from "./issueSessions.js";
 import { startIssueWork } from "../git/issue-work.js";
+import { forgeFromRepoEntry } from "../git/forge-host.js";
 import { mountTerminalReplyRoutes } from "./terminal-reply-routes.js";
 import { randomUUID } from "node:crypto";
 import { mountSessionAskRoutes } from "./session-ask-routes.js";
@@ -253,6 +254,7 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
   mountIssueSessionRoutes(app, {
     sessions: new Map<string, IssueSession>(),
     isRunning: (session) => ptys.has(session),
+    isGitHub: (repo) => forgeFromRepoEntry(repo)?.kind === "github",
     limit: getMaxIssueSessions,
     cloneOf: cloneOfRepo,
     startWork: (repo, issue, dir, spawnSeeded) => startIssueWork(repo, issue, dir, { spawnSeeded }),

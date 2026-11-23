@@ -15,7 +15,7 @@ export const START_ISSUE_SESSION: ToolDefinition = {
   parameters: {
     type: "object",
     properties: {
-      repo: { type: "string", description: "The repository, as owner/repo." },
+      repo: { type: "string", description: "The GitHub repository, as owner/repo. GitLab is refused: the skill reads issues and PRs with gh." },
       issue: { type: "number", description: "The issue number." },
       agent: { type: "string", enum: [...FULL_GUI_MCP_AGENTS], description: "Which agent implements it (default claude)." },
     },

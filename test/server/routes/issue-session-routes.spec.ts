@@ -34,6 +34,7 @@ function route(): Handler {
   mountIssueSessionRoutes(app, {
     sessions,
     isRunning: (session) => running.has(session),
+    isGitHub: (repo) => !repo.startsWith("gitlab.com/"),
     limit: () => limit,
     cloneOf: async () => clone,
     startWork,
@@ -156,6 +157,11 @@ describe("startIssueSession", () => {
     await call(handler, req(BODY));
     expect((await call(handler, req(BODY))).message).toContain("already being worked on by session s-1");
     expect(spawn).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a repository that is not on GitHub", async () => {
+    expect((await call(route(), req({ repo: "gitlab.com/group/project", issue: 7 }))).message).toContain("not a GitHub repository");
+    expect(startWork).not.toHaveBeenCalled();
   });
 
   it("refuses a repository with no clone here", async () => {
