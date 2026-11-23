@@ -37,6 +37,10 @@ import { mountAgentAvailabilityRoutes } from "../routes/agent-availability-route
 import type { AgentAvailability } from "../../common/agentAvailability.js";
 import { mountIssueWorkRoutes } from "../routes/issue-work-routes.js";
 import { mountTerminalReplyRoutes } from "./terminal-reply-routes.js";
+import { randomUUID } from "node:crypto";
+import { mountSessionAskRoutes } from "./session-ask-routes.js";
+import { spawnedSessions } from "../session/spawned-sessions.js";
+import { liveTurnReader } from "../session/live-last-turn.js";
 import { mountRequestGates } from "./request-gates.js";
 import { captureTerminalScreen } from "../backends/remoteHost/hostScreens.js";
 import { sessionExistsHere } from "../backends/remoteHost/hostBindings.js";
@@ -185,6 +189,27 @@ const sessionCallReporting = (deps: AppRouteDeps, sessionId: string) => ({
   reportsOwnCalls: hookedSessions.has(sessionId),
 });
 
+// The question dialog a session is blocked on — both writers into a terminal refuse while one is open.
+function openQuestionIn(deps: AppRouteDeps): (sessionId: string) => Promise<AskQuestionEvent | null> {
+  return async (sessionId) => openQuestionOf(await deps.toolStores.toolCallsStore.get(sessionId), sessionId);
+}
+
+// Enough of a uuid to tell one send from the next to the same session.
+const ASK_NONCE_CHARS = 8;
+
+// The routes an agent talks to a session it started through (#3404).
+function mountSessionAsk(app: Express, deps: AppRouteDeps): void {
+  mountSessionAskRoutes(app, {
+    spawned: spawnedSessions,
+    send: (sessionId, text, options) => sendToSession(sessionId, text, options),
+    openQuestion: openQuestionIn(deps),
+    turnReader: liveTurnReader,
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    now: () => Date.now(),
+    nonce: () => randomUUID().slice(0, ASK_NONCE_CHARS),
+  });
+}
+
 export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
   // FIRST, before any route, parser or static file (request-gates.ts).
   mountRequestGates(app, deps);
@@ -216,6 +241,9 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
     spawnCursorPty: deps.spawnCursorPty,
     registerBackgroundSession: deps.registerBackgroundSession,
   });
+
+  // sendToSession / waitForSessionReply (#3404): host tools, before the catch-all.
+  mountSessionAsk(app, deps);
 
   // showInPane / requestCheck (#3022): host tools too, so before the catch-all like the ones above.
   mountPaneToolRoutes(app, { publish: (channel, data) => deps.publish(channel, data) });
@@ -440,7 +468,7 @@ function mountSessionFacingRoutes(app: Express, deps: AppRouteDeps): void {
   mountTerminalReplyRoutes(app, {
     sessionExists: sessionExistsHere,
     captureScreen: (sessionId) => captureTerminalScreen(sessionId, deps.outputBufferLimit),
-    openQuestion: async (sessionId) => openQuestionOf(await deps.toolStores.toolCallsStore.get(sessionId), sessionId),
+    openQuestion: openQuestionIn(deps),
     sendReply: (sessionId, text, options) => sendToSession(sessionId, text, options),
     isAllowedOrigin: deps.isAllowedOrigin,
   });

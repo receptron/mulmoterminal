@@ -32,6 +32,7 @@ import { runManageShapeScript } from "../infra/tools/shapescript-manage-tool.js"
 import { manageSharedApp } from "../infra/tools/shared-app-tool.js";
 import { useSharedApp } from "../infra/tools/use-shared-app-tool.js";
 import { upstreamFailureMessage } from "./plugin-narration.js";
+import { spawnedSessions } from "../session/spawned-sessions.js";
 import type {
   SpawnClaudePty,
   SpawnCodexPty,
@@ -173,6 +174,9 @@ export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
       // After the spawn, like the marks below: a launch that threw has no session, and a record
       // for one would sit in the log forever describing nothing.
       if (startedFrom) rememberSessionCollection(sessionId, startedFrom);
+      // The session that asked is the one sendToSession lets talk to this one (#3404).
+      const caller = sessionIdFromHeader(req.get(SESSION_HEADER));
+      if (caller) spawnedSessions.recordSpawn(sessionId, caller);
       // Visible: somebody should be able to SEE this session. The browser that asked for it
       // places it immediately (useChatLauncher), and this covers every other caller — an agent
       // calling the tool from another session, with no tab open at all. The mark is cleared the
