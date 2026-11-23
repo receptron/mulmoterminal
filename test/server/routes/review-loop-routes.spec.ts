@@ -36,6 +36,8 @@ let reply: string | null;
 let settings: ReviewSettings | string;
 let pr: PrReviewState | string;
 let agent: string | undefined;
+/** Sessions other than the reviewer that are running here. */
+let running: Set<string>;
 let spawned: SpawnedSessions;
 let loops = new Map<string, ReviewLoop>();
 let clock_ms = 0;
@@ -44,6 +46,11 @@ const TICK_MS = 1000;
 /** What the reviewer last received, so its turn can answer exactly that prompt. */
 const sentToReviewer = (): string => send.mock.calls.filter(([session]) => session === REVIEWER).at(-1)?.[1] ?? "";
 const typedToAuthor = (): string[] => send.mock.calls.filter(([session]) => session === AUTHOR).map(([, text]) => text);
+
+function agentOf(session: string): string | undefined {
+  if (session === REVIEWER) return agent;
+  return running.has(session) ? "claude" : undefined;
+}
 
 async function readTurn(): Promise<TurnSnapshot> {
   return reply === null ? { prompt: null, reply: null } : { prompt: sentToReviewer(), reply };
@@ -63,7 +70,7 @@ function routes(): { requestRoute: Handler; endRoute: Handler } {
     loops,
     settingsOf: async () => settings,
     prState: async () => pr,
-    agentOf: () => agent,
+    agentOf,
     close,
   });
   const requestRoute = map["/api/plugin/requestReview"];
@@ -97,6 +104,7 @@ beforeEach(() => {
   settings = SETTINGS;
   pr = { open: true, head: HEAD, ci: "passing" };
   agent = "codex";
+  running = new Set([AUTHOR, OTHER]);
   spawned = createSpawnedSessions();
   spawned.recordSpawn(REVIEWER, AUTHOR);
   loops = new Map();
@@ -208,6 +216,23 @@ describe("a review round", () => {
     await vi.waitFor(() => expect(error).toHaveBeenCalled());
     expect(typedToAuthor()).toHaveLength(DELIVERY_ATTEMPTS);
     error.mockRestore();
+  });
+});
+
+describe("an author that is gone", () => {
+  it("no longer holds the PR: another session may take the review over, and the old round says nothing", async () => {
+    reply = null;
+    const { requestRoute } = routes();
+    await call(requestRoute, req(BODY));
+    // As if OTHER had started a reviewer of its own: the address check passes, and the loop decides.
+    spawned.recordSpawn(REVIEWER, OTHER);
+    expect(await call(requestRoute, req(BODY, OTHER))).toMatch(/Another session is running/);
+    running.delete(AUTHOR);
+    expect(await call(requestRoute, req(BODY, OTHER))).toMatch(/Round 1 of/);
+    expect(loops.get("owner/repo#7")?.author).toBe(OTHER);
+    reply = "REVIEW VERDICT: LGTM (head aaaaaaa)";
+    await vi.waitFor(() => expect(send.mock.calls.filter(([session]) => session === OTHER)).toHaveLength(1));
+    expect(typedToAuthor()).toEqual([]);
   });
 });
 

@@ -99,6 +99,15 @@ async function runRound(deps: ReviewLoopRouteDeps, run: RoundRun): Promise<void>
   await deliver(deps, loop.author, roundEndMessage({ loop, settings, now: typeof pr === "string" ? null : pr, timedOut: wait.status === "waiting" }));
 }
 
+/** The PR's loop, unless the session that ran it is no longer running here — a closed or crashed
+ *  author would otherwise hold the PR until a restart. Dropping it also abandons its round. */
+function liveLoop(deps: ReviewLoopRouteDeps, key: string): ReviewLoop | undefined {
+  const loop = deps.loops.get(key);
+  if (loop === undefined || deps.agentOf(loop.author) !== undefined) return loop;
+  deps.loops.delete(key);
+  return undefined;
+}
+
 /** Everything that must hold before a round is sent, or the refusal to answer with. */
 async function roundCheck(
   deps: ReviewLoopRouteDeps,
@@ -117,7 +126,7 @@ async function roundCheck(
   const pr = await deps.prState(request.repo, request.pr);
   if (typeof pr === "string") return `Could not read ${request.repo}#${request.pr}: ${pr}`;
   if (!pr.open) return `${request.repo}#${request.pr} is not open.`;
-  const loopRefusal = roundRefusal(deps.loops.get(loopKey(request)), { author: caller, reviewer: request.reviewer, head: pr.head }, settings);
+  const loopRefusal = roundRefusal(liveLoop(deps, loopKey(request)), { author: caller, reviewer: request.reviewer, head: pr.head }, settings);
   return loopRefusal ?? { settings, head: pr.head };
 }
 
@@ -138,7 +147,7 @@ function claimRound(
   checked: { settings: ReviewSettings; head: string },
 ): ReviewLoop | string {
   const key = loopKey(request);
-  const existing = deps.loops.get(key);
+  const existing = liveLoop(deps, key);
   const refusal = roundRefusal(existing, { author: caller, reviewer: request.reviewer, head: checked.head }, checked.settings);
   if (refusal !== null) return refusal;
   const loop = existing ?? { repo: request.repo, pr: request.pr, author: caller, reviewer: request.reviewer, rounds: [], running: false };
