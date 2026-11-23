@@ -256,11 +256,12 @@ function adoptReloaded(next: AppConfig, onCwdPresetsChanged?: CwdPresetsChanged)
   notifySavedChanges(previous, next, onCwdPresetsChanged);
 }
 
-// Serve `presets` as the saved directories, waking only the subscribers of that list.
+// Serve exactly `presets` as the saved directories — labels and order included, since they are what
+// the client was just handed — and wake that list's subscribers only when a PATH changed.
 function adoptSavedPresets(presets: CwdPreset[], onCwdPresetsChanged?: CwdPresetsChanged): void {
-  if (samePresets(config.cwdPresets, presets)) return;
+  const previous = config.cwdPresets;
   config = { ...config, cwdPresets: presets };
-  notifyPresetsChanged(onCwdPresetsChanged);
+  if (!samePresets(previous, presets)) notifyPresetsChanged(onCwdPresetsChanged);
 }
 
 // Fire-and-forget by contract, like notifyPresetsChanged: the save already succeeded, and a
@@ -478,7 +479,8 @@ function pruneUnderLock(res: Response, onCwdPresetsChanged?: CwdPresetsChanged) 
     // The client adopts this list as the whole truth, so this process must serve the same one — as
     // every write path does. Another mulmoterminal may have changed the file since we last read it.
     // Only the list: a prune is not a config reload, and must not apply anyone's other settings.
-    if (loaded.status === "ok") adoptSavedPresets(loaded.config.cwdPresets, onCwdPresetsChanged);
+    // A missing file is an empty list here, exactly as a write treats it.
+    adoptSavedPresets(onDisk, onCwdPresetsChanged);
     const hidden = new Set([...decision.unreachable, ...decision.gone]);
     return res.json({ cwdPresets: onDisk, unreachable: onDisk.map((preset) => preset.path).filter((dir) => hidden.has(dir)) });
   }

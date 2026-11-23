@@ -304,6 +304,48 @@ describe("POST /api/config/cwd-presets/prune-missing", () => {
     expect(getPrRepos()).toEqual([]);
   });
 
+  // The invariant, rather than one more case of it: what this process serves afterwards is exactly the
+  // list it answered — a rename or a reorder by another process included — while the subscribers of
+  // the list are woken only when a path changed.
+  it("serves exactly the list it answered, waking subscribers only for a path change", async () => {
+    const { kept } = scratchTree();
+    const other = path.join(path.dirname(kept), "other");
+    mkdirSync(other);
+    const { app, onChanged } = await mountAgainstTempHome({
+      cwdPresets: [
+        { label: "kept", path: kept },
+        { label: "other", path: other },
+      ],
+    });
+    const { APP_CONFIG_FILE } = await import("../../../../server/config/config-routes.js");
+    const renamedAndReordered = [
+      { label: "Other (renamed)", path: other },
+      { label: "kept", path: kept },
+    ];
+    writeFileSync(APP_CONFIG_FILE, JSON.stringify({ cwdPresets: renamedAndReordered }));
+    const pruned = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    const served = await routeCall(app)("/api/config");
+    expect(pruned.body.cwdPresets).toEqual(renamedAndReordered);
+    expect(served.body.cwdPresets).toEqual(pruned.body.cwdPresets);
+    expect(onChanged).toHaveBeenCalledTimes(1); // the order of paths moved
+    writeFileSync(APP_CONFIG_FILE, JSON.stringify({ cwdPresets: [{ label: "Other again", path: other }, renamedAndReordered[1]] }));
+    await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    const reserved = await routeCall(app)("/api/config");
+    expect(reserved.body.cwdPresets).toEqual([{ label: "Other again", path: other }, renamedAndReordered[1]]);
+    expect(onChanged).toHaveBeenCalledTimes(1); // a rename alone wakes nobody
+  });
+
+  it("serves the empty list it answered when config.json has gone missing", async () => {
+    const { kept } = scratchTree();
+    const { app } = await mountAgainstTempHome({ cwdPresets: [{ label: "kept", path: kept }] });
+    const { APP_CONFIG_FILE } = await import("../../../../server/config/config-routes.js");
+    rmSync(APP_CONFIG_FILE);
+    const pruned = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    const served = await routeCall(app)("/api/config");
+    expect(pruned.body.cwdPresets).toEqual([]);
+    expect(served.body.cwdPresets).toEqual([]);
+  });
+
   it("answers an empty list for a config with no saved directories", async () => {
     const { app } = await mountAgainstTempHome({});
     const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
