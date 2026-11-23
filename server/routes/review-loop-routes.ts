@@ -7,7 +7,8 @@
 // session the caller started (routes/sessionAsk.ts), and the header naming the caller is an assertion.
 import type { Express, Request, Response } from "express";
 import type { ReviewSettings } from "../../common/reviewSettings.js";
-import { InputBlockedError, sanitizeTerminalInput } from "../backends/remoteHost/terminalInput.js";
+import { InputBlockedError } from "../backends/remoteHost/terminalInput.js";
+import { deliverWhenFree, inputHeld } from "./deliverWhenFree.js";
 import { SESSION_HEADER, sessionIdFromHeader } from "../backends/files/presentPathRoot.js";
 import type { PrReviewState } from "../git/pr-review-state.js";
 import { messageOf } from "../errors.js";
@@ -28,10 +29,6 @@ import {
   type ReviewLoop,
 } from "./reviewLoop.js";
 
-// A dialog open in the author's session holds the round's result back; it is offered again until then.
-export const DELIVERY_RETRY_MS = 5000;
-export const DELIVERY_ATTEMPTS = 120;
-
 export interface ReviewLoopRouteDeps extends SessionAskRouteDeps {
   loops: Map<string, ReviewLoop>;
   /** The repository's declared review settings, or why there are none to run a loop with. */
@@ -47,25 +44,6 @@ function callerOf(req: Request, res: Response, tool: string): string | null {
   const caller = sessionIdFromHeader(req.get(SESSION_HEADER));
   if (!caller) res.json({ message: `${tool} works only from a MulmoTerminal terminal.` });
   return caller ?? null;
-}
-
-/** The result of a round, typed into the author's session once nothing holds its input — and not
- *  at all once the loop has ended, however long a dialog held it back. */
-async function deliver(deps: ReviewLoopRouteDeps, author: string, text: string, ended: () => boolean): Promise<void> {
-  // Asked before the paste and again before the Enter, like every other send.
-  const blocked = async (): Promise<boolean> => ended() || (await deps.openQuestion(author)) !== null;
-  for (let attempt = 1; attempt <= DELIVERY_ATTEMPTS; attempt += 1) {
-    if (ended()) return;
-    try {
-      await deps.send(author, sanitizeTerminalInput(text), { blocked });
-      return;
-    } catch (err) {
-      // After the paste the text is already in the input box, where the user can see and submit it.
-      if (!(err instanceof InputBlockedError) || err.afterPaste) return;
-      await deps.sleep(DELIVERY_RETRY_MS);
-    }
-  }
-  console.error(`[requestReview] a dialog in session ${author} kept the review result from being typed.`);
 }
 
 interface RoundRun {
@@ -108,7 +86,7 @@ async function runRound(deps: ReviewLoopRouteDeps, run: RoundRun): Promise<void>
   const text = await roundResult(deps, run, wait);
   if (ended()) return;
   loop.running = false;
-  await deliver(deps, loop.author, text, ended);
+  await deliverWhenFree(deps, loop.author, text, ended, "requestReview");
 }
 
 /** The PR's loop, unless the session that ran it is no longer running here — a closed or crashed
@@ -151,8 +129,8 @@ async function roundCheck(
 function sendFailure(reviewer: string, err: unknown): string {
   if (err instanceof InputBlockedError)
     return err.afterPaste
-      ? `Reviewer session ${reviewer} opened a question dialog before Enter: the review request is in its input box, not submitted. Answer the dialog there, then call requestReview again.`
-      : `Reviewer session ${reviewer} is waiting on a question dialog; nothing was sent.`;
+      ? `Reviewer session ${reviewer} opened a question dialog or a permission prompt before Enter: the review request is in its input box, not submitted. Answer the dialog there, then call requestReview again.`
+      : `Reviewer session ${reviewer} is waiting on a question dialog or a permission prompt; nothing was sent.`;
   return `Could not send to reviewer session ${reviewer}: ${messageOf(err)}`;
 }
 
@@ -191,7 +169,7 @@ function mountRequest(app: Express, deps: ReviewLoopRouteDeps): void {
     const key = loopKey(loop);
     const round = loop.rounds.length + 1;
     const sent = `${reviewPrompt({ ...request, head: checked.head, round, maxRounds: checked.settings.maxRounds })}${askTag(deps.nonce())}`;
-    const blocked = async (): Promise<boolean> => (await deps.openQuestion(request.reviewer)) !== null;
+    const blocked = async (): Promise<boolean> => inputHeld(deps, request.reviewer);
     try {
       await deps.send(request.reviewer, sent, { blocked });
     } catch (err) {

@@ -1,7 +1,15 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import path from "node:path";
-import { activityHookEffects, buildPushText, pushKindFor, resolveHookCwd, resolveHookSessionId } from "../../../../server/session/activity/activity-hook.js";
+import {
+  activityHookEffects,
+  buildPushText,
+  IDLE_PROMPT_EVENT,
+  nextHookEvent,
+  pushKindFor,
+  resolveHookCwd,
+  resolveHookSessionId,
+} from "../../../../server/session/activity/activity-hook.js";
 import { dirConfigWriteTarget } from "../../../../server/config/dir/dir-config.js";
 
 describe("activityHookEffects", () => {
@@ -255,5 +263,32 @@ describe("Notification kinds — informational vs actually blocked (#874)", () =
   // The actively-viewed pane never raises attention, whatever the type — unchanged by #874.
   it("still suppresses the flag on the active pane", () => {
     expect(activityHookEffects("Notification", true, "permission_prompt")).toEqual([]);
+  });
+});
+
+// #3413: what the watch over implementers reads as "blocked on the user" — the newest hook, kept
+// whether or not it moved a flag.
+describe("nextHookEvent", () => {
+  it("moves on with every hook, a block included", () => {
+    expect(nextHookEvent(undefined, "Notification", "permission_prompt")).toBe("Notification");
+    expect(nextHookEvent("Notification", "PostToolUse")).toBe("PostToolUse");
+    expect(nextHookEvent("Stop", "UserPromptSubmit")).toBe("UserPromptSubmit");
+    expect(nextHookEvent("UserPromptSubmit", "Notification")).toBe("Notification");
+  });
+
+  // Sent after the input box has sat idle: the user is wanted, but no dialog holds the input — so it
+  // must neither read as a block nor leave an earlier one standing.
+  it("keeps an idle-prompt Notification apart from one that may hold a dialog", () => {
+    expect(nextHookEvent("Stop", "Notification", "idle_prompt")).toBe(IDLE_PROMPT_EVENT);
+    expect(nextHookEvent("Notification", "Notification", "idle_prompt")).toBe(IDLE_PROMPT_EVENT);
+    expect(nextHookEvent(IDLE_PROMPT_EVENT, "Notification", "permission_prompt")).toBe("Notification");
+    expect(nextHookEvent(IDLE_PROMPT_EVENT, "Notification", "elicitation_dialog")).toBe("Notification");
+    expect(nextHookEvent(IDLE_PROMPT_EVENT, "Notification")).toBe("Notification");
+  });
+
+  it("is not moved by a Notification that only reports something that already happened", () => {
+    expect(nextHookEvent("Notification", "Notification", "agent_completed")).toBe("Notification");
+    expect(nextHookEvent("PostToolUse", "Notification", "agent_completed")).toBe("PostToolUse");
+    expect(nextHookEvent(undefined, "Notification", "agent_completed")).toBeUndefined();
   });
 });

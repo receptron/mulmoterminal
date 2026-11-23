@@ -40,6 +40,21 @@ export function isActionableNotification(notificationType?: string): boolean {
   return !notificationType || !INFORMATIONAL_NOTIFICATIONS.has(notificationType);
 }
 
+/** What `nextHookEvent` keeps for an `idle_prompt` Notification: Claude Code sends one after its
+ *  input box has sat idle a while. It is actionable for the attention mark — the user is wanted — but
+ *  it holds no dialog: the input box is free, which is when a sender may type. */
+export const IDLE_PROMPT_EVENT = "Notification:idle_prompt";
+
+/** The newest hook event to keep for a session (#3413): every hook moves it on, whatever flag it
+ *  moves, except a Notification that only reports something that already happened — that is not
+ *  progress, and must not read as a new block or clear one. "Notification" is kept only for one that
+ *  may hold a dialog open (a permission prompt, an elicitation, a type this file does not know). */
+export function nextHookEvent(previous: string | undefined, event: string, notificationType?: string): string | undefined {
+  if (event !== "Notification") return event;
+  if (!isActionableNotification(notificationType)) return previous;
+  return notificationType === "idle_prompt" ? IDLE_PROMPT_EVENT : event;
+}
+
 export function activityHookEffects(event: string, active: boolean, notificationType?: string): ActivityEffect[] {
   if (WORKING_EVENTS.has(event)) return [{ kind: "working", value: true }];
   // A finished turn (Stop) has unseen output; a paused turn (Notification) waits on the

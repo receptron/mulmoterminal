@@ -50,6 +50,10 @@ import { implementerSpawn, mountIssueSessionRoutes } from "./issue-session-route
 import type { IssueSession } from "./issueSessions.js";
 import { startIssueWork } from "../git/issue-work.js";
 import { forgeFromRepoEntry } from "../git/forge-host.js";
+import { startIssueSessionWatch } from "./issue-session-watch.js";
+import { fetchBranchPr } from "../git/pr-of-branch.js";
+import { deliverWhenFree, inputHeld } from "./deliverWhenFree.js";
+import { waitingOnPermission } from "./issueSessionWatch.js";
 import { mountTerminalReplyRoutes } from "./terminal-reply-routes.js";
 import { randomUUID } from "node:crypto";
 import { mountSessionAskRoutes } from "./session-ask-routes.js";
@@ -105,6 +109,7 @@ import { mountFilesRoutes } from "../backends/files/files.js";
 import { mountFilesPageRoute } from "../backends/files/filesPage.js";
 import { mountFileGrantRoutes } from "../backends/files/fileGrants.js";
 import {
+  lastHookEvent,
   hookedSessions,
   markSessionPlaced,
   markUnplacedSession,
@@ -237,6 +242,7 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     spawned: spawnedSessions,
     send: (sessionId: string, text: string, options: SendOptions) => sendToSession(sessionId, text, options),
     openQuestion: openQuestionIn(deps),
+    permissionPending: (session: string) => waitingOnPermission(lastHookEvent.get(session)),
     turnReader: liveTurnReader,
     sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
     now: () => Date.now(),
@@ -251,9 +257,11 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     agentOf: (session) => ptys.get(session)?.agent,
     close: (session) => endTmuxSession(tmuxRouteDeps(deps), session, true),
   });
+  const issueSessions = new Map<string, IssueSession>();
+  const isRunning = (session: string): boolean => ptys.has(session);
   mountIssueSessionRoutes(app, {
-    sessions: new Map<string, IssueSession>(),
-    isRunning: (session) => ptys.has(session),
+    sessions: issueSessions,
+    isRunning,
     isGitHub: (repo) => forgeFromRepoEntry(repo)?.kind === "github",
     limit: getMaxIssueSessions,
     cloneOf: cloneOfRepo,
@@ -261,6 +269,14 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     spawn: implementerSpawn(deps.spawnIssueSession),
     recordSpawn: (child, parent) => spawnedSessions.recordSpawn(child, parent),
     markVisible: (session, agent) => markUnplacedSession(session, agent),
+  });
+  startIssueSessionWatch({
+    sessions: issueSessions,
+    isRunning,
+    prOf: fetchBranchPr,
+    blocked: (session) => inputHeld(ask, session),
+    deliver: (parent, text, ended) => deliverWhenFree(ask, parent, text, ended, "startIssueSession"),
+    limit: getMaxIssueSessions,
   });
 }
 
