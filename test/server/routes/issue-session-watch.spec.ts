@@ -3,7 +3,7 @@
 // still holding a place, the same block told twice, a line typed into a starter that is gone, or one
 // implementer's failure stopping the look at the others.
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { watchIssueSessions, type IssueSessionWatchDeps } from "../../../server/routes/issue-session-watch.js";
+import { startIssueSessionWatch, watchIssueSessions, type IssueSessionWatchDeps } from "../../../server/routes/issue-session-watch.js";
 import type { IssueSession } from "../../../server/routes/issueSessions.js";
 import type { BranchPr } from "../../../server/git/pr-of-branch.js";
 
@@ -137,5 +137,36 @@ describe("watchIssueSessions", () => {
     errors.mockRestore();
     expect(sessions.get("s-1")?.finished).toBeNull();
     expect(sessions.get("s-2")?.finished).toBe("closed");
+  });
+});
+
+describe("startIssueSessionWatch", () => {
+  // A slow gh must not stack passes: the next look is scheduled when one ENDS, not on a fixed beat.
+  it("starts the next pass only after the one before it finished", async () => {
+    vi.useFakeTimers();
+    try {
+      let release: () => void = () => undefined;
+      prOf.mockImplementation(
+        () =>
+          new Promise<null>((resolve) => {
+            release = () => resolve(null);
+          }),
+      );
+      sessions = new Map([["s-1", entry("s-1", 7)]]);
+      startIssueSessionWatch(deps(), 10);
+      expect(prOf).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(prOf).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(prOf).toHaveBeenCalledTimes(1);
+      release();
+      await vi.advanceTimersByTimeAsync(9);
+      expect(prOf).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(prOf).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
   });
 });
