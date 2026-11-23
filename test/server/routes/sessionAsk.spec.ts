@@ -26,6 +26,10 @@ const STRANGER = "2d9f4e30-3333-4444-8555-b66677778888";
 const MS = 1000;
 
 describe("parseSendRequest", () => {
+  it("hands back the message as it will be typed, so the wait can match the recorded prompt", () => {
+    expect(parseSendRequest({ session: CHILD, message: "a\u0001b\n  c " })).toEqual({ ok: true, session: CHILD, message: "a b c" });
+  });
+
   it("accepts a session id and a message", () => {
     expect(parseSendRequest({ session: CHILD, message: "review PR #12" })).toEqual({ ok: true, session: CHILD, message: "review PR #12" });
   });

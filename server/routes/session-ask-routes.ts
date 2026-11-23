@@ -42,6 +42,14 @@ function addressed(req: Request, res: Response, tool: string, target: string, sp
   return caller;
 }
 
+/** A dialog that opened after the paste leaves the line in the input box, where the user may still
+ *  submit it — so it is remembered for the wait, and the caller is told it is there. */
+function blockedMessage(session: string, err: InputBlockedError, remember: () => void): string {
+  if (!err.afterPaste) return `Session ${session} is waiting on a question dialog; nothing was sent.`;
+  remember();
+  return `Session ${session} opened a question dialog before Enter: your text is in its input box, not submitted.`;
+}
+
 function mountSend(app: Express, deps: SessionAskRouteDeps): void {
   app.post("/api/plugin/sendToSession", async (req, res) => {
     const request = parseSendRequest(req.body);
@@ -54,7 +62,8 @@ function mountSend(app: Express, deps: SessionAskRouteDeps): void {
     try {
       await deps.send(request.session, sent, { blocked });
     } catch (err) {
-      if (err instanceof InputBlockedError) return res.json({ message: `Session ${request.session} is waiting on a question dialog; nothing was sent.` });
+      if (err instanceof InputBlockedError)
+        return res.json({ message: blockedMessage(request.session, err, () => deps.spawned.rememberSent(request.session, sent)) });
       return res.json({ message: `Could not send to session ${request.session}: ${messageOf(err)}` });
     }
     deps.spawned.rememberSent(request.session, sent);

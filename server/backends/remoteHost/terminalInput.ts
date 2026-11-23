@@ -117,7 +117,14 @@ const typeAndSubmit = (deps: TerminalInputDeps, sessionId: string, safe: string)
 
 /** Thrown when a send's `blocked` check says no. The paste may already be in the input box when it
  *  comes from the second check; nothing is submitted either way. */
-export class InputBlockedError extends Error {}
+export class InputBlockedError extends Error {
+  /** True when the paste had already landed: the line is sitting in the input box, unsubmitted. */
+  readonly afterPaste: boolean;
+  constructor(message?: string, afterPaste = false) {
+    super(message);
+    this.afterPaste = afterPaste;
+  }
+}
 
 /** What a single send may ask of the sender. */
 export interface SendOptions {
@@ -139,7 +146,7 @@ const guardedTypeAndSubmit = async (deps: TerminalInputDeps, sessionId: string, 
   }
   const submit = deps.submitSequence?.(sessionId) ?? "\r";
   await new Promise<void>((resolve) => (deps.scheduleSubmit ?? defaultSchedule)(resolve));
-  if (await blocked()) throw new InputBlockedError(`session ${sessionId} became blocked before its Enter; the line was left unsubmitted`);
+  if (await blocked()) throw new InputBlockedError(`session ${sessionId} became blocked before its Enter; the line was left unsubmitted`, true);
   deps.writeToSession(sessionId, submit);
 };
 
