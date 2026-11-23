@@ -14,6 +14,12 @@ describe("parseVerdictLine", () => {
     expect(parseVerdictLine("codex verdict: changes requested  \r")).toEqual({ verdict: "changes", sha: "" });
   });
 
+  it("reads the review loop's REVIEW VERDICT line the same way, from any reviewer agent", () => {
+    expect(parseVerdictLine("REVIEW VERDICT: LGTM (head e1f7799)\n- none")).toEqual({ verdict: "lgtm", sha: "e1f7799" });
+    expect(parseVerdictLine("review verdict: CHANGES REQUESTED (head abcdef0)")).toEqual({ verdict: "changes", sha: "abcdef0" });
+    ["CLAUDE VERDICT: LGTM", "REVIEWER VERDICT: LGTM", "REVIEW VERDICT LGTM"].forEach((body) => expect(parseVerdictLine(body), body).toBeNull());
+  });
+
   it("reads the verdict whatever follows it on the line, and a malformed head as none named", () => {
     expect(parseVerdictLine("CODEX VERDICT: CHANGES REQUESTED\\n\\n- P2: x")).toEqual({ verdict: "changes", sha: "" });
     expect(parseVerdictLine("CODEX VERDICT: LGTM, mostly")).toEqual({ verdict: "lgtm", sha: "" });

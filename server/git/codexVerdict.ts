@@ -1,6 +1,7 @@
-// Codex cross-review verdicts on a PR (#3196), pure: a codex round is posted as a plain comment (or
-// review body) whose first line is `CODEX VERDICT: LGTM (head <sha>)`, so GitHub's review list never
-// sees it. This reads those lines out of a `gh pr list` row's comments and reviews.
+// Cross-review verdicts on a PR (#3196), pure: a round is posted as a plain comment (or review body)
+// whose first line is `CODEX VERDICT: LGTM (head <sha>)` — or `REVIEW VERDICT:`, which the review loop
+// asks any reviewer agent for (#3409) — so GitHub's review list never sees it. This reads those lines
+// out of a `gh pr list` row's comments and reviews.
 import type { BoardCodexReview, CodexVerdict } from "../../common/githubBoard.js";
 import { isRecord } from "../../common/isRecord.js";
 import { readString } from "../../common/readString.js";
@@ -12,7 +13,7 @@ export const GH_LIST_ITEM_CAP = 100;
 const TRUSTED_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 
 // What follows the verdict is not anchored: some verdicts were posted with a backslash-n typed after it.
-const VERDICT_OPENING = /^CODEX VERDICT: (LGTM|CHANGES REQUESTED)\b/i;
+const VERDICT_OPENING = /^(?:CODEX|REVIEW) VERDICT: (LGTM|CHANGES REQUESTED)\b/i;
 
 const HEAD_NAMED = /^ \(head ([0-9a-f]{7,40})\)/i;
 
