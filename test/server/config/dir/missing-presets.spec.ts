@@ -104,8 +104,14 @@ describe("decidePrune", () => {
     });
   });
 
-  it("forgets it on a sighting at least a day after the first, and drops it from the record", () => {
-    expect(decidePrune([kept, deleted], fs, { [deleted]: NOW - DAY }, NOW)).toEqual({ gone: [deleted], unreachable: [], missingSince: {} });
+  // Kept until the check after the removal, so a removal that was not written is confirmed again
+  // rather than waiting another day; once the entry has left the list it drops out (test below).
+  it("forgets it on a sighting at least a day after the first, keeping its time in the record", () => {
+    expect(decidePrune([kept, deleted], fs, { [deleted]: NOW - DAY }, NOW)).toEqual({
+      gone: [deleted],
+      unreachable: [],
+      missingSince: { [deleted]: NOW - DAY },
+    });
   });
 
   it("never puts an unreachable directory on the clock, however old a record says it is", () => {

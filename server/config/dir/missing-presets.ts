@@ -59,7 +59,9 @@ export interface PruneDecision {
 
 /** A deletion is confirmed only by a SECOND sighting at least `confirmAfter_ms` after the first.
  *  Until then the directory is hidden like an unreachable one. A directory that comes back, or
- *  leaves the list, drops out of the record, so its clock starts again from nothing. */
+ *  leaves the list, drops out of the record, so its clock starts again from nothing. A confirmed one
+ *  stays in the record until the check after its removal: if the removal is not written, the next
+ *  check confirms it again instead of waiting another day. */
 export function decidePrune(
   paths: readonly string[],
   probe: DirProbe,
@@ -77,6 +79,6 @@ export function decidePrune(
   return {
     gone: suspects.filter(isConfirmed),
     unreachable: paths.filter((dir) => hidden.has(dir)),
-    missingSince: Object.fromEntries(waiting.map((dir) => [dir, missingSince[dir] ?? now_ms])),
+    missingSince: Object.fromEntries(suspects.map((dir) => [dir, missingSince[dir] ?? now_ms])),
   };
 }

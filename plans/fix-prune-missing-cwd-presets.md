@@ -23,6 +23,9 @@ Relative entries and filesystem roots are left alone (nothing to judge them by).
 A single "not found" is never proof: a network share can answer ENOENT for a moment. Each
 suspected deletion is recorded in `~/.mulmoterminal/missing-dirs.json` (path -> first seen), read and
 written under the config lock; a directory that comes back or leaves the list drops out of it.
+A confirmed deletion keeps its time until the check after the removal, so an unwritten removal is
+confirmed again rather than waiting another day. If the record itself cannot be written, nothing is
+removed on that check: a stale time could otherwise confirm the next absence at once.
 
 ## Shape
 

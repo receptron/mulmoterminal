@@ -357,8 +357,11 @@ function createPresetMutations(
 
   // Forget deleted directories and refresh which saved ones are out of reach. Serialized like the
   // others so it never interleaves with a record or remove.
-  function pruneMissingPresets(): Promise<void> {
+  // `isStale` is asked when the check's turn comes, not when it is queued: a view that went away while
+  // it waited behind another write must not start it.
+  function pruneMissingPresets(isStale?: () => boolean): Promise<void> {
     return serialize(async () => {
+      if (isStale?.()) return;
       await pruneMissingOnServer();
     });
   }
@@ -700,8 +703,9 @@ interface ConfigReaderDeps {
   snapshotVersion: () => number;
   adoptServerPresets: (list: unknown, capturedVersion: number) => void;
   migrateLegacyRecents: () => Promise<void>;
-  /** Runs after every read whose answer was adopted — the first attempt or a background retry. */
-  afterRead: () => Promise<void>;
+  /** Runs after every read whose answer was adopted — the first attempt or a background retry.
+   *  Handed the read's own staleness test, for work that starts later than this call. */
+  afterRead: (stale: () => boolean) => Promise<void>;
 }
 
 /** What one attempt is given: the signal that cancels it when it is no longer wanted, and the
@@ -760,7 +764,7 @@ function createConfigReader({ defaultCwd, snapshotVersion, adoptServerPresets, m
       await migrateLegacyRecents();
       // Asked again after that await: a view that went away during it must not start a check.
       if (stale()) return true;
-      await afterRead();
+      await afterRead(stale);
     } catch {
       // Unreadable, or an adoption step that failed. The screen keeps whatever it already had —
       // and this still counts as answered, so no retry is armed.
@@ -861,9 +865,13 @@ function createConfigLoader(loadOnce: ConfigRead, unavailable: Ref<boolean>): ()
 // The missing-directory check runs after each adopted read — a background retry included, so a
 // first attempt lost to a restart still gets its check — and never alongside one. Off for a plain
 // `loadConfig`, whose callers count its requests.
-function createPruningConfigLoader(deps: Omit<ConfigReaderDeps, "afterRead">, unavailable: Ref<boolean>, pruneMissingPresets: () => Promise<void>) {
+function createPruningConfigLoader(
+  deps: Omit<ConfigReaderDeps, "afterRead">,
+  unavailable: Ref<boolean>,
+  pruneMissingPresets: (isStale?: () => boolean) => Promise<void>,
+) {
   let pruneAfterRead = false;
-  const afterRead = () => (pruneAfterRead ? pruneMissingPresets() : Promise.resolve());
+  const afterRead = (stale: () => boolean) => (pruneAfterRead ? pruneMissingPresets(stale) : Promise.resolve());
   const loadConfig = createConfigLoader(createConfigReader({ ...deps, afterRead }), unavailable);
   const loadConfigThenPruneMissing = (): Promise<void> => {
     pruneAfterRead = true;

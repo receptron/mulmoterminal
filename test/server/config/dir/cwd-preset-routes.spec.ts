@@ -203,8 +203,33 @@ describe("POST /api/config/cwd-presets/prune-missing", () => {
     expect(res.body.unreachable).toEqual([unmounted]);
     expect(onDisk().cwdPresets.map((preset: { path: string }) => preset.path)).toEqual([kept, unmounted]);
     expect(onDisk().pushEnabled).toBe(true);
-    expect(missingSince()).toEqual({});
     expect(onChanged).toHaveBeenCalledTimes(1);
+    // Its time is dropped on the next check, once the entry has left the list.
+    await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    expect(missingSince()).toEqual({});
+  });
+
+  // A record that was not written may hold a time the directory has since reset, so it must not
+  // confirm anything: everything suspected is hidden, nothing is removed.
+  it("removes nothing when the first-seen record cannot be written", async () => {
+    const { kept, deleted } = scratchTree();
+    const saved = [kept, deleted].map((dir) => ({ label: path.basename(dir), path: dir }));
+    vi.doMock("../../../../server/config/dir/cwd-presets", async (importOriginal) => ({
+      ...(await importOriginal<typeof import("../../../../server/config/dir/cwd-presets")>()),
+      saveMissingSince: () => false,
+    }));
+    try {
+      const { app, onDisk, onChanged } = await mountAgainstTempHome({ cwdPresets: saved });
+      writeMissingSince({ [deleted]: Date.now() - MISSING_CONFIRM_MS - 1 });
+      const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+      expect(res.status).toBe(200);
+      expect(pathsOf(res.body)).toEqual([kept, deleted]);
+      expect(res.body.unreachable).toEqual([deleted]);
+      expect(onDisk().cwdPresets).toHaveLength(2);
+      expect(onChanged).not.toHaveBeenCalled();
+    } finally {
+      vi.doUnmock("../../../../server/config/dir/cwd-presets");
+    }
   });
 
   it("keeps waiting when the second check comes less than a day later", async () => {

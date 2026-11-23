@@ -464,8 +464,13 @@ function pruneUnderLock(res: Response, onCwdPresetsChanged?: CwdPresetsChanged) 
     loadMissingSince(MISSING_SINCE_FILE),
     Date.now(),
   );
-  saveMissingSince(MISSING_SINCE_FILE, decision.missingSince);
-  if (decision.gone.length === 0) return res.json({ cwdPresets: onDisk, unreachable: decision.unreachable });
+  // A record that could not be written may still hold a time the directory has since reset (it came
+  // back), and would confirm its next absence at once. So nothing is removed on it — only hidden.
+  const recorded = saveMissingSince(MISSING_SINCE_FILE, decision.missingSince);
+  if (!recorded || decision.gone.length === 0) {
+    const hidden = new Set([...decision.unreachable, ...decision.gone]);
+    return res.json({ cwdPresets: onDisk, unreachable: onDisk.map((preset) => preset.path).filter((dir) => hidden.has(dir)) });
+  }
   const forget = new Set(decision.gone);
   return applyConfigChangeLocked(res, onCwdPresetsChanged, {
     update: (base) => ({ cwdPresets: base.cwdPresets.filter((preset) => !forget.has(preset.path)) }),

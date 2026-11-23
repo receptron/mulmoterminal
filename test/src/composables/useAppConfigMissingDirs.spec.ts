@@ -98,4 +98,33 @@ describe("useAppConfig — missing-directory check and the config retry", () => 
 
     expect(urls).not.toContain("/api/config/cwd-presets/prune-missing");
   });
+
+  // Asked again when its turn comes: a view disposed while the check waited behind another write
+  // must not start it.
+  it("skips a queued check whose read went stale while it waited its turn", async () => {
+    const urls: string[] = [];
+    const after = (delay_ms: number) => new Promise((resolve) => setTimeout(resolve, delay_ms));
+    globalThis.fetch = vi.fn(async (url: string) => {
+      urls.push(String(url));
+      if (String(url) === "/api/config/cwd-presets/record") {
+        await after(1_000);
+        return { ok: true, json: async () => ({ cwdPresets: [{ label: "x", path: "/x" }] }) };
+      }
+      if (String(url) === "/api/config") return { ok: true, json: async () => ({ cwdPresets: [] }) };
+      return { ok: true, json: async () => ({ cwdPresets: [], unreachable: [] }) };
+    }) as unknown as typeof fetch;
+    const scope = effectScope();
+    const config = scope.run(() => useAppConfig());
+    if (!config) throw new Error("scope did not run");
+
+    const recording = config.recordPreset("/x"); // holds the write queue for a second
+    const load = config.loadConfigThenPruneMissing();
+    await vi.advanceTimersByTimeAsync(100); // read adopted, check queued behind the record
+    scope.stop();
+    await vi.advanceTimersByTimeAsync(2_000);
+    await Promise.all([recording, load]);
+
+    expect(urls).toContain("/api/config/cwd-presets/record");
+    expect(urls).not.toContain("/api/config/cwd-presets/prune-missing");
+  });
 });
