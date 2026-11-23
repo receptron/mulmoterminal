@@ -585,6 +585,31 @@ describe("useAppConfig — loadConfig retries a request that failed", () => {
     expect(presets.value).toEqual([]);
   });
 
+  // #3414: a failed missing-directory check wrote nothing, so it must not make the config read's
+  // retry discard the list it brings back. The check runs when the launch panel opens — here, while
+  // the retried read is in flight, which is the timing where a bump would discard that read.
+  it("adopts the retried config when a missing-directory check fails while the retry is in flight", async () => {
+    const gets: string[] = [];
+    const after = (delay_ms: number) => new Promise((resolve) => setTimeout(resolve, delay_ms));
+    globalThis.fetch = vi.fn(async (url: string) => {
+      if (String(url) === "/api/config/cwd-presets/prune-missing") throw new Error("ECONNREFUSED");
+      if (String(url) !== "/api/config") return { ok: true, json: async () => ({}) };
+      gets.push(String(url));
+      if (gets.length === 1) throw new Error("ECONNREFUSED");
+      await after(5_000);
+      return { ok: true, json: async () => ({ cwdPresets: [{ label: "proj", path: "/p" }] }) };
+    }) as unknown as typeof fetch;
+    const { loadConfig, pruneMissingPresets, presets } = useAppConfig();
+
+    await loadConfig();
+    await vi.advanceTimersByTimeAsync(2_000); // the retry has started and is waiting on its answer
+    expect(gets).toHaveLength(2);
+    await pruneMissingPresets();
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(presets.value).toEqual([{ label: "proj", path: "/p" }]);
+  });
+
   it("stops rather than polling a server that is down for good", async () => {
     const calls = mockAttempts(DOWN);
     const { loadConfig } = useAppConfig();

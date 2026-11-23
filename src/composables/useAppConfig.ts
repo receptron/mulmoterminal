@@ -437,15 +437,17 @@ function createPresetManager(presets: Ref<CwdPreset[]>, saving: Ref<boolean>, er
    *  its own copy was empty or stale — which is the point.
    *
    *  A failed call leaves the list exactly as it was: the directory is simply not recorded, and
-   *  the next launch tries again. It counts as a local write (`version++`) so a GET already in
-   *  flight cannot re-adopt the pre-change list over it (#164). */
+   *  the next launch tries again. An adopted answer counts as a local write (`version++`) so a GET
+   *  already in flight cannot re-adopt the pre-change list over it (#164). Only an ADOPTED one: a
+   *  failed call wrote nothing, and bumping anyway made the config read's retry discard the good
+   *  list it brought, leaving the launcher empty. */
   const mutateOneOnServer: MutateOneOnServer = async (url, body, adoptExtra) => {
-    version++;
     try {
       const res = await fetchWithTimeout(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(`save failed (${res.status})`);
       const saved: unknown = await res.json();
       if (isRecord(saved) && isUnknownArray(saved.cwdPresets)) {
+        version++;
         presets.value = saved.cwdPresets.filter(isCwdPreset);
         loaded = true;
         adoptExtra?.(saved);

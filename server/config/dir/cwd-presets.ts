@@ -1,8 +1,9 @@
 // Directory presets the launch form offers, persisted at config.json. Extracted
 // from index.ts so the sanitize/load/save logic is unit-testable.
-import { existsSync, statSync } from "node:fs";
+import { existsSync, lstatSync, statSync } from "node:fs";
 import path from "node:path";
 import { type CwdPreset } from "../config-schema.js";
+import type { DirPresence } from "./missing-presets.js";
 import { readJsonFile } from "../../infra/fs/read-text-file.js";
 import { writeFileAtomicSync } from "../../files/atomic-write.js";
 import { isRecord } from "../../../common/isRecord.js";
@@ -57,14 +58,22 @@ export function loadPresets(file: string): CwdPreset[] {
 
 const ABSENT_CODES = new Set(["ENOENT", "ENOTDIR"]);
 
+const isAbsentError = (err: unknown): boolean => isRecord(err) && typeof err.code === "string" && ABSENT_CODES.has(err.code);
+
 // Only a definite "not there" counts: EACCES or an I/O error reads as present, because the caller
-// deletes saved entries on this answer.
-export function isAbsentDir(dir: string): boolean {
+// deletes saved entries on `absent`. A link that is there but leads nowhere is told apart with lstat.
+export function probeDir(dir: string): DirPresence {
   try {
     statSync(dir);
-    return false;
+    return "present";
   } catch (err) {
-    return isRecord(err) && typeof err.code === "string" && ABSENT_CODES.has(err.code);
+    if (!isAbsentError(err)) return "present";
+  }
+  try {
+    lstatSync(dir);
+    return "dangling";
+  } catch (err) {
+    return isAbsentError(err) ? "absent" : "present";
   }
 }
 

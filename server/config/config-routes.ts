@@ -60,8 +60,8 @@ import { withConfigLock, ConfigLockTimeout } from "./config-lock.js";
 import { mountConfigReloadRoute } from "./config-reload.js";
 import { mountKeymapBindingRoute } from "./keymap/keymap-binding-route.js";
 import { lastSegment } from "../../common/pathSegments.js";
-import { classifyMissingPresets } from "./dir/missing-presets.js";
-import { isAbsentDir } from "./dir/cwd-presets.js";
+import { classifyMissingPresets, type MissingPresets } from "./dir/missing-presets.js";
+import { probeDir } from "./dir/cwd-presets.js";
 
 export const APP_CONFIG_FILE = path.join(os.homedir(), ".mulmoterminal", "config.json");
 const CONFIG_FILE = APP_CONFIG_FILE;
@@ -439,29 +439,47 @@ function mountCwdPresetRoutes(app: Express, onCwdPresetsChanged?: CwdPresetsChan
 
 /** Forget saved directories that were deleted, and name the ones that are only out of reach so the
  *  launcher can hide them without losing them (#3414). Against the file under the lock, like the
- *  routes above; a list with nothing gone is answered without a write. */
+ *  routes above — the no-op answer too, since a client adopts it as the whole list. */
 function mountPruneMissingPresetsRoute(app: Express, onCwdPresetsChanged?: CwdPresetsChanged): void {
   const classify = (presets: readonly CwdPreset[]) =>
     classifyMissingPresets(
       presets.map((preset) => preset.path),
-      isAbsentDir,
+      probeDir,
     );
   const answerWith = (res: Response, presets: CwdPreset[]) => res.json({ cwdPresets: presets, unreachable: classify(presets).unreachable });
-  app.post("/api/config/cwd-presets/prune-missing", (_req, res) => {
-    const loaded = loadAppConfigResult(CONFIG_FILE);
-    const onDisk = loaded.status === "ok" ? loaded.config.cwdPresets : [];
-    if (classify(onDisk).gone.length === 0) {
-      answerWith(res, onDisk);
-      return;
-    }
-    return void mutateConfigOnDisk(res, onCwdPresetsChanged, {
+  const pruneGone = (res: Response) =>
+    mutateConfigOnDisk(res, onCwdPresetsChanged, {
       update: (base) => {
         const gone = new Set(classify(base.cwdPresets).gone);
         return { cwdPresets: base.cwdPresets.filter((preset) => !gone.has(preset.path)) };
       },
       answer: (next) => answerWith(res, next.cwdPresets),
     });
+  app.post("/api/config/cwd-presets/prune-missing", async (_req, res) => {
+    try {
+      // Answered here when nothing is gone; otherwise the write re-reads under its own hold of the lock.
+      const needsWrite = await withConfigLock(CONFIG_FILE, () => answerUnlessGone(res, classify));
+      if (needsWrite) await pruneGone(res);
+    } catch (err) {
+      answerLockFailure(res, err);
+    }
   });
+}
+
+/** Answer the prune from the file as it is, unless something in it is gone. True means a write is needed.
+ *  An unreadable file is refused rather than answered as an empty list, which a client would adopt —
+ *  and without the backup copy a write makes, since nothing is about to be written. */
+function answerUnlessGone(res: Response, classify: (presets: readonly CwdPreset[]) => MissingPresets): boolean {
+  const loaded = loadAppConfigResult(CONFIG_FILE);
+  if (loaded.status === "corrupt") {
+    res.status(409).json({ error: "config.json is unreadable. Fix or remove it, then retry." });
+    return false;
+  }
+  const onDisk = loaded.status === "ok" ? loaded.config.cwdPresets : [];
+  const { gone, unreachable } = classify(onDisk);
+  if (gone.length > 0) return true;
+  res.json({ cwdPresets: onDisk, unreachable });
+  return false;
 }
 
 /** Apply a change to the config ON DISK, reading and writing the file the same way `POST /api/config`

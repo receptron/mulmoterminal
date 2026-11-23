@@ -8,7 +8,7 @@
 // on 2026-08-09 a terminal launched during the initial GET reduced five saved directories to one.
 // The routes below exist so the caller never holds the list at all.
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
 import express from "express";
 import { routeCall, jsonPost } from "../../../helpers/routeCall";
 import { isRecord } from "../../../../common/isRecord";
@@ -196,6 +196,28 @@ describe("POST /api/config/cwd-presets/prune-missing", () => {
     expect(res.body.unreachable).toEqual([unmounted]);
     expect(readFileSync(APP_CONFIG_FILE, "utf8")).toBe(before);
     expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it.skipIf(process.platform === "win32")("keeps a symlink whose target is missing, and names it", async () => {
+    const { kept } = scratchTree();
+    const link = path.join(path.dirname(kept), "usb-link");
+    symlinkSync(path.join(path.dirname(kept), "unmounted"), link);
+    const saved = [kept, link].map((dir) => ({ label: path.basename(dir), path: dir }));
+    const { app, onDisk } = await mountAgainstTempHome({ cwdPresets: saved });
+    const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    expect(pathsOf(res.body)).toEqual([kept, link]);
+    expect(res.body.unreachable).toEqual([link]);
+    expect(onDisk().cwdPresets).toHaveLength(2);
+  });
+
+  // An empty answer would be adopted as the whole list, and every chip would vanish.
+  it("refuses an unreadable config instead of answering it as empty, and leaves the file alone", async () => {
+    const { app } = await mountAgainstTempHome({});
+    const { APP_CONFIG_FILE } = await import("../../../../server/config/config-routes.js");
+    writeFileSync(APP_CONFIG_FILE, "{ not json");
+    const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    expect(res.status).toBe(409);
+    expect(readFileSync(APP_CONFIG_FILE, "utf8")).toBe("{ not json");
   });
 
   it("answers an empty list for a config with no saved directories", async () => {
