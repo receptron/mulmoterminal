@@ -27,6 +27,7 @@ const prCard: BoardCard = card({
     reviewRounds: 2,
     headReviewed: false,
     codex: null,
+    requiredLgtm: null,
   },
   branch: "feat/4-x",
   cells: [
@@ -100,9 +101,9 @@ describe("GithubBoard", () => {
         {
           repo: "o/r",
           cards: [
-            withCodex("pr-1", { verdicts: 3, more: false, latest: "lgtm", head: "current" }),
-            withCodex("pr-2", { verdicts: 100, more: true, latest: "changes", head: "stale" }),
-            withCodex("pr-3", { verdicts: 1, more: false, latest: "lgtm", head: "unknown" }),
+            withCodex("pr-1", { verdicts: 3, more: false, latest: "lgtm", head: "current", lgtmOnHead: 1 }),
+            withCodex("pr-2", { verdicts: 100, more: true, latest: "changes", head: "stale", lgtmOnHead: 0 }),
+            withCodex("pr-3", { verdicts: 1, more: false, latest: "lgtm", head: "unknown", lgtmOnHead: 0 }),
           ],
         },
       ],
@@ -110,13 +111,39 @@ describe("GithubBoard", () => {
     const w = mount(GithubBoard);
     await flushPromises();
     const [current, stale, unknown] = w.findAll('[data-testid="board-card"]');
-    expect(current?.get('[data-testid="board-codex"]').text()).toBe("Codex 3: LGTM");
+    expect(current?.get('[data-testid="board-codex"]').text()).toBe("Verdict 3: LGTM");
     expect(current?.get('[data-testid="board-codex"]').classes()).toContain("text-[#3fae6b]");
     expect(current?.find('[data-testid="board-codex-head"]').exists()).toBe(false);
-    expect(stale?.get('[data-testid="board-codex"]').text()).toBe("Codex 100+: changes requested");
+    expect(stale?.get('[data-testid="board-codex"]').text()).toBe("Verdict 100+: changes requested");
     expect(stale?.get('[data-testid="board-codex"]').classes()).toContain("text-muted");
     expect(stale?.get('[data-testid="board-codex-head"]').text()).toBe("for an older push");
     expect(unknown?.get('[data-testid="board-codex-head"]').text()).toBe("push not named");
+  });
+
+  it("marks a PR ready to merge only when its repository's merge condition is met", async () => {
+    const lgtm = { verdicts: 2, more: false, latest: "lgtm" as const, head: "current" as const, lgtmOnHead: 2 };
+    const ready = (key: string, over: Partial<NonNullable<BoardCard["pr"]>>, column: BoardCard["column"] = "qa"): BoardCard =>
+      card({ ...prCard, key, column, pr: prCard.pr ? { ...prCard.pr, ci: "passing", codex: lgtm, requiredLgtm: 2, ...over } : null });
+    serve({
+      repos: [
+        {
+          repo: "o/r",
+          cards: [
+            ready("pr-1", {}),
+            ready("pr-2", { requiredLgtm: 3 }),
+            ready("pr-3", { ci: "pending" }),
+            ready("pr-4", { requiredLgtm: null }),
+            ready("pr-5", { isDraft: true }),
+            ready("pr-6", {}, "merged"),
+          ],
+        },
+      ],
+    });
+    const w = mount(GithubBoard);
+    await flushPromises();
+    const marked = w.findAll('[data-testid="board-card"]').map((el) => el.find('[data-testid="board-merge-ready"]').exists());
+    expect(marked).toEqual([true, false, false, false, false, false]);
+    expect(w.get('[data-testid="board-merge-ready"]').text()).toContain("Ready to merge");
   });
 
   it("jumps to a cell the grid holds and disables one it does not", async () => {

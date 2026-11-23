@@ -37,7 +37,7 @@ describe("codexReviewOf", () => {
       comment("CODEX VERDICT: LGTM (head 8b0efda)", "2026-10-26T04:51:10Z"),
     ];
     const reviews = [{ body: "CODEX VERDICT: CHANGES REQUESTED (head e1f7799)", submittedAt: "2026-10-26T04:58:00Z", authorAssociation: "OWNER" }];
-    expect(codexReviewOf(comments, reviews, HEAD)).toEqual({ verdicts: 3, more: false, latest: "changes", head: "current" });
+    expect(codexReviewOf(comments, reviews, HEAD)).toEqual({ verdicts: 3, more: false, latest: "changes", head: "current", lgtmOnHead: 0 });
   });
 
   it("says whether the newest verdict is for this head, another one, or none it names", () => {
@@ -46,6 +46,18 @@ describe("codexReviewOf", () => {
     expect(one("CODEX VERDICT: LGTM (head 8b0efda)")).toBe("stale");
     expect(one("CODEX VERDICT: LGTM")).toBe("unknown");
     expect(codexReviewOf([comment("CODEX VERDICT: LGTM (head e1f7799)", "t")], [], "")?.head).toBe("stale");
+  });
+
+  it("counts the LGTMs naming this head, from either verdict line, and nothing else", () => {
+    const comments = [
+      comment(`REVIEW VERDICT: LGTM (head ${HEAD})`, "2026-10-26T04:00:00Z"),
+      comment(`CODEX VERDICT: LGTM (head ${HEAD.slice(0, 7)})`, "2026-10-26T04:01:00Z"),
+      comment(`CODEX VERDICT: CHANGES REQUESTED (head ${HEAD})`, "2026-10-26T04:02:00Z"),
+      comment("CODEX VERDICT: LGTM (head e1f7799)", "2026-10-26T04:03:00Z"),
+      comment("REVIEW VERDICT: LGTM", "2026-10-26T04:04:00Z"),
+      comment(`REVIEW VERDICT: LGTM (head ${HEAD})`, "2026-10-26T04:05:00Z", "NONE"),
+    ];
+    expect(codexReviewOf(comments, [], HEAD)?.lgtmOnHead).toBe(2);
   });
 
   it("counts only the repo's own people", () => {
@@ -69,7 +81,7 @@ describe("codexReviewOf", () => {
   it("does not count a verdict with no time, such as a review saved but not submitted", () => {
     const posted = comment("CODEX VERDICT: CHANGES REQUESTED", "2026-10-26T04:00:00Z");
     const pending = { body: "CODEX VERDICT: LGTM", submittedAt: null, authorAssociation: "OWNER" };
-    expect(codexReviewOf([posted], [pending], HEAD)).toEqual({ verdicts: 1, more: false, latest: "changes", head: "unknown" });
+    expect(codexReviewOf([posted], [pending], HEAD)).toEqual({ verdicts: 1, more: false, latest: "changes", head: "unknown", lgtmOnHead: 0 });
     expect(codexReviewOf([], [pending, { ...pending, submittedAt: "" }], HEAD)).toBeNull();
     expect(codexReviewOf([{ ...posted, createdAt: undefined }], [], HEAD)).toBeNull();
   });

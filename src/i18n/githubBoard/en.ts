@@ -25,7 +25,9 @@ export const githubBoardEn = {
     changesRequested: "Changes requested",
     approved: "Approved",
     reviewRound: "Review {count}",
-    codex: { lgtm: "Codex {count}: LGTM", changes: "Codex {count}: changes requested", stale: "for an older push", unknown: "push not named" },
+    codex: { lgtm: "Verdict {count}: LGTM", changes: "Verdict {count}: changes requested", stale: "for an older push", unknown: "push not named" },
+    mergeReady: "Ready to merge",
+    mergeReadyTip: "The LGTMs this repository requires are on the newest push, and CI passed",
     awaitingReview: "Newest push not reviewed yet",
     noCell: "No terminal is on this branch",
     cell: { working: "Working", waiting: "Waiting for you", idle: "Idle" },
@@ -59,6 +61,6 @@ export const githubBoardEn = {
       noReviews: "No reviews yet",
       noBody: "No description",
     },
-    rule: "Review counts each pushed commit that got a review. Codex counts the codex verdicts posted as comments. Ready means CI passed and the newest push was reviewed.",
+    rule: "Review counts each pushed commit that got a review. Verdict counts the cross-review verdicts posted as comments (CODEX VERDICT or REVIEW VERDICT lines). Ready to merge means the LGTMs the repository declares in its review setting are on the newest push and CI passed. Ready means CI passed and the newest push was reviewed.",
   },
 };

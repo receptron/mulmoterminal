@@ -10,6 +10,7 @@ import type { GithubStarState } from "../../common/githubRepo.js";
 import type { RepoDirsResponse } from "../../common/repoDirs.js";
 import type { BoardResponse } from "../../common/githubBoard.js";
 import { boardAcrossRepos, boardDetail, liveCellRepos, type LiveCell } from "../git/board-fetch.js";
+import { requiredLgtmOfRepo } from "../git/repo-review.js";
 import { parseBoardDetailQuery } from "../git/board-detail.js";
 import { unconfiguredRepos, withUnregisteredLists } from "../git/board-repos.js";
 import { activity, ptys } from "../session/registry.js";
@@ -48,7 +49,7 @@ export function mountRepoRoutes(app: Express): void {
   // cells from this process's own PTYs.
   app.get("/api/github/board", async (_req, res) => {
     try {
-      const body: BoardResponse = { repos: await boardAcrossRepos(getPrRepos(), liveBoardCells()) };
+      const body: BoardResponse = { repos: await boardAcrossRepos(getPrRepos(), liveBoardCells(), requiredLgtmOfRepo) };
       res.json(body);
     } catch (err) {
       res.status(500).json({ error: String(err) });

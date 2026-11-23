@@ -60,7 +60,7 @@ describe("boardAcrossRepos", () => {
   it("reads comments, and so codex verdicts, for open PRs only", async () => {
     runGh.mockClear();
     const [board] = await boardAcrossRepos(["o/r"], []);
-    expect(board?.cards?.find((card) => card.key === "pr-5")?.pr?.codex).toEqual({ verdicts: 1, more: false, latest: "lgtm", head: "current" });
+    expect(board?.cards?.find((card) => card.key === "pr-5")?.pr?.codex).toEqual({ verdicts: 1, more: false, latest: "lgtm", head: "current", lgtmOnHead: 1 });
     const fieldsFor = (state: string): string[] => {
       const call = runGh.mock.calls.find(([args]) => args[1] === "list" && args.includes(state));
       return (call?.[0][call[0].indexOf("--json") + 1] ?? "").split(",");
@@ -70,6 +70,24 @@ describe("boardAcrossRepos", () => {
     expect(fieldsFor("merged")).toContain("reviews");
     // A merged row has its reviews but not its comments, so a review-body verdict is not a whole count.
     expect(board?.cards?.find((card) => card.key === "pr-6")?.pr?.codex).toBeNull();
+  });
+
+  it("carries the repository's required LGTMs to every PR, and none when they cannot be read", async () => {
+    const asked: string[] = [];
+    const [board] = await boardAcrossRepos(["o/r"], [], async (repo) => {
+      asked.push(repo);
+      return 2;
+    });
+    expect(asked).toEqual(["o/r"]);
+    expect(board?.cards?.flatMap((card) => (card.pr ? [card.pr.requiredLgtm] : []))).toEqual(expect.arrayContaining([2]));
+    expect(board?.cards?.every((card) => card.pr === null || card.pr.requiredLgtm === 2)).toBe(true);
+    const [failed] = await boardAcrossRepos(["o/r"], [], async () => {
+      throw new Error("unreadable");
+    });
+    expect(failed?.error).toBeUndefined();
+    expect(failed?.cards?.every((card) => card.pr === null || card.pr.requiredLgtm === null)).toBe(true);
+    const [none] = await boardAcrossRepos(["o/r"], []);
+    expect(none?.cards?.every((card) => card.pr === null || card.pr.requiredLgtm === null)).toBe(true);
   });
 
   it("answers a non-GitHub repo with its own error", async () => {

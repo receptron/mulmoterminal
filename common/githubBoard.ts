@@ -26,8 +26,10 @@ export interface BoardPr {
   reviewRounds: number;
   /** Whether the newest commit has been reviewed yet. */
   headReviewed: boolean;
-  /** Codex cross-review rounds, posted as comments; null when none was. */
+  /** Cross-review rounds, posted as comments; null when none was. */
   codex: BoardCodexReview | null;
+  /** LGTMs on the current head the repository's `review` setting requires, or null when it declares none. */
+  requiredLgtm: number | null;
 }
 
 export type CodexVerdict = "lgtm" | "changes";
@@ -40,7 +42,14 @@ export interface BoardCodexReview {
   latest: CodexVerdict;
   /** Which head the newest verdict names: this PR's head, another commit, or none. */
   head: "current" | "stale" | "unknown";
+  /** LGTM verdicts naming this PR's head. */
+  lgtmOnHead: number;
 }
+
+/** The repository's declared merge condition, as requestReview reports it: the required LGTMs on the
+ *  current head and every CI check passing. A repository that declares no `review` never meets it. */
+export const mergeConditionMet = (pr: BoardPr): boolean =>
+  pr.requiredLgtm !== null && !pr.isDraft && pr.ci === "passing" && (pr.codex?.lgtmOnHead ?? 0) >= pr.requiredLgtm;
 
 export interface BoardCell {
   session: string;

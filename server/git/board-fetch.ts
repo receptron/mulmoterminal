@@ -42,10 +42,15 @@ const ghJson = async (args: string[]): Promise<unknown[]> => {
   return isUnknownArray(parsed) ? parsed : [];
 };
 
-const listPrs = async (repo: string, state: "open" | "merged", limit: number): Promise<BoardPrRow[]> =>
+const listPrs = async (repo: string, state: "open" | "merged", limit: number, requiredLgtm: number | null): Promise<BoardPrRow[]> =>
   (await ghJson(["pr", "list", "--repo", repo, "--state", state, "--limit", String(limit), "--json", prFields(state)])).flatMap(
-    (raw) => parseBoardPr(raw, repo) ?? [],
+    (raw) => parseBoardPr(raw, repo, requiredLgtm) ?? [],
   );
+
+/** LGTMs on the current head a repository's `review` setting requires, or null when it declares none. */
+export type RequiredLgtmOf = (repo: string) => Promise<number | null>;
+
+const noReviewSettings: RequiredLgtmOf = async () => null;
 
 const listIssues = async (repo: string): Promise<BoardIssue[]> =>
   (await ghJson(["issue", "list", "--repo", repo, "--state", "open", "--limit", String(BOARD_OPEN_LIMIT), "--json", "number,title,url"])).flatMap(
@@ -97,11 +102,13 @@ async function placeCells(cells: readonly LiveCell[]): Promise<PlacedCells> {
 /** The GitHub repos a live cell is in, by `owner/repo`. */
 export const liveCellRepos = async (liveCells: readonly LiveCell[]): Promise<string[]> => (await placeCells(liveCells)).githubRepos;
 
-async function repoBoard(repo: string, cells: readonly CellOnBranch[]): Promise<RepoBoard> {
+async function repoBoard(repo: string, cells: readonly CellOnBranch[], requiredLgtmOf: RequiredLgtmOf): Promise<RepoBoard> {
   try {
+    // A setting that cannot be read means none: the board then shows no merge condition, never a wrong one.
+    const requiredLgtm = await requiredLgtmOf(repo).catch(() => null);
     const [openPrs, mergedPrs, openIssues, defaultBranch] = await Promise.all([
-      listPrs(repo, "open", BOARD_OPEN_LIMIT),
-      listPrs(repo, "merged", BOARD_MERGED_LIMIT),
+      listPrs(repo, "open", BOARD_OPEN_LIMIT, requiredLgtm),
+      listPrs(repo, "merged", BOARD_MERGED_LIMIT, requiredLgtm),
       listIssues(repo),
       defaultBranchOf(repo),
     ]);
@@ -143,27 +150,31 @@ export async function boardDetail(repo: string, configured: readonly string[], i
   return { issue: issueDetail, pr: prDetail, errors };
 }
 
-const configuredBoard = async (repo: string, cellsByRepo: Map<string, CellOnBranch[]>): Promise<RepoBoard> => {
+const configuredBoard = async (repo: string, cellsByRepo: Map<string, CellOnBranch[]>, requiredLgtmOf: RequiredLgtmOf): Promise<RepoBoard> => {
   const support = repoSupport(repo);
   if (!isSupported(support)) return { repo, error: support.error };
   const project = support.forge.kind === "github" ? projectPath(support.forge) : null;
   if (!project) return { repo, error: "only GitHub repositories are shown on the board" };
-  return repoBoard(project, cellsByRepo.get(repoIdentity(repo)) ?? []);
+  return repoBoard(project, cellsByRepo.get(repoIdentity(repo)) ?? [], requiredLgtmOf);
 };
 
 // One the user never asked for: when it cannot be read it is left out rather than shown as an error.
-const unregisteredBoards = async (repos: readonly string[], cellsByRepo: Map<string, CellOnBranch[]>): Promise<RepoBoard[]> => {
-  const boards = await Promise.all(repos.map((repo) => repoBoard(repo, cellsByRepo.get(repoIdentity(repo)) ?? [])));
+const unregisteredBoards = async (repos: readonly string[], cellsByRepo: Map<string, CellOnBranch[]>, requiredLgtmOf: RequiredLgtmOf): Promise<RepoBoard[]> => {
+  const boards = await Promise.all(repos.map((repo) => repoBoard(repo, cellsByRepo.get(repoIdentity(repo)) ?? [], requiredLgtmOf)));
   return boards.flatMap((board) => (board.error === undefined ? [{ ...board, unregistered: true }] : []));
 };
 
 /** One board per configured repo, then one per unconfigured GitHub repo a live cell is in. A configured
  *  repo that is not on GitHub, or that `gh` cannot read, carries an error. */
-export async function boardAcrossRepos(repos: readonly string[], liveCells: readonly LiveCell[]): Promise<RepoBoard[]> {
+export async function boardAcrossRepos(
+  repos: readonly string[],
+  liveCells: readonly LiveCell[],
+  requiredLgtmOf: RequiredLgtmOf = noReviewSettings,
+): Promise<RepoBoard[]> {
   const { cellsByRepo, githubRepos } = await placeCells(liveCells);
   const [configured, unregistered] = await Promise.all([
-    Promise.all(repos.map((repo) => configuredBoard(repo, cellsByRepo))),
-    unregisteredBoards(unconfiguredRepos(repos, githubRepos), cellsByRepo),
+    Promise.all(repos.map((repo) => configuredBoard(repo, cellsByRepo, requiredLgtmOf))),
+    unregisteredBoards(unconfiguredRepos(repos, githubRepos), cellsByRepo, requiredLgtmOf),
   ]);
   return [...configured, ...unregistered];
 }

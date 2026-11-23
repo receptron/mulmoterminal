@@ -1646,9 +1646,11 @@ here disables the button and says why. Backed by `POST /api/issues/start`.
 **The board (experimental).** **Open the board** on `/github` goes to `/github/board`: per repo, one
 card per piece of work in five columns — To do, Implementing, In review (with the review round),
 Ready (QA) and Merged — joining each issue to the PR that closes it and to the live cells on its
-branch. An open PR's card also counts the codex cross-review verdicts posted as comments (a first line
-`CODEX VERDICT: LGTM (head <sha>)` or `CHANGES REQUESTED`, by the repo's owner, members or
-collaborators) and shows the newest, coloured only when the sha it names is the PR's head. Pressing a card opens a detail panel with the issue body, the PR's checks and reviews, and
+branch. An open PR's card also counts the cross-review verdicts posted as comments (a first line
+`CODEX VERDICT: LGTM (head <sha>)` or `REVIEW VERDICT: …`, or `CHANGES REQUESTED`, by the repo's
+owner, members or collaborators) and shows the newest, coloured only when the sha it names is the
+PR's head. When the repository declares `review` in its `.mulmoterminal.json`, a card whose head
+has the required LGTMs and whose CI passed is marked **Ready to merge**. Pressing a card opens a detail panel with the issue body, the PR's checks and reviews, and
 those cells (`GET /api/github/board/detail`); GitHub is a link inside it. A To do card's **▶** starts
 the issue as above but **sends the issue text at once** and stays on the board; the new cell joins
 the grid behind it, and the card moves to Implementing. The board keeps itself current while open: cells follow the same live `sessions` feed as the grid, a card whose cell is waiting for you gets an amber border, and the board reads itself again every minute while visible and a few seconds after one of its cells finishes a turn. Each cell in the detail panel can be answered there: its current screen (read by itself when the cell is waiting), a reply box that types one line and presses Enter — the phone's sanitized sender, which never clears what was already in the input box — and, when the question pane is switched on, Claude's question dialog as buttons. A permission prompt is answered with keys, so in the terminal. Backed by `GET /api/github/board`.

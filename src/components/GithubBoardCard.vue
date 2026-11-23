@@ -4,7 +4,7 @@
 // reached from there.
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import type { BoardCard } from "../../common/githubBoard";
+import { mergeConditionMet, type BoardCard } from "../../common/githubBoard";
 import { ciDotClass } from "./ciDot";
 import GithubBoardCells from "./GithubBoardCells.vue";
 import IssueStartButton from "./IssueStartButton.vue";
@@ -26,6 +26,8 @@ const review = computed(() => (props.card.pr?.review ?? "").toUpperCase());
 const waiting = computed(() => cardWaiting(props.card));
 
 const codex = computed(() => props.card.pr?.codex ?? null);
+
+const mergeReady = computed(() => props.card.column !== "merged" && props.card.pr !== null && mergeConditionMet(props.card.pr));
 
 // gh returns a PR's first comments and reviews only, so a list at its cap may miss later verdicts.
 const codexCount = computed(() => {
@@ -83,6 +85,15 @@ const borderClass = computed(() => {
       <span v-if="card.branch" class="w-full truncate font-mono text-[11px] text-dim">⎇ {{ card.branch }}</span>
     </button>
     <div v-if="card.pr" class="flex flex-wrap items-center gap-1 text-[11px]">
+      <span
+        v-if="mergeReady"
+        data-testid="board-merge-ready"
+        class="flex items-center gap-0.5 rounded border border-[#3fae6b] bg-[#3fae6b]/10 px-1.5 font-semibold text-[#3fae6b]"
+        :data-tip="t('githubBoard.mergeReadyTip')"
+      >
+        <span class="material-symbols-outlined text-[13px]" aria-hidden="true">merge</span>
+        {{ t("githubBoard.mergeReady") }}
+      </span>
       <span v-if="card.pr.isDraft" class="rounded border border-border px-1.5 text-muted">{{ t("githubBoard.draft") }}</span>
       <span v-if="review === 'CHANGES_REQUESTED'" class="rounded border border-err-text px-1.5 text-err-text">{{ t("githubBoard.changesRequested") }}</span>
       <span v-if="review === 'APPROVED'" class="rounded border border-[#3fae6b] px-1.5 text-[#3fae6b]">{{ t("githubBoard.approved") }}</span>
