@@ -59,7 +59,7 @@ describe("codexReviewOf", () => {
       comment(`REVIEW VERDICT: LGTM (head ${HEAD})`, "2026-10-26T04:00:00Z"),
       comment(`CODEX VERDICT: LGTM (head ${HEAD.slice(0, 7)})`, "2026-10-26T04:01:00Z"),
       comment(`CODEX VERDICT: CHANGES REQUESTED (head ${HEAD})`, "2026-10-26T04:02:00Z"),
-      comment("CODEX VERDICT: LGTM (head e1f7799)", "2026-10-26T04:03:00Z"),
+      comment("CODEX VERDICT: LGTM (head 0123abc)", "2026-10-26T04:03:00Z"),
       comment("REVIEW VERDICT: LGTM", "2026-10-26T04:04:00Z"),
       comment(`REVIEW VERDICT: LGTM (head ${HEAD})`, "2026-10-26T04:05:00Z", "NONE"),
     ];
