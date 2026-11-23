@@ -948,7 +948,7 @@ onBeforeUnmount(detachSpawnedChat);
       @retry-config="loadConfig"
       @close="closeLaunchPanel"
     />
-    <AppSettingsModal v-if="showSettings" :presets="presets" @launch-skill="launchSkill" @close="closeSettings" />
+    <AppSettingsModal v-if="showSettings" :presets="config.savedPresets.value" @launch-skill="launchSkill" @close="closeSettings" />
     <PrefixKeyHint :pending="keys.pending.value" />
     <FocusModeNotice />
   </div>

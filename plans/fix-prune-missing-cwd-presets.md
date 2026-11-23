@@ -29,10 +29,11 @@ Relative entries and filesystem roots are left alone (nothing to judge them by).
   config lock (same reasoning as `record` / `remove`: never a client's copy). Answers
   `{ cwdPresets, unreachable }`. Writes nothing when nothing is gone, but still reads under the lock,
   since the client adopts the answer as the whole list. An unreadable file is a 409, never `[]`.
-- Client: `useAppConfig` keeps the raw list internally (`savedPresets`, what every write and the
-  version guard work on) and exports `presets` as that list minus `unreachablePresetPaths`, so
-  every surface GridView feeds (launch panel, empty-cell form, palette, Settings, the preferred-dir
-  pick) stops offering an out-of-reach directory. `pruneMissingPresets()` is serialized with the
+- Client: `useAppConfig` keeps the raw list (`savedPresets`, what every write and the version guard
+  work on) and exports `presets` as that list minus `unreachablePresetPaths`, so the launch surfaces
+  GridView feeds (launch panel, empty-cell form, palette, the preferred-dir pick) stop offering an
+  out-of-reach directory. Settings is handed `savedPresets` instead, so a hidden entry is still
+  listed somewhere — the chip's close button is hidden with it. `pruneMissingPresets()` is serialized with the
   other preset writes.
 - Triggers: `loadConfigThenPruneMissing` on GridView mount (the check runs after the read, never
   racing it — it counts as a local write, so a failed check landing first would make the read

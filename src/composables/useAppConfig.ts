@@ -865,7 +865,8 @@ function createConfigLoader(loadOnce: ConfigRead, unavailable: Ref<boolean>): ()
 // user who has opened no directories. Take them from the shell that loaded them instead.
 export function useAppConfig() {
   const defaultCwd = ref<string | null>(null);
-  // Every saved directory, as the file has it. What callers get is `presets` below.
+  // Every saved directory, as the file has it. Launch surfaces get `presets` below; Settings lists
+  // this one, so an out-of-reach entry still has somewhere it can be seen.
   const savedPresets = ref<CwdPreset[]>([]);
   const saving = ref(false);
   const error = ref<string | null>(null);
@@ -892,6 +893,7 @@ export function useAppConfig() {
     storiesRoots,
     home,
     presets,
+    savedPresets: computed(() => savedPresets.value),
     configUnavailable,
     prRepos,
     gitlabHosts,
