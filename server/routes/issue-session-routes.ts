@@ -55,7 +55,15 @@ function workFailure(deps: IssueSessionRouteDeps, request: StartRequest, work: S
 async function startImplementer(deps: IssueSessionRouteDeps, parent: string, request: StartRequest, dir: string): Promise<IssueSession | string> {
   const work = await deps.startWork(request.repo, request.issue, dir, (cwd) => deps.spawn(request.agent, cwd, implementerSeed(request, parent)));
   if (!work.ok || work.outcome === "resumed" || work.sessionId === undefined || work.worktree === undefined) return workFailure(deps, request, work);
-  const entry: IssueSession = { session: work.sessionId, parent, ...request, worktree: work.worktree, branch: work.branch ?? null };
+  const entry: IssueSession = {
+    session: work.sessionId,
+    parent,
+    ...request,
+    worktree: work.worktree,
+    branch: work.branch ?? null,
+    finished: null,
+    blockedTold: false,
+  };
   deps.sessions.set(entry.session, entry);
   deps.recordSpawn(entry.session, parent);
   deps.markVisible(entry.session, request.agent);

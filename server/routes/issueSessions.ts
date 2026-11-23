@@ -7,6 +7,9 @@ import { agentCarriesFullGuiMcp, FULL_GUI_MCP_AGENTS, type FullGuiMcpAgent } fro
 import { isTerminalAgent } from "../../common/sessionAgent.js";
 import type { Parsed } from "./sessionAsk.js";
 
+/** How an implementer's work ended, as the watch saw it (routes/issueSessionWatch.ts). */
+export type IssueSessionEnd = "merged" | "closed" | "ended";
+
 /** An implementer startIssueSession started, for as long as this process runs. */
 export interface IssueSession {
   session: string;
@@ -17,6 +20,10 @@ export interface IssueSession {
   agent: FullGuiMcpAgent;
   worktree: string;
   branch: string | null;
+  /** Set once, by the watch; a finished implementer no longer holds a place, even while its cell stays open. */
+  finished: IssueSessionEnd | null;
+  /** The caller was told it is waiting on the user, and is not told again until that changes. */
+  blockedTold: boolean;
 }
 
 export interface StartRequest {
@@ -43,9 +50,12 @@ export function parseStartRequest(body: unknown): Parsed<StartRequest> {
   return { ok: true, repo, issue, agent };
 }
 
-/** Implementers still running here, plus starts that have claimed a place and not finished spawning. */
+/** Still working on its issue: running here, and not yet merged, closed or ended. */
+const working = (entry: IssueSession, isRunning: (session: string) => boolean): boolean => entry.finished === null && isRunning(entry.session);
+
+/** Implementers still working, plus starts that have claimed a place and not finished spawning. */
 export function runningCount(sessions: Iterable<IssueSession>, isRunning: (session: string) => boolean, starting: number): number {
-  return [...sessions].filter((entry) => isRunning(entry.session)).length + starting;
+  return [...sessions].filter((entry) => working(entry, isRunning)).length + starting;
 }
 
 export function limitRefusal(running: number, limit: number): string | null {
@@ -59,7 +69,7 @@ export function runningFor(
   request: { repo: string; issue: number },
   isRunning: (session: string) => boolean,
 ): IssueSession | undefined {
-  return [...sessions].find((entry) => entry.repo === request.repo && entry.issue === request.issue && isRunning(entry.session));
+  return [...sessions].find((entry) => entry.repo === request.repo && entry.issue === request.issue && working(entry, isRunning));
 }
 
 /** The implementer's first turn. Prose rather than a `/skill` line, which codex and copilot do not read. */

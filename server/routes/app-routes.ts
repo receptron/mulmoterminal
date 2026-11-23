@@ -50,6 +50,10 @@ import { mountIssueSessionRoutes } from "./issue-session-routes.js";
 import type { IssueSession } from "./issueSessions.js";
 import { startIssueWork } from "../git/issue-work.js";
 import { forgeFromRepoEntry } from "../git/forge-host.js";
+import { startIssueSessionWatch } from "./issue-session-watch.js";
+import { fetchBranchPr } from "../git/pr-of-branch.js";
+import { deliverWhenFree } from "./deliverWhenFree.js";
+import { waitingOnPermission } from "./issueSessionWatch.js";
 import { mountTerminalReplyRoutes } from "./terminal-reply-routes.js";
 import { randomUUID } from "node:crypto";
 import { mountSessionAskRoutes } from "./session-ask-routes.js";
@@ -105,6 +109,7 @@ import { mountFilesRoutes } from "../backends/files/files.js";
 import { mountFilesPageRoute } from "../backends/files/filesPage.js";
 import { mountFileGrantRoutes } from "../backends/files/fileGrants.js";
 import {
+  activity,
   hookedSessions,
   markSessionPlaced,
   markUnplacedSession,
@@ -251,9 +256,11 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     agentOf: (session) => ptys.get(session)?.agent,
     close: (session) => endTmuxSession(tmuxRouteDeps(deps), session, true),
   });
+  const issueSessions = new Map<string, IssueSession>();
+  const isRunning = (session: string): boolean => ptys.has(session);
   mountIssueSessionRoutes(app, {
-    sessions: new Map<string, IssueSession>(),
-    isRunning: (session) => ptys.has(session),
+    sessions: issueSessions,
+    isRunning,
     isGitHub: (repo) => forgeFromRepoEntry(repo)?.kind === "github",
     limit: getMaxIssueSessions,
     cloneOf: cloneOfRepo,
@@ -261,6 +268,14 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     spawn: (agent, cwd, seed) => deps.spawnIssueSession(agent, cwd, seed, true, null, { allTools: true }),
     recordSpawn: (child, parent) => spawnedSessions.recordSpawn(child, parent),
     markVisible: (session, agent) => markUnplacedSession(session, agent),
+  });
+  startIssueSessionWatch({
+    sessions: issueSessions,
+    isRunning,
+    prOf: fetchBranchPr,
+    blocked: async (session) => waitingOnPermission(activity.get(session)) || (await ask.openQuestion(session)) !== null,
+    deliver: (parent, text, ended) => deliverWhenFree(ask, parent, text, ended, "startIssueSession"),
+    limit: getMaxIssueSessions,
   });
 }
 

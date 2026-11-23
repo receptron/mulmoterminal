@@ -19,6 +19,8 @@ const entry = (session: string, issue = 7, repo = "owner/repo"): IssueSession =>
   agent: "claude",
   worktree: `/wt/${issue}`,
   branch: `issue/${issue}`,
+  finished: null,
+  blockedTold: false,
 });
 
 describe("parseStartRequest", () => {
@@ -53,6 +55,13 @@ describe("the limit", () => {
     expect(runningCount(sessions, (s) => s !== "b", 0)).toBe(2);
     expect(runningCount(sessions, (s) => s !== "b", 1)).toBe(3);
     expect(runningCount([], () => true, 0)).toBe(0);
+  });
+
+  // A merged implementer's cell may stay open for the user to read; it no longer holds a place.
+  it("does not count an implementer the watch saw finish, though its session still runs", () => {
+    const merged = { ...entry("a"), finished: "merged" as const };
+    expect(runningCount([merged, entry("b", 8)], () => true, 0)).toBe(1);
+    expect(runningFor([merged], { repo: "owner/repo", issue: 7 }, () => true)).toBeUndefined();
   });
 
   it("refuses at the limit and past it, and not below", () => {

@@ -681,6 +681,9 @@ MulmoTerminal の「**拡張**」の柱がここ。稼働中ターミナルの�
 セルを一つずつ持ち、[レビューの往復](#dir-review)を経て merge まで進めます。
 `~/.mulmoterminal/config.json` の `maxIssueSessions` は、それを同時にいくつまで走らせるかです。数えるのは
 すべてのリポジトリを合わせた数で、超える起動は、どれかが終わるまで断られます。
+MulmoTerminal は実装役を一つずつ見ていて、PR が merge されたとき、閉じられたとき、セッションが終わったとき、
+利用者を待って止まったとき（質問や許可の確認）に、起動したセッションへ `[startIssueSession]` で始まる一行を
+打ち込みます。merge または閉じられた実装役は、セルが開いたままでも数に入りません。
 
 ```json
 { "maxIssueSessions": 3 }
