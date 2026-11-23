@@ -675,6 +675,21 @@ MulmoTerminal の「**拡張**」の柱がここ。稼働中ターミナルの�
 このプロジェクトのセッションに、返信の最後のまとめを書かせるかどうか。書かなければグローバル設定
 （既定 ON）に従います。→ [返信の最後のまとめを切る](#append-system-prompt)
 
+## 同時に進める issue の数（`maxIssueSessions`） {#max-issue-sessions}
+
+セッションは `startIssueSession` の道具で、issue を自分の実装役に渡せます。実装役は issue の worktree と
+セルを一つずつ持ち、[レビューの往復](#dir-review)を経て merge まで進めます。
+`~/.mulmoterminal/config.json` の `maxIssueSessions` は、それを同時にいくつまで走らせるかです。数えるのは
+すべてのリポジトリを合わせた数で、超える起動は、どれかが終わるまで断られます。
+
+```json
+{ "maxIssueSessions": 3 }
+```
+
+- 1〜8。既定は 2。範囲外や数でない値は既定として扱い、「上限なし」にはなりません。
+- 実装役はそれぞれレビュー役を一つ起こすので、走るセッションはこの数の倍になります。
+- Settings に入力欄はありません。**設定ファイルを読み直す**と、次の起動から効きます。
+
 ## 自分の配色を作る（`themes`） {#custom-themes}
 
 組み込みの 4 つ（Midnight / Nord / Daylight / Solarized Light）以外の配色を、`~/.mulmoterminal/config.json`

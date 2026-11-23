@@ -97,6 +97,20 @@ describe("createIssueSessionSpawner", () => {
     expect(calls[0].args).toEqual(["s-1", null, null, CWD, false, { mcpGroups: GROUPS, initialPrompt: SEED }]);
   });
 
+  // #3413: a session's implementer carries every tool, so the review tools reach it; the groups would only repeat them.
+  it("hands claude, codex and copilot every tool when asked, without the directory's groups", async () => {
+    const { spawn, calls, groupsFor } = setup();
+    await spawn("claude", CWD, SEED, true, null, { allTools: true });
+    await spawn("codex", CWD, SEED, true, null, { allTools: true });
+    await spawn("copilot", CWD, SEED, true, null, { allTools: true });
+    expect(calls.map((c) => c.args)).toEqual([
+      ["s-1", null, null, { cwd: CWD, attachGuiMcp: true, initialPrompt: SEED }],
+      ["s-1", null, null, CWD, true, { mcpGroups: [], initialPrompt: SEED }],
+      ["s-1", null, null, CWD, true, { mcpGroups: [], initialPrompt: SEED }],
+    ]);
+    expect(groupsFor).not.toHaveBeenCalled();
+  });
+
   it.each(["antigravity", "grok", "muse"] as const)("gives %s the directory's groups", async (agent) => {
     const { spawn, calls } = setup();
     await spawn(agent, CWD, SEED, false, null);

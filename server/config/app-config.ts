@@ -64,6 +64,7 @@ import { sanitizeGitlabHosts } from "../../common/gitlabHosts.js";
 import { DEFAULT_WORKLOG_INTERVAL_HOURS, sanitizeWorklogIntervalHours } from "../../common/worklogInterval.js";
 import { DEFAULT_REAP_IDLE_DAYS, sanitizeReapIdleDays, DEFAULT_REAP_INTERVAL_HOURS, sanitizeReapIntervalHours } from "../../common/sessionReap.js";
 import { GUI_SERVER_ID } from "../../common/toolGroups.js";
+import { DEFAULT_MAX_ISSUE_SESSIONS, sanitizeMaxIssueSessions } from "../../common/issueSessionLimit.js";
 import { CUSTOM_THEMES_MAX } from "../../common/themeEntries.js";
 
 export interface AppConfig {
@@ -140,6 +141,8 @@ export interface AppConfig {
   // the next sweep (#1467). 0 turns the sweep off; the conversation is on disk either way.
   sessionIdleReapDays: number;
   sessionReapIntervalHours: number;
+  /** How many implementers startIssueSession may have running at once (#3413). */
+  maxIssueSessions: number;
   // Anthropic-compatible backends a directory can point its sessions at (#579). Safe to
   // serve: an entry names the env var holding its key (`tokenEnv`), never the key.
   providers: Provider[];
@@ -551,6 +554,26 @@ const mergeOptOutFlags = (base: AppConfig, body: Record<string, unknown>): OptOu
     cellSendButton: body.cellSendButton !== undefined ? body.cellSendButton : base.cellSendButton,
   });
 
+// The numbers that bound how many sessions run and for how long, read and merged together for the
+// same length bound as the flags above.
+type SessionCounts = Pick<AppConfig, "sessionIdleReapDays" | "sessionReapIntervalHours" | "maxIssueSessions">;
+const sanitizeSessionCounts = (o: Record<string, unknown>): SessionCounts => ({
+  sessionIdleReapDays: sanitizeReapIdleDays(o.sessionIdleReapDays),
+  sessionReapIntervalHours: sanitizeReapIntervalHours(o.sessionReapIntervalHours),
+  maxIssueSessions: sanitizeMaxIssueSessions(o.maxIssueSessions),
+});
+const mergeSessionCounts = (base: AppConfig, body: Record<string, unknown>): SessionCounts =>
+  sanitizeSessionCounts({
+    sessionIdleReapDays: body.sessionIdleReapDays !== undefined ? body.sessionIdleReapDays : base.sessionIdleReapDays,
+    sessionReapIntervalHours: body.sessionReapIntervalHours !== undefined ? body.sessionReapIntervalHours : base.sessionReapIntervalHours,
+    maxIssueSessions: body.maxIssueSessions !== undefined ? body.maxIssueSessions : base.maxIssueSessions,
+  });
+const publicSessionCounts = (config: AppConfig): SessionCounts => ({
+  sessionIdleReapDays: config.sessionIdleReapDays,
+  sessionReapIntervalHours: config.sessionReapIntervalHours,
+  maxIssueSessions: config.maxIssueSessions,
+});
+
 export function sanitizeDecisionDigest(input: unknown): boolean {
   return input === true;
 }
@@ -611,6 +634,7 @@ export const emptyConfig = (): AppConfig => ({
   worklogIntervalHours: DEFAULT_WORKLOG_INTERVAL_HOURS,
   sessionIdleReapDays: DEFAULT_REAP_IDLE_DAYS,
   sessionReapIntervalHours: DEFAULT_REAP_INTERVAL_HOURS,
+  maxIssueSessions: DEFAULT_MAX_ISSUE_SESSIONS,
   providers: [],
   terminalSubmit: DEFAULT_TERMINAL_SUBMIT_MODE,
   tmuxPrefix: TMUX_PREFIX_DEFAULT,
@@ -726,8 +750,7 @@ function sanitizeAppConfig(raw: unknown): AppConfig {
     feedRefreshEnabled: sanitizeFeedRefreshEnabled(o.feedRefreshEnabled),
     calendarSyncEnabled: sanitizeCalendarSyncEnabled(o.calendarSyncEnabled),
     worklogIntervalHours: sanitizeWorklogIntervalHours(o.worklogIntervalHours),
-    sessionIdleReapDays: sanitizeReapIdleDays(o.sessionIdleReapDays),
-    sessionReapIntervalHours: sanitizeReapIntervalHours(o.sessionReapIntervalHours),
+    ...sanitizeSessionCounts(o),
     providers: sanitizeProviders(o.providers),
     terminalSubmit: sanitizeTerminalSubmit(o.terminalSubmit),
     tmuxPrefix: sanitizeTmuxPrefix(o.tmuxPrefix),
@@ -864,8 +887,7 @@ export function mergeConfigUpdate(base: AppConfig, body: Record<string, unknown>
     feedRefreshEnabled: updated("feedRefreshEnabled", sanitizeFeedRefreshEnabled, base.feedRefreshEnabled),
     calendarSyncEnabled: updated("calendarSyncEnabled", sanitizeCalendarSyncEnabled, base.calendarSyncEnabled),
     worklogIntervalHours: updated("worklogIntervalHours", sanitizeWorklogIntervalHours, base.worklogIntervalHours),
-    sessionIdleReapDays: updated("sessionIdleReapDays", sanitizeReapIdleDays, base.sessionIdleReapDays),
-    sessionReapIntervalHours: updated("sessionReapIntervalHours", sanitizeReapIntervalHours, base.sessionReapIntervalHours),
+    ...mergeSessionCounts(base, body),
     providers: updated("providers", sanitizeProviders, base.providers),
     terminalSubmit: updated("terminalSubmit", sanitizeTerminalSubmit, base.terminalSubmit),
     tmuxPrefix: updated("tmuxPrefix", sanitizeTmuxPrefix, base.tmuxPrefix),
@@ -928,8 +950,7 @@ export function toPublicAppConfig(config: AppConfig): AppConfig {
     feedRefreshEnabled: config.feedRefreshEnabled,
     calendarSyncEnabled: config.calendarSyncEnabled,
     worklogIntervalHours: config.worklogIntervalHours,
-    sessionIdleReapDays: config.sessionIdleReapDays,
-    sessionReapIntervalHours: config.sessionReapIntervalHours,
+    ...publicSessionCounts(config),
     terminalSubmit: config.terminalSubmit,
     tmuxPrefix: config.tmuxPrefix,
     keymap: config.keymap,
