@@ -13,6 +13,9 @@ export const DEFAULT_WAIT_SECONDS = 45;
 // outlived it would be answered to nobody.
 export const MAX_WAIT_SECONDS = 240;
 export const REPLY_POLL_MS = 2000;
+// Room kept for the tag every message carries (askTag), so the tagged text still fits the sender's cap.
+const TAG_RESERVE_CHARS = 40;
+export const SEND_MAX_CHARS = REPLY_MAX_CHARS - TAG_RESERVE_CHARS;
 // A reply goes back as a tool result, read by a model; past this it is cut and says so.
 export const REPLY_RESULT_MAX_CHARS = 20_000;
 const MS_PER_SECOND = 1000;
@@ -33,9 +36,14 @@ export function parseSendRequest(body: unknown): Parsed<{ session: string; messa
   if (session === null) return refuse(SESSION_REQUIRED);
   const message = typeof record.message === "string" ? record.message : "";
   if (sanitizeTerminalInput(message) === "") return refuse("`message` is required: the text to type into the session.");
-  if (message.length > REPLY_MAX_CHARS) return refuse(`\`message\` is longer than ${REPLY_MAX_CHARS} characters.`);
+  if (message.length > SEND_MAX_CHARS) return refuse(`\`message\` is longer than ${SEND_MAX_CHARS} characters.`);
   return { ok: true, session, message };
 }
+
+/** Appended to each message. The wait recognises the reply by the end of the prompt it answers, so
+ *  without a per-send tag a message sent twice ("re-review, please") matches the EARLIER turn and
+ *  hands back its old reply at once. */
+export const askTag = (nonce: string): string => ` [sendToSession ${nonce}]`;
 
 /** The wait asked for, in ms: absent is the default, and anything out of range is pulled into it
  *  rather than refused — a model asking for an hour wants "as long as you can". */

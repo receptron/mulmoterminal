@@ -12,9 +12,12 @@ import {
   REPLY_POLL_MS,
   REPLY_RESULT_MAX_CHARS,
   replyMessage,
+  SEND_MAX_CHARS,
+  askTag,
   type ReplyWaitDeps,
 } from "../../../server/routes/sessionAsk.js";
 import { REPLY_MAX_CHARS } from "../../../server/routes/terminalReply.js";
+import { answersOurSend } from "../../../common/turnCorrelation.js";
 import type { TurnSnapshot } from "../../../common/turnCorrelation.js";
 
 const CALLER = "0b7d2c1e-1111-4222-8333-944455556666";
@@ -37,13 +40,14 @@ describe("parseSendRequest", () => {
     ["an empty message", { session: CHILD, message: "" }],
     ["a message of control bytes only", { session: CHILD, message: "\u0003\u001b" }],
     ["a message that is not a string", { session: CHILD, message: ["hi"] }],
-    ["a message over the cap", { session: CHILD, message: "x".repeat(REPLY_MAX_CHARS + 1) }],
+    ["a message over the cap", { session: CHILD, message: "x".repeat(SEND_MAX_CHARS + 1) }],
   ])("refuses %s", (_label, body) => {
     expect(parseSendRequest(body).ok).toBe(false);
   });
 
-  it("accepts a message exactly at the cap", () => {
-    expect(parseSendRequest({ session: CHILD, message: "x".repeat(REPLY_MAX_CHARS) }).ok).toBe(true);
+  it("accepts a message exactly at the cap, leaving room for the tag within the sender's own cap", () => {
+    expect(parseSendRequest({ session: CHILD, message: "x".repeat(SEND_MAX_CHARS) }).ok).toBe(true);
+    expect(SEND_MAX_CHARS + askTag("0123abcd").length).toBeLessThanOrEqual(REPLY_MAX_CHARS);
   });
 });
 
@@ -175,5 +179,14 @@ describe("replyMessage", () => {
 
   it("says a turn ended without text", () => {
     expect(replyMessage(CHILD, { status: "answered", reply: "  " })).toMatch(/without any text/);
+  });
+});
+
+describe("askTag", () => {
+  it("makes the same message sent twice tell its two turns apart", () => {
+    const first = `re-review, please${askTag("aaaa1111")}`;
+    const second = `re-review, please${askTag("bbbb2222")}`;
+    expect(answersOurSend(first, second)).toBe(false);
+    expect(answersOurSend(second, second)).toBe(true);
   });
 });

@@ -10,6 +10,7 @@ import { mountSessionAskRoutes } from "../../../server/routes/session-ask-routes
 import { createSpawnedSessions, type SpawnedSessions } from "../../../server/session/spawned-sessions.js";
 import { InputBlockedError, type SendOptions } from "../../../server/backends/remoteHost/terminalInput.js";
 import { SESSION_HEADER } from "../../../server/backends/files/presentPathRoot.js";
+import { askTag } from "../../../server/routes/sessionAsk.js";
 
 const CALLER = "0b7d2c1e-1111-4222-8333-944455556666";
 const CHILD = "1c8e3d2f-2222-4333-8444-a55566667777";
@@ -46,11 +47,23 @@ const turns: TurnSnapshot[] = [];
 const readTurn = vi.fn<() => Promise<TurnSnapshot>>(async () => turns.shift() ?? { prompt: null, reply: null });
 let turnReader: () => (() => Promise<TurnSnapshot>) | string = () => readTurn;
 let spawned: SpawnedSessions;
+const nonces: string[] = [];
+// Advances on every read, so a wait that never sees its reply reaches its deadline.
+const TICK_MS = 1000;
+let clock_ms = 0;
 
 function routes(): { sendRoute: Handler; waitRoute: Handler } {
   const map: Record<string, Handler> = {};
   const app = { post: (path: string, handler: Handler) => (map[path] = handler) } as unknown as Express;
-  mountSessionAskRoutes(app, { spawned, send, openQuestion, turnReader: () => turnReader(), sleep: async () => undefined, now: () => 0 });
+  mountSessionAskRoutes(app, {
+    spawned,
+    send,
+    openQuestion,
+    turnReader: () => turnReader(),
+    sleep: async () => undefined,
+    now: () => (clock_ms += TICK_MS),
+    nonce: () => nonces.shift() ?? "nonce000",
+  });
   const sendRoute = map["/api/plugin/sendToSession"];
   const waitRoute = map["/api/plugin/waitForSessionReply"];
   if (!sendRoute || !waitRoute) throw new Error("routes not mounted");
@@ -73,6 +86,7 @@ beforeEach(() => {
   openQuestion.mockClear();
   readTurn.mockClear();
   turns.length = 0;
+  nonces.length = 0;
   turnReader = () => readTurn;
   spawned = createSpawnedSessions();
   spawned.recordSpawn(CHILD, CALLER);
@@ -80,11 +94,14 @@ beforeEach(() => {
 });
 
 describe("sendToSession", () => {
-  it("types the message into a session the caller started, and remembers it for the wait", async () => {
+  it("types the message, tagged, into a session the caller started, and remembers it for the wait", async () => {
+    nonces.push("tag00001");
+    const tagged = `Review PR #12.${askTag("tag00001")}`;
+    expect(send).not.toHaveBeenCalled();
     const message = await call(routes().sendRoute, request({ session: CHILD, message: "Review PR #12." }));
-    expect(send).toHaveBeenCalledWith(CHILD, "Review PR #12.", expect.objectContaining({ blocked: expect.any(Function) }));
+    expect(send).toHaveBeenCalledWith(CHILD, tagged, expect.objectContaining({ blocked: expect.any(Function) }));
     expect(message).toMatch(/Sent to session/);
-    expect(spawned.lastSentTo(CHILD)).toBe("Review PR #12.");
+    expect(spawned.lastSentTo(CHILD)).toBe(tagged);
   });
 
   it("refuses a call that did not come from a terminal", async () => {
@@ -123,6 +140,14 @@ describe("sendToSession", () => {
 });
 
 describe("waitForSessionReply", () => {
+  it("does not hand back the earlier reply when the same message is sent again", async () => {
+    nonces.push("first001", "second02");
+    await call(routes().sendRoute, request({ session: CHILD, message: "re-review, please" }));
+    await call(routes().sendRoute, request({ session: CHILD, message: "re-review, please" }));
+    turns.push({ prompt: `re-review, please${askTag("first001")}`, reply: "old: changes requested" });
+    expect(await call(routes().waitRoute, request({ session: CHILD, waitSeconds: 1 }))).toMatch(/has not answered yet/);
+  });
+
   it("returns the reply to what was sent", async () => {
     spawned.rememberSent(CHILD, "Review PR #12.");
     turns.push({ prompt: "older", reply: "older reply" }, { prompt: "Review PR #12.", reply: "LGTM" });

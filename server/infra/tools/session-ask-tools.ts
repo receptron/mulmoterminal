@@ -2,8 +2,7 @@
 // message into it, then read its answer. Host tools (routes/session-ask-routes.ts), and in no tool
 // group, like spawnBackgroundChat itself. MulmoClaude has no counterpart.
 import type { ToolDefinition } from "gui-chat-protocol";
-import { DEFAULT_WAIT_SECONDS, MAX_WAIT_SECONDS } from "../../routes/sessionAsk.js";
-import { REPLY_MAX_CHARS } from "../../routes/terminalReply.js";
+import { DEFAULT_WAIT_SECONDS, MAX_WAIT_SECONDS, SEND_MAX_CHARS } from "../../routes/sessionAsk.js";
 
 const SESSION_PROPERTY = {
   type: "string",
@@ -18,7 +17,7 @@ export const SEND_TO_SESSION: ToolDefinition = {
   prompt:
     "Use `sendToSession` to talk to a session you started — for example, asking a reviewer session running another agent to review a change, then sending it your fixes. " +
     "The other session shares none of your context, so make each message self-contained. " +
-    `At most ${REPLY_MAX_CHARS} characters. Nothing is sent while that session shows a question dialog; you are told so instead.`,
+    `At most ${SEND_MAX_CHARS} characters; a short tag is appended so its reply can be matched. Nothing is sent while that session shows a question dialog; you are told so instead.`,
   parameters: {
     type: "object",
     properties: {

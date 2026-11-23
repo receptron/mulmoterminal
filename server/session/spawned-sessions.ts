@@ -1,5 +1,6 @@
 // Which session started which through spawnBackgroundChat, and the text each parent last sent its
-// child (#3404). It is what limits sendToSession to sessions the caller started.
+// child (#3404). It is what limits the sendToSession TOOL to sessions the caller started — the caller
+// is the broker's header, an assertion rather than a credential (routes/session-ask-routes.ts).
 //
 // Process lifetime on purpose: a restart forgets it, and a session started before then can no
 // longer be sent to. The refusal says so (routes/sessionAsk.ts).

@@ -24,6 +24,11 @@ umbrella describes is built on top of this later; nothing here runs a loop.
 
 - **Only sessions you started.** An agent holding these tools must not be able to type into the
   other cells the user has open. Parentage is recorded at spawn, keyed by the caller's session id.
+  That id is the broker's header — an assertion, not a credential — so this limits the tools, not
+  local processes: `POST /api/terminal/:id/reply` already lets any local process type into any
+  session, with no header at all.
+- **Each message carries a short tag** (`[sendToSession <id>]`). The wait recognises the reply by
+  the end of the prompt it answers, so a message sent twice would otherwise match the earlier turn.
 - **Send and wait are two tools.** A tool call has a ceiling the server does not control: codex
   gives up on an MCP call after its tool timeout, and the broker's own `fetch` stops waiting for
   response headers after undici's default. So the wait is bounded per call (a default under codex's

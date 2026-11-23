@@ -2,7 +2,9 @@
 // started, and reads what that session answered. Host tools, before the plugin catch-all.
 //
 // The caller comes from the MCP broker's header, and the target must be a session the caller started
-// (routes/sessionAsk.ts) — these tools must not reach the other cells the user has open.
+// (routes/sessionAsk.ts), so an agent using these tools cannot reach the other cells the user has
+// open. The header is an assertion, not a credential: this limits the TOOLS. A local process can
+// already type into any session through POST /api/terminal/:id/reply, which takes no header at all.
 import type { Express, Request, Response } from "express";
 import type { AskQuestionEvent } from "../../common/askQuestion.js";
 import type { TurnSnapshot } from "../../common/turnCorrelation.js";
@@ -10,7 +12,7 @@ import { InputBlockedError, type SendOptions } from "../backends/remoteHost/term
 import { SESSION_HEADER, sessionIdFromHeader } from "../backends/files/presentPathRoot.js";
 import type { SpawnedSessions } from "../session/spawned-sessions.js";
 import { messageOf } from "../errors.js";
-import { addressRefusal, awaitReply, parseSendRequest, parseWaitRequest, replyMessage } from "./sessionAsk.js";
+import { addressRefusal, askTag, awaitReply, parseSendRequest, parseWaitRequest, replyMessage } from "./sessionAsk.js";
 
 export interface SessionAskRouteDeps {
   spawned: SpawnedSessions;
@@ -21,6 +23,8 @@ export interface SessionAskRouteDeps {
   turnReader: (sessionId: string) => (() => Promise<TurnSnapshot>) | string;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
+  /** A fresh tag per send (askTag). */
+  nonce: () => string;
 }
 
 /** The calling session and the target it may address, or null once the refusal has been answered. */
@@ -46,13 +50,14 @@ function mountSend(app: Express, deps: SessionAskRouteDeps): void {
     // Asked inside the sender's chain, before the paste and again before the Enter: a dialog can
     // open while this send waits its turn.
     const blocked = async (): Promise<boolean> => (await deps.openQuestion(request.session)) !== null;
+    const sent = `${request.message}${askTag(deps.nonce())}`;
     try {
-      await deps.send(request.session, request.message, { blocked });
+      await deps.send(request.session, sent, { blocked });
     } catch (err) {
       if (err instanceof InputBlockedError) return res.json({ message: `Session ${request.session} is waiting on a question dialog; nothing was sent.` });
       return res.json({ message: `Could not send to session ${request.session}: ${messageOf(err)}` });
     }
-    deps.spawned.rememberSent(request.session, request.message);
+    deps.spawned.rememberSent(request.session, sent);
     return res.json({ message: `Sent to session ${request.session}. Call waitForSessionReply to read its answer.` });
   });
 }
