@@ -47,6 +47,7 @@ const EMPTY = {
   addDirs: null,
   appendSystemPrompt: null,
   worktreeEnv: null,
+  review: null,
 };
 
 function withConfig(body: unknown): { dir: string; cleanup: () => void } {
@@ -152,6 +153,7 @@ describe("loadDirConfig", () => {
       // One good variable and two the loader must drop ON THEIR OWN: a name no shell could
       // export, and a privileged port. Dropping the whole block would take PORT with them.
       worktreeEnv: { PORT: { kind: "port", base: 3000 }, "not a name": { kind: "port", base: 4000 }, LOW: { kind: "port", base: 80 } },
+      review: { reviewer: "claude", maxRounds: 4 },
     });
     writeFileSync(path.join(dir, "a.mp3"), "x");
     expect(loadDirConfig(dir)).toEqual({
@@ -185,6 +187,7 @@ describe("loadDirConfig", () => {
       addDirs: null,
       appendSystemPrompt: false,
       worktreeEnv: { PORT: { kind: "port", base: 3000 } },
+      review: { reviewer: "claude", maxRounds: 4, requiredLgtm: 1 },
     });
     cleanup();
   });
@@ -559,6 +562,7 @@ describe("dirConfigDetail", () => {
       commandLabels: [],
       autoIcon: null,
       worktreeEnvNames: [],
+      reviewSummary: null,
     });
     rmSync(dir, { recursive: true, force: true });
   });

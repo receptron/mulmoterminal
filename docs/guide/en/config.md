@@ -177,7 +177,7 @@ Open it in the Files pane and the editor knows this file's keys: it offers them 
 
 To get to it from Settings: **Settings → Directory settings**, expand a directory, and press **Open in Files** beside its file — or, where it has none yet, **Create .mulmoterminal.json and open it**, which writes an empty `{}` first. Either one closes Settings and opens the file in the full-screen Files view.
 
-Or change it without opening the file: under the values, **Change here** has a row each for the name, the seven colours, the header's status style and its colour per status, the terminal theme and its palette, font size, font family, grid priority, the model its sessions start on, the closing-summary switch, extra directories (`addDirs`), the icon, the terminal background, the attention sounds, the header's buttons, chips and command-palette entries (the same editors as the global ones), the Skill menu, the Mulmo menu's decks and the per-worktree variables — every key the file can hold except `mobileFiles`, which is set in the file only. **This checkout only** moves a key into `.mulmoterminal.local.json`, and **Share** moves it back. From a terminal, the path menu (click the directory in its header) has **This directory's settings**, which opens Settings with that directory's row open. Setting any status colour here replaces the global set of status colours for that directory, as `headerStatusColors` in the file always has. The status colours and the palette are saved as a whole set, so an entry the app already ignores there (an unknown palette key, a value that is not a colour) is dropped by the next save from the form. A change is saved as soon as you leave the field (or pick the colour) and applies at once; **Use global** removes that key so the global setting applies again. Keys the form does not show are left as they are. A key `.mulmoterminal.local.json` already holds is written there, marked *this checkout only*.
+Or change it without opening the file: under the values, **Change here** has a row each for the name, the seven colours, the header's status style and its colour per status, the terminal theme and its palette, font size, font family, grid priority, the model its sessions start on, the closing-summary switch, extra directories (`addDirs`), the icon, the terminal background, the attention sounds, the header's buttons, chips and command-palette entries (the same editors as the global ones), the Skill menu, the Mulmo menu's decks and the per-worktree variables — every key the file can hold except `mobileFiles` and `review`, which are set in the file only. **This checkout only** moves a key into `.mulmoterminal.local.json`, and **Share** moves it back. From a terminal, the path menu (click the directory in its header) has **This directory's settings**, which opens Settings with that directory's row open. Setting any status colour here replaces the global set of status colours for that directory, as `headerStatusColors` in the file always has. The status colours and the palette are saved as a whole set, so an entry the app already ignores there (an unknown palette key, a value that is not a colour) is dropped by the next save from the form. A change is saved as soon as you leave the field (or pick the colour) and applies at once; **Use global** removes that key so the global setting applies again. Keys the form does not show are left as they are. A key `.mulmoterminal.local.json` already holds is written there, marked *this checkout only*.
 
 ### Which model to use
 
@@ -513,7 +513,7 @@ Now a new worktree is given its own copy, derived from the project's, written to
 repository committed and leaves the worktree's `git status` clean:
 
 - **The identity is copied as written** — `name`, `icon`, `theme`, `colors`, `fontSize`,
-  `fontFamily`, `provider`, `model`, `headerStatusTint`, `backgroundImage`. Same project, same terminal, same model. `icon` is carried as
+  `fontFamily`, `provider`, `model`, `headerStatusTint`, `backgroundImage`, [`review`](#dir-review). Same project, same terminal, same model. `icon` is carried as
   the path you typed rather than the file it resolved to, so a logo committed to the repository is
   found again inside the worktree; one that is gitignored simply doesn't appear there.
 - **The chrome colours are rotated a little around the colour wheel** — `badgeColor`,
@@ -695,6 +695,28 @@ included.
 - An html page is shown with every network request blocked, and the images it names are embedded
   if they are inside a declared directory.
 - A worktree does not inherit this key.
+
+### How this repository's PRs are reviewed (`review`) {#dir-review}
+
+Declares how a session that drives a review should treat this repository's pull requests. Nothing
+reviews automatically until the key is set; a session that drives a review reads it with the
+`reviewSettings` tool, given the repository as `owner/repo`.
+
+```json
+{ "review": { "reviewer": "codex", "maxRounds": 10, "requiredLgtm": 1 } }
+```
+
+- **`reviewer`** — the agent that reviews: `claude`, `codex`, `antigravity`, `grok`, `copilot` or
+  `cursor`. Default `codex`. `muse` cannot be one yet: its replies cannot be read back.
+- **`maxRounds`** — how many review rounds before a person is asked, 1 to 50. Default 10.
+- **`requiredLgtm`** — how many LGTMs naming the PR's current head make it mergeable, 1 to 5.
+  Default 1. Every CI check passing is always required as well.
+- Omit any field for its default; `"review": {}` takes all three defaults.
+- If any field is wrong (an agent this app does not run, a number out of range, a misspelt field name), the **whole key**
+  is ignored rather than falling back to a default reviewer, and Settings → Directory settings lists
+  it under *ignored*. Settings shows a valid one as **Review**.
+- The file is the only way to set it. It is read from the clone that work on the repository starts
+  in, and a worktree inherits it.
 
 ### Closing summary for this directory (`appendSystemPrompt`)
 

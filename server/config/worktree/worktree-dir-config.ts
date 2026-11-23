@@ -35,8 +35,9 @@ const HUE_STEP_DEGREES = 12;
 // not carry it would be the one tree of the project whose dev server still fought for 3000.
 //
 // `headerStatusTint` is here rather than tinted below because it is a MODE, not a colour — there
-// is no hue in "none" to rotate.
-const INHERITED_KEYS = ["name", "theme", "colors", "fontSize", "fontFamily", "provider", "model", "worktreeEnv", "headerStatusTint"] as const;
+// is no hue in "none" to rotate. `review` says how the PROJECT is reviewed, whichever tree a PR
+// comes from.
+const INHERITED_KEYS = ["name", "theme", "colors", "fontSize", "fontFamily", "provider", "model", "worktreeEnv", "headerStatusTint", "review"] as const;
 
 // The cell's chrome — everything a glance at the grid distinguishes one cell by. These get the
 // tint, so a worktree is recognisable both AS this project and as not the project's main tree.

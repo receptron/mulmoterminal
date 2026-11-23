@@ -39,6 +39,7 @@ export const DIR_CONFIG_KEYS = [
   "addDirs",
   "appendSystemPrompt",
   "worktreeEnv",
+  "review",
 ] as const;
 
 export type DirConfigKey = (typeof DIR_CONFIG_KEYS)[number];
@@ -97,6 +98,8 @@ export interface DirConfigExtras {
   // values belong to a tree rather than to the file, and each cell already shows its own on the
   // `env` header chip; what this panel answers is whether the declaration was read at all.
   worktreeEnvNames: string[];
+  // The `review` block in one line (#3407), defaults filled in; null when none was read.
+  reviewSummary: string | null;
 }
 
 export const EMPTY_DIR_CONFIG_EXTRAS: DirConfigExtras = {
@@ -113,6 +116,7 @@ export const EMPTY_DIR_CONFIG_EXTRAS: DirConfigExtras = {
   commandLabels: [],
   autoIcon: null,
   worktreeEnvNames: [],
+  reviewSummary: null,
 };
 
 // "The loader kept nothing for this key" — null/undefined, but also the empty collections the

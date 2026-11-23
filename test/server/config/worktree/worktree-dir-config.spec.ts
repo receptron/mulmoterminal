@@ -66,6 +66,7 @@ describe("every directory setting is inherited or deliberately not", () => {
       chips: ["git"],
       skills: ["review"],
       appendSystemPrompt: false,
+      review: { reviewer: "claude" },
     };
     const inherited = Object.keys(inheritedFrom(everything, 1));
     const unaccounted = [...DIR_CONFIG_KEYS].filter((key) => !inherited.includes(key) && !DELIBERATELY_NOT_INHERITED.includes(key));

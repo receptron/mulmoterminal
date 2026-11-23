@@ -65,6 +65,9 @@ import {
   resolveAddDirs,
 } from "../config-schema.js";
 
+import { dirReviewField } from "../review-schema.js";
+import { reviewSummary, type ReviewSettings } from "../../../common/reviewSettings.js";
+
 export const DIR_CONFIG_FILE = ".mulmoterminal.json";
 // The same settings for THIS checkout only (#1430). Several clones of one repository share a
 // project config and differ in nothing but their colours and grid rank, so the shared part lives
@@ -115,6 +118,9 @@ export interface DirConfig extends DirChrome {
   // Which variables every working tree of this project needs its own value of (#1367). The
   // DECLARATION, not the values — reserving those touches disk and lives in worktree-env.ts.
   worktreeEnv: WorktreeEnvSpec | null;
+  // How this repository wants its changes reviewed (#3407), defaults filled in; null when the file
+  // declares none or the block does not validate.
+  review: ReviewSettings | null;
 }
 
 // What the browser receives: the raw sound path stays server-side (streamed via
@@ -202,6 +208,7 @@ const EMPTY: DirConfig = {
   addDirs: null,
   appendSystemPrompt: null,
   worktreeEnv: null,
+  review: null,
 };
 
 /** Every layer as ONE object, the more specific winning per top-level key.
@@ -298,6 +305,7 @@ export function loadDirConfig(cwd: string): DirConfig {
       addDirs: resolveAddDirs(raw.addDirs, base, (p) => statSync(p).isDirectory()),
       appendSystemPrompt: dirAppendSystemPromptField.parse(raw.appendSystemPrompt),
       worktreeEnv: dirWorktreeEnvField.parse(raw.worktreeEnv),
+      review: dirReviewField.parse(raw.review),
     };
   } catch {
     return EMPTY;
@@ -407,7 +415,7 @@ export interface DirConfigDetail {
 const chipLabel = (chip: HeaderChip): string => (typeof chip === "string" ? chip : chip.label);
 
 function dirConfigExtras(cwd: string): DirConfigExtras {
-  const { provider, model, skills, decks, mobileFiles, addDirs, appendSystemPrompt, buttons, chips, commands, icon, worktreeEnv } = loadDirConfig(cwd);
+  const { provider, model, skills, decks, mobileFiles, addDirs, appendSystemPrompt, buttons, chips, commands, icon, worktreeEnv, review } = loadDirConfig(cwd);
   return {
     provider,
     model,
@@ -422,6 +430,7 @@ function dirConfigExtras(cwd: string): DirConfigExtras {
     commandLabels: commands.map((command) => command.label),
     autoIcon: autoIconRef(cwd, icon),
     worktreeEnvNames: Object.keys(worktreeEnv ?? {}),
+    reviewSummary: review ? reviewSummary(review) : null,
   };
 }
 

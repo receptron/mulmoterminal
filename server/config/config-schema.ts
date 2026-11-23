@@ -13,6 +13,7 @@
 import path from "node:path";
 import { DIR_BACKGROUND_FITS } from "../../common/dirBackground.js";
 import { z } from "zod";
+import { reviewSchema } from "./review-schema.js";
 // Shared with the client dir-config parser so the two can't drift — see common/themeColors.ts.
 import { THEME_COLOR_KEYS, PALETTE_COLOR_RE } from "../../common/themeColors.js";
 import { THEME_IDS } from "../../common/themeIds.js";
@@ -621,6 +622,9 @@ const writableDirConfigSchema = z.object({
   // database name. Each tree (the checkout itself and every managed worktree) is reserved a
   // distinct value, exported into its terminals. Omit and nothing is set, as before.
   worktreeEnv: worktreeEnvSchema.optional(),
+  // How this repository wants its changes reviewed (#3407): the reviewer agent, the round cap and
+  // the LGTMs a head needs. Read by the reviewSettings tool; omit and nothing reviews automatically.
+  review: reviewSchema.optional(),
 });
 
 /** Whether `value` is one the file may hold under `key` — the same rule the Files pane's editor marks. */
