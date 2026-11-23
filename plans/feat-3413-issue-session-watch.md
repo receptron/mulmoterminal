@@ -11,7 +11,9 @@ Every `ISSUE_WATCH_INTERVAL_MS`, for each implementer not yet finished, the serv
 - whether its session still runs here;
 - whether it stopped on the user: an open question dialog, or its newest hook event being `Notification`
   (claude's, and codex's PermissionRequest, which arrives under that name). Read from `lastHookEvent`, kept
-  on every hook whether or not it moved a flag — not from `activity`, whose `waiting` is also the unread
+  where hooks come in (`/api/hook`, and codex's turn boundaries) whether or not a hook moved a flag —
+  a block on a watched cell included, an informational Notification excluded, a flag set from
+  anywhere else (marking a cell unread, viewing it) never — not from `activity`, whose `waiting` is also the unread
   mark: an unviewed cell keeps it from its first `Stop`, after which a `Notification` moves nothing there.
   A turn that merely ended is not a stop on the user: the implementer may be waiting for its review round,
   which the server types in.

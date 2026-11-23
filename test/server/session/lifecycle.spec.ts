@@ -158,20 +158,15 @@ describe("reap", () => {
 });
 
 describe("setWorking / setWaiting", () => {
-  // #3413: an unviewed cell keeps `waiting` from its first Stop, so a later Notification moves no flag —
-  // and the watch over implementers still has to see it, and see it go once the session moves on.
-  it("records the newest hook event even when it moves no flag, and forgets it on reap", () => {
+  // #3413: the newest hook event is kept where hooks come in; a flag set from anywhere else — the
+  // user marking a cell unread, a cell being viewed — must not move it, and reap forgets it.
+  it("leaves the newest hook event alone, and forgets it on reap", () => {
     const lifecycle = createSessionLifecycle(makeDeps());
-    lifecycle.setWaiting(ID, true, "Stop");
-    lifecycle.setWorking(ID, false, "Stop");
-    lifecycle.setWorking(ID, true, "UserPromptSubmit");
-    lifecycle.setWaiting(ID, true, "Notification");
-    expect(activity.get(ID)?.event).toBe("UserPromptSubmit");
-    expect(lastHookEvent.get(ID)).toBe("Notification");
-    lifecycle.setWorking(ID, true, "PostToolUse");
-    expect(lastHookEvent.get(ID)).toBe("PostToolUse");
+    lastHookEvent.set(ID, "Notification");
+    lifecycle.setWaiting(ID, true, "MarkedUnread");
     lifecycle.setWaiting(ID, false);
-    expect(lastHookEvent.get(ID)).toBe("PostToolUse");
+    lifecycle.setWorking(ID, true, "UserPromptSubmit");
+    expect(lastHookEvent.get(ID)).toBe("Notification");
     ptys.set(ID, fakeEntry());
     lifecycle.reap(ID);
     expect(lastHookEvent.has(ID)).toBe(false);
