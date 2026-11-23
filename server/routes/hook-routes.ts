@@ -351,6 +351,10 @@ async function handleHookRequest(deps: HookDeps, req: Request, res: Response) {
   }
   if (sessionId) {
     const entry = ptys.get(sessionId);
+    // As it ARRIVES, before any awaited work below: recorded later, a slow hook finishing second would
+    // overwrite the one after it, or write the record back after its session was reaped. Every hook,
+    // whatever flag it moves, and live sessions only — nothing reaps an id with no pty.
+    if (entry) noteHookEvent(sessionId, event, fields.notificationType);
     const active = !!(entry && entry.active);
     const cwd = resolveHookCwd(body.cwd, entry?.cwd);
     await applyHeaderHooks(deps, sessionId, event, body, cwd);
@@ -381,9 +385,6 @@ async function handleHookRequest(deps: HookDeps, req: Request, res: Response) {
     // it would sit in the map for the life of the process, once per such session (CodeRabbit on
     // #2071). A session of ours always has an entry: its pty is what the hook is reporting about.
     if (entry && agent === "cursor" && event === "Stop") recordCursorStop(sessionId, raw);
-    // Every hook, whatever flag it moves — a block while the pane is active included — and live
-    // sessions only, for recordCursorStop's reason above: nothing reaps an id with no pty.
-    if (entry) noteHookEvent(sessionId, event, fields.notificationType);
     handleActivityHook(deps, sessionId, active, fields);
     await handleToolHook(deps, sessionId, event, toolPayload(body), cwd);
     handleTurnEnd(deps, sessionId, entry !== undefined, fields);
