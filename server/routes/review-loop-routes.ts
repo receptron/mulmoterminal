@@ -112,11 +112,17 @@ async function runRound(deps: ReviewLoopRouteDeps, run: RoundRun): Promise<void>
 }
 
 /** The PR's loop, unless the session that ran it is no longer running here — a closed or crashed
- *  author would otherwise hold the PR until a restart. Dropping it also abandons its round. */
+ *  author would otherwise hold the PR until a restart. Dropping it abandons its round and closes its
+ *  reviewer, which only that author could address. */
 function liveLoop(deps: ReviewLoopRouteDeps, key: string): ReviewLoop | undefined {
   const loop = deps.loops.get(key);
   if (loop === undefined || deps.agentOf(loop.author) !== undefined) return loop;
   deps.loops.delete(key);
+  try {
+    deps.close(loop.reviewer);
+  } catch (err) {
+    console.error(`[requestReview] could not close reviewer session ${loop.reviewer} of ${key}: ${messageOf(err)}`);
+  }
   return undefined;
 }
 

@@ -18,6 +18,8 @@ import { SESSION_HEADER } from "../../../server/backends/files/presentPathRoot.j
 const AUTHOR = "0b7d2c1e-1111-4222-8333-944455556666";
 const REVIEWER = "1c8e3d2f-2222-4333-8444-a55566667777";
 const OTHER = "2d9f4e30-3333-4444-8555-b66677778888";
+const REVIEWER2 = "3ea05f41-4444-4555-8666-c77788889999";
+const REVIEWERS = new Set([REVIEWER, REVIEWER2]);
 const HEAD = "a".repeat(40);
 const NEXT = "b".repeat(40);
 const SETTINGS: ReviewSettings = { reviewer: "codex", maxRounds: 3, requiredLgtm: 1 };
@@ -47,11 +49,11 @@ let clock_ms = 0;
 const TICK_MS = 1000;
 
 /** What the reviewer last received, so its turn can answer exactly that prompt. */
-const sentToReviewer = (): string => send.mock.calls.filter(([session]) => session === REVIEWER).at(-1)?.[1] ?? "";
+const sentToReviewer = (): string => send.mock.calls.filter(([session]) => REVIEWERS.has(session)).at(-1)?.[1] ?? "";
 const typedToAuthor = (): string[] => send.mock.calls.filter(([session]) => session === AUTHOR).map(([, text]) => text);
 
 function agentOf(session: string): string | undefined {
-  if (session === REVIEWER) return agent;
+  if (REVIEWERS.has(session)) return agent;
   return running.has(session) ? "claude" : undefined;
 }
 
@@ -232,11 +234,14 @@ describe("an author that is gone", () => {
     reply = null;
     const { requestRoute } = routes();
     await call(requestRoute, req(BODY));
-    // As if OTHER had started a reviewer of its own: the address check passes, and the loop decides.
-    spawned.recordSpawn(REVIEWER, OTHER);
-    expect(await call(requestRoute, req(BODY, OTHER))).toMatch(/Another session is running/);
+    spawned.recordSpawn(REVIEWER2, OTHER);
+    const takeOver = req({ ...BODY, reviewer: REVIEWER2 }, OTHER);
+    expect(await call(requestRoute, takeOver)).toMatch(/Another session is running/);
     running.delete(AUTHOR);
-    expect(await call(requestRoute, req(BODY, OTHER))).toMatch(/Round 1 of/);
+    expect(await call(requestRoute, takeOver)).toMatch(/Round 1 of/);
+    // The old reviewer answered to the old author alone, so nobody is left to use it.
+    expect(close).toHaveBeenCalledWith(REVIEWER);
+    expect(close).not.toHaveBeenCalledWith(REVIEWER2);
     expect(loops.get("owner/repo#7")?.author).toBe(OTHER);
     reply = "REVIEW VERDICT: LGTM (head aaaaaaa)";
     await vi.waitFor(() => expect(send.mock.calls.filter(([session]) => session === OTHER)).toHaveLength(1));
