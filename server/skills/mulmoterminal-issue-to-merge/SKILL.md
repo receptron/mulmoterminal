@@ -11,8 +11,9 @@ merge. The repository decides who reviews and when a PR is mergeable, in the `re
 `.mulmoterminal.json` — never you, and never the reviewer.
 
 The review tools (`reviewSettings`, `requestReview`, `endReview`, `spawnBackgroundChat`,
-`waitForSessionReply`) are offered in the workspace session. If you do not have them, say so and stop:
-the user should run this from the workspace cell.
+`waitForSessionReply`) are offered only to a session that carries MulmoTerminal's whole tool set: a
+workspace cell running Claude, Codex or Copilot, not a project cell. If you do not have them, say so
+and stop: the user should run this from such a cell.
 
 ## 1. Read the issue and the repository's rules
 
@@ -42,9 +43,10 @@ them. If nothing is open, say what you assumed and go on.
 
 ## 4. Review loop
 
-1. Start the reviewer once for this PR with `spawnBackgroundChat`, using the `agent` that
-   `reviewSettings` named and a message like "You will be asked to review <owner/repo>#<PR>. Wait for
-   the request." Keep its `chatId`. One reviewer per PR; do not reuse it for another PR.
+1. Start the reviewer once for this PR with `spawnBackgroundChat { message, role: "reviewer",
+   hidden: false, agent }` — `agent` is the one `reviewSettings` named, and the message something
+   like "You will be asked to review <owner/repo>#<PR>. Wait for the request." Keep its `chatId`. One
+   reviewer per PR; do not reuse it for another PR.
 2. Wait for CI to start, then call `requestReview { repo, pr, reviewer }`. It returns at once. Do not
    poll: when the round ends, MulmoTerminal types a line starting with `[requestReview]` into your
    session, saying the verdict, the rounds left, and what to do next.
@@ -56,8 +58,9 @@ them. If nothing is open, say what you assumed and go on.
 4. On a reply with **no verdict line**, or **no answer**: look at the reviewer's cell, then ask again
    with `requestReview` or ask the user.
 5. On **LGTM**: the message says whether the merge condition is met — the declared number of LGTMs
-   on the current head AND every CI check passing. If CI is still running, wait for it
-   (`gh pr checks <PR> -R <repo> --watch`).
+   on the current head AND every CI check passing. When the LGTMs are there but CI is still running,
+   the message says so instead; do not call `requestReview` again (it refuses a head that already has
+   its LGTMs). Wait for CI (`gh pr checks <PR> -R <repo> --watch`).
 
 Stop and ask the user when: the round limit is reached (`requestReview` refuses past it), the
 reviewer raises the same finding again after you answered it, or a finding needs a decision the issue
@@ -65,7 +68,10 @@ did not make.
 
 ## 5. Merge and close
 
-- Merge only when the message said **Merge condition met**, and re-check CI first. Use the
+- Merge only when the merge condition holds on the head you are about to merge: the message said
+  **Merge condition met**, or it said the LGTMs were there and CI was still running and CI has since
+  passed. Either way, check first that the head has not moved since the round
+  (`gh pr view <PR> -R <repo> --json headRefOid`) and that every check passes. Use the
   repository's merge method; without a rule, a merge commit (`gh pr merge <PR> -R <repo> --merge`).
   If a permission check or hook blocks the merge, report it and wait for the user — do not route
   around it.
