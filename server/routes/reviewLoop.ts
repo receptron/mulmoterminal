@@ -7,6 +7,7 @@ import { isRecord } from "../../common/isRecord.js";
 import { isRepoEntry } from "../../common/repoEntry.js";
 import type { ReviewSettings } from "../../common/reviewSettings.js";
 import { SESSION_ID_RE } from "../config/env.js";
+import { parseVerdictLine } from "../git/codexVerdict.js";
 import type { Parsed } from "./sessionAsk.js";
 
 const MS_PER_MINUTE = 60_000;
@@ -15,6 +16,9 @@ const MS_PER_MINUTE = 60_000;
 export const REVIEW_WAIT_MINUTES = 60;
 export const REVIEW_WAIT_MS = REVIEW_WAIT_MINUTES * MS_PER_MINUTE;
 const SHORT_SHA_CHARS = 7;
+// GitHub's own limits: an owner of 39 characters and a name of 100. A longer one names no repository,
+// and the review request repeats the name, so this is what keeps it inside one send.
+const MAX_REPO_CHARS = 140;
 
 export interface ReviewRound {
   head: string;
@@ -43,7 +47,7 @@ export const loopKey = ({ repo, pr }: ReviewTarget): string => `${repo.toLowerCa
 function targetOf(record: Record<string, unknown>): ReviewTarget | null {
   const repo = typeof record.repo === "string" ? record.repo.trim() : "";
   const pr = record.pr;
-  if (!isRepoEntry(repo) || typeof pr !== "number" || !Number.isInteger(pr) || pr < 1) return null;
+  if (!isRepoEntry(repo) || repo.length > MAX_REPO_CHARS || typeof pr !== "number" || !Number.isInteger(pr) || pr < 1) return null;
   return { repo, pr };
 }
 
@@ -62,6 +66,25 @@ export function parseEndRequest(body: unknown): Parsed<ReviewTarget> {
   const target = targetOf(isRecord(body) ? body : {});
   return target === null ? { ok: false, error: TARGET_REQUIRED } : { ok: true, ...target };
 }
+
+/** The verdict a reply opens with, counted only when it names the head that was asked about: an
+ *  LGTM for some other commit says nothing about this one. */
+export function verdictFor(reply: string, head: string): CodexVerdict | null {
+  const line = parseVerdictLine(reply.trimStart());
+  return line !== null && line.sha !== "" && head.startsWith(line.sha) ? line.verdict : null;
+}
+
+/** Why `reviewer` may not review `target`, or null: a session reviews one PR, since its reply is
+ *  matched by its last turn and ending either loop would close it under the other. */
+export function reviewerRefusal(loops: Iterable<ReviewLoop>, target: ReviewTarget, reviewer: string): string | null {
+  const key = loopKey(target);
+  const other = [...loops].find((loop) => loop.reviewer === reviewer && loopKey(loop) !== key);
+  return other === undefined ? null : `Session ${reviewer} is already reviewing ${other.repo}#${other.pr}; start another reviewer for this PR.`;
+}
+
+/** What the author is told when the reviewer session stops running mid-round. */
+export const reviewerGoneMessage = (loop: ReviewLoop): string =>
+  `[requestReview] ${loop.repo}#${loop.pr}: reviewer session ${loop.reviewer} is no longer running, so round ${loop.rounds.length + 1} did not finish and was not counted. Call endReview, start a new reviewer, and call requestReview with it — or ask the user.`;
 
 export const lgtmCountOn = (rounds: readonly ReviewRound[], head: string): number =>
   rounds.filter((round) => round.head === head && round.verdict === "lgtm").length;
@@ -134,11 +157,16 @@ function ciPhrase(ci: CiState): string {
   return `CI is ${ci}`;
 }
 
+const LAST_ROUND = "That was the last round this repository allows: ask the user how to go on.";
+
 function lgtmNext(loop: ReviewLoop, settings: ReviewSettings, now: PrNow | null): string {
   if (now === null) return "The PR could not be read to check the merge condition; check it with gh pr view before merging.";
   const count = lgtmCountOn(loop.rounds, now.head);
   const lgtm = `${count}/${settings.requiredLgtm} LGTM on the current head`;
-  if (count < settings.requiredLgtm) return `${lgtm}: call requestReview again for another review of this head.`;
+  if (count < settings.requiredLgtm) {
+    const again = loop.rounds.length < settings.maxRounds ? "call requestReview again for another review of this head." : LAST_ROUND;
+    return `${lgtm}: ${again}`;
+  }
   if (now.ci !== "passing") return `${lgtm}, but ${ciPhrase(now.ci)}: merge once every check passes (gh pr checks --watch).`;
   return `Merge condition met: ${lgtm} and ${ciPhrase(now.ci)}. You may merge it (merge commit), then call endReview.`;
 }
@@ -146,7 +174,7 @@ function lgtmNext(loop: ReviewLoop, settings: ReviewSettings, now: PrNow | null)
 function nextStep(end: RoundEnd, round: ReviewRound, readIt: string): string {
   const { loop, settings, now, timedOut } = end;
   const left = settings.maxRounds - loop.rounds.length;
-  const retry = left > 0 ? `${left} rounds left.` : "That was the last round this repository allows: ask the user how to go on.";
+  const retry = left > 0 ? `${left} rounds left.` : LAST_ROUND;
   if (timedOut)
     return `The reviewer has not answered in ${REVIEW_WAIT_MINUTES} minutes. Look at its cell, then call requestReview again or ask the user. ${retry}`;
   if (round.verdict === null) return `Its reply has no REVIEW VERDICT line. ${readIt} Then call requestReview again or ask the user. ${retry}`;

@@ -35,6 +35,9 @@ const close = vi.fn<(session: string) => void>();
 let reply: string | null;
 let settings: ReviewSettings | string;
 let pr: PrReviewState | string;
+/** When set, every PR read waits on it — to hold a round between its answer and its message. */
+let prGate: (() => Promise<void>) | null;
+let sleep: (ms: number) => Promise<void>;
 let agent: string | undefined;
 /** Sessions other than the reviewer that are running here. */
 let running: Set<string>;
@@ -64,12 +67,15 @@ function routes(): { requestRoute: Handler; endRoute: Handler } {
     send,
     openQuestion,
     turnReader: () => readTurn,
-    sleep: async () => undefined,
+    sleep: (ms) => sleep(ms),
     now: () => (clock_ms += TICK_MS),
     nonce: () => "nonce000",
     loops,
     settingsOf: async () => settings,
-    prState: async () => pr,
+    prState: async () => {
+      await prGate?.();
+      return pr;
+    },
     agentOf,
     close,
   });
@@ -104,6 +110,8 @@ beforeEach(() => {
   settings = SETTINGS;
   pr = { open: true, head: HEAD, ci: "passing" };
   agent = "codex";
+  prGate = null;
+  sleep = async () => undefined;
   running = new Set([AUTHOR, OTHER]);
   spawned = createSpawnedSessions();
   spawned.recordSpawn(REVIEWER, AUTHOR);
@@ -233,6 +241,69 @@ describe("an author that is gone", () => {
     reply = "REVIEW VERDICT: LGTM (head aaaaaaa)";
     await vi.waitFor(() => expect(send.mock.calls.filter(([session]) => session === OTHER)).toHaveLength(1));
     expect(typedToAuthor()).toEqual([]);
+  });
+});
+
+describe("findings of the first review round", () => {
+  it("does not count an LGTM naming another commit", async () => {
+    reply = "REVIEW VERDICT: LGTM (head bbbbbbb)";
+    await call(routes().requestRoute, req(BODY));
+    await roundsEnded(1);
+    expect(loops.get("owner/repo#7")?.rounds).toEqual([{ head: HEAD, verdict: null }]);
+    expect(typedToAuthor()[0]).not.toMatch(/Merge condition met/);
+  });
+
+  it("keeps one reviewer session to one PR", async () => {
+    reply = null;
+    const { requestRoute } = routes();
+    await call(requestRoute, req(BODY));
+    expect(await call(requestRoute, req({ ...BODY, pr: 8 }))).toMatch(/already reviewing owner\/repo#7/);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds the claim until the round's result is written, so the next round cannot slip in", async () => {
+    let release = (): void => undefined;
+    const { requestRoute } = routes();
+    await call(requestRoute, req(BODY));
+    // Only the round's own read of the PR waits; the second request's checks read it at once.
+    let held = false;
+    prGate = async () => {
+      if (held) return;
+      held = true;
+      await new Promise<void>((resolve) => (release = resolve));
+    };
+    await vi.waitFor(() => expect(held).toBe(true));
+    pr = { open: true, head: NEXT, ci: "passing" };
+    expect(await call(requestRoute, req(BODY))).toMatch(/still running/);
+    release();
+    await roundsEnded(1);
+    expect(typedToAuthor()[0]).toMatch(/round 1\/3/);
+  });
+
+  it("types nothing once endReview runs while a dialog holds the result back", async () => {
+    // Real time between attempts, so endReview lands among them rather than after all of them.
+    sleep = () => new Promise((resolve) => setTimeout(resolve, 2));
+    send.mockImplementation(async (session) => {
+      if (session === AUTHOR) throw new InputBlockedError();
+    });
+    const { requestRoute, endRoute } = routes();
+    await call(requestRoute, req(BODY));
+    await vi.waitFor(() => expect(typedToAuthor().length).toBeGreaterThan(0));
+    await call(endRoute, req({ repo: "owner/repo", pr: 7 }));
+    const attempts = typedToAuthor().length;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(typedToAuthor().length).toBeLessThanOrEqual(attempts + 1);
+    expect(typedToAuthor().length).toBeLessThan(DELIVERY_ATTEMPTS);
+  });
+
+  it("tells the author at once when the reviewer stops running, counting no round", async () => {
+    reply = null;
+    await call(routes().requestRoute, req(BODY));
+    agent = undefined;
+    await roundsEnded(1);
+    expect(typedToAuthor()[0]).toMatch(/no longer running, so round 1 did not finish/);
+    expect(clock_ms).toBeLessThan(REVIEW_WAIT_MS);
+    expect(loops.get("owner/repo#7")).toMatchObject({ rounds: [], running: false });
   });
 });
 

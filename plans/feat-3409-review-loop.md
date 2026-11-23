@@ -15,19 +15,23 @@ C (the board) follow.
 1. Checks, in order: caller is a terminal; reviewer was started by it; the repository declares
    `review` (#3407); the reviewer runs the declared agent; the PR is open; the loop allows a round
    (`roundRefusal`: same author, same reviewer, none running, under `maxRounds`, not a head that had
-   changes requested, not a head that already has its LGTMs).
+   changes requested, not a head that already has its LGTMs), and the reviewer reviews no other PR
+   (`reviewerRefusal`). A loop whose author is no longer running is dropped, so the PR can be taken over.
 2. The loop is claimed with no await between the last check and `running = true`, so two racing
    calls send one round.
 3. The prompt (`reviewPrompt`) names the PR and head, asks for every finding at once with severity,
    a first line `REVIEW VERDICT: LGTM|CHANGES REQUESTED (head <sha>)`, and the same reply posted as a
    PR comment; it forbids touching an existing checkout. Tagged like sendToSession, and remembered,
    so `waitForSessionReply` reads the full review at once.
-4. In the background: `awaitReply` for up to `REVIEW_WAIT_MINUTES`; the verdict is read with the
-   board's parser, now accepting `REVIEW VERDICT:` beside `CODEX VERDICT:`.
+4. In the background: `awaitReply` for up to `REVIEW_WAIT_MINUTES`, cut short when the reviewer
+   stops running (that round is not counted). The verdict is read with the board's parser, now
+   accepting `REVIEW VERDICT:` beside `CODEX VERDICT:`, and counts only when it names the head that
+   was asked about (`verdictFor`).
 5. The PR is read again (head, CI) and `roundEndMessage` is typed into the author: the verdict, the
    rounds left, and "merge condition met" only for the declared LGTMs on the CURRENT head with CI
-   passing. A dialog open in the author holds it back and it is retried; after the paste it stays in
-   the input box.
+   passing. The loop stays claimed until that message is written, so a next round cannot append
+   first. A dialog open in the author holds it back and it is retried; after the paste it stays in
+   the input box. `endReview` stops a held-back result from being typed at all.
 
 ## Decisions
 

@@ -9,7 +9,6 @@ import type { Express, Request, Response } from "express";
 import type { ReviewSettings } from "../../common/reviewSettings.js";
 import { InputBlockedError, sanitizeTerminalInput } from "../backends/remoteHost/terminalInput.js";
 import { SESSION_HEADER, sessionIdFromHeader } from "../backends/files/presentPathRoot.js";
-import { parseVerdictLine } from "../git/codexVerdict.js";
 import type { PrReviewState } from "../git/pr-review-state.js";
 import { messageOf } from "../errors.js";
 import type { SessionAskRouteDeps } from "./session-ask-routes.js";
@@ -23,8 +22,10 @@ import {
   reviewPrompt,
   roundEndMessage,
   roundRefusal,
+  reviewerGoneMessage,
+  reviewerRefusal,
+  verdictFor,
   type ReviewLoop,
-  type ReviewRound,
 } from "./reviewLoop.js";
 
 // A dialog open in the author's session holds the round's result back; it is offered again until then.
@@ -48,10 +49,13 @@ function callerOf(req: Request, res: Response, tool: string): string | null {
   return caller ?? null;
 }
 
-/** The result of a round, typed into the author's session once nothing holds its input. */
-async function deliver(deps: ReviewLoopRouteDeps, author: string, text: string): Promise<void> {
-  const blocked = async (): Promise<boolean> => (await deps.openQuestion(author)) !== null;
+/** The result of a round, typed into the author's session once nothing holds its input — and not
+ *  at all once the loop has ended, however long a dialog held it back. */
+async function deliver(deps: ReviewLoopRouteDeps, author: string, text: string, ended: () => boolean): Promise<void> {
+  // Asked before the paste and again before the Enter, like every other send.
+  const blocked = async (): Promise<boolean> => ended() || (await deps.openQuestion(author)) !== null;
   for (let attempt = 1; attempt <= DELIVERY_ATTEMPTS; attempt += 1) {
+    if (ended()) return;
     try {
       await deps.send(author, sanitizeTerminalInput(text), { blocked });
       return;
@@ -81,22 +85,30 @@ async function reviewerAnswer(deps: ReviewLoopRouteDeps, run: RoundRun, ended: (
   }
 }
 
-const verdictOf = (wait: ReplyWait): ReviewRound["verdict"] =>
-  wait.status === "answered" ? (parseVerdictLine(wait.reply.trimStart())?.verdict ?? null) : null;
+/** What the author is told about the round, recorded first. The loop stays claimed meanwhile, so a
+ *  next round cannot append before this one is described. */
+async function roundResult(deps: ReviewLoopRouteDeps, run: RoundRun, wait: ReplyWait | string): Promise<string> {
+  const { loop, settings, head } = run;
+  if (typeof wait === "string") return `[requestReview] ${loop.repo}#${loop.pr}: could not read the reviewer's reply: ${wait}`;
+  if (wait.status === "aborted") return reviewerGoneMessage(loop);
+  loop.rounds.push({ head, verdict: wait.status === "answered" ? verdictFor(wait.reply, head) : null });
+  const pr = await deps.prState(loop.repo, loop.pr);
+  return roundEndMessage({ loop, settings, now: typeof pr === "string" ? null : pr, timedOut: wait.status === "waiting" });
+}
 
 /** Waits for the reviewer in the background, records the round and tells the author — unless the
- *  loop was ended meanwhile, when nobody is waiting for the result. */
+ *  loop was ended meanwhile, when nobody is waiting for the result. A reviewer that stops running
+ *  ends the wait at once rather than after the whole timeout. */
 async function runRound(deps: ReviewLoopRouteDeps, run: RoundRun): Promise<void> {
-  const { loop, settings, head } = run;
+  const { loop } = run;
   const key = loopKey(loop);
   const ended = (): boolean => deps.loops.get(key) !== loop;
-  const wait = await reviewerAnswer(deps, run, ended);
-  if (ended() || (typeof wait !== "string" && wait.status === "aborted")) return;
+  const wait = await reviewerAnswer(deps, run, () => ended() || deps.agentOf(loop.reviewer) === undefined);
+  if (ended()) return;
+  const text = await roundResult(deps, run, wait);
+  if (ended()) return;
   loop.running = false;
-  if (typeof wait === "string") return deliver(deps, loop.author, `[requestReview] ${loop.repo}#${loop.pr}: could not read the reviewer's reply: ${wait}`);
-  loop.rounds.push({ head, verdict: verdictOf(wait) });
-  const pr = await deps.prState(loop.repo, loop.pr);
-  await deliver(deps, loop.author, roundEndMessage({ loop, settings, now: typeof pr === "string" ? null : pr, timedOut: wait.status === "waiting" }));
+  await deliver(deps, loop.author, text, ended);
 }
 
 /** The PR's loop, unless the session that ran it is no longer running here — a closed or crashed
@@ -148,7 +160,9 @@ function claimRound(
 ): ReviewLoop | string {
   const key = loopKey(request);
   const existing = liveLoop(deps, key);
-  const refusal = roundRefusal(existing, { author: caller, reviewer: request.reviewer, head: checked.head }, checked.settings);
+  const refusal =
+    roundRefusal(existing, { author: caller, reviewer: request.reviewer, head: checked.head }, checked.settings) ??
+    reviewerRefusal(deps.loops.values(), request, request.reviewer);
   if (refusal !== null) return refusal;
   const loop = existing ?? { repo: request.repo, pr: request.pr, author: caller, reviewer: request.reviewer, rounds: [], running: false };
   loop.running = true;

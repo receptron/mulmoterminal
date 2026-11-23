@@ -11,6 +11,9 @@ import {
   reviewPrompt,
   roundEndMessage,
   roundRefusal,
+  reviewerGoneMessage,
+  reviewerRefusal,
+  verdictFor,
   type ReviewLoop,
   type ReviewRound,
 } from "../../../server/routes/reviewLoop.js";
@@ -51,6 +54,7 @@ describe("parseReviewRequest / parseEndRequest", () => {
     [{ repo: "owner/repo", pr: 0 }],
     [{ repo: "owner/repo", pr: 1.5 }],
     [{ repo: 1, pr: 7 }],
+    [{ repo: `${"o".repeat(39)}/${"r".repeat(101)}`, pr: 7 }],
   ])("refuses a request without a PR: %j", (body) => {
     expect(parseReviewRequest({ ...(body ?? {}), reviewer: REVIEWER }).ok).toBe(false);
     expect(parseEndRequest(body).ok).toBe(false);
@@ -102,6 +106,40 @@ describe("roundRefusal", () => {
     ["a head that already has its LGTMs", loopWith([{ head: HEAD, verdict: "lgtm" }]), /nothing more to review/],
   ])("refuses %s", (_label, loop, reason) => {
     expect(roundRefusal(loop, request, SETTINGS)).toMatch(reason);
+  });
+});
+
+describe("verdictFor", () => {
+  it("counts a verdict naming the head asked about, in full or abbreviated, after leading blank lines", () => {
+    expect(verdictFor(`REVIEW VERDICT: LGTM (head ${HEAD})`, HEAD)).toBe("lgtm");
+    expect(verdictFor("\n  REVIEW VERDICT: CHANGES REQUESTED (head aaaaaaa)\n- P1", HEAD)).toBe("changes");
+    expect(verdictFor("CODEX VERDICT: LGTM (head AAAAAAA)", HEAD)).toBe("lgtm");
+  });
+
+  it.each([
+    ["another head", "REVIEW VERDICT: LGTM (head bbbbbbb)"],
+    ["no head at all", "REVIEW VERDICT: LGTM"],
+    ["prose before the line", "Looks good.\nREVIEW VERDICT: LGTM (head aaaaaaa)"],
+    ["no verdict", "fine by me"],
+  ])("does not count a reply naming %s", (_label, reply) => {
+    expect(verdictFor(reply, HEAD)).toBeNull();
+  });
+});
+
+describe("reviewerRefusal", () => {
+  it("keeps a reviewer session to one PR", () => {
+    const loops = [loopWith([], { pr: 8 })];
+    expect(reviewerRefusal(loops, { repo: "owner/repo", pr: 7 }, REVIEWER)).toMatch(/already reviewing owner\/repo#8/);
+    expect(reviewerRefusal(loops, { repo: "Owner/Repo", pr: 8 }, REVIEWER)).toBeNull();
+    expect(reviewerRefusal(loops, { repo: "owner/repo", pr: 7 }, OTHER)).toBeNull();
+  });
+});
+
+describe("reviewerGoneMessage", () => {
+  it("says the round was not counted and how to go on", () => {
+    expect(reviewerGoneMessage(loopWith([{ head: HEAD, verdict: "changes" }]))).toMatch(
+      /no longer running, so round 2 did not finish and was not counted.*endReview/,
+    );
   });
 });
 
@@ -168,6 +206,17 @@ describe("roundEndMessage", () => {
   it("asks for another review while the LGTMs fall short", () => {
     const message = ended([{ head: HEAD, verdict: "lgtm" }], { head: HEAD, ci: "passing" }, false, { ...SETTINGS, requiredLgtm: 2 });
     expect(message).toMatch(/1\/2 LGTM.*requestReview again/);
+  });
+
+  it("sends the author to the user when the LGTMs fall short on the last round", () => {
+    const rounds: ReviewRound[] = [
+      { head: "c", verdict: "changes" },
+      { head: "d", verdict: "changes" },
+      { head: HEAD, verdict: "lgtm" },
+    ];
+    const message = ended(rounds, { head: HEAD, ci: "passing" }, false, { ...SETTINGS, requiredLgtm: 2 });
+    expect(message).toMatch(/1\/2 LGTM.*last round this repository allows/);
+    expect(message).not.toMatch(/requestReview again/);
   });
 
   it("does not count an LGTM for a head the PR has moved past", () => {
