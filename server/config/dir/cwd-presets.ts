@@ -1,6 +1,6 @@
 // Directory presets the launch form offers, persisted at config.json. Extracted
 // from index.ts so the sanitize/load/save logic is unit-testable.
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { type CwdPreset } from "../config-schema.js";
 import { readJsonFile } from "../../infra/fs/read-text-file.js";
@@ -52,6 +52,19 @@ export function loadPresets(file: string): CwdPreset[] {
     return sanitizePresets(isRecord(parsed) ? parsed.cwdPresets : undefined);
   } catch {
     return [];
+  }
+}
+
+const ABSENT_CODES = new Set(["ENOENT", "ENOTDIR"]);
+
+// Only a definite "not there" counts: EACCES or an I/O error reads as present, because the caller
+// deletes saved entries on this answer.
+export function isAbsentDir(dir: string): boolean {
+  try {
+    statSync(dir);
+    return false;
+  } catch (err) {
+    return isRecord(err) && typeof err.code === "string" && ABSENT_CODES.has(err.code);
   }
 }
 

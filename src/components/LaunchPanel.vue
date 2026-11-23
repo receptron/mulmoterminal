@@ -47,7 +47,8 @@ const emit = defineEmits<{
   (e: "run", value: RunCommand): void;
   (e: "launch", value: LaunchPick): void;
   (e: "remove-preset", value: string): void;
-  (e: "close" | "retry-config"): void;
+  // A directory can be deleted while the app is open, so the host re-checks the saved ones on every open.
+  (e: "close" | "retry-config" | "opened"): void;
 }>();
 
 const dir = ref(props.initialDir ?? props.defaultCwd ?? "");
@@ -90,6 +91,7 @@ let opener: Element | null = null;
 // The directory field, so Enter alone starts what is picked in the dir that was carried in. The
 // panel opens on a keystroke, and a keyboard path that lands focus nowhere costs a reach for the
 // mouse to use the value it just filled in for you.
+onMounted(() => emit("opened"));
 onMounted(async () => {
   opener = document.activeElement;
   await nextTick();

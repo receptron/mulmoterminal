@@ -26,7 +26,10 @@ interface Preset {
 //
 // `gate` stalls the GET; `snapshot` is what that stalled GET will answer with — taken when it
 // STARTS, so a slow response is genuinely stale rather than magically current.
-function mockServer(initial: Preset[] = [], opts: { gate?: Promise<void>; get?: Record<string, unknown>; delayMs?: number } = {}) {
+function mockServer(
+  initial: Preset[] = [],
+  opts: { gate?: Promise<void>; get?: Record<string, unknown>; delayMs?: number; gone?: string[]; unreachable?: string[] } = {},
+) {
   let list: Preset[] = [...initial];
   globalThis.fetch = vi.fn(async (url: string, init?: { body?: string }) => {
     const target = String(url);
@@ -36,6 +39,10 @@ function mockServer(initial: Preset[] = [], opts: { gate?: Promise<void>; get?: 
       const existing = list.find((preset) => preset.path === body.path);
       list = [existing ?? { label: String(body.label), path: String(body.path) }, ...list.filter((preset) => preset.path !== body.path)];
       return { ok: true, json: async () => ({ cwdPresets: list }) };
+    }
+    if (target === "/api/config/cwd-presets/prune-missing") {
+      list = list.filter((preset) => !(opts.gone ?? []).includes(preset.path));
+      return { ok: true, json: async () => ({ cwdPresets: list, unreachable: opts.unreachable ?? [] }) };
     }
     if (target === "/api/config/cwd-presets/remove") {
       list = list.filter((preset) => preset.path !== body.path);
@@ -233,6 +240,32 @@ describe("useAppConfig — auto preset recording", () => {
     await recordPreset("/b");
     await removePreset("/a");
     expect(presets.value.map((p) => p.path)).toEqual(["/b"]);
+  });
+
+  // #3414: deleted directories leave the list; unreachable ones stay saved but are not offered.
+  it("pruneMissingPresets adopts the pruned list and hides unreachable directories", async () => {
+    mockServer(
+      [
+        { label: "kept", path: "/w/kept" },
+        { label: "deleted", path: "/w/deleted" },
+        { label: "usb", path: "/Volumes/usb/p" },
+      ],
+      { gone: ["/w/deleted"], unreachable: ["/Volumes/usb/p"] },
+    );
+    const { presets, loadConfigThenPruneMissing } = useAppConfig();
+    await loadConfigThenPruneMissing();
+    expect(presets.value.map((p) => p.path)).toEqual(["/w/kept"]);
+    const prunes = vi.mocked(globalThis.fetch).mock.calls.filter(([url]) => url === "/api/config/cwd-presets/prune-missing");
+    expect(prunes).toHaveLength(1);
+  });
+
+  it("pruneMissingPresets keeps the list as it was when the server cannot be reached", async () => {
+    mockServer([{ label: "kept", path: "/w/kept" }]);
+    const { presets, loadConfig, pruneMissingPresets } = useAppConfig();
+    await loadConfig();
+    vi.mocked(globalThis.fetch).mockRejectedValueOnce(new Error("offline"));
+    await pruneMissingPresets();
+    expect(presets.value.map((p) => p.path)).toEqual(["/w/kept"]);
   });
 
   it("imports legacy localStorage recents (recent_dirs_v1) to the FRONT of presets on load, then clears the key", async () => {

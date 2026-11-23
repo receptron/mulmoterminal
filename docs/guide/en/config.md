@@ -2318,7 +2318,7 @@ What you write here appears in an empty cell's launcher under **OR RUN A SCRIPT*
 
 | Key | Role |
 |---|---|
-| `cwdPresets` | Working-directory chips in the launcher (`{ label, path }`; click to fill the field, the play icon to launch). Ordered by each directory's [`orderPriority`](#order-priority); the ones that declare none follow, in the order you last launched them |
+| `cwdPresets` | Working-directory chips in the launcher (`{ label, path }`; click to fill the field, the play icon to launch). Ordered by each directory's [`orderPriority`](#order-priority); the ones that declare none follow, in the order you last launched them. A directory that has been deleted (its parent folder still exists) is removed from the list when the app loads or the launcher opens; one whose parent is missing too, as on an unplugged drive, stays saved but is hidden until it is back |
 | `launchers` | The launch commands that appear under "OR LAUNCH" in a grid cell. Only what you add — a plain shell is already the launcher's **Shell** toggle |
 | `quickCommands` | Phrases the **phone** offers as chips on a session (`{ label, text, agents? }`). Tapping one fills the input box — it is not sent until you press send. `agents` scopes a chip to any of `SESSION_AGENTS` — `"claude"`, `"codex"`, `"antigravity"`, `"grok"`, `"muse"`, `"copilot"`, `"cursor"` / `"shell"`; omit it to offer the chip everywhere. Editable in Settings → **Phone quick commands** |
 | `prRepos` | The repos targeted by the cross-repo PR/Issue view. Editable in Settings → **Pull request repos**, where a save takes effect at once; a hand-edit applies on **Reload config file** or a restart (→ [GitHub](github.html#register)) |

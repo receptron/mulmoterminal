@@ -8,7 +8,7 @@
 // on 2026-08-09 a terminal launched during the initial GET reduced five saved directories to one.
 // The routes below exist so the caller never holds the list at all.
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import express from "express";
 import { routeCall, jsonPost } from "../../../helpers/routeCall";
 import { isRecord } from "../../../../common/isRecord";
@@ -158,5 +158,49 @@ describe("POST /api/config/cwd-presets/remove", () => {
   it("refuses a request with no path", async () => {
     const { app } = await mountAgainstTempHome({ cwdPresets: TWO });
     expect((await routeCall(app)("/api/config/cwd-presets/remove", jsonPost({}))).status).toBe(400);
+  });
+});
+
+// #3414: a deleted directory leaves the list; one whose parent is gone too (an unmounted drive looks
+// like that) is kept on disk and only named, so the launcher can hide it until it comes back.
+describe("POST /api/config/cwd-presets/prune-missing", () => {
+  function scratchTree() {
+    const root = realpathSync(mkdtempSync(path.join(tmpdir(), "mt-prune-")));
+    dirs.push(root);
+    const kept = path.join(root, "kept");
+    mkdirSync(kept);
+    return { kept, deleted: path.join(root, "deleted"), unmounted: path.join(root, "volume", "project") };
+  }
+
+  it("drops the deleted directory, keeps the unreachable one on disk and names it", async () => {
+    const { kept, deleted, unmounted } = scratchTree();
+    const saved = [kept, deleted, unmounted].map((dir) => ({ label: path.basename(dir), path: dir }));
+    const { app, onDisk, onChanged } = await mountAgainstTempHome({ cwdPresets: saved, pushEnabled: true });
+    const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    expect(res.status).toBe(200);
+    expect(pathsOf(res.body)).toEqual([kept, unmounted]);
+    expect(res.body.unreachable).toEqual([unmounted]);
+    expect(onDisk().cwdPresets.map((preset: { path: string }) => preset.path)).toEqual([kept, unmounted]);
+    expect(onDisk().pushEnabled).toBe(true);
+    expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("writes nothing when nothing was deleted", async () => {
+    const { kept, unmounted } = scratchTree();
+    const saved = [kept, unmounted].map((dir) => ({ label: path.basename(dir), path: dir }));
+    const { app, onChanged } = await mountAgainstTempHome({ cwdPresets: saved });
+    const { APP_CONFIG_FILE } = await import("../../../../server/config/config-routes.js");
+    const before = readFileSync(APP_CONFIG_FILE, "utf8");
+    const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    expect(pathsOf(res.body)).toEqual([kept, unmounted]);
+    expect(res.body.unreachable).toEqual([unmounted]);
+    expect(readFileSync(APP_CONFIG_FILE, "utf8")).toBe(before);
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it("answers an empty list for a config with no saved directories", async () => {
+    const { app } = await mountAgainstTempHome({});
+    const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    expect(res.body).toEqual({ cwdPresets: [], unreachable: [] });
   });
 });

@@ -468,11 +468,11 @@ onMounted(() => (offNewTerminal = registerNewTerminalHandler(openNewTerminal)));
 onBeforeUnmount(detachNewTerminal);
 
 // Server config: the default workspace dir + the auto-recorded dir presets + sound.
-const { defaultCwd, storiesRoots, home, presets, configUnavailable, launchers, customAgents, accounts, loadConfig, recordPreset, removePreset } =
+const { defaultCwd, storiesRoots, home, presets, configUnavailable, launchers, customAgents, accounts, loadConfig, recordPreset, removePreset, ...config } =
   useAppConfig();
 // Module state (the palette opens it on a section, #2450), owned by this view: the modal goes with it.
 const showSettings = settingsOpen;
-onMounted(loadConfig);
+onMounted(config.loadConfigThenPruneMissing);
 onBeforeUnmount(closeSettings);
 
 // Page Up / Page Down walk the zoom between terminals (#829). Listened for on `window` in the
@@ -939,6 +939,7 @@ onBeforeUnmount(detachSpawnedChat);
       :accounts="accounts"
       :open-session-ids="openSessionIds"
       :open-cwds="openCwds"
+      @opened="config.pruneMissingPresets"
       @start="onPanelStart"
       @resume="onPanelResume"
       @run="onPanelRun"

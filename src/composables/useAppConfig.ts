@@ -1,5 +1,5 @@
 import { sanitizeTokenRotation, TOKEN_ROTATION_OFF, type TokenRotation } from "../../common/tokenRotation";
-import { getCurrentScope, onScopeDispose, ref, type Ref } from "vue";
+import { computed, getCurrentScope, onScopeDispose, ref, type Ref } from "vue";
 import { presetLabel, type CwdPreset } from "../components/presets";
 import { isManagedWorktreePath, worktreeLabel } from "../../common/worktreePath";
 import type { Launcher } from "../components/launchers";
@@ -250,6 +250,7 @@ function createPresetMutations(
   hasAuthoritativeList: () => boolean,
   recordPresetOnServer: (path: string, label: string) => Promise<boolean>,
   removePresetOnServer: (path: string) => Promise<boolean>,
+  pruneMissingOnServer: () => Promise<boolean>,
 ) {
   let presetWrite: Promise<unknown> = Promise.resolve();
   function serialize(mutate: () => Promise<void>): Promise<void> {
@@ -354,7 +355,28 @@ function createPresetMutations(
     }
   }
 
-  return { recordPreset, removePreset, migrateLegacyRecents };
+  // Forget deleted directories and refresh which saved ones are out of reach. Serialized like the
+  // others so it never interleaves with a record or remove.
+  function pruneMissingPresets(): Promise<void> {
+    return serialize(async () => {
+      await pruneMissingOnServer();
+    });
+  }
+
+  return { recordPreset, removePreset, migrateLegacyRecents, pruneMissingPresets };
+}
+
+type MutateOneOnServer = (url: string, body: Record<string, string>, adoptExtra?: (saved: Record<string, unknown>) => void) => Promise<boolean>;
+
+// Deleted directories leave the saved list; ones that are only out of reach (an unmounted drive)
+// stay saved and are named here, so the launcher can hide them until they come back (#3414).
+function createUnreachableTracker(mutateOneOnServer: MutateOneOnServer) {
+  const unreachablePresetPaths = ref<string[]>([]);
+  const pruneMissingOnServer = () =>
+    mutateOneOnServer("/api/config/cwd-presets/prune-missing", {}, (saved) => {
+      unreachablePresetPaths.value = stringsOf(saved.unreachable);
+    });
+  return { unreachablePresetPaths, pruneMissingOnServer };
 }
 
 // The directory-preset subsystem: savePresets + the mutations above, owning the version
@@ -417,7 +439,7 @@ function createPresetManager(presets: Ref<CwdPreset[]>, saving: Ref<boolean>, er
    *  A failed call leaves the list exactly as it was: the directory is simply not recorded, and
    *  the next launch tries again. It counts as a local write (`version++`) so a GET already in
    *  flight cannot re-adopt the pre-change list over it (#164). */
-  async function mutateOneOnServer(url: string, body: Record<string, string>): Promise<boolean> {
+  const mutateOneOnServer: MutateOneOnServer = async (url, body, adoptExtra) => {
     version++;
     try {
       const res = await fetchWithTimeout(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -426,6 +448,7 @@ function createPresetManager(presets: Ref<CwdPreset[]>, saving: Ref<boolean>, er
       if (isRecord(saved) && isUnknownArray(saved.cwdPresets)) {
         presets.value = saved.cwdPresets.filter(isCwdPreset);
         loaded = true;
+        adoptExtra?.(saved);
       }
       error.value = null;
       return true;
@@ -433,16 +456,18 @@ function createPresetManager(presets: Ref<CwdPreset[]>, saving: Ref<boolean>, er
       error.value = "Couldn't save presets. Check the server and try again.";
       return false;
     }
-  }
+  };
 
   const recordPresetOnServer = (path: string, label: string) => mutateOneOnServer("/api/config/cwd-presets/record", { path, label });
   const removePresetOnServer = (path: string) => mutateOneOnServer("/api/config/cwd-presets/remove", { path });
+  const { unreachablePresetPaths, pruneMissingOnServer } = createUnreachableTracker(mutateOneOnServer);
 
   return {
     savePresets,
-    ...createPresetMutations(presets, () => loaded, recordPresetOnServer, removePresetOnServer),
+    ...createPresetMutations(presets, () => loaded, recordPresetOnServer, removePresetOnServer, pruneMissingOnServer),
     snapshotVersion,
     adoptServerPresets,
+    unreachablePresetPaths,
   };
 }
 
@@ -838,17 +863,27 @@ function createConfigLoader(loadOnce: ConfigRead, unavailable: Ref<boolean>): ()
 // user who has opened no directories. Take them from the shell that loaded them instead.
 export function useAppConfig() {
   const defaultCwd = ref<string | null>(null);
-  const presets = ref<CwdPreset[]>([]);
+  // Every saved directory, as the file has it. What callers get is `presets` below.
+  const savedPresets = ref<CwdPreset[]>([]);
   const saving = ref(false);
   const error = ref<string | null>(null);
 
-  const { savePresets, recordPreset, removePreset, migrateLegacyRecents, snapshotVersion, adoptServerPresets } = createPresetManager(presets, saving, error);
+  const { savePresets, recordPreset, removePreset, migrateLegacyRecents, pruneMissingPresets, snapshotVersion, adoptServerPresets, unreachablePresetPaths } =
+    createPresetManager(savedPresets, saving, error);
+  // Out-of-reach directories stay saved but are offered nowhere until they come back (#3414).
+  const presets = computed(() => savedPresets.value.filter((preset) => !unreachablePresetPaths.value.includes(preset.path)));
 
   // Whether the config could not be read at all, after the retries gave up — what the launcher
   // shows instead of pretending the user has no saved directories. Per-call like `presets`, and
   // filled in for the caller that loads.
   const configUnavailable = ref(false);
   const loadConfig = createConfigLoader(createConfigReader({ defaultCwd, snapshotVersion, adoptServerPresets, migrateLegacyRecents }), configUnavailable);
+  // The missing-directory check follows the read rather than racing it: it counts as a local write,
+  // so a failed check landing first would make the read discard the list it brought.
+  const loadConfigThenPruneMissing = async (): Promise<void> => {
+    await loadConfig();
+    await pruneMissingPresets();
+  };
 
   return {
     defaultCwd,
@@ -875,9 +910,11 @@ export function useAppConfig() {
     saving,
     error,
     loadConfig,
+    loadConfigThenPruneMissing,
     savePresets,
     recordPreset,
     removePreset,
+    pruneMissingPresets,
     savePushEnabled,
     savePushKinds,
     savePrRepos,
