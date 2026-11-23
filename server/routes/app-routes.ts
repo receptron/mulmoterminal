@@ -13,7 +13,7 @@ import express, { type Express } from "express";
 import { mountAllRoutes } from "../infra/tools/plugins-registry.js";
 import { mountConfigRoutes } from "../config/config-routes.js";
 import { mountFilesBrowseRoutes } from "../files/files-browse.js";
-import { mountTmuxRoutes, type TmuxRouteDeps } from "../infra/process/tmux-routes.js";
+import { endTmuxSession, mountTmuxRoutes, type TmuxRouteDeps } from "../infra/process/tmux-routes.js";
 import { mountSwitchTokenRoutes } from "../infra/http/switch-token-routes.js";
 import { clearSwitchedToken, pinSwitchedToken } from "../session/credentials/token-switch-pins.js";
 import { sessionToken } from "../session/credentials/token-sessions.js";
@@ -41,7 +41,10 @@ import { mountIssueWorkRoutes } from "../routes/issue-work-routes.js";
 import { mountTerminalReplyRoutes } from "./terminal-reply-routes.js";
 import { randomUUID } from "node:crypto";
 import { mountSessionAskRoutes } from "./session-ask-routes.js";
-import { mountReviewSettingsRoute } from "./review-settings-route.js";
+import { mountReviewSettingsRoute, reviewSettingsAnswer } from "./review-settings-route.js";
+import { mountReviewLoopRoutes } from "./review-loop-routes.js";
+import type { ReviewLoop } from "./reviewLoop.js";
+import { fetchPrReviewState } from "../git/pr-review-state.js";
 import { defaultCloneOf } from "../../common/repoDirs.js";
 import { spawnedSessions } from "../session/spawned-sessions.js";
 import { liveTurnReader } from "../session/live-last-turn.js";
@@ -49,6 +52,8 @@ import { mountRequestGates } from "./request-gates.js";
 import { captureTerminalScreen } from "../backends/remoteHost/hostScreens.js";
 import { sessionExistsHere } from "../backends/remoteHost/hostBindings.js";
 import { sendToSession } from "../session/session-input.js";
+import type { SendOptions } from "../backends/remoteHost/terminalInput.js";
+import type { ReviewSettings } from "../../common/reviewSettings.js";
 import type { SpawnIssueSession } from "../session/spawn/issue-session-spawn.js";
 import { mountDirRoutes } from "../routes/dir-routes.js";
 import { mountPlayfulMediaRoutes } from "../routes/playful-media-routes.js";
@@ -203,19 +208,35 @@ const ASK_NONCE_CHARS = 8;
 
 // The routes an agent runs a review through: talking to a session it started (#3404), and reading
 // how a repository wants reviews done (#3407).
-function mountReviewLoopRoutes(app: Express, deps: AppRouteDeps): void {
-  mountReviewSettingsRoute(app, {
-    cloneOf: async (repo) => defaultCloneOf(await repoDirsFromPresets(getCwdPresets(), getRepoDirs()), repo),
-    reviewOf: (dir) => loadDirConfig(dir).review,
-  });
-  mountSessionAskRoutes(app, {
+/** The clone work on `repo` starts in, as the issue start picks it. */
+const cloneOfRepo = async (repo: string): Promise<string | null> => defaultCloneOf(await repoDirsFromPresets(getCwdPresets(), getRepoDirs()), repo);
+
+/** A repository's declared review settings, or why there are none. */
+async function reviewSettingsOf(repo: string): Promise<ReviewSettings | string> {
+  const dir = await cloneOfRepo(repo);
+  const review = dir === null ? null : loadDirConfig(dir).review;
+  return review ?? reviewSettingsAnswer(repo, dir, null).message;
+}
+
+function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
+  mountReviewSettingsRoute(app, { cloneOf: cloneOfRepo, reviewOf: (dir) => loadDirConfig(dir).review });
+  const ask = {
     spawned: spawnedSessions,
-    send: (sessionId, text, options) => sendToSession(sessionId, text, options),
+    send: (sessionId: string, text: string, options: SendOptions) => sendToSession(sessionId, text, options),
     openQuestion: openQuestionIn(deps),
     turnReader: liveTurnReader,
-    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
     now: () => Date.now(),
     nonce: () => randomUUID().slice(0, ASK_NONCE_CHARS),
+  };
+  mountSessionAskRoutes(app, ask);
+  mountReviewLoopRoutes(app, {
+    ...ask,
+    loops: new Map<string, ReviewLoop>(),
+    settingsOf: reviewSettingsOf,
+    prState: fetchPrReviewState,
+    agentOf: (session) => ptys.get(session)?.agent,
+    close: (session) => endTmuxSession(tmuxRouteDeps(deps), session, true),
   });
 }
 
@@ -251,8 +272,9 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
     registerBackgroundSession: deps.registerBackgroundSession,
   });
 
-  // sendToSession / waitForSessionReply / reviewSettings (#3404, #3407): host tools, before the catch-all.
-  mountReviewLoopRoutes(app, deps);
+  // sendToSession / waitForSessionReply / reviewSettings / requestReview / endReview (#3404, #3407, #3409):
+  // host tools, before the catch-all.
+  mountReviewRoutes(app, deps);
 
   // showInPane / requestCheck (#3022): host tools too, so before the catch-all like the ones above.
   mountPaneToolRoutes(app, { publish: (channel, data) => deps.publish(channel, data) });
