@@ -44,3 +44,39 @@ export function classifyMissingPresets(paths: readonly string[], probe: DirProbe
     unreachable: missing.filter((dir) => !isGone(dir)),
   };
 }
+
+/** How long a directory must stay missing before it is forgotten. One "not found" is not proof: a
+ *  network share can answer ENOENT for a moment, so the first sighting only hides it. */
+export const MISSING_CONFIRM_MS = 24 * 60 * 60 * 1000;
+
+/** What one prune decides: what to forget now, what to hide, and when each still-unconfirmed
+ *  deletion was first seen — the record the next prune is judged against. */
+export interface PruneDecision {
+  gone: string[];
+  unreachable: string[];
+  missingSince: Record<string, number>;
+}
+
+/** A deletion is confirmed only by a SECOND sighting at least `confirmAfter_ms` after the first.
+ *  Until then the directory is hidden like an unreachable one. A directory that comes back, or
+ *  leaves the list, drops out of the record, so its clock starts again from nothing. */
+export function decidePrune(
+  paths: readonly string[],
+  probe: DirProbe,
+  missingSince: Readonly<Record<string, number>>,
+  now_ms: number,
+  confirmAfter_ms = MISSING_CONFIRM_MS,
+): PruneDecision {
+  const { gone: suspects, unreachable } = classifyMissingPresets(paths, probe);
+  const isConfirmed = (dir: string) => {
+    const since = missingSince[dir];
+    return since !== undefined && now_ms - since >= confirmAfter_ms;
+  };
+  const waiting = suspects.filter((dir) => !isConfirmed(dir));
+  const hidden = new Set([...unreachable, ...waiting]);
+  return {
+    gone: suspects.filter(isConfirmed),
+    unreachable: paths.filter((dir) => hidden.has(dir)),
+    missingSince: Object.fromEntries(waiting.map((dir) => [dir, missingSince[dir] ?? now_ms])),
+  };
+}

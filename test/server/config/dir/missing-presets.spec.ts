@@ -3,8 +3,8 @@ import { describe, it, expect, afterAll } from "vitest";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { classifyMissingPresets, type DirPresence, type DirProbe } from "../../../../server/config/dir/missing-presets";
-import { dirHasEntries, probeDir } from "../../../../server/config/dir/cwd-presets";
+import { classifyMissingPresets, decidePrune, MISSING_CONFIRM_MS, type DirPresence, type DirProbe } from "../../../../server/config/dir/missing-presets";
+import { dirHasEntries, loadMissingSince, probeDir, saveMissingSince } from "../../../../server/config/dir/cwd-presets";
 
 const at = (posixPath: string) => path.resolve(posixPath);
 /** A probe over a fixed picture of the filesystem: listed paths answer as given, the rest are present
@@ -83,6 +83,62 @@ describe("classifyMissingPresets", () => {
 
   it("answers empty lists for an empty input", () => {
     expect(classifyMissingPresets([], { presence: () => "absent", hasEntries: () => true })).toEqual({ gone: [], unreachable: [] });
+  });
+});
+
+describe("decidePrune", () => {
+  const DAY = MISSING_CONFIRM_MS;
+  const NOW = 10 * DAY;
+  const [kept, deleted, usb] = ["/w/kept", "/w/deleted", "/v/usb/p"].map(at);
+  const fs = fsWith({ [deleted]: "absent", [usb]: "absent", [path.dirname(usb)]: "absent" });
+
+  it("only hides a suspected deletion at first sight, and records when it was seen", () => {
+    expect(decidePrune([kept, deleted, usb], fs, {}, NOW)).toEqual({ gone: [], unreachable: [deleted, usb], missingSince: { [deleted]: NOW } });
+  });
+
+  it("keeps the first sighting's time while the day has not passed", () => {
+    expect(decidePrune([deleted], fs, { [deleted]: NOW - DAY + 1 }, NOW)).toEqual({
+      gone: [],
+      unreachable: [deleted],
+      missingSince: { [deleted]: NOW - DAY + 1 },
+    });
+  });
+
+  it("forgets it on a sighting at least a day after the first, and drops it from the record", () => {
+    expect(decidePrune([kept, deleted], fs, { [deleted]: NOW - DAY }, NOW)).toEqual({ gone: [deleted], unreachable: [], missingSince: {} });
+  });
+
+  it("never puts an unreachable directory on the clock, however old a record says it is", () => {
+    expect(decidePrune([usb], fs, { [usb]: 0 }, NOW)).toEqual({ gone: [], unreachable: [usb], missingSince: {} });
+  });
+
+  it("drops a directory that came back, or that left the list, from the record", () => {
+    expect(decidePrune([kept], fs, { [kept]: 0, [at("/w/removed")]: 0 }, NOW).missingSince).toEqual({});
+  });
+
+  it("does not confirm against a first sighting in the future (a clock set back)", () => {
+    expect(decidePrune([deleted], fs, { [deleted]: NOW + DAY }, NOW).gone).toEqual([]);
+  });
+});
+
+describe("loadMissingSince / saveMissingSince", () => {
+  const dir = realpathSync(mkdtempSync(path.join(tmpdir(), "mt-missing-since-")));
+  const file = path.join(dir, "missing-dirs.json");
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("round-trips a record and reads a missing file as empty", () => {
+    expect(loadMissingSince(file)).toEqual({});
+    expect(saveMissingSince(file, { "/a": 1 })).toBe(true);
+    expect(loadMissingSince(file)).toEqual({ "/a": 1 });
+  });
+
+  it("reads malformed JSON, a non-object, and non-number entries as nothing", () => {
+    writeFileSync(file, "{ nope");
+    expect(loadMissingSince(file)).toEqual({});
+    writeFileSync(file, "[1, 2]");
+    expect(loadMissingSince(file)).toEqual({});
+    writeFileSync(file, JSON.stringify({ "/a": "yesterday", "/b": null, "/c": 5 }));
+    expect(loadMissingSince(file)).toEqual({ "/c": 5 });
   });
 });
 

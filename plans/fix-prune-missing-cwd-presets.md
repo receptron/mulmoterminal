@@ -12,7 +12,7 @@ A saved directory that does not exist is one of two things, told apart by its pa
 
 | path | parent | meaning | action |
 |---|---|---|---|
-| absent | present, not empty, and not a mount root | deleted | remove from `cwdPresets` on disk |
+| absent | present, not empty, and not a mount root | suspected deleted | hide, record when first seen; remove from `cwdPresets` on disk only when a check at least `MISSING_CONFIRM_MS` (a day) later still finds it missing |
 | absent | absent, EMPTY (a mount point left behind by an unmount looks like this), a dangling symlink, or a mount root (`/Volumes`, `/media`, `/mnt`, `/run/media`, `/media/<user>`, `/run/media/<user>`) | could be an unplugged drive | keep on disk, hide |
 | a dangling symlink itself | — | link onto something not mounted | keep on disk, hide |
 | present / not ENOENT | — | there, or unknown (EACCES) | nothing |
@@ -20,13 +20,17 @@ A saved directory that does not exist is one of two things, told apart by its pa
 Only `ENOENT` / `ENOTDIR` count as absent — a permission error must never delete a saved entry.
 Relative entries and filesystem roots are left alone (nothing to judge them by).
 
+A single "not found" is never proof: a network share can answer ENOENT for a moment. Each
+suspected deletion is recorded in `~/.mulmoterminal/missing-dirs.json` (path -> first seen), read and
+written under the config lock; a directory that comes back or leaves the list drops out of it.
+
 ## Shape
 
 - `server/config/dir/missing-presets.ts` — pure `classifyMissingPresets(paths, isAbsent)` →
   `{ gone, unreachable }`. The fs probe is injected.
 - `probeDir` beside it in `cwd-presets.ts` (the IO half): `stat`, then `lstat` to tell a dangling link.
-- `POST /api/config/cwd-presets/prune-missing` — removes `gone` from the list ON DISK under the
-  config lock (same reasoning as `record` / `remove`: never a client's copy). Answers
+- `POST /api/config/cwd-presets/prune-missing` — `decidePrune` (pure) under the config lock, then
+  removes the confirmed deletions from the list ON DISK under the config lock (same reasoning as `record` / `remove`: never a client's copy). Answers
   `{ cwdPresets, unreachable }`. Writes nothing when nothing is gone, but still reads under the lock,
   since the client adopts the answer as the whole list. An unreadable file is a 409, never `[]`.
 - Client: `useAppConfig` keeps the raw list (`savedPresets`, what every write and the version guard

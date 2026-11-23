@@ -1,6 +1,7 @@
 // The missing-directory check (#3414) around the config read's background retry: the check must
 // neither cost the retry its list nor be lost when only the retry succeeds.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { effectScope } from "vue";
 import { useAppConfig } from "../../../src/composables/useAppConfig";
 
 vi.mock("../../../src/composables/lateTerminalWidthTable", () => ({ adoptLateTerminalWidthTable: vi.fn(async () => undefined) }));
@@ -67,5 +68,34 @@ describe("useAppConfig — missing-directory check and the config retry", () => 
 
     expect(urls.filter((url) => url === "/api/config/cwd-presets/prune-missing")).toHaveLength(1);
     expect(presets.value).toEqual([{ label: "kept", path: "/k" }]);
+  });
+
+  // A view that goes away while the read is still finishing (here, during the legacy-recents import
+  // it awaits) must not start the check afterwards.
+  it("does not start the check when its scope is disposed after the read was adopted", async () => {
+    localStorage.setItem("recent_dirs_v1", JSON.stringify(["/r/one"]));
+    const urls: string[] = [];
+    const after = (delay_ms: number) => new Promise((resolve) => setTimeout(resolve, delay_ms));
+    globalThis.fetch = vi.fn(async (url: string) => {
+      urls.push(String(url));
+      if (String(url) === "/api/config/cwd-presets/record") {
+        await after(1_000);
+        return { ok: true, json: async () => ({ cwdPresets: [{ label: "one", path: "/r/one" }] }) };
+      }
+      if (String(url) === "/api/config") return { ok: true, json: async () => ({ cwdPresets: [] }) };
+      return { ok: true, json: async () => ({ cwdPresets: [], unreachable: [] }) };
+    }) as unknown as typeof fetch;
+    const scope = effectScope();
+    const config = scope.run(() => useAppConfig());
+    if (!config) throw new Error("scope did not run");
+
+    const load = config.loadConfigThenPruneMissing();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(urls).toContain("/api/config/cwd-presets/record"); // the read was adopted; the import is running
+    scope.stop();
+    await vi.advanceTimersByTimeAsync(2_000);
+    await load;
+
+    expect(urls).not.toContain("/api/config/cwd-presets/prune-missing");
   });
 });

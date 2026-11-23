@@ -758,6 +758,8 @@ function createConfigReader({ defaultCwd, snapshotVersion, adoptServerPresets, m
       applyGlobalSettings(c, pinsMark, jobsMark);
       adoptServerSideSettings(c);
       await migrateLegacyRecents();
+      // Asked again after that await: a view that went away during it must not start a check.
+      if (stale()) return true;
       await afterRead();
     } catch {
       // Unreadable, or an adoption step that failed. The screen keeps whatever it already had —

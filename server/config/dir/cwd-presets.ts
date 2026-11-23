@@ -86,6 +86,28 @@ export function dirHasEntries(dir: string): boolean {
   }
 }
 
+/** When each suspected deletion was first seen. Unreadable or malformed reads as an empty record —
+ *  the safe direction, since an empty record only delays a deletion. */
+export function loadMissingSince(file: string): Record<string, number> {
+  try {
+    if (!existsSync(file)) return {};
+    const parsed: unknown = readJsonFile(file);
+    if (!isRecord(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1])));
+  } catch {
+    return {};
+  }
+}
+
+export function saveMissingSince(file: string, missingSince: Record<string, number>): boolean {
+  try {
+    writeFileAtomicSync(file, JSON.stringify(missingSince, null, 2));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** The filesystem as `classifyMissingPresets` asks about it. */
 export const presetDirProbe: DirProbe = { presence: probeDir, hasEntries: dirHasEntries };
 
