@@ -12,6 +12,7 @@ import { InputBlockedError, type SendOptions } from "../backends/remoteHost/term
 import { SESSION_HEADER, sessionIdFromHeader } from "../backends/files/presentPathRoot.js";
 import type { SpawnedSessions } from "../session/spawned-sessions.js";
 import { messageOf } from "../errors.js";
+import { inputHeld } from "./deliverWhenFree.js";
 import { addressRefusal, askTag, awaitReply, parseSendRequest, parseWaitRequest, replyMessage } from "./sessionAsk.js";
 
 export interface SessionAskRouteDeps {
@@ -19,6 +20,8 @@ export interface SessionAskRouteDeps {
   /** Resolves once the Enter has gone out; rejects with InputBlockedError when `blocked` says no. */
   send: (sessionId: string, text: string, options: SendOptions) => Promise<unknown>;
   openQuestion: (sessionId: string) => Promise<AskQuestionEvent | null>;
+  /** The agent reported a permission prompt it is still waiting on (deliverWhenFree.ts). */
+  permissionPending: (sessionId: string) => boolean;
   /** A reader for the session's last completed turn, or why it cannot be read. */
   turnReader: (sessionId: string) => (() => Promise<TurnSnapshot>) | string;
   sleep: (ms: number) => Promise<void>;
@@ -45,9 +48,9 @@ function addressed(req: Request, res: Response, tool: string, target: string, sp
 /** A dialog that opened after the paste leaves the line in the input box, where the user may still
  *  submit it — so it is remembered for the wait, and the caller is told it is there. */
 function blockedMessage(session: string, err: InputBlockedError, remember: () => void): string {
-  if (!err.afterPaste) return `Session ${session} is waiting on a question dialog; nothing was sent.`;
+  if (!err.afterPaste) return `Session ${session} is waiting on a question dialog or a permission prompt; nothing was sent.`;
   remember();
-  return `Session ${session} opened a question dialog before Enter: your text is in its input box, not submitted.`;
+  return `Session ${session} opened a question dialog or a permission prompt before Enter: your text is in its input box, not submitted.`;
 }
 
 function mountSend(app: Express, deps: SessionAskRouteDeps): void {
@@ -57,7 +60,7 @@ function mountSend(app: Express, deps: SessionAskRouteDeps): void {
     if (addressed(req, res, "sendToSession", request.session, deps.spawned) === null) return;
     // Asked inside the sender's chain, before the paste and again before the Enter: a dialog can
     // open while this send waits its turn.
-    const blocked = async (): Promise<boolean> => (await deps.openQuestion(request.session)) !== null;
+    const blocked = async (): Promise<boolean> => inputHeld(deps, request.session);
     const sent = `${request.message}${askTag(deps.nonce())}`;
     try {
       await deps.send(request.session, sent, { blocked });

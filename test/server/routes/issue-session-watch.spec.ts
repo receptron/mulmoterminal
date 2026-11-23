@@ -3,7 +3,7 @@
 // still holding a place, the same block told twice, a line typed into a starter that is gone, or one
 // implementer's failure stopping the look at the others.
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { watchIssueSessions, type IssueSessionWatchDeps } from "../../../server/routes/issue-session-watch.js";
+import { startIssueSessionWatch, watchIssueSessions, type IssueSessionWatchDeps } from "../../../server/routes/issue-session-watch.js";
 import type { IssueSession } from "../../../server/routes/issueSessions.js";
 import type { BranchPr } from "../../../server/git/pr-of-branch.js";
 
@@ -17,6 +17,7 @@ const entry = (session: string, issue: number, parent = "parent"): IssueSession 
   branch: `issue/${issue}`,
   finished: null,
   blockedTold: false,
+  prUnreadable: 0,
 });
 
 let sessions: Map<string, IssueSession>;
@@ -71,6 +72,18 @@ describe("watchIssueSessions", () => {
     expect(prOf.mock.calls.map(([, branch]) => branch)).toEqual(["issue/8"]);
   });
 
+  it("does not finish an ended implementer on a pass gh could not answer, and sees its merge later", async () => {
+    running.delete("s-2");
+    prOf.mockImplementation(async (_repo, branch) => (branch === "issue/8" ? "unreadable" : null));
+    await watchIssueSessions(deps());
+    expect(sessions.get("s-2")?.finished).toBeNull();
+    expect(deliver).not.toHaveBeenCalled();
+    prOf.mockImplementation(async (_repo, branch) => (branch === "issue/8" ? { number: 11, state: "MERGED" } : null));
+    await watchIssueSessions(deps());
+    expect(sessions.get("s-2")?.finished).toBe("merged");
+    expect(told()[0]?.[1]).toContain("PR #11 was merged");
+  });
+
   it("records an implementer whose session ended", async () => {
     running.delete("s-2");
     await watchIssueSessions(deps());
@@ -110,6 +123,7 @@ describe("watchIssueSessions", () => {
   });
 
   it("keeps looking at the others when one look fails, or a delivery throws", async () => {
+    // A gh that threw outright, not one that answered nothing readable.
     prOf.mockImplementation(async (_repo, branch) => {
       if (branch === "issue/7") throw new Error("gh down");
       return { number: 10, state: "CLOSED" };
@@ -123,5 +137,36 @@ describe("watchIssueSessions", () => {
     errors.mockRestore();
     expect(sessions.get("s-1")?.finished).toBeNull();
     expect(sessions.get("s-2")?.finished).toBe("closed");
+  });
+});
+
+describe("startIssueSessionWatch", () => {
+  // A slow gh must not stack passes: the next look is scheduled when one ENDS, not on a fixed beat.
+  it("starts the next pass only after the one before it finished", async () => {
+    vi.useFakeTimers();
+    try {
+      let release: () => void = () => undefined;
+      prOf.mockImplementation(
+        () =>
+          new Promise<null>((resolve) => {
+            release = () => resolve(null);
+          }),
+      );
+      sessions = new Map([["s-1", entry("s-1", 7)]]);
+      startIssueSessionWatch(deps(), 10);
+      expect(prOf).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(prOf).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(prOf).toHaveBeenCalledTimes(1);
+      release();
+      await vi.advanceTimersByTimeAsync(9);
+      expect(prOf).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(prOf).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
   });
 });

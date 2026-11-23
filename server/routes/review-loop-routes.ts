@@ -8,7 +8,7 @@
 import type { Express, Request, Response } from "express";
 import type { ReviewSettings } from "../../common/reviewSettings.js";
 import { InputBlockedError } from "../backends/remoteHost/terminalInput.js";
-import { deliverWhenFree } from "./deliverWhenFree.js";
+import { deliverWhenFree, inputHeld } from "./deliverWhenFree.js";
 import { SESSION_HEADER, sessionIdFromHeader } from "../backends/files/presentPathRoot.js";
 import type { PrReviewState } from "../git/pr-review-state.js";
 import { messageOf } from "../errors.js";
@@ -129,8 +129,8 @@ async function roundCheck(
 function sendFailure(reviewer: string, err: unknown): string {
   if (err instanceof InputBlockedError)
     return err.afterPaste
-      ? `Reviewer session ${reviewer} opened a question dialog before Enter: the review request is in its input box, not submitted. Answer the dialog there, then call requestReview again.`
-      : `Reviewer session ${reviewer} is waiting on a question dialog; nothing was sent.`;
+      ? `Reviewer session ${reviewer} opened a question dialog or a permission prompt before Enter: the review request is in its input box, not submitted. Answer the dialog there, then call requestReview again.`
+      : `Reviewer session ${reviewer} is waiting on a question dialog or a permission prompt; nothing was sent.`;
   return `Could not send to reviewer session ${reviewer}: ${messageOf(err)}`;
 }
 
@@ -169,7 +169,7 @@ function mountRequest(app: Express, deps: ReviewLoopRouteDeps): void {
     const key = loopKey(loop);
     const round = loop.rounds.length + 1;
     const sent = `${reviewPrompt({ ...request, head: checked.head, round, maxRounds: checked.settings.maxRounds })}${askTag(deps.nonce())}`;
-    const blocked = async (): Promise<boolean> => (await deps.openQuestion(request.reviewer)) !== null;
+    const blocked = async (): Promise<boolean> => inputHeld(deps, request.reviewer);
     try {
       await deps.send(request.reviewer, sent, { blocked });
     } catch (err) {

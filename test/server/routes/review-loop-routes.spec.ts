@@ -35,6 +35,8 @@ type Handler = (req: Req, res: { json: (body: { message?: string }) => void }) =
 const send = vi.fn<(sessionId: string, text: string, options: SendOptions) => Promise<unknown>>(async () => undefined);
 const openQuestion = vi.fn<(sessionId: string) => Promise<AskQuestionEvent | null>>(async () => null);
 const close = vi.fn<(session: string) => boolean>(() => true);
+/** Sessions whose agent reported a permission prompt it is still waiting on. */
+let permissionPending: Set<string>;
 let reply: string | null;
 let settings: ReviewSettings | string;
 let pr: PrReviewState | string;
@@ -69,6 +71,7 @@ function routes(): { requestRoute: Handler; endRoute: Handler } {
     spawned,
     send,
     openQuestion,
+    permissionPending: (session) => permissionPending.has(session),
     turnReader: () => readTurn,
     sleep: (ms) => sleep(ms),
     now: () => (clock_ms += TICK_MS),
@@ -108,6 +111,7 @@ beforeEach(() => {
   send.mockImplementation(async () => undefined);
   openQuestion.mockReset();
   openQuestion.mockImplementation(async () => null);
+  permissionPending = new Set();
   close.mockReset();
   close.mockImplementation(() => true);
   reply = "REVIEW VERDICT: LGTM (head aaaaaaa)\n- nothing";
@@ -205,9 +209,32 @@ describe("a review round", () => {
       throw new InputBlockedError();
     });
     const { requestRoute } = routes();
-    expect(await call(requestRoute, req(BODY))).toMatch(/waiting on a question dialog; nothing was sent/);
+    expect(await call(requestRoute, req(BODY))).toMatch(/waiting on a question dialog or a permission prompt; nothing was sent/);
     expect(loops.get("owner/repo#7")?.running).toBe(false);
     expect(await call(requestRoute, req(BODY))).toMatch(/Round 1 of/);
+  });
+
+  // An Enter typed into a permission prompt answers it, so neither the request nor the result may be typed there.
+  it("types into neither the reviewer nor the author while a permission prompt holds it", async () => {
+    let typedIntoAuthor = 0;
+    send.mockImplementation(async (session, _text, options) => {
+      if (await options.blocked?.()) throw new InputBlockedError();
+      if (session === AUTHOR) typedIntoAuthor += 1;
+    });
+    permissionPending.add(REVIEWER);
+    const { requestRoute } = routes();
+    expect(await call(requestRoute, req(BODY))).toMatch(/permission prompt; nothing was sent/);
+    permissionPending.clear();
+    permissionPending.add(AUTHOR);
+    let held = 0;
+    sleep = async () => {
+      held += 1;
+      if (held === 2) permissionPending.clear();
+    };
+    expect(await call(requestRoute, req(BODY))).toMatch(/Round 1 of/);
+    await vi.waitFor(() => expect(typedIntoAuthor).toBe(1));
+    expect(held).toBe(2);
+    expect(typedToAuthor()).toHaveLength(3);
   });
 
   it("holds the result while a dialog is open in the author's session, then types it", async () => {

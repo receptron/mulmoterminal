@@ -5,7 +5,7 @@
 import { messageOf } from "../errors.js";
 import type { IssueSession } from "./issueSessions.js";
 import { runningCount } from "./issueSessions.js";
-import { watchMessage, watchStep, type ImplementerObservation } from "./issueSessionWatch.js";
+import { PR_UNREADABLE, watchMessage, watchStep, type ImplementerObservation } from "./issueSessionWatch.js";
 import type { BranchPr } from "../git/pr-of-branch.js";
 
 export const ISSUE_WATCH_INTERVAL_MS = 30_000;
@@ -13,7 +13,7 @@ export const ISSUE_WATCH_INTERVAL_MS = 30_000;
 export interface IssueSessionWatchDeps {
   sessions: Map<string, IssueSession>;
   isRunning: (session: string) => boolean;
-  prOf: (repo: string, branch: string) => Promise<BranchPr | null>;
+  prOf: (repo: string, branch: string) => Promise<BranchPr | null | typeof PR_UNREADABLE>;
   /** A question dialog is open, or the agent reported it is waiting on a permission prompt. */
   blocked: (session: string) => Promise<boolean>;
   /** Type the line into `parent` once nothing holds its input, unless `ended` says it is gone. */
@@ -32,8 +32,9 @@ async function observe(deps: IssueSessionWatchDeps, entry: IssueSession): Promis
 
 /** One look at one implementer: record what it came to, and tell its starter when that is news. */
 async function watchOne(deps: IssueSessionWatchDeps, entry: IssueSession): Promise<void> {
-  const step = watchStep(await observe(deps, entry), entry.blockedTold);
+  const step = watchStep(await observe(deps, entry), entry);
   entry.blockedTold = step.blockedTold;
+  entry.prUnreadable = step.prUnreadable;
   if (step.finished !== null) entry.finished = step.finished;
   if (step.event === null) return;
   const text = watchMessage(entry, step.event, runningCount(deps.sessions.values(), deps.isRunning, 0), deps.limit());

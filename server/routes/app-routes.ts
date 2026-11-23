@@ -46,13 +46,13 @@ import { mountRepoRoutes } from "../routes/repo-routes.js";
 import { mountAgentAvailabilityRoutes } from "../routes/agent-availability-routes.js";
 import type { AgentAvailability } from "../../common/agentAvailability.js";
 import { mountIssueWorkRoutes } from "../routes/issue-work-routes.js";
-import { mountIssueSessionRoutes } from "./issue-session-routes.js";
+import { implementerSpawn, mountIssueSessionRoutes } from "./issue-session-routes.js";
 import type { IssueSession } from "./issueSessions.js";
 import { startIssueWork } from "../git/issue-work.js";
 import { forgeFromRepoEntry } from "../git/forge-host.js";
 import { startIssueSessionWatch } from "./issue-session-watch.js";
 import { fetchBranchPr } from "../git/pr-of-branch.js";
-import { deliverWhenFree } from "./deliverWhenFree.js";
+import { deliverWhenFree, inputHeld } from "./deliverWhenFree.js";
 import { waitingOnPermission } from "./issueSessionWatch.js";
 import { mountTerminalReplyRoutes } from "./terminal-reply-routes.js";
 import { randomUUID } from "node:crypto";
@@ -242,6 +242,7 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     spawned: spawnedSessions,
     send: (sessionId: string, text: string, options: SendOptions) => sendToSession(sessionId, text, options),
     openQuestion: openQuestionIn(deps),
+    permissionPending: (session: string) => waitingOnPermission(lastHookEvent.get(session)),
     turnReader: liveTurnReader,
     sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
     now: () => Date.now(),
@@ -265,7 +266,7 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     limit: getMaxIssueSessions,
     cloneOf: cloneOfRepo,
     startWork: (repo, issue, dir, spawnSeeded) => startIssueWork(repo, issue, dir, { spawnSeeded }),
-    spawn: (agent, cwd, seed) => deps.spawnIssueSession(agent, cwd, seed, true, null, { allTools: true }),
+    spawn: implementerSpawn(deps.spawnIssueSession),
     recordSpawn: (child, parent) => spawnedSessions.recordSpawn(child, parent),
     markVisible: (session, agent) => markUnplacedSession(session, agent),
   });
@@ -273,7 +274,7 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     sessions: issueSessions,
     isRunning,
     prOf: fetchBranchPr,
-    blocked: async (session) => waitingOnPermission(lastHookEvent.get(session)) || (await ask.openQuestion(session)) !== null,
+    blocked: (session) => inputHeld(ask, session),
     deliver: (parent, text, ended) => deliverWhenFree(ask, parent, text, ended, "startIssueSession"),
     limit: getMaxIssueSessions,
   });
