@@ -29,8 +29,11 @@ written under the config lock; a directory that comes back or leaves the list dr
 - `server/config/dir/missing-presets.ts` — pure `classifyMissingPresets(paths, isAbsent)` →
   `{ gone, unreachable }`. The fs probe is injected.
 - `probeDir` beside it in `cwd-presets.ts` (the IO half): `stat`, then `lstat` to tell a dangling link.
-- `POST /api/config/cwd-presets/prune-missing` — `decidePrune` (pure) under the config lock, then
-  removes the confirmed deletions from the list ON DISK under the config lock (same reasoning as `record` / `remove`: never a client's copy). Answers
+- `POST /api/config/cwd-presets/prune-missing` — `decidePrune` (pure), the record, and the removal
+  of the confirmed deletions from the list ON DISK all happen in ONE hold of the config lock (same
+  reasoning as `record` / `remove`: never a client's copy; and nothing recorded in between can be
+  removed on an older decision). `applyConfigChangeLocked` is `mutateConfigOnDisk`'s body, moved
+  unchanged so a caller already holding the lock can use it. Answers
   `{ cwdPresets, unreachable }`. Writes nothing when nothing is gone, but still reads under the lock,
   since the client adopts the answer as the whole list. An unreadable file is a 409, never `[]`.
 - Client: `useAppConfig` keeps the raw list (`savedPresets`, what every write and the version guard
