@@ -11,7 +11,7 @@ import { launchAgentPick } from "../composables/launchAgentPick";
 //
 // This component owns only what the form edits (dir / agent / model choice) and forwards the four
 // launch intents. Turning an intent into a cell is GridView's job, because only it can place one.
-import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import CellLaunchForm from "./CellLaunchForm.vue";
 import type { AgentPick, CustomAgent } from "../../common/customAgents";
 import type { AgentAccount } from "../../common/agentAccounts";
@@ -52,6 +52,19 @@ const emit = defineEmits<{
 }>();
 
 const dir = ref(props.initialDir ?? props.defaultCwd ?? "");
+// The handed-in dir can move after the panel opens — its own missing-directory check may hide the
+// saved directory it was picked from — so the field follows it until the user chooses one themselves.
+const dirTouched = ref(false);
+function onDir(value: string) {
+  dir.value = value;
+  dirTouched.value = true;
+}
+watch(
+  () => props.initialDir ?? props.defaultCwd ?? "",
+  (handedIn) => {
+    if (!dirTouched.value) dir.value = handedIn;
+  },
+);
 // The configured default every time, deliberately: the panel is mounted fresh per open (GridView
 // holds it behind v-if), so the picker starts where the in-cell form starts rather than inheriting
 // whatever the origin cell happens to run. Opening it on a codex cell is not a request to start
@@ -131,7 +144,7 @@ onBeforeUnmount(() => {
       :open-session-ids="openSessionIds"
       :open-cwds="openCwds"
       :cancellable="true"
-      @update:dir="(value) => (dir = value)"
+      @update:dir="onDir"
       @update:agent="choosePickedAgent"
       @update:choice="(value) => (launchChoice = value)"
       @update:account="(value) => (account = value)"
