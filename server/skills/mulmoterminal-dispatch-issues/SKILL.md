@@ -48,9 +48,14 @@ queued, and that **each implementer asks its questions in its own cell — answe
 Do not poll, and do not read the implementers' cells to check on them. Each `[startIssueSession]` line
 says what happened:
 
-- **merged** — the place is free: start the next queued issue, if any.
-- **closed without merging**, or **session ended** — tell the user which issue, and start the next queued
-  one. Do not restart the same issue on your own; ask the user.
+- **merged** — the place is free: start the next queued issue, if any. MulmoTerminal has already closed
+  the implementer, its reviewers and its worktree; the line says what it kept and why.
+- **closed without merging** — the same close has happened. Tell the user which issue, and anything the
+  line says was kept (a worktree with unpushed work). Start the next queued one. Do not restart the same
+  issue on your own; ask the user.
+- **session ended** — its cell is gone but its worktree and any reviewer are not. Tell the user which
+  issue, close it with `closeIssueSession { session }`, pass on what that answers, and start the next
+  queued one. Do not restart the same issue on your own; ask the user.
 - **waiting for the user** — tell the user which issue and which cell needs them. Do not answer its
   question, and do not `sendToSession` an answer on the user's behalf.
 
@@ -58,7 +63,9 @@ A start the limit refuses here (another session took the place) stays queued, an
 next line — or, when none of yours is running any more, when the user asks, as in step 3.
 
 When the user asks for an issue to be added or dropped, change the queue; an implementer already started
-keeps running until it finishes, or until the user closes its cell.
+keeps running until it finishes. When the user asks you to stop one that is still working,
+`closeIssueSession` refuses it; call it again with `force: true` only on the user's word. Only you, the
+session that started it, can close it.
 
 ## 5. Report when the queue is empty and every implementer finished
 
