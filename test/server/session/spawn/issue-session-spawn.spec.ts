@@ -124,6 +124,18 @@ describe("createIssueSessionSpawner", () => {
     ]);
   });
 
+  it("hands codex the extra writable roots, and nothing to the others or for an empty list", async () => {
+    const { spawn, calls } = setup();
+    await spawn("codex", CWD, SEED, true, null, { writableRoots: ["/repo/.git/objects"] });
+    await spawn("claude", CWD, SEED, true, null, { writableRoots: ["/repo/.git/objects"] });
+    await spawn("codex", CWD, SEED, true, null, { writableRoots: [] });
+    expect(calls.map((c) => c.args)).toEqual([
+      ["s-1", null, null, CWD, false, { mcpGroups: GROUPS, initialPrompt: SEED, writableRoots: ["/repo/.git/objects"] }],
+      ["s-1", null, null, { cwd: CWD, attachGuiMcp: false, initialPrompt: SEED }],
+      ["s-1", null, null, CWD, false, { mcpGroups: GROUPS, initialPrompt: SEED }],
+    ]);
+  });
+
   it.each(["antigravity", "grok", "muse"] as const)("gives %s the directory's groups", async (agent) => {
     const { spawn, calls } = setup();
     await spawn(agent, CWD, SEED, false, null);
