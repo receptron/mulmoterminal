@@ -22,6 +22,17 @@ export function reviewWorkspaces(deps: ReviewWorkspaceDeps): ReviewWorkspaces {
   // The clone each worktree was made from: `git worktree` is asked from there, and the repository's
   // default clone may have changed since.
   const cloneOfWorkspace = new Map<string, string>();
+  const dropWorkspace = async (workspace: string): Promise<void> => {
+    const clone = cloneOfWorkspace.get(workspace);
+    if (clone === undefined) return;
+    try {
+      const failed = await removeReviewWorktree(deps.worktree, clone, workspace);
+      if (failed === null) cloneOfWorkspace.delete(workspace);
+      else console.error(`[requestReview] ${failed}`);
+    } catch (err) {
+      console.error(`[requestReview] could not remove ${workspace}: ${messageOf(err)}`);
+    }
+  };
   return {
     start: async (spec) => {
       const clone = await deps.cloneOf(spec.repo);
@@ -30,10 +41,15 @@ export function reviewWorkspaces(deps: ReviewWorkspaceDeps): ReviewWorkspaces {
       const placed = await checkoutReviewHead(deps.worktree, clone, workspace, spec.pr, spec.head);
       if (placed !== null) return placed;
       cloneOfWorkspace.set(workspace, clone);
-      const spawned = await deps.spawn(spec.agent, workspace, spec.seed, true, null, { networkAccess: true });
-      deps.recordSpawn(spawned.sessionId, spec.author);
-      deps.markVisible(spawned.sessionId, spec.agent);
-      return { session: spawned.sessionId, workspace };
+      try {
+        const spawned = await deps.spawn(spec.agent, workspace, spec.seed, true, null, { networkAccess: true });
+        deps.recordSpawn(spawned.sessionId, spec.author);
+        deps.markVisible(spawned.sessionId, spec.agent);
+        return { session: spawned.sessionId, workspace };
+      } catch (err) {
+        await dropWorkspace(workspace);
+        return `could not start the reviewer: ${messageOf(err)}`;
+      }
     },
     move: async (loop, head) => {
       const clone = loop.workspace === null ? undefined : cloneOfWorkspace.get(loop.workspace);
@@ -41,15 +57,7 @@ export function reviewWorkspaces(deps: ReviewWorkspaceDeps): ReviewWorkspaces {
       return checkoutReviewHead(deps.worktree, clone, loop.workspace, loop.pr, head);
     },
     drop: async (loop) => {
-      const clone = loop.workspace === null ? undefined : cloneOfWorkspace.get(loop.workspace);
-      if (clone === undefined || loop.workspace === null) return;
-      try {
-        const failed = await removeReviewWorktree(deps.worktree, clone, loop.workspace);
-        if (failed === null) cloneOfWorkspace.delete(loop.workspace);
-        else console.error(`[requestReview] ${failed}`);
-      } catch (err) {
-        console.error(`[requestReview] could not remove ${loop.workspace}: ${messageOf(err)}`);
-      }
+      if (loop.workspace !== null) await dropWorkspace(loop.workspace);
     },
   };
 }

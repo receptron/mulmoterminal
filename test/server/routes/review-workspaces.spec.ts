@@ -25,9 +25,11 @@ function setup(overrides: Partial<ReviewWorkspaceDeps> = {}) {
         gitCalls.push([cwd, args.join(" ")]);
         if (args[0] === "worktree" && args[1] === "add") present.add(args[4] ?? "");
         if (args[0] === "worktree" && args[1] === "remove") present.delete(args[3] ?? "");
-        return { ok: true, stdout: "" };
+        return { ok: true, stdout: args[1] === "list" ? [...present].map((dir) => `worktree ${dir}`).join("\n") : "" };
       },
       exists: (dir) => present.has(dir),
+      isSymlink: () => false,
+      realpath: (dir) => dir,
     },
     spawn,
     recordSpawn,
@@ -64,9 +66,24 @@ describe("reviewWorkspaces.start", () => {
   });
 
   it("starts nothing when the head cannot be checked out", async () => {
-    const { workspaces, spawn } = setup({ worktree: { git: async () => ({ ok: false, stdout: "" }), exists: () => false } });
+    const { workspaces, spawn } = setup({
+      worktree: { git: async () => ({ ok: false, stdout: "" }), exists: () => false, isSymlink: () => false, realpath: (dir) => dir },
+    });
     expect(await workspaces.start(SPEC)).toMatch(/could not fetch/);
     expect(spawn).not.toHaveBeenCalled();
+  });
+});
+
+describe("reviewWorkspaces.start, when the spawn fails", () => {
+  it("removes the worktree it just made and says why, rather than throwing", async () => {
+    const { workspaces, gitCalls, present } = setup({
+      spawn: vi.fn<SpawnIssueSession>(async () => {
+        throw new Error("tmux refused");
+      }),
+    });
+    expect(await workspaces.start(SPEC)).toMatch(/could not start the reviewer: tmux refused/);
+    expect(gitCalls.at(-1)).toEqual(["/src/repo", "worktree remove --force /review/owner-repo-pr7"]);
+    expect(present.size).toBe(0);
   });
 });
 
@@ -105,7 +122,12 @@ describe("reviewWorkspaces.move / drop", () => {
       throw new Error("git missing");
     });
     const { workspaces } = setup({
-      worktree: { git: async (args) => (args[1] === "remove" ? remove() : { ok: true, stdout: "" }), exists: () => true },
+      worktree: {
+        git: async (args) => (args[1] === "remove" ? remove() : { ok: true, stdout: "worktree /review/owner-repo-pr7" }),
+        exists: () => true,
+        isSymlink: () => false,
+        realpath: (dir) => dir,
+      },
     });
     const started = await workspaces.start(SPEC);
     if (typeof started === "string") throw new Error(started);
