@@ -42,8 +42,8 @@ export interface IssueSessionOptions {
   /** Hand claude, codex or copilot the whole GUI MCP instead of the directory's groups (#3413). The
    *  other agents read theirs from a file every session in the directory shares, and ignore it. */
   allTools?: boolean;
-  /** Let codex's sandbox reach the network (a reviewer, #3425). The other agents have no such
-   *  sandbox switch, and ignore it. */
+  /** Let codex's sandbox reach the network (a reviewer or an implementer, both of which talk to
+   *  GitHub). The other agents have no such sandbox switch, and ignore it. */
   networkAccess?: boolean;
 }
 
