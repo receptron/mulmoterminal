@@ -733,7 +733,8 @@ takes the PR's later rounds, its worktree moved to each new head, and a new one 
 stopped. (A session may still start a reviewer of its own with `spawnBackgroundChat` and name it as
 `reviewer`.) MulmoTerminal sends the reviewer the request, naming the `skill` to follow, waits for its answer, and types how
 the round ended into the calling session: the verdict, the rounds left, and whether the merge
-condition is met. It refuses a round past `maxRounds`, a second review of a head that had changes
+condition is met. When the reviewer stops on a question or a permission prompt mid-round, the calling session is told
+once, with the reviewer's cell, so it can tell you where to answer. It refuses a round past `maxRounds`, a second review of a head that had changes
 requested, and a reviewer that is not the declared agent. It never merges; the session does.
 `endReview` closes the reviewer once the PR is merged, and removes the worktree MulmoTerminal made. The reviewer is asked to open its reply, and
 the comment it posts on the PR, with `REVIEW VERDICT: LGTM (head <sha>)` or

@@ -505,3 +505,54 @@ describe("a reviewer MulmoTerminal starts (requestReview without `reviewer`)", (
     expect(dropWorkspace).toHaveBeenCalledWith(expect.objectContaining({ workspace: WORKSPACE }));
   });
 });
+
+describe("a reviewer held on the user mid-round", () => {
+  it("tells the author once, naming the reviewer's cell, and still types the round's result when it answers", async () => {
+    reply = null;
+    let polls = 0;
+    sleep = async () => {
+      polls += 1;
+      if (polls === 1) permissionPending.add(REVIEWER);
+      if (polls === 4) {
+        permissionPending.delete(REVIEWER);
+        reply = "REVIEW VERDICT: LGTM (head aaaaaaa)";
+      }
+    };
+    expect(await call(routes().requestRoute, req(BODY))).toMatch(/Round 1 of/);
+    await roundsEnded(2);
+    const [held, result] = typedToAuthor();
+    expect(held).toMatch(new RegExp(`reviewer session ${REVIEWER} is waiting for the user .* round 1 is paused`));
+    expect(result).toMatch(/Merge condition met/);
+  });
+
+  it("tells nothing when the reviewer is never held", async () => {
+    await call(routes().requestRoute, req(BODY));
+    await roundsEnded(1);
+    expect(typedToAuthor().join("\n")).not.toMatch(/waiting for the user/);
+  });
+
+  it("says nothing about a hold once the loop has ended", async () => {
+    reply = null;
+    let typedIntoAuthor = 0;
+    send.mockImplementation(async (session, _text, options) => {
+      if (await options.blocked?.()) throw new InputBlockedError();
+      if (session === AUTHOR) typedIntoAuthor += 1;
+    });
+    const { requestRoute, endRoute } = routes();
+    expect(await call(requestRoute, req(BODY))).toMatch(/Round 1 of/);
+    // The reviewer is held, and so is the author, so the notice waits to be delivered; the loop
+    // ends while it waits, and the author is free again on the very next attempt.
+    permissionPending.add(REVIEWER);
+    permissionPending.add(AUTHOR);
+    let sleeps = 0;
+    sleep = async () => {
+      sleeps += 1;
+      if (sleeps !== 3) return;
+      void call(endRoute, req({ repo: "owner/repo", pr: 7 }));
+      permissionPending.delete(AUTHOR);
+    };
+    await vi.waitFor(() => expect(loops.size).toBe(0));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(typedIntoAuthor).toBe(0);
+  });
+});

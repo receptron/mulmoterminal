@@ -25,6 +25,7 @@ import {
   roundEndMessage,
   roundRefusal,
   reviewerGoneMessage,
+  reviewerHeldMessage,
   reviewerRefusal,
   verdictFor,
   type ReviewLoop,
@@ -98,11 +99,28 @@ async function roundResult(deps: ReviewLoopRouteDeps, run: RoundRun, wait: Reply
 /** Waits for the reviewer in the background, records the round and tells the author — unless the
  *  loop was ended meanwhile, when nobody is waiting for the result. A reviewer that stops running
  *  ends the wait at once rather than after the whole timeout. */
+/** The reply reader, which also tells the author the first time it finds the reviewer held on the
+ *  user. The notice is not awaited: a slow delivery must not stall the reply it is waiting for. */
+function noticingHold(deps: ReviewLoopRouteDeps, run: RoundRun, ended: () => boolean): RoundRun["readTurn"] {
+  let told = false;
+  const stale = (): boolean => ended() || !run.loop.running;
+  return async () => {
+    if (!told && (await inputHeld(deps, run.loop.reviewer))) {
+      told = true;
+      deliverWhenFree(deps, run.loop.author, reviewerHeldMessage(run.loop), stale, "requestReview").catch((err: unknown) =>
+        console.error(`[requestReview] could not tell ${run.loop.author} its reviewer is held: ${messageOf(err)}`),
+      );
+    }
+    return run.readTurn();
+  };
+}
+
 async function runRound(deps: ReviewLoopRouteDeps, run: RoundRun): Promise<void> {
   const { loop } = run;
   const key = loopKey(loop);
   const ended = (): boolean => deps.loops.get(key) !== loop;
-  const wait = await reviewerAnswer(deps, run, () => ended() || deps.agentOf(loop.reviewer) === undefined);
+  const watched = { ...run, readTurn: noticingHold(deps, run, ended) };
+  const wait = await reviewerAnswer(deps, watched, () => ended() || deps.agentOf(loop.reviewer) === undefined);
   if (ended()) return;
   const text = await roundResult(deps, run, wait);
   if (ended()) return;

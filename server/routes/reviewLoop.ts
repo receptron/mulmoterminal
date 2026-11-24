@@ -95,6 +95,11 @@ export const reviewerGoneMessage = (loop: ReviewLoop): string =>
       : "Call requestReview again without `reviewer` and MulmoTerminal starts a new one — or ask the user."
   }`;
 
+/** What the author is told, once per round, when the reviewer stops on a question or a permission
+ *  prompt: nothing else would say so before the round's whole wait ran out. */
+export const reviewerHeldMessage = (loop: ReviewLoop): string =>
+  `[requestReview] ${loop.repo}#${loop.pr}: reviewer session ${loop.reviewer} is waiting for the user — a question or a permission prompt in its cell — so round ${loop.rounds.length + 1} is paused. Tell the user to answer it in that cell; the round goes on by itself once it is answered.`;
+
 export const lgtmCountOn = (rounds: readonly ReviewRound[], head: string): number =>
   rounds.filter((round) => round.head === head && round.verdict === "lgtm").length;
 
