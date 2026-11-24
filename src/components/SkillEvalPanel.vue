@@ -83,7 +83,10 @@ onUnmounted(() => {
 
 async function measure(): Promise<void> {
   confirming.value = false;
+  const asked = selection;
   const started = await startSkillEvalRun(props.source, props.skill.slug);
+  // Moved to another skill, or the panel is gone: nothing here should start polling.
+  if (asked !== selection) return;
   if (started.kind === "busy") notice.value = t("skillsView.eval.busy");
   else if (started.kind === "failed") notice.value = t("skillsView.eval.startFailed", { error: started.error });
   else {

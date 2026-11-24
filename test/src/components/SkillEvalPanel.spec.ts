@@ -12,9 +12,10 @@ const loads: Promise<SkillEvalOverview | null>[] = [];
 const calls: string[] = [];
 const placed: unknown[] = [];
 let authoring: Promise<string | null> = Promise.resolve("chat-1");
+let starting: Promise<{ kind: "started"; id: string }> = Promise.resolve({ kind: "started", id: "r" });
 vi.mock("../../../src/composables/skillEvalApi", () => ({
   loadSkillEval: () => loads.shift() ?? Promise.resolve(overview),
-  startSkillEvalRun: () => (calls.push("start"), Promise.resolve({ kind: "started", id: "r" })),
+  startSkillEvalRun: () => (calls.push("start"), starting),
   stopSkillEvalRun: () => (calls.push("stop"), Promise.resolve(true)),
   startSkillEvalAuthoring: () => (calls.push("author"), authoring),
 }));
@@ -61,6 +62,7 @@ beforeEach(() => {
   placed.length = 0;
   loads.length = 0;
   authoring = Promise.resolve("chat-1");
+  starting = Promise.resolve({ kind: "started", id: "r" });
   vi.useRealTimers();
 });
 
@@ -161,5 +163,21 @@ describe("SkillEvalPanel", () => {
     await vi.advanceTimersByTimeAsync(3000);
     expect(wrapper.find("[data-testid=skill-eval-progress]").exists()).toBe(true);
     wrapper.unmount();
+  });
+
+  it("starts no polling for a run whose start answered after the panel was gone", async () => {
+    vi.useFakeTimers();
+    let answerStart: (value: { kind: "started"; id: string }) => void = () => {};
+    starting = new Promise((resolve) => (answerStart = resolve));
+    overview = { ...base, set, runs: [] };
+    const wrapper = await mountPanel();
+    await wrapper.find("[data-testid=skill-eval-measure]").trigger("click");
+    await wrapper.find("[data-testid=skill-eval-go]").trigger("click");
+    wrapper.unmount();
+    // The server has the run by now, so any read would say it is going and keep a poll alive.
+    overview = { ...base, set, runs: [run(true, false, { status: "running", attempts: [] })], activeRunId: "r" };
+    answerStart({ kind: "started", id: "r" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
