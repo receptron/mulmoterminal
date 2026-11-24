@@ -92,8 +92,14 @@ function setUp(writer: Writer = improvesIt) {
   return { call, fields, evalDir, skillDir, prompts, tmpRoot };
 }
 
+// A read that lands while the record is being replaced can come back empty on Windows: that is not an end.
 async function finished(evalDir: string, id: string): Promise<SkillEvalRun | null> {
-  for (let i = 0; i < 100 && (await readRun(evalDir, id))?.status === "running"; i++) await new Promise((r) => setTimeout(r, 10));
+  const ended = (run: SkillEvalRun | null): run is SkillEvalRun => run !== null && run.status !== "running";
+  for (let i = 0; i < 300; i++) {
+    const run = await readRun(evalDir, id);
+    if (ended(run)) return run;
+    await new Promise((r) => setTimeout(r, 10));
+  }
   return readRun(evalDir, id);
 }
 
