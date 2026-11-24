@@ -208,7 +208,8 @@ describe("mulmoterminal-config routes to skills that exist", () => {
     // same: it writes the user's spreadsheets and charts, not a setting, and so does `mulmoterminal-video-edit`
     // with the user's videos, and `mulmoterminal-html-plan` with a plan the user decides on, and
     // `mulmoterminal-library` with what a conversation is promoted to, and `mulmoterminal-issue-to-merge`
-    // with a repository's code, and `mulmoterminal-dispatch-issues` with which issues run where.
+    // with a repository's code, and `mulmoterminal-dispatch-issues` with which issues run where, and
+    // `mulmoterminal-review` with a pull request's review.
     const notSettings = [
       "mulmoterminal-config",
       "mulmoterminal-bug-report",
@@ -221,6 +222,7 @@ describe("mulmoterminal-config routes to skills that exist", () => {
       "mulmoterminal-library",
       "mulmoterminal-issue-to-merge",
       "mulmoterminal-dispatch-issues",
+      "mulmoterminal-review",
     ];
     const writers = BUNDLED_SKILL_NAMES.filter((name) => !notSettings.some((excluded) => excluded === name));
     expect(writers.filter((name) => !routed().includes(name))).toEqual([]);

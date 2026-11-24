@@ -17,7 +17,7 @@ import {
   type ReviewLoop,
   type ReviewRound,
 } from "../../../server/routes/reviewLoop.js";
-import { REVIEW_DEFAULTS, type ReviewSettings } from "../../../common/reviewSettings.js";
+import { MAX_REVIEW_SKILL_CHARS, REVIEW_DEFAULTS, type ReviewSettings } from "../../../common/reviewSettings.js";
 import { SEND_MAX_CHARS } from "../../../server/routes/sessionAsk.js";
 import { parseVerdictLine } from "../../../server/git/codexVerdict.js";
 
@@ -26,7 +26,7 @@ const REVIEWER = "1c8e3d2f-2222-4333-8444-a55566667777";
 const OTHER = "2d9f4e30-3333-4444-8555-b66677778888";
 const HEAD = "a".repeat(40);
 const NEXT = "b".repeat(40);
-const SETTINGS: ReviewSettings = { reviewer: "codex", maxRounds: 3, requiredLgtm: 1 };
+const SETTINGS: ReviewSettings = { reviewer: "codex", maxRounds: 3, requiredLgtm: 1, skill: "team-review" };
 
 const loopWith = (rounds: ReviewRound[], extra: Partial<ReviewLoop> = {}): ReviewLoop => ({
   repo: "owner/repo",
@@ -158,7 +158,14 @@ describe("lgtmCountOn", () => {
 });
 
 describe("reviewPrompt", () => {
-  const facts = { repo: "owner/repo", pr: 7, head: HEAD, round: 1, maxRounds: REVIEW_DEFAULTS.maxRounds };
+  const facts = { repo: "owner/repo", pr: 7, head: HEAD, round: 1, maxRounds: REVIEW_DEFAULTS.maxRounds, skill: REVIEW_DEFAULTS.skill };
+
+  it("names the skill to follow, and keeps the verdict line and the PR comment as its own", () => {
+    const prompt = reviewPrompt({ ...facts, skill: "my-plugin:deep-review" });
+    expect(prompt).toContain("Follow the my-plugin:deep-review skill");
+    expect(prompt).toContain("this message wins");
+    expect(prompt).toContain("gh pr comment 7 -R owner/repo");
+  });
 
   it("names the PR, the head, and both verdict lines in a form the parser reads", () => {
     const prompt = reviewPrompt(facts);
@@ -177,7 +184,14 @@ describe("reviewPrompt", () => {
   });
 
   it("fits what one send may carry, at the longest a repository name can be", () => {
-    const longest = reviewPrompt({ ...facts, repo: `${"o".repeat(39)}/${"r".repeat(100)}`, pr: 999_999, round: 50, maxRounds: 50 });
+    const longest = reviewPrompt({
+      ...facts,
+      repo: `${"o".repeat(39)}/${"r".repeat(100)}`,
+      pr: 999_999,
+      round: 50,
+      maxRounds: 50,
+      skill: "s".repeat(MAX_REVIEW_SKILL_CHARS),
+    });
     expect(longest.length).toBeLessThanOrEqual(SEND_MAX_CHARS);
     expect(longest).not.toMatch(/\n/);
   });

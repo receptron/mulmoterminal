@@ -23,7 +23,7 @@ const REVIEWER2 = "3ea05f41-4444-4555-8666-c77788889999";
 const REVIEWERS = new Set([REVIEWER, REVIEWER2]);
 const HEAD = "a".repeat(40);
 const NEXT = "b".repeat(40);
-const SETTINGS: ReviewSettings = { reviewer: "codex", maxRounds: 3, requiredLgtm: 1 };
+const SETTINGS: ReviewSettings = { reviewer: "codex", maxRounds: 3, requiredLgtm: 1, skill: "team-review" };
 const BODY = { repo: "owner/repo", pr: 7, reviewer: REVIEWER };
 
 interface Req {
@@ -151,6 +151,7 @@ describe("a review round", () => {
     expect(answer).toMatch(/Round 1 of owner\/repo#7 was sent/);
     expect(sentToReviewer()).toMatch(/^Review pull request #7 of owner\/repo at head a{40} .* \[sendToSession nonce000\]$/);
     expect(spawned.lastSentTo(REVIEWER)).toBe(sentToReviewer());
+    expect(sentToReviewer()).toContain(`Follow the ${SETTINGS.skill} skill`);
     await roundsEnded(1);
     expect(typedToAuthor()[0]).toMatch(/round 1\/3, reviewer codex .*LGTM on head aaaaaaa\. Merge condition met/);
     expect(loops.get("owner/repo#7")).toMatchObject({ rounds: [{ head: HEAD, verdict: "lgtm" }], running: false });
