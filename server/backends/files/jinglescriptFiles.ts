@@ -12,9 +12,11 @@
 // that exact string to recognise a composed score as the render's own. An absolute value would
 // fail the comparison and the render would be named `<stem>-2`.
 import { AsyncLocalStorage } from "node:async_hooks";
+import { lstat } from "node:fs/promises";
 import path from "node:path";
 import type { Express, NextFunction, Request, Response } from "express";
 import type { FileOps } from "gui-chat-protocol";
+import { hasErrnoCode } from "../../errors.js";
 import { createFileOps } from "./fileOps.js";
 import { jingleScriptByPath, openPathWorkspace } from "./openPath.js";
 import { JINGLESCRIPT_FILES_DIR, jingleScriptFileTarget } from "./jinglescriptFilePath.js";
@@ -33,12 +35,27 @@ export function runAsJingleScriptCaller<T>(cwd: string, fn: () => T): T {
 // gets the workspace — what cwdForSession answers for a request without one.
 const cwdOfCall = (): string => callerCwd.getStore() ?? openPathWorkspace();
 
-const filesArea = createFileOps(() => path.join(cwdOfCall(), JINGLESCRIPT_FILES_DIR), "jinglescript");
+const filesRoot = (): string => path.join(cwdOfCall(), JINGLESCRIPT_FILES_DIR);
+const filesArea = createFileOps(filesRoot, "jinglescript");
+
+// createFileOps trusts its root's own realpath. This root sits in the session's directory, where the
+// agent can put a link, so a `jinglescript` that is not a plain directory must not become that root.
+async function assertPlainFilesRoot(): Promise<void> {
+  const root = filesRoot();
+  try {
+    const stat = await lstat(root);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error(`jinglescript files area is not a plain directory: ${root}`);
+  } catch (error) {
+    if (hasErrnoCode(error) && error.code === "ENOENT") return;
+    throw error;
+  }
+}
 
 function routed<T>(value: string, operation: (ops: FileOps, key: string) => Promise<T>): Promise<T> {
   const target = jingleScriptFileTarget(value, cwdOfCall());
   if (target === null) return Promise.reject(new Error(`invalid path: ${value}`));
-  return target.area === "files" ? operation(filesArea, target.name) : operation(jingleScriptByPath, target.value);
+  if (target.area === "score") return operation(jingleScriptByPath, target.value);
+  return assertPlainFilesRoot().then(() => operation(filesArea, target.name));
 }
 
 const unsupported = (operation: string) => (): Promise<never> => Promise.reject(new Error(`manageJingleScript files do not support ${operation}`));

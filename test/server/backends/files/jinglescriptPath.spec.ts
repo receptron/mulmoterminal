@@ -125,6 +125,25 @@ describe("manageJingleScript's render files", () => {
       rmSync(outside, { recursive: true, force: true });
     }
   });
+
+  it("refuses an area that is itself a link out of the session, and leaves the target untouched", async () => {
+    const outside = mkdtempSync(path.join(tmpdir(), "mt-jingle-outside-"));
+    try {
+      symlinkSync(outside, path.join(project, "jinglescript"));
+      await runAsJingleScriptCaller(project, async () => {
+        await expect(jingleScriptFileOps.write("jinglescript/escape.wav", "x")).rejects.toThrow("not a plain directory");
+        await expect(jingleScriptFileOps.exists("jinglescript/escape.wav")).rejects.toThrow("not a plain directory");
+      });
+      expect(existsSync(path.join(outside, "escape.wav"))).toBe(false);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses an area that is a file rather than a folder", async () => {
+    writeFileSync(path.join(project, "jinglescript"), "not a folder");
+    await runAsJingleScriptCaller(project, () => expect(jingleScriptFileOps.write("jinglescript/a.mp3", "x")).rejects.toThrow("not a plain directory"));
+  });
 });
 
 describe("the manageJingleScript route", () => {
