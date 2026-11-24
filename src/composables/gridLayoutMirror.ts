@@ -108,12 +108,13 @@ export function loadGridState(): GridState {
 }
 
 // Asked again at the moment of restoring: the offer can sit on screen while another tab opens one of
-// its sessions, and taking it here would push that tab off it. Unanswerable reads as "none".
-async function attachedNow(): Promise<string[]> {
+// its sessions, and taking it here would push that tab off it. Null when it cannot be asked.
+async function attachedNow(): Promise<string[] | null> {
   try {
-    return stringsIn((await readCopy())?.attached);
+    const answer = await readCopy();
+    return answer ? stringsIn(answer.attached) : null;
   } catch {
-    return [];
+    return null;
   }
 }
 
@@ -121,7 +122,13 @@ async function attachedNow(): Promise<string[]> {
 export async function restoreOfferedCells(): Promise<void> {
   const offered = offeredCells.value ?? [];
   offeredCells.value = null; // the bar goes at once, so a second press cannot open them twice
-  const shown = new Set([...openSessionIds(), ...(await attachedNow())]);
+  const attached = await attachedNow();
+  // Unasked is not "nothing attached": the offer comes back for another try instead.
+  if (attached === null) {
+    offeredCells.value = offered;
+    return;
+  }
+  const shown = new Set([...openSessionIds(), ...attached]);
   offered.filter((cell) => cell.session !== null && !shown.has(cell.session)).forEach((cell) => openCellAt(cell, null));
   release();
 }

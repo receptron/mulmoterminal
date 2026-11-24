@@ -194,6 +194,19 @@ describe("a grid that loads with none", () => {
     expect(opened.cells).toEqual([expect.objectContaining({ session: A })]);
   });
 
+  it("keeps the offer, opening nothing, when it cannot ask again", async () => {
+    serverCopy = JSON.parse(stored([{ session: A, cwd: "/a" }]));
+    const mirror = await load();
+    mirror.loadGridState();
+    await settle();
+    globalThis.fetch = vi.fn(async () => {
+      throw new TypeError("offline");
+    }) as unknown as typeof fetch;
+    await mirror.restoreOfferedCells();
+    expect(opened.cells).toEqual([]);
+    expect(mirror.offeredCells.value?.map((c) => c.session)).toEqual([A]);
+  });
+
   it("opens each cell once however often Restore is pressed", async () => {
     serverCopy = JSON.parse(stored([{ session: A, cwd: "/a" }]));
     const mirror = await load();
