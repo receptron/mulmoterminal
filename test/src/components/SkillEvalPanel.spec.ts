@@ -300,6 +300,7 @@ describe("SkillEvalPanel", () => {
       const wrapper = await mountPanel();
       expect(wrapper.find("[data-testid=skill-eval-ladder-enough]").text()).toContain("did not finish");
       expect(wrapper.find("[data-testid=skill-eval-earlier]").text()).toContain("not finished");
+      expect(wrapper.findAll("[data-testid=skill-eval-ladder-step]")[1]?.text()).toContain("the search ended before it");
     });
 
     it("says how far a running search has got, and what an earlier one found", async () => {
@@ -307,6 +308,7 @@ describe("SkillEvalPanel", () => {
       overview = { ...base, set, runs: [going], activeRunId: going.id };
       const wrapper = await mountPanel();
       expect(wrapper.find("[data-testid=skill-eval-progress]").text()).toContain("Trying models, cheapest first… 1 / at most 6");
+      expect(wrapper.findAll("[data-testid=skill-eval-ladder-step]")[1]?.text()).toContain("Not measured yet");
       wrapper.unmount();
       overview = { ...base, set, runs: [run(true, false), search([tried("haiku", true, 0), tried("haiku", true, 1)])] };
       expect((await mountPanel()).find("[data-testid=skill-eval-earlier]").text()).toContain("enough: haiku · done · model search");

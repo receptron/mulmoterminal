@@ -16,6 +16,12 @@ const verdict = computed(() => {
   return summary.value.enough ? t("skillsView.eval.ladder.enough", { model: summary.value.enough }) : t("skillsView.eval.ladder.none");
 });
 const spentUsd = computed(() => summary.value.steps.reduce((total, step) => total + step.costUsd, 0) + summary.value.gradingCostUsd);
+// Why a model has no result: not reached yet, skipped because a cheaper one passed everything, or never
+// reached because the search ended early. Only a search that finished skips a model.
+const notMeasuredText = computed(() => {
+  if (props.run.status === "running") return t("skillsView.eval.ladder.pending");
+  return t(props.run.status === "done" ? "skillsView.eval.ladder.notMeasured" : "skillsView.eval.ladder.notReached");
+});
 const percent = (rate: number | null): string => (rate === null ? "—" : `${String(Math.round(rate * 100))}%`);
 const usd = (value: number | null): string => (value === null ? "—" : `$${value.toFixed(3)}`);
 </script>
@@ -41,7 +47,7 @@ const usd = (value: number | null): string => (value === null ? "—" : `$${valu
             <td class="py-0.5 pr-2">{{ percent(step.passRate) }} ({{ step.passes }}/{{ step.attempts }})</td>
             <td class="py-0.5">{{ usd(step.costPerPassUsd) }}</td>
           </template>
-          <td v-else colspan="2" class="py-0.5 text-dim">{{ t("skillsView.eval.ladder.notMeasured") }}</td>
+          <td v-else colspan="2" class="py-0.5 text-dim">{{ notMeasuredText }}</td>
         </tr>
       </tbody>
     </table>

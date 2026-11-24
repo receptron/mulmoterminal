@@ -80,6 +80,8 @@ export const skillsViewEn = {
         enough: "{model} is enough: it passed as often as the best model did, and it is the cheapest that did.",
         none: "No model passed with the skill. If the skill was not read, fix its description; if the work is analysis, a stronger model may help more than a skill.",
         notMeasured: "Not measured: a cheaper model already passed everything.",
+        pending: "Not measured yet.",
+        notReached: "Not measured: the search ended before it.",
         shaky: "Only one model passed at all, so this choice rests on one row. Add tasks and search again before relying on it.",
         hint: "A guide, not a setting: the model a skill runs on is chosen per conversation. Search again when the skill, the tasks or the available models change.",
         model: "Model",
