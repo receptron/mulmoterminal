@@ -608,7 +608,7 @@ function mountSessionFacingRoutes(app: Express, deps: AppRouteDeps): void {
   // The launch form's Working directory field: is it there, and which subdirectories complete it.
   mountDirSuggestRoute(app);
   mountPlayfulMediaRoutes(app);
-  mountSkillCatalogRoutes(app);
+  mountSkillCatalogRoutes(app, { evals: { spawnSession: deps.spawnIssueSession } });
   mountLibraryRoutes(app, { promote: { spawnSession: deps.spawnIssueSession, isAllowedOrigin: deps.isAllowedOrigin } });
   mountGuiMcpRoutes(app);
 

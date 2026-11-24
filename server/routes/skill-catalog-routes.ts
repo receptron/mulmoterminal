@@ -3,26 +3,21 @@
 // directory could not be read.
 import type { Express } from "express";
 import { rememberedSessionCwds } from "../session/registry.js";
-import { readSkillCatalog, readSkillDoc, type SkillDocSource } from "../backends/skills/skillCatalog.js";
+import { readSkillCatalog, readSkillDoc } from "../backends/skills/skillCatalog.js";
 import { MAX_QUERY_CHARS, readSkillsShSkill, searchSkillsSh, type FetchText } from "../backends/skills/skillsSh.js";
 import { isRemoteSkillId, isRemoteSource } from "../../common/skillsSh.js";
 import { isEditableSkill, writeSkillDoc } from "../backends/skills/skillEdit.js";
 import { isFaithfulText, memoryVersion } from "../backends/library/memory-write.js";
 import { memoryEditOf } from "./library-memory-routes.js";
 import { requestBody } from "./requestBody.js";
-
-const nonEmpty = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
-
-function docSource(query: Record<string, unknown>): SkillDocSource {
-  const plugin = nonEmpty(query.plugin);
-  if (plugin !== null) return { scope: "plugin", plugin };
-  const dir = nonEmpty(query.dir);
-  return dir === null ? { scope: "user" } : { scope: "project", dir };
-}
+import { docSource } from "./skill-source-query.js";
+import { mountSkillEvalRoutes, type SkillEvalRouteDeps } from "./skill-eval-routes.js";
 
 export interface SkillCatalogRouteDeps {
   /** Override the skills.sh fetch, for tests. */
   fetchSkillsSh?: FetchText;
+  /** What the skill evaluation routes need (#3438). */
+  evals?: SkillEvalRouteDeps;
 }
 
 const queryText = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
@@ -66,6 +61,7 @@ export function mountSkillCatalogRoutes(app: Express, deps: SkillCatalogRouteDep
   });
 
   mountSkillsShRoutes(app, deps.fetchSkillsSh);
+  mountSkillEvalRoutes(app, deps.evals);
 }
 
 function mountSkillsShRoutes(app: Express, fetchSkillsSh: FetchText | undefined): void {
