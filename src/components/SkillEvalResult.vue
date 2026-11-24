@@ -61,6 +61,9 @@ const perCase = computed(() =>
       <li v-if="summary.avoid.attempts > 0">{{ t("skillsView.eval.avoid", { invoked: summary.avoid.invoked, attempts: summary.avoid.attempts }) }}</li>
       <li v-if="summary.fewCases">{{ t("skillsView.eval.fewCases") }}</li>
       <li v-if="skillTextChanged">{{ t("skillsView.eval.skillChanged") }}</li>
+      <li v-if="run.interruptedBy" data-testid="skill-eval-interrupted-by" class="text-err-text">
+        {{ t("skillsView.eval.interruptedBy", { reason: run.interruptedBy }) }}
+      </li>
       <li>
         {{
           t("skillsView.eval.spent", {

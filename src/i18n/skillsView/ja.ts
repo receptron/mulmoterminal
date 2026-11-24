@@ -50,6 +50,7 @@ export const skillsViewJa = {
       fewCases: "課題が少ないので、小さな差は見えません。差がないと出ても、効いていないとは限りません。",
       skillChanged: "前の結果とは SKILL.md の中身が違います。",
       spent: "この評価にかかった費用: {cost}（採点を含む）",
+      interruptedBy: "途中で失敗して止まりました: {reason}",
       perCase: "課題ごとの合格数",
       avoidTag: "（使うべきでない）",
       improve: {

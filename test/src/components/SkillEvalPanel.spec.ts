@@ -62,6 +62,7 @@ function run(passWith: boolean, passWithout: boolean, extra: Partial<SkillEvalRu
       baseSkillHash: "",
       baseRunId: null,
       ladder: [],
+      interruptedBy: "",
     },
     attempts: [attempt("with", passWith), attempt("without", passWithout)],
     ...extra,
@@ -313,5 +314,9 @@ describe("SkillEvalPanel", () => {
       overview = { ...base, set, runs: [run(true, false), search([tried("haiku", true, 0), tried("haiku", true, 1)])] };
       expect((await mountPanel()).find("[data-testid=skill-eval-earlier]").text()).toContain("enough: haiku · done · model search");
     });
+  });
+  it("says why a run stopped partway when something failed", async () => {
+    overview = { ...base, set, runs: [run(true, false, { status: "interrupted", interruptedBy: "EPERM: operation not permitted" })] };
+    expect((await mountPanel()).find("[data-testid=skill-eval-interrupted-by]").text()).toContain("EPERM: operation not permitted");
   });
 });

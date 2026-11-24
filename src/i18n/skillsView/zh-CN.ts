@@ -50,6 +50,7 @@ export const skillsViewZhCN = {
       fewCases: "任务较少，看不出小的差异。显示没有差异也不代表没有效果。",
       skillChanged: "SKILL.md 的内容与上次测量时不同。",
       spent: "本次评估的费用：{cost}（含评分）",
+      interruptedBy: "中途出错而停止：{reason}",
       perCase: "各任务的通过数",
       avoidTag: "（不应使用）",
       improve: {

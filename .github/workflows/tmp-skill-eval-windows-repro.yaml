@@ -1,0 +1,47 @@
+# TEMPORARY (#3458): repeats the skill evaluation specs on Windows with Defender left on, as the PR gate
+# runs them, to see why a finished measurement is sometimes not accepted. Removed before merge.
+name: Skill eval Windows repro (temporary)
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  repro:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+      - uses: actions/cache/restore@v5
+        with:
+          path: node_modules
+          key: win-node-modules-24.x-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            win-node-modules-24.x-
+      - name: Install
+        run: yarn install --frozen-lockfile --network-timeout 120000
+      - name: Repeat the skill evaluation specs
+        shell: bash
+        run: |
+          failed=0
+          for i in $(seq 1 25); do
+            if ! yarn -s vitest run test/server/backends/skillEval > "run-$i.log" 2>&1; then
+              failed=$((failed + 1))
+              echo "::group::run $i failed"
+              grep -E "FAIL |AssertionError|Expected|Received|interrupt|EPERM|EBUSY|ENOTEMPTY" "run-$i.log" | head -40
+              echo "::endgroup::"
+            fi
+          done
+          echo "failed runs: $failed of 25"
+          test "$failed" -eq 0

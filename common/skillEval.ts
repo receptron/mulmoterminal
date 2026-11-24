@@ -117,6 +117,8 @@ export const skillEvalRunSchema = z.object({
   baseRunId: z.string().nullable().default(null),
   /** Set when this run searched for the cheapest model that is enough (#3453): the models, cheapest first. */
   ladder: z.array(z.string()).default([]),
+  /** Why a run ended as interrupted, when something failed rather than the server stopping (#3458). */
+  interruptedBy: z.string().default(""),
 });
 export type SkillEvalRun = z.infer<typeof skillEvalRunSchema>;
 

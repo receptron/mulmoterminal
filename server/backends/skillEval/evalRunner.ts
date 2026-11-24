@@ -74,6 +74,7 @@ function initialRun(start: EvalStart, id: string, now_ms: number): SkillEvalRun 
       improveCostUsd: 0,
     },
     ...{ baseSkillHash: improving ? start.skillHash : "", baseRunId: start.improveFrom?.id ?? null, ladder: start.ladder ? start.set.ladder : [] },
+    interruptedBy: "",
   };
 }
 
@@ -130,6 +131,8 @@ function finalStatus(failed: boolean, stopRequested: boolean): SkillEvalRun["sta
   return stopRequested ? "stopped" : "done";
 }
 
+const failureText = (reason: unknown): string => (reason instanceof Error ? reason.message : String(reason));
+
 interface Measuring {
   run: SkillEvalRun;
   self: ActiveRun;
@@ -143,7 +146,10 @@ async function measurePlans(plans: AttemptPlan[], measuring: Measuring): Promise
   const { run, self, save, deps } = measuring;
   const queue = [...plans];
   const workers = await Promise.allSettled(Array.from({ length: EVAL_CONCURRENCY }, () => drain(queue, run, self, save, deps)));
-  return workers.some((worker) => worker.status === "rejected");
+  const failure = workers.find((worker) => worker.status === "rejected");
+  if (failure === undefined) return false;
+  run.interruptedBy = failureText(failure.reason);
+  return true;
 }
 
 /** One model after another, cheapest first, until one passes everything; true when a worker failed. */
@@ -172,8 +178,9 @@ async function execute(run: SkillEvalRun, self: ActiveRun, start: EvalStart, ski
     }
     const failed = await measureSkill(start, skillDir, { run, self, save, deps });
     run.status = finalStatus(failed, self.stopRequested);
-  } catch {
+  } catch (err) {
     run.status = "interrupted";
+    run.interruptedBy = failureText(err);
   } finally {
     run.finishedAt = deps.now();
     await save().catch(() => {});

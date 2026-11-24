@@ -188,7 +188,7 @@ describe("a skill evaluation run", () => {
     release();
     await first?.done;
     const run = await readRun(evalDir, first?.id ?? "");
-    expect(run?.status).toBe("interrupted");
+    expect(run).toMatchObject({ status: "interrupted", interruptedBy: "claude went away" });
     expect(calls).toBe(2);
   });
 
