@@ -21,13 +21,27 @@ function parsed(line: string): Record<string, unknown> | null {
   }
 }
 
-/** The skills an assistant message asked the `Skill` tool for. */
-function invokedSkills(record: Record<string, unknown>): string[] {
-  if (record.type !== "assistant" || !isRecord(record.message) || !Array.isArray(record.message.content)) return [];
-  return record.message.content.flatMap((block: unknown) =>
-    isRecord(block) && block.type === "tool_use" && block.name === "Skill" && isRecord(block.input) && typeof block.input.skill === "string"
-      ? [block.input.skill]
+const contentOf = (record: Record<string, unknown>, type: string): unknown[] =>
+  record.type === type && isRecord(record.message) && Array.isArray(record.message.content) ? record.message.content : [];
+
+/** The ids of the `Skill` tool calls that asked for `skillSlug`. */
+function skillCallIds(record: Record<string, unknown>, skillSlug: string): string[] {
+  return contentOf(record, "assistant").flatMap((block) =>
+    isRecord(block) &&
+    block.type === "tool_use" &&
+    block.name === "Skill" &&
+    isRecord(block.input) &&
+    block.input.skill === skillSlug &&
+    typeof block.id === "string"
+      ? [block.id]
       : [],
+  );
+}
+
+/** The ids of the tool calls that came back without an error. A refused call comes back as one. */
+function succeededIds(record: Record<string, unknown>): string[] {
+  return contentOf(record, "user").flatMap((block) =>
+    isRecord(block) && block.type === "tool_result" && block.is_error !== true && typeof block.tool_use_id === "string" ? [block.tool_use_id] : [],
   );
 }
 
@@ -41,7 +55,9 @@ function resultError(result: Record<string, unknown>): string | null {
 
 export function streamOutcome(lines: readonly string[], skillSlug: string): StreamOutcome {
   const records = lines.map(parsed).filter((record): record is Record<string, unknown> => record !== null);
-  const skillInvoked = records.some((record) => invokedSkills(record).includes(skillSlug));
+  // Asking for the skill is not reading it: the call counts once its result came back without an error.
+  const succeeded = new Set(records.flatMap(succeededIds));
+  const skillInvoked = records.flatMap((record) => skillCallIds(record, skillSlug)).some((id) => succeeded.has(id));
   const result = records.findLast((record) => record.type === "result");
   if (result === undefined) return { skillInvoked, finalText: "", costUsd: 0, denied: [], error: "the run gave no result" };
   return {

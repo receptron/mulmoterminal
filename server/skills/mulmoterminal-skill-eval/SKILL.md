@@ -15,12 +15,14 @@ ask.
 
 ## 1. Find the skill and read it
 
-The request names the skill (for example `weekly-report`, or `plugin:slug` for a plugin's skill).
-Read its `SKILL.md` and any files next to it. Work out what it is FOR: the kind of request it should
+The request names the skill (for example `weekly-report`, or `plugin:slug` for a plugin's skill),
+where its `SKILL.md` is, and the folder to save the evaluation in. Read the `SKILL.md` and any files
+next to it. Work out what it is FOR: the kind of request it should
 change, and what a good result looks like. If you cannot find it, say so and stop.
 
-If `~/.mulmoterminal/skill-evals/<name>/cases.json` already exists (a plugin skill's `:` is written
-`__` in the folder name), read it: the user may want to change it rather than start again.
+If `cases.json` already exists in that folder, read it: the user may want to change it rather than
+start again. Use exactly the folder the request gives: a folder's skill has a folder name of its own,
+so two projects with a skill of the same name keep separate evaluations.
 
 ## 2. Draft the tasks
 
@@ -32,9 +34,10 @@ Draft **3 to 5 "use" tasks** and **exactly 1 "avoid" task**.
   wrong. It catches a skill that fires on everything.
 
 Each task runs in a fresh, empty folder with only the files you give it. The agent has no access to
-the user's projects, no other skills, and no `CLAUDE.md`. It may create and edit files there. It may
-not run commands unless you list them in `allowedTools` — only add ones the task truly needs, and
-tell the user what each one allows.
+the user's projects, no other skills, and no `CLAUDE.md`. It may create and edit files there. Beyond
+that it may run only the commands you list in `allowedTools` — only add ones the task truly needs, and
+tell the user what each one allows — plus whatever the skill itself grants in its own `allowed-tools`,
+exactly as it would when the user runs it. If the skill grants tools, say so to the user.
 
 Do NOT write the task so that it only makes sense with the skill ("follow the weekly-report format").
 Write what a person would actually ask. The skill's job is to make that request turn out better.
@@ -66,7 +69,7 @@ MulmoTerminal shows the price limit before it starts. Ask them to approve, chang
 
 ## 5. Write the file
 
-Write `~/.mulmoterminal/skill-evals/<name>/cases.json`:
+Write `cases.json` in the folder the request gave:
 
 ```json
 {
@@ -105,7 +108,7 @@ Write `~/.mulmoterminal/skill-evals/<name>/cases.json`:
 - Optional: `model` (default `haiku`), `judgeModel` (the model that checks rubric items, default
   `haiku`), `repeats` (default 3, at most 5), `maxBudgetUsdPerAttempt` (default 0.5),
   `allowedTools` (for example `["Bash(python3 *)"]`). At most 20 tasks.
-- A task's starting files go in `~/.mulmoterminal/skill-evals/<name>/files/<id>/` — they are copied
+- A task's starting files go in `files/<id>/` in that folder — they are copied
   into the empty folder before the task runs. Write them yourself; keep them small and made up, never
   copied from the user's real files.
 

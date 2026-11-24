@@ -13,7 +13,7 @@ import { maxRunCostUsd, plannedAttempts, SKILL_EVAL_AUTHOR_SKILL, type SkillEval
 import type { SpawnIssueSession } from "../session/spawn/issue-session-spawn.js";
 import { commandRunner, type AttemptDeps } from "../backends/skillEval/evalAttempt.js";
 import { runClaude } from "../backends/skillEval/runClaude.js";
-import { listRuns, readEvalSet, readRun, skillEvalDir, textHash } from "../backends/skillEval/evalStore.js";
+import { listRuns, readEvalSet, readRun, skillEvalFolder, textHash } from "../backends/skillEval/evalStore.js";
 import { activeRunId, effectiveStatus, startEvalRun, stopEvalRun } from "../backends/skillEval/evalRunner.js";
 import { docSource } from "./skill-source-query.js";
 import { requestBody } from "./requestBody.js";
@@ -43,18 +43,22 @@ async function isFile(file: string): Promise<boolean> {
 }
 
 interface ResolvedSkill {
+  /** The name claude runs it by. */
   id: string;
   slug: string;
   file: string;
   source: SkillDocSource;
+  /** Its evaluation folder. */
+  evalDir: string;
 }
 
-async function resolveSkill(query: Record<string, unknown>, cwds: () => Promise<string[]>): Promise<ResolvedSkill | null> {
+async function resolveSkill(root: string, query: Record<string, unknown>, cwds: () => Promise<string[]>): Promise<ResolvedSkill | null> {
   const slug = typeof query.slug === "string" ? query.slug : "";
   const source = docSource(query);
   const file = await skillDocFile({ source, slug, cwds: await cwds() });
   if (file === null || !(await isFile(file))) return null;
-  return { id: skillIdOf(source, slug), slug, file, source };
+  const id = skillIdOf(source, slug);
+  return { id, slug, file, source, evalDir: skillEvalFolder(root, id, source.scope === "project" ? source.dir : null) };
 }
 
 const fail = (res: Response, status: number, error: string): void => {
@@ -73,17 +77,18 @@ interface Context {
 // approves, and Claude Code holds that rather than the skill's own wording.
 const AUTHOR_PERMISSION_MODE = "plan";
 
-/** The first turn of the drafting cell: the skill's name and where its SKILL.md is. */
-export const authorTurn = (skillId: string, file: string): string => `/${SKILL_EVAL_AUTHOR_SKILL} ${skillId} ${file}`;
+/** The first turn of the drafting cell: the skill's name, where its SKILL.md is, and the folder to save in. */
+export const authorTurn = (skill: ResolvedSkill): string =>
+  `/${SKILL_EVAL_AUTHOR_SKILL} skill ${JSON.stringify(skill.id)}, SKILL.md at ${JSON.stringify(skill.file)}, save in ${JSON.stringify(skill.evalDir)}`;
 
 async function startAuthoring(ctx: Context, body: Record<string, unknown>, res: Response): Promise<void> {
   if (ctx.spawnSession === null) return fail(res, 503, "sessions cannot be started here");
-  const skill = await resolveSkill(body, ctx.cwds);
+  const skill = await resolveSkill(ctx.root, body, ctx.cwds);
   if (skill === null) return fail(res, 404, SKILL_NOT_FOUND);
   // A folder's skill is drafted in that folder; the user's and a plugin's anywhere, so the home.
   const cwd = skill.source.scope === "project" ? skill.source.dir : homedir();
   try {
-    const spawned = await ctx.spawnSession("claude", cwd, authorTurn(skill.id, skill.file), true, null, { claudePermissionMode: AUTHOR_PERMISSION_MODE });
+    const spawned = await ctx.spawnSession("claude", cwd, authorTurn(skill), true, null, { claudePermissionMode: AUTHOR_PERMISSION_MODE });
     res.json({ chatId: spawned.sessionId, agent: spawned.agent });
   } catch (err) {
     fail(res, 500, err instanceof Error ? err.message : "the session could not be started");
@@ -91,34 +96,34 @@ async function startAuthoring(ctx: Context, body: Record<string, unknown>, res: 
 }
 
 async function overview(ctx: Context, query: Record<string, unknown>, res: Response): Promise<void> {
-  const skill = await resolveSkill(query, ctx.cwds);
+  const skill = await resolveSkill(ctx.root, query, ctx.cwds);
   if (skill === null) return fail(res, 404, SKILL_NOT_FOUND);
-  const read = await readEvalSet(ctx.root, skill.id);
+  const read = await readEvalSet(skill.evalDir, skill.id);
   const set = read.kind === "ok" ? read.set : null;
   res.json({
-    ...{ skill: skill.id, dir: skillEvalDir(ctx.root, skill.id), set, setError: read.kind === "invalid" ? read.error : null },
+    ...{ skill: skill.id, dir: skill.evalDir, set, setError: read.kind === "invalid" ? read.error : null },
     estimate: set === null ? null : { attempts: plannedAttempts(set), maxCostUsd: maxRunCostUsd(set) },
-    ...{ runs: (await listRuns(ctx.root, skill.id)).map(runView), activeRunId: activeRunId(skill.id) },
+    ...{ runs: (await listRuns(skill.evalDir)).map(runView), activeRunId: activeRunId(skill.evalDir) },
   });
 }
 
 async function oneRun(ctx: Context, query: Record<string, unknown>, runId: string, res: Response): Promise<void> {
-  const skill = await resolveSkill(query, ctx.cwds);
+  const skill = await resolveSkill(ctx.root, query, ctx.cwds);
   if (skill === null) return fail(res, 404, SKILL_NOT_FOUND);
-  const run = await readRun(ctx.root, skill.id, runId);
+  const run = await readRun(skill.evalDir, runId);
   if (run === null) return fail(res, 404, "run not found");
   res.json(runView(run));
 }
 
 async function startRun(ctx: Context, body: Record<string, unknown>, res: Response): Promise<void> {
-  const skill = await resolveSkill(body, ctx.cwds);
+  const skill = await resolveSkill(ctx.root, body, ctx.cwds);
   if (skill === null) return fail(res, 404, SKILL_NOT_FOUND);
-  const read = await readEvalSet(ctx.root, skill.id);
+  const read = await readEvalSet(skill.evalDir, skill.id);
   if (read.kind === "absent") return fail(res, 404, "no evaluation is set up for this skill");
   if (read.kind === "invalid") return fail(res, 400, read.error);
   const skillText = await readFile(skill.file, "utf8");
   const skillDir = path.dirname(skill.file);
-  const start = { root: ctx.root, set: read.set, setHash: read.hash, skillDir, skillSlug: skill.slug, skillText, skillHash: textHash(skillText) };
+  const start = { evalDir: skill.evalDir, set: read.set, setHash: read.hash, skillDir, skillSlug: skill.slug, skillText, skillHash: textHash(skillText) };
   const started = await startEvalRun(start, ctx.attemptDeps);
   if (started === null) return fail(res, 409, "another evaluation is running");
   res.status(202).json({ id: started.id });

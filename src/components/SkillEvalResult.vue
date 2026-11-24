@@ -61,7 +61,7 @@ const perCase = computed(() =>
       <li v-if="summary.avoid.attempts > 0">{{ t("skillsView.eval.avoid", { invoked: summary.avoid.invoked, attempts: summary.avoid.attempts }) }}</li>
       <li v-if="summary.fewCases">{{ t("skillsView.eval.fewCases") }}</li>
       <li v-if="skillTextChanged">{{ t("skillsView.eval.skillChanged") }}</li>
-      <li>{{ t("skillsView.eval.spent", { cost: usd(summary.with.costUsd + summary.without.costUsd + summary.gradingCostUsd) }) }}</li>
+      <li>{{ t("skillsView.eval.spent", { cost: usd(summary.with.costUsd + summary.without.costUsd + summary.avoid.costUsd + summary.gradingCostUsd) }) }}</li>
     </ul>
     <details>
       <summary class="cursor-pointer text-secondary">{{ t("skillsView.eval.perCase") }}</summary>

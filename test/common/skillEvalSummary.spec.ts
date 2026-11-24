@@ -72,6 +72,16 @@ describe("summarizeSkillEval", () => {
     expect(summary.verdict).toBe("no-evidence");
   });
 
+  it("calls a gap of exactly one case's worth a difference, though the rates do not subtract exactly", () => {
+    // Five cases, one round: three pass with the skill, two without — 0.6 - 0.4 is 0.19999999999999996.
+    const summary = summarizeSkillEval(
+      five,
+      grid(five, 1, (arm, c) => (arm === "with" ? c < 3 : c < 2)),
+      1,
+    );
+    expect(summary.verdict).toBe("helps");
+  });
+
   it("does not count a pass with the skill that never invoked it", () => {
     const attempts = [attempt("a", "with", 0, true, { skillInvoked: false }), attempt("a", "without", 0, false)];
     const summary = summarizeSkillEval([useCase("a")], attempts, 1);
@@ -109,7 +119,7 @@ describe("summarizeSkillEval", () => {
       attempt("avoid", "with", 2, false, { skillInvoked: false }),
     ];
     const summary = summarizeSkillEval([useCase("a"), avoidCase], attempts, 3);
-    expect(summary.avoid).toEqual({ attempts: 3, invoked: 1, passes: 1 });
+    expect(summary.avoid).toEqual({ attempts: 3, invoked: 1, passes: 1, costUsd: 3 });
     expect(summary.with.attempts).toBe(0);
   });
 

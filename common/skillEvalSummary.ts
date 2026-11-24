@@ -30,7 +30,7 @@ export interface SkillEvalSummary {
   gap: number | null;
   verdict: SkillEvalVerdict;
   fewCases: boolean;
-  avoid: { attempts: number; invoked: number; passes: number };
+  avoid: { attempts: number; invoked: number; passes: number; costUsd: number };
   gradingCostUsd: number;
 }
 
@@ -59,16 +59,24 @@ function roundSpread(without: readonly SkillEvalAttempt[]): number | null {
   return Math.max(...rates) - Math.min(...rates);
 }
 
+// Rates are fractions of whole attempts, so two that should be equal can differ in the last bits
+// (0.6 - 0.4 is 0.19999999999999996): a gap within this of the threshold is AT the threshold.
+const RATE_EPSILON = 1e-9;
+
 function verdictOf(gap: number | null, spread: number | null, minimumGap: number): SkillEvalVerdict {
   if (gap === null || spread === null) return "pending";
-  if (Math.abs(gap) <= spread || Math.abs(gap) < minimumGap) return "no-evidence";
+  const size = Math.abs(gap);
+  if (size <= spread + RATE_EPSILON || size < minimumGap - RATE_EPSILON) return "no-evidence";
   return gap > 0 ? "helps" : "hurts";
 }
 
 const ofArm = (attempts: readonly SkillEvalAttempt[], arm: SkillEvalArm): SkillEvalAttempt[] => attempts.filter((a) => a.arm === arm);
 
 function avoidSummary(avoid: readonly SkillEvalAttempt[]): SkillEvalSummary["avoid"] {
-  return { attempts: avoid.length, invoked: avoid.filter((a) => a.skillInvoked).length, passes: avoid.filter((a) => a.pass && !a.skillInvoked).length };
+  return {
+    ...{ attempts: avoid.length, invoked: avoid.filter((a) => a.skillInvoked).length, passes: avoid.filter((a) => a.pass && !a.skillInvoked).length },
+    costUsd: sum(avoid.map((a) => a.costUsd)),
+  };
 }
 
 export function summarizeSkillEval(cases: readonly SkillEvalCase[], attempts: readonly SkillEvalAttempt[], repeats: number): SkillEvalSummary {

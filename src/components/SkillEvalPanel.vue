@@ -22,7 +22,10 @@ const overview = shallowRef<SkillEvalOverview | null>(null);
 const loadFailed = ref(false);
 const notice = ref<string | null>(null);
 const confirming = ref(false);
+const drafting = ref(false);
 let poll: ReturnType<typeof setInterval> | null = null;
+// Bumped when the skill changes or the panel goes: an answer for an earlier skill is dropped.
+let selection = 0;
 
 const latest = computed<SkillEvalRun | null>(() => overview.value?.runs[0] ?? null);
 const latestSummary = computed<SkillEvalSummary | null>(() =>
@@ -42,16 +45,25 @@ function stopPolling(): void {
 }
 
 async function refresh(): Promise<void> {
+  const asked = selection;
   const read = await loadSkillEval(props.source, props.skill.slug);
+  if (asked !== selection) return;
+  // A failed read while a run is shown keeps what is on screen and tries again on the next tick.
+  if (read === null) {
+    loadFailed.value = overview.value === null;
+    if (overview.value === null) stopPolling();
+    return;
+  }
   overview.value = read;
-  loadFailed.value = read === null;
-  if (read?.activeRunId == null) stopPolling();
+  loadFailed.value = false;
+  if (read.activeRunId === null) stopPolling();
   else poll ??= setInterval(() => void refresh(), POLL_MS);
 }
 
 watch(
   () => [props.source, props.skill.id],
   () => {
+    selection += 1;
     stopPolling();
     overview.value = null;
     notice.value = null;
@@ -60,7 +72,10 @@ watch(
   },
   { immediate: true },
 );
-onUnmounted(stopPolling);
+onUnmounted(() => {
+  selection += 1;
+  stopPolling();
+});
 
 async function measure(): Promise<void> {
   confirming.value = false;
@@ -78,7 +93,9 @@ async function stop(): Promise<void> {
 }
 
 async function draft(): Promise<void> {
-  const chatId = await startSkillEvalAuthoring(props.source, props.skill.slug);
+  if (drafting.value) return;
+  drafting.value = true;
+  const chatId = await startSkillEvalAuthoring(props.source, props.skill.slug).finally(() => (drafting.value = false));
   if (chatId === null) {
     notice.value = t("skillsView.eval.draftFailed");
     return;
@@ -105,7 +122,8 @@ async function draft(): Promise<void> {
         <button
           type="button"
           data-testid="skill-eval-draft"
-          class="cursor-pointer rounded border border-border bg-transparent px-2 py-1 text-[12px] text-fg hover:bg-hover"
+          :disabled="drafting"
+          class="cursor-pointer rounded border border-border bg-transparent px-2 py-1 text-[12px] text-fg hover:bg-hover disabled:cursor-default disabled:opacity-60"
           @click="draft"
         >
           {{ overview.setError ? t("skillsView.eval.fix") : t("skillsView.eval.draft") }}
@@ -158,6 +176,7 @@ async function draft(): Promise<void> {
           <button
             type="button"
             data-testid="skill-eval-draft"
+            :disabled="drafting"
             class="cursor-pointer rounded border border-border bg-transparent px-2 py-1 text-[12px] text-secondary hover:text-fg"
             @click="draft"
           >

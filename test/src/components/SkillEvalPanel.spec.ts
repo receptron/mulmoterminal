@@ -7,13 +7,16 @@ import type { SkillEvalOverview, SkillEvalRun } from "../../../common/skillEval"
 import { skillsViewEn } from "../../../src/i18n/skillsView/en";
 
 let overview: SkillEvalOverview | null = null;
+/** When set, each load takes the next answer from here instead of `overview`. */
+const loads: Promise<SkillEvalOverview | null>[] = [];
 const calls: string[] = [];
 const placed: unknown[] = [];
+let authoring: Promise<string | null> = Promise.resolve("chat-1");
 vi.mock("../../../src/composables/skillEvalApi", () => ({
-  loadSkillEval: () => Promise.resolve(overview),
+  loadSkillEval: () => loads.shift() ?? Promise.resolve(overview),
   startSkillEvalRun: () => (calls.push("start"), Promise.resolve({ kind: "started", id: "r" })),
   stopSkillEvalRun: () => (calls.push("stop"), Promise.resolve(true)),
-  startSkillEvalAuthoring: () => (calls.push("author"), Promise.resolve("chat-1")),
+  startSkillEvalAuthoring: () => (calls.push("author"), authoring),
 }));
 vi.mock("../../../src/composables/useSpawnedChat", () => ({ placeSpawnedChat: (request: unknown) => placed.push(request) }));
 const SkillEvalPanel = (await import("../../../src/components/SkillEvalPanel.vue")).default;
@@ -56,6 +59,9 @@ const mountPanel = async () => {
 beforeEach(() => {
   calls.length = 0;
   placed.length = 0;
+  loads.length = 0;
+  authoring = Promise.resolve("chat-1");
+  vi.useRealTimers();
 });
 
 describe("SkillEvalPanel", () => {
@@ -102,5 +108,44 @@ describe("SkillEvalPanel", () => {
     const wrapper = await mountPanel();
     expect(wrapper.find("[data-testid=skill-eval-set-error]").text()).toContain("cases: too small");
     expect(wrapper.find("[data-testid=skill-eval-draft]").text()).toBe("Fix the tasks");
+  });
+
+  it("drops an answer for a skill no longer selected", async () => {
+    let answerFirst: (value: SkillEvalOverview | null) => void = () => {};
+    loads.push(new Promise((resolve) => (answerFirst = resolve)));
+    overview = { ...base, set, runs: [run(true, false)] };
+    const wrapper = mount(SkillEvalPanel, { props: { source, skill }, global: { plugins: [i18n] } });
+    await wrapper.setProps({ skill: { ...skill, slug: "other", id: "other" } });
+    await flushPromises();
+    answerFirst({ ...base, set: null, estimate: null, runs: [] });
+    await flushPromises();
+    expect(wrapper.find("[data-testid=skill-eval-verdict]").exists()).toBe(true);
+  });
+
+  it("keeps a running run on screen through a failed read, and reads again", async () => {
+    vi.useFakeTimers();
+    overview = { ...base, set, runs: [run(true, false, { status: "running", attempts: [] })], activeRunId: "1795000000000-aaaaaaaa" };
+    const wrapper = await mountPanel();
+    loads.push(Promise.resolve(null));
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(wrapper.find("[data-testid=skill-eval-progress]").exists()).toBe(true);
+    overview = { ...base, set, runs: [run(true, false)] };
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(wrapper.find("[data-testid=skill-eval-verdict]").text()).toBe("It helps");
+    wrapper.unmount();
+  });
+
+  it("opens one drafting cell however often the button is pressed while it opens", async () => {
+    let answer: (id: string | null) => void = () => {};
+    authoring = new Promise((resolve) => (answer = resolve));
+    overview = { ...base, set: null, estimate: null, runs: [] };
+    const wrapper = await mountPanel();
+    const button = wrapper.find("[data-testid=skill-eval-draft]");
+    await button.trigger("click");
+    await button.trigger("click");
+    answer("chat-1");
+    await flushPromises();
+    expect(calls).toEqual(["author"]);
+    expect(placed).toHaveLength(1);
   });
 });

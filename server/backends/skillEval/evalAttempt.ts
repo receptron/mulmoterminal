@@ -111,6 +111,8 @@ export async function runAttempt(plan: AttemptPlan, deps: AttemptDeps): Promise<
   const work = await prepareDir(plan, deps.tmpRoot);
   try {
     const outcome = await runAgent(plan, work, deps);
+    // The grader must judge the work, not read the skill being measured and grade by it.
+    await rm(path.join(work, ".claude", "skills"), { recursive: true, force: true });
     // A run that ended in an error is a failure whatever is on disk: it did not finish the task.
     const graded = outcome.error === null ? await grade(plan, work, outcome.finalText, deps) : { pass: false, output: "", costUsd: 0 };
     return {
