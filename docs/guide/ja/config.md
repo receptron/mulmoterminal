@@ -654,17 +654,18 @@ MulmoTerminal の「**拡張**」の柱がここ。稼働中ターミナルの�
 レビューを進めるセッションが、このリポジトリの PR をどう扱うかを決めます。このキーを書くまでは、自動でレビューは回りません。レビューを進めるセッションは、リポジトリを `owner/repo` で渡して `reviewSettings` という道具でこれを読みます。
 
 ```json
-{ "review": { "reviewer": "codex", "maxRounds": 10, "requiredLgtm": 1 } }
+{ "review": { "reviewer": "codex", "maxRounds": 10, "requiredLgtm": 1, "skill": "mulmoterminal-review" } }
 ```
 
 - **`reviewer`** —— レビューするエージェント。`claude`、`codex`、`antigravity`、`grok`、`copilot`、`cursor` のどれか。既定は `codex`。`muse` は返事を読み取れないので、まだ使えません。
 - **`maxRounds`** —— 人に聞くまでのレビューの往復の上限。1〜50。既定は 10。
 - **`requiredLgtm`** —— PR の今の head を名指しした LGTM がいくつあれば merge してよいか。1〜5。既定は 1。これに加えて、CI がすべて通っていることは常に必要です。
-- 書かなかった項目は既定値になります。`"review": {}` なら 3 つとも既定値です。
+- **`skill`** —— レビュー役が往復ごとに従うスキル。スキルの名前か、`plugin:名前` の形。既定は MulmoTerminal に同梱の `mulmoterminal-review` です。一回の往復で指摘を全部出し、それぞれに重さ、同じ間違いがある他の場所、直す最小の変更を付け、走らせられなかった確認は「確かめていない」と書きます。自分のやり方でレビューさせたいときは、自分のスキルの名前を書きます。どのスキルでも、返事を判定の行で始めて PR に投稿することは依頼文で求めます。往復はそれで数えるためです。
+- 書かなかった項目は既定値になります。`"review": {}` なら 4 つとも既定値です。
 - どれか一つでも間違っていると（このアプリが動かさないエージェント、範囲外の数、綴りを間違えた項目名）、既定のレビュー役に置き換えるのではなく**キーごと**無視され、設定 → Directory settings の *ignored* に出ます。正しく読めたものは **Review** として表示されます。
 - ファイルにだけ書けます。そのリポジトリの作業を始める clone のものが読まれ、worktree にも引き継がれます。
 
-キーがあれば、セッションは二つの道具で往復を回します。宣言されたエージェントでレビュー役のセッションを起動し（`spawnBackgroundChat`）、リポジトリと PR の番号とそのセッションを渡して `requestReview` を呼びます。MulmoTerminal がレビュー役に依頼を送り、返事を待ち、往復の結果（判定、残りの往復の数、merge の条件を満たしたか）を呼んだセッションに打ち込みます。`maxRounds` を超える往復、修正を求められた head の再レビュー、宣言と違うエージェントのレビュー役は断ります。merge はしません。merge するのはセッションです。PR を merge したら `endReview` でレビュー役を閉じます。レビュー役には、返事と PR に投稿するコメントを `REVIEW VERDICT: LGTM (head <sha>)` か `REVIEW VERDICT: CHANGES REQUESTED (head <sha>)` で始めるよう頼みます。GitHub ボードはこの行を `CODEX VERDICT:` の行と同じように数えます。往復の記録はメモリ上にだけあり、再起動すると数え直しになります。
+キーがあれば、セッションは二つの道具で往復を回します。宣言されたエージェントでレビュー役のセッションを起動し（`spawnBackgroundChat`）、リポジトリと PR の番号とそのセッションを渡して `requestReview` を呼びます。MulmoTerminal がレビュー役に、従う `skill` を名指しした依頼を送り、返事を待ち、往復の結果（判定、残りの往復の数、merge の条件を満たしたか）を呼んだセッションに打ち込みます。`maxRounds` を超える往復、修正を求められた head の再レビュー、宣言と違うエージェントのレビュー役は断ります。merge はしません。merge するのはセッションです。PR を merge したら `endReview` でレビュー役を閉じます。レビュー役には、返事と PR に投稿するコメントを `REVIEW VERDICT: LGTM (head <sha>)` か `REVIEW VERDICT: CHANGES REQUESTED (head <sha>)` で始めるよう頼みます。GitHub ボードはこの行を `CODEX VERDICT:` の行と同じように数えます。往復の記録はメモリ上にだけあり、再起動すると数え直しになります。
 
 ### このディレクトリの返信まとめ（`appendSystemPrompt`）
 

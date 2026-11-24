@@ -119,12 +119,14 @@ export interface PromptFacts extends ReviewTarget {
   head: string;
   round: number;
   maxRounds: number;
+  skill: string;
 }
 
 /** What the reviewer is sent. It arrives as one line, so it is written as sentences, not a list. */
-export function reviewPrompt({ repo, pr, head, round, maxRounds }: PromptFacts): string {
+export function reviewPrompt({ repo, pr, head, round, maxRounds, skill }: PromptFacts): string {
   const parts = [
     `Review pull request #${pr} of ${repo} at head ${head} (round ${round} of at most ${maxRounds}).`,
+    `Follow the ${skill} skill for how to review; where it and this message differ on the verdict line or the PR comment, this message wins.`,
     `Read it with gh pr view ${pr} -R ${repo} and gh pr diff ${pr} -R ${repo}.`,
     "Do not modify, check out or commit in any existing checkout; to run code, make your own worktree or clone in a temporary directory.",
     "Report every finding you have in this one round, each with a severity (P1 must fix, P2 should fix, P3 optional) and file:line, and the smallest change that resolves it.",

@@ -32,7 +32,7 @@ describe("the reviewSettings route", () => {
     );
     expect(reviewOf).toHaveBeenCalledWith("/work/repo");
     expect(answer.jsonData).toEqual({ repo: "owner/repo", dir: "/work/repo", ...REVIEW_DEFAULTS, reviewer: "claude" });
-    expect(answer.message).toMatch(/reviewer claude/);
+    expect(answer.message).toMatch(/reviewer claude following the mulmoterminal-review skill/);
   });
 
   it.each([[undefined], [{}], [{ repo: 42 }], [{ repo: "not a repo" }], [{ repo: "" }]])("refuses a request without a repository: %j", async (body) => {
