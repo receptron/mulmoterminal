@@ -99,6 +99,8 @@ export const skillEvalRunSchema = z.object({
   /** What the improvement changed, in the words of the model that wrote it. */
   note: z.string().default(""),
   improveCostUsd: z.number().default(0),
+  /** The hash of the skill on disk an improvement was written from: adopting it over any other text would lose an edit. */
+  baseSkillHash: z.string().default(""),
 });
 export type SkillEvalRun = z.infer<typeof skillEvalRunSchema>;
 

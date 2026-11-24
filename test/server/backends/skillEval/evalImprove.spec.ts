@@ -4,7 +4,7 @@
 // fails, which run an improvement starts from, and adopting one over the skill with the old text kept.
 import { describe, it, expect, afterEach } from "vitest";
 import express from "express";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ClaudeRunRequest, ClaudeRunResult } from "../../../../server/backends/skillEval/runClaude";
@@ -169,6 +169,32 @@ describe("improving a skill", () => {
     expect(readFileSync(path.join(retasked.skillDir, "SKILL.md"), "utf8")).toBe(ORIGINAL);
   });
 
+  it("refuses to adopt over an edit made to the skill after the improvement was written", async () => {
+    const env = setUp();
+    await measure(env, "/api/skill-evals/runs");
+    const improved = await measure(env, "/api/skill-evals/improve");
+    writeFileSync(path.join(env.skillDir, "SKILL.md"), "edited by hand");
+    expect((await env.call("/api/skill-evals/adopt", jsonPost({ ...env.fields, runId: improved?.id }))).status).toBe(409);
+    expect(readFileSync(path.join(env.skillDir, "SKILL.md"), "utf8")).toBe("edited by hand");
+  });
+
+  it.skipIf(process.platform === "win32")("writes nothing through a linked SKILL.md, and keeps no link the writer made", async () => {
+    const env = setUp((cwd) => {
+      symlinkSync("/etc/hosts", path.join(cwd, "skill", "hosts"));
+      return improvesIt(cwd);
+    });
+    const target = path.join(scratch(), "real.md");
+    writeFileSync(target, ORIGINAL);
+    unlinkSync(path.join(env.skillDir, "SKILL.md"));
+    symlinkSync(target, path.join(env.skillDir, "SKILL.md"));
+    await measure(env, "/api/skill-evals/runs");
+    const improved = await measure(env, "/api/skill-evals/improve");
+    expect(improved?.status).toBe("done");
+    expect(readFileSync(target, "utf8")).toBe(ORIGINAL);
+    expect(lstatSync(path.join(candidateDir(env.evalDir, improved?.id ?? ""), "SKILL.md")).isSymbolicLink()).toBe(false);
+    expect(existsSync(path.join(candidateDir(env.evalDir, improved?.id ?? ""), "hosts"))).toBe(false);
+  });
+
   it("says whether the skill may be written over", async () => {
     const env = setUp();
     const overview = await env.call(`/api/skill-evals?slug=weekly&dir=${encodeURIComponent(env.fields.dir)}`);
@@ -185,7 +211,7 @@ describe("what the writer is given", () => {
   const run = (attempts: SkillEvalAttempt[], extra: Partial<SkillEvalRun> = {}): SkillEvalRun => ({
     ...{ id: "1795000000000-aaaaaaaa", skill: "weekly", status: "done", startedAt: 1, finishedAt: 2, model: "haiku", repeats: 1 },
     ...{ skillText: ORIGINAL, skillHash: "h", setHash: "s", cases: SET.cases as SkillEvalRun["cases"], plannedAttempts: 2 },
-    ...{ attempts, candidateId: null, note: "", improveCostUsd: 0 },
+    ...{ attempts, candidateId: null, note: "", improveCostUsd: 0, baseSkillHash: "" },
     ...extra,
   });
 

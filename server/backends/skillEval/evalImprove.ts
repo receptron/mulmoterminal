@@ -7,7 +7,7 @@
 // fixed paths and templates override the task, an unread skill usually has a description that does not
 // summarise its body, and a skill rewritten without a test can do worse than none — which is why the
 // result is measured before anyone may adopt it.
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { SKILL_EVAL_IMPROVE_BUDGET_USD, type SkillEvalAttempt, type SkillEvalCase, type SkillEvalRun, type SkillEvalSet } from "../../../common/skillEval.js";
 import { ATTEMPT_TIMEOUT_MS, type AttemptDeps } from "./evalAttempt.js";
@@ -80,7 +80,8 @@ async function keepCandidate(work: string, dir: string, before: string, note: st
   const skillText = await readFile(path.join(work, SKILL_FOLDER, "SKILL.md"), "utf8").catch(() => null);
   if (skillText === null) return { kind: "failed", error: "the improvement left no SKILL.md", costUsd };
   if (skillText === before) return { kind: "failed", error: "the improvement changed nothing", costUsd };
-  await cp(path.join(work, SKILL_FOLDER), dir, { recursive: true });
+  // A link the writer made could point anywhere; the candidate keeps regular files only.
+  await cp(path.join(work, SKILL_FOLDER), dir, { recursive: true, filter: async (source) => !(await lstat(source)).isSymbolicLink() });
   return { kind: "ok", candidate: { dir, skillText, note, costUsd } };
 }
 

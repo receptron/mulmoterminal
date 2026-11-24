@@ -28,6 +28,7 @@ export async function adoptCandidate(evalDir: string, run: SkillEvalRun, request
   if (textHash(candidateText) !== run.skillHash) return { kind: "refused", error: "the improvement changed since it was measured" };
   const current = await readSkillDoc(request);
   if (current === null) return { kind: "refused", error: "the skill could not be read" };
+  if (textHash(current) !== run.baseSkillHash) return { kind: "changed" };
   const backup = await keepVersion(evalDir, current, now_ms);
   const written = await writeSkillDoc(request, candidateText, memoryVersion(current));
   if (written.kind === "conflict") return { kind: "changed" };

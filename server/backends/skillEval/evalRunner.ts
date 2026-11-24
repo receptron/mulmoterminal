@@ -55,6 +55,7 @@ function initialRun(start: EvalStart, id: string, now_ms: number): SkillEvalRun 
     // An improvement's text is not known until it has been written.
     ...{ skillText: improving ? "" : start.skillText, skillHash: improving ? "" : start.skillHash, setHash: start.setHash, cases: start.set.cases },
     ...{ plannedAttempts: plannedAttempts(start.set), attempts: [], candidateId: improving ? id : null, note: "", improveCostUsd: 0 },
+    baseSkillHash: improving ? start.skillHash : "",
   };
 }
 
@@ -148,7 +149,8 @@ export async function startEvalRun(start: EvalStart, deps: AttemptDeps): Promise
     throw err;
   });
   try {
-    await cp(start.skillDir, skillCopy, { recursive: true });
+    // Dereferenced, so nothing that edits the copy can write through a link into the skill itself.
+    await cp(start.skillDir, skillCopy, { recursive: true, dereference: true });
     await writeRun(start.evalDir, run);
   } catch (err) {
     await rm(skillCopy, { recursive: true, force: true });

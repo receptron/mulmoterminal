@@ -49,7 +49,17 @@ function run(passWith: boolean, passWithout: boolean, extra: Partial<SkillEvalRu
   });
   return {
     ...{ id: "1795000000000-aaaaaaaa", skill: "weekly", status: "done", startedAt: 1, finishedAt: 2, model: "haiku", repeats: 1 },
-    ...{ skillText: "", skillHash: "h", setHash: "s", cases: [evalCase], plannedAttempts: 2, candidateId: null, note: "", improveCostUsd: 0 },
+    ...{
+      skillText: "",
+      skillHash: "h",
+      setHash: "s",
+      cases: [evalCase],
+      plannedAttempts: 2,
+      candidateId: null,
+      note: "",
+      improveCostUsd: 0,
+      baseSkillHash: "",
+    },
     attempts: [attempt("with", passWith), attempt("without", passWithout)],
     ...extra,
   };
