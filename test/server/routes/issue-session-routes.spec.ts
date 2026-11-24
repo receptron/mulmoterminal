@@ -23,6 +23,8 @@ let limit: number;
 let clone: string | null;
 let work: (spawnSeeded: (cwd: string, seed: string) => Promise<SpawnedSession>) => Promise<StartIssueWorkResult & Partial<SpawnedSession>>;
 let nextId: number;
+const STARTED_AT_MS = 1_790_000_000_000;
+let clock_ms = STARTED_AT_MS;
 const spawn = vi.fn<IssueSessionRouteDeps["spawn"]>();
 const recordSpawn = vi.fn<IssueSessionRouteDeps["recordSpawn"]>();
 const markVisible = vi.fn<IssueSessionRouteDeps["markVisible"]>();
@@ -37,6 +39,7 @@ function route(): Handler {
     isGitHub: (repo) => !repo.startsWith("gitlab.com/"),
     limit: () => limit,
     cloneOf: async () => clone,
+    now: () => clock_ms,
     startWork,
     spawn,
     recordSpawn,
@@ -79,6 +82,7 @@ beforeEach(() => {
   });
   recordSpawn.mockReset();
   markVisible.mockReset();
+  clock_ms = STARTED_AT_MS;
   startWork.mockReset();
   startWork.mockImplementation(async (_repo, _issue, _dir, spawnSeeded) => work(spawnSeeded));
 });
@@ -96,6 +100,17 @@ describe("startIssueSession", () => {
     expect(recordSpawn).toHaveBeenCalledWith("s-1", PARENT);
     expect(markVisible).toHaveBeenCalledWith("s-1", "codex");
     expect(sessions.get("s-1")).toMatchObject({ parent: PARENT, repo: "owner/repo", issue: 7, branch: "issue/7-thing", worktree: "/wt/7" });
+    expect(sessions.get("s-1")?.startedAtMs).toBe(STARTED_AT_MS);
+  });
+
+  // #3440: finding or cutting the worktree takes time, and an earlier attempt's PR may close meanwhile.
+  it("records the start as the moment the agent is spawned, not the moment the request arrived", async () => {
+    startWork.mockImplementationOnce(async (_repo, _issue, _dir, spawnSeeded) => {
+      clock_ms += 5000;
+      return work(spawnSeeded);
+    });
+    await call(route(), req(BODY));
+    expect(sessions.get("s-1")?.startedAtMs).toBe(STARTED_AT_MS + 5000);
   });
 
   it("refuses a call without a caller, or with a bad request, before touching anything", async () => {

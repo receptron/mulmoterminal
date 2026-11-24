@@ -21,6 +21,7 @@ const entry = (over: Partial<IssueSession> = {}): IssueSession => ({
   agent: "claude",
   worktree: "/wt/7",
   branch: "issue/7-thing",
+  startedAtMs: 0,
   finished: "merged",
   blockedTold: false,
   prUnreadable: 0,

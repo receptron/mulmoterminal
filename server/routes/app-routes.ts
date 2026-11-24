@@ -313,6 +313,7 @@ function mountIssueSessions(
     spawn: implementerSpawn(deps.spawnIssueSession),
     recordSpawn: (child, parent) => spawnedSessions.recordSpawn(child, parent),
     markVisible: (session, agent) => markUnplacedSession(session, agent),
+    now: () => Date.now(),
   });
   startIssueSessionWatch({
     sessions: issueSessions,

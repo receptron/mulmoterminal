@@ -13,7 +13,8 @@ export const ISSUE_WATCH_INTERVAL_MS = 30_000;
 export interface IssueSessionWatchDeps {
   sessions: Map<string, IssueSession>;
   isRunning: (session: string) => boolean;
-  prOf: (repo: string, branch: string) => Promise<BranchPr | null | typeof PR_UNREADABLE>;
+  /** The newest PR from the branch that was not already over at `sinceMs`. */
+  prOf: (repo: string, branch: string, sinceMs: number) => Promise<BranchPr | null | typeof PR_UNREADABLE>;
   /** A question dialog is open, or the agent reported it is waiting on a permission prompt. */
   blocked: (session: string) => Promise<boolean>;
   /** Type the line into `parent` once nothing holds its input, unless `ended` says it is gone. */
@@ -26,7 +27,7 @@ export interface IssueSessionWatchDeps {
 async function observe(deps: IssueSessionWatchDeps, entry: IssueSession): Promise<ImplementerObservation> {
   const running = deps.isRunning(entry.session);
   const [pr, blocked] = await Promise.all([
-    entry.branch === null ? Promise.resolve(null) : deps.prOf(entry.repo, entry.branch),
+    entry.branch === null ? Promise.resolve(null) : deps.prOf(entry.repo, entry.branch, entry.startedAtMs),
     running ? deps.blocked(entry.session) : Promise.resolve(false),
   ]);
   return { running, pr, blocked };
