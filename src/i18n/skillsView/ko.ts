@@ -50,6 +50,7 @@ export const skillsViewKo = {
       fewCases: "과제가 적어 작은 차이는 보이지 않습니다. 차이가 없다고 나와도 효과가 없다는 뜻은 아닙니다.",
       skillChanged: "이전 결과와 SKILL.md 내용이 다릅니다.",
       spent: "이 평가에 든 비용: {cost}(채점 포함)",
+      interruptedBy: "도중에 실패해 멈췄습니다: {reason}",
       perCase: "과제별 합격 수",
       avoidTag: "(쓰면 안 됨)",
       improve: {

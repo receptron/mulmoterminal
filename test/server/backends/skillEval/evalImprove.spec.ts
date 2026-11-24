@@ -96,7 +96,10 @@ function setUp(writer: Writer = improvesIt) {
 async function measure(env: ReturnType<typeof setUp>, url: string): Promise<SkillEvalRun | null> {
   const started = await env.call(url, jsonPost(env.fields));
   expect(started.status).toBe(202);
-  return finishedSkillEvalRun(env.evalDir, String(started.body.id));
+  const run = await finishedSkillEvalRun(env.evalDir, String(started.body.id));
+  // A measurement of the skill itself always finishes here; when it does not, the reason is the failure to read.
+  if (url === "/api/skill-evals/runs") expect(run?.status, run?.interruptedBy).toBe("done");
+  return run;
 }
 
 describe("improving a skill", () => {
@@ -221,7 +224,7 @@ describe("what the writer is given", () => {
   const run = (attempts: SkillEvalAttempt[], extra: Partial<SkillEvalRun> = {}): SkillEvalRun => ({
     ...{ id: "1795000000000-aaaaaaaa", skill: "weekly", status: "done", startedAt: 1, finishedAt: 2, model: "haiku", repeats: 1 },
     ...{ skillText: ORIGINAL, skillHash: "h", setHash: "s", cases: SET.cases as SkillEvalRun["cases"], plannedAttempts: 2 },
-    ...{ attempts, candidateId: null, note: "", improveCostUsd: 0, baseSkillHash: "", baseRunId: null, ladder: [] },
+    ...{ attempts, candidateId: null, note: "", improveCostUsd: 0, baseSkillHash: "", baseRunId: null, ladder: [], interruptedBy: "" },
     ...extra,
   });
 

@@ -52,6 +52,9 @@ const usd = (value: number | null): string => (value === null ? "—" : `$${valu
       </tbody>
     </table>
     <ul class="m-0 list-disc pl-4 text-secondary">
+      <li v-if="run.interruptedBy" data-testid="skill-eval-interrupted-by" class="text-err-text">
+        {{ t("skillsView.eval.interruptedBy", { reason: run.interruptedBy }) }}
+      </li>
       <li v-if="summary.shaky">{{ t("skillsView.eval.ladder.shaky") }}</li>
       <li>{{ t("skillsView.eval.ladder.hint") }}</li>
       <li>{{ t("skillsView.eval.spent", { cost: usd(spentUsd) }) }}</li>

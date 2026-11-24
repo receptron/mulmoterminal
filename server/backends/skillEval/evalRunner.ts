@@ -74,12 +74,13 @@ function initialRun(start: EvalStart, id: string, now_ms: number): SkillEvalRun 
       improveCostUsd: 0,
     },
     ...{ baseSkillHash: improving ? start.skillHash : "", baseRunId: start.improveFrom?.id ?? null, ladder: start.ladder ? start.set.ladder : [] },
+    interruptedBy: "",
   };
 }
 
 /** The folder the attempts copy the skill from: the snapshot, or for an improvement run the improvement,
  *  written first from the snapshot. Null when it could not be written, which ends the run. */
-async function measuredSkill(run: SkillEvalRun, start: EvalStart, skillCopy: string, save: () => Promise<void>, deps: AttemptDeps): Promise<string | null> {
+async function measuredSkill(run: SkillEvalRun, start: EvalStart, skillCopy: string, save: Save, deps: AttemptDeps): Promise<string | null> {
   if (start.improveFrom == null) return skillCopy;
   const written = await writeCandidate(start.set, skillCopy, start.improveFrom, candidateDir(start.evalDir, run.id), deps);
   if (written.kind === "failed") {
@@ -101,19 +102,37 @@ function plansOf(start: EvalStart, skillCopy: string, order: PlannedAttempt[], m
   });
 }
 
+/** Writes the run record as it is now; answers whether it landed. */
+type Save = () => Promise<boolean>;
+
 /** Saves one after another: two attempts finishing together must not land their records out of order.
- *  A save that failed does not stop the next one from trying. */
-function serialSaver(evalDir: string, run: SkillEvalRun): () => Promise<void> {
-  let last: Promise<void> = Promise.resolve();
+ *  Answers whether this save landed, and never fails: each save writes the whole record, so one that did
+ *  not land is made good by the next — on Windows a reader holding the file makes the rename fail (#3458). */
+function serialSaver(evalDir: string, run: SkillEvalRun): Save {
+  let last: Promise<boolean> = Promise.resolve(true);
   return () => {
     const snapshot: SkillEvalRun = { ...run, attempts: [...run.attempts] };
-    const next = last.catch(() => {}).then(() => writeRun(evalDir, snapshot));
-    last = next;
-    return next;
+    last = last
+      .then(() => writeRun(evalDir, snapshot))
+      .then(
+        () => true,
+        () => false,
+      );
+    return last;
   };
 }
 
-async function drain(queue: AttemptPlan[], run: SkillEvalRun, self: ActiveRun, save: () => Promise<void>, deps: AttemptDeps): Promise<void> {
+/** Waits between tries of the last save, the one no later save makes good: unsaved, the record says running. */
+export const FINAL_SAVE_RETRY_DELAYS_MS = [100, 250, 500, 1000, 2000];
+
+async function saveLast(save: Save): Promise<void> {
+  for (const delay_ms of [...FINAL_SAVE_RETRY_DELAYS_MS, null]) {
+    if (await save()) return;
+    if (delay_ms !== null) await new Promise((resolve) => setTimeout(resolve, delay_ms));
+  }
+}
+
+async function drain(queue: AttemptPlan[], run: SkillEvalRun, self: ActiveRun, save: Save, deps: AttemptDeps): Promise<void> {
   try {
     for (let plan = queue.shift(); plan !== undefined && !self.stopRequested; plan = queue.shift()) {
       run.attempts.push(await runAttempt(plan, deps));
@@ -130,10 +149,12 @@ function finalStatus(failed: boolean, stopRequested: boolean): SkillEvalRun["sta
   return stopRequested ? "stopped" : "done";
 }
 
+const failureText = (reason: unknown): string => (reason instanceof Error ? reason.message : String(reason));
+
 interface Measuring {
   run: SkillEvalRun;
   self: ActiveRun;
-  save: () => Promise<void>;
+  save: Save;
   deps: AttemptDeps;
 }
 
@@ -143,7 +164,10 @@ async function measurePlans(plans: AttemptPlan[], measuring: Measuring): Promise
   const { run, self, save, deps } = measuring;
   const queue = [...plans];
   const workers = await Promise.allSettled(Array.from({ length: EVAL_CONCURRENCY }, () => drain(queue, run, self, save, deps)));
-  return workers.some((worker) => worker.status === "rejected");
+  const failure = workers.find((worker) => worker.status === "rejected");
+  if (failure === undefined) return false;
+  run.interruptedBy = failureText(failure.reason);
+  return true;
 }
 
 /** One model after another, cheapest first, until one passes everything; true when a worker failed. */
@@ -172,11 +196,12 @@ async function execute(run: SkillEvalRun, self: ActiveRun, start: EvalStart, ski
     }
     const failed = await measureSkill(start, skillDir, { run, self, save, deps });
     run.status = finalStatus(failed, self.stopRequested);
-  } catch {
+  } catch (err) {
     run.status = "interrupted";
+    run.interruptedBy = failureText(err);
   } finally {
     run.finishedAt = deps.now();
-    await save().catch(() => {});
+    await saveLast(save);
     await rm(skillCopy, { recursive: true, force: true });
     active = null;
   }

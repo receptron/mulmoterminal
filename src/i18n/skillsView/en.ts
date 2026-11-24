@@ -50,6 +50,7 @@ export const skillsViewEn = {
       fewCases: 'With this few tasks a small difference cannot be seen. "No evidence" does not mean it has no effect.',
       skillChanged: "The SKILL.md differs from the one measured last time.",
       spent: "This evaluation cost {cost}, grading included.",
+      interruptedBy: "It stopped partway because something failed: {reason}",
       perCase: "Passes per task",
       avoidTag: "(should not use)",
       improve: {

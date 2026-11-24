@@ -14,6 +14,7 @@ import { listRuns, readEvalSet, readRun, skillEvalFolder, textHash } from "../..
 import { skillEvalSetSchema, type SkillEvalSet } from "../../../../common/skillEval";
 import { mountSkillEvalRoutes } from "../../../../server/routes/skill-eval-routes";
 import { jsonPost, routeCall } from "../../../helpers/routeCall";
+import { finishedSkillEvalRun } from "../../../helpers/finishedSkillEvalRun";
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
@@ -188,7 +189,7 @@ describe("a skill evaluation run", () => {
     release();
     await first?.done;
     const run = await readRun(evalDir, first?.id ?? "");
-    expect(run?.status).toBe("interrupted");
+    expect(run).toMatchObject({ status: "interrupted", interruptedBy: "claude went away" });
     expect(calls).toBe(2);
   });
 
@@ -322,7 +323,7 @@ describe("/api/skill-evals", () => {
     const started = await call("/api/skill-evals/runs", jsonPost({ slug: "weekly", dir: projectDir }));
     expect(started.status).toBe(202);
     const id = String(started.body.id);
-    for (let i = 0; i < 50 && (await readRun(evalDir, id))?.status === "running"; i++) await new Promise((r) => setTimeout(r, 20));
+    await finishedSkillEvalRun(evalDir, id);
     const run = (await call(`/api/skill-evals/runs/${id}?slug=weekly&dir=${encodeURIComponent(projectDir)}`)).body;
     expect(run).toMatchObject({ status: "done", plannedAttempts: 10 });
     expect(run.attempts).toHaveLength(10);
