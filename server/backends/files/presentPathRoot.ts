@@ -15,16 +15,14 @@
 // and then resolve those two against the workspace again. Rewriting to an ABSOLUTE path
 // here means everything downstream is session-independent, and a stored tool result
 // keeps pointing at the file it actually opened.
-import path from "node:path";
 import type { Express, Request, Response, NextFunction } from "express";
-import { classifyFilePath } from "@mulmoclaude/core/artifacts";
 import { MARKDOWN_EXTENSIONS, HTML_EXTENSIONS } from "@mulmoclaude/core/files";
 import { isPresentableHtmlPath } from "@mulmoclaude/html-plugin";
 import { SHAPE_EXTENSIONS } from "@gui-chat-plugin/shapescript";
 import { isRecord } from "../../../common/isRecord.js";
-import { JINGLESCRIPT_SCORE_EXTENSIONS } from "./openPath.js";
 import { SESSION_ID_RE } from "../../config/env.js";
 import { isSamePath } from "../../infra/fs/path-within.js";
+import { sessionRelativePath } from "./sessionRelativePath.js";
 
 /** Request header carrying the chat session a tool call belongs to. Set by the MCP
  *  broker (server/mcp/broker.ts), which is the only caller that knows it. */
@@ -68,18 +66,10 @@ export const PRESENT_PATH_EXTENSIONS = new Map<string, readonly string[]>([
   ["exportShapeScriptStl", SHAPE_EXTENSIONS],
   // manageShapeScript (publish / update by `path`) — fourth.
   ["manageShapeScript", SHAPE_EXTENSIONS],
-  // manageJingleScript's checkScore / renderScore read a score file by `path`; a relative one
-  // names the file in the project the agent is working in, as presentDocument's does.
-  ["manageJingleScript", JINGLESCRIPT_SCORE_EXTENSIONS],
+  // Not manageJingleScript: its file ops resolve against the session themselves
+  // (jinglescriptFiles.ts), because the plugin compares the `path` it gets with the
+  // relative one it told the model, and an absolutized value fails that comparison.
 ]);
-
-// `artifacts/…` is the workspace's own output area: the plugins route those values to
-// `files.artifacts` (a root fixed at <workspace>/artifacts), and it is where saveNewDoc
-// and executeHtml put a document they just created. Re-rooting them at the session cwd
-// would mean a tool could not re-open the document it had just saved.
-function isWorkspaceArtifactPath(value: string): boolean {
-  return value.split(/[/\\]/)[0] === "artifacts";
-}
 
 /**
  * `args` with a relative `path` resolved against `cwd`, or `args` untouched.
@@ -91,15 +81,14 @@ function isWorkspaceArtifactPath(value: string): boolean {
  *   - a value core's own gate would refuse (wrong extension, `.`/`..`/empty segment,
  *     NUL) — rewriting it here would either launder a bad path into a valid absolute
  *     one or duplicate a rule that belongs to core. Let the existing validation fail it.
- *   - an already-absolute path, and `artifacts/…` (see above).
+ *   - an already-absolute path, and `artifacts/…` (sessionRelativePath.ts).
  */
 export function absolutizePresentPath(args: unknown, cwd: string, extensions: readonly string[]): unknown {
   if (!isRecord(args) || typeof args.kind === "string") return args;
   const value = args.path;
   if (typeof value !== "string" || value === "") return args;
-  if (classifyFilePath(value, extensions) !== "relative") return args;
-  if (isWorkspaceArtifactPath(value)) return args;
-  return { ...args, path: path.resolve(cwd, value) };
+  const resolved = sessionRelativePath(value, cwd, extensions);
+  return resolved === value ? args : { ...args, path: resolved };
 }
 
 /** Why a page under a dot-prefixed directory cannot be presented, for the agent that
