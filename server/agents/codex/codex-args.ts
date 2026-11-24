@@ -35,8 +35,8 @@ export interface CodexArgsInput {
   guiMcpServers: readonly GuiMcpServer[];
   // Register the PermissionRequest hook that reports an approval dialog (see codex-hook.ts).
   permissionHook: boolean;
-  // Let the sandbox reach the network, for a session whose job needs it (a reviewer reading and
-  // commenting on its PR with gh). Absent: whatever the user's own codex config says.
+  // Let the sandbox reach the network, for a session whose job needs it (a reviewer or an implementer
+  // talking to GitHub with gh). Absent: whatever the user's own codex config says.
   networkAccess?: boolean;
 }
 
