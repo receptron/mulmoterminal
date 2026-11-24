@@ -25,6 +25,8 @@ describe("worktreeGitRoots", () => {
       ...["objects", "refs", "logs", "packed-refs", "packed-refs.lock"].map((name) => path.join(common, name)),
     ]);
     expect(await worktreeGitRoots(clone)).toEqual([]);
+    await run(clone, "config", "extensions.worktreeConfig", "true");
+    expect(await worktreeGitRoots(path.join(root, "wt"))).toEqual([]);
   });
 
   it("answers nothing outside a repository", async () => {

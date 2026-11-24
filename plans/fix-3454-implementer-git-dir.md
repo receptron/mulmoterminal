@@ -30,8 +30,14 @@ codex implementer started by `startIssueSession` stopped on an approval prompt a
 ## Deliberately not writable
 
 The clone's `config` and `hooks`. Writing either (`core.hooksPath`, a hook) runs code outside the
-sandbox the next time anyone uses git in that clone.
+sandbox the next time anyone uses git in that clone. For the same reason nothing is named in a clone
+with `extensions.worktreeConfig` on: git then reads `config.worktree` from the worktree's own git dir.
 
 ## Out of scope
+
+- A cold resume of the implementer (a restart, then the cell reconnects) respawns codex without the
+  roots, as it already does without `networkAccess`. Keeping per-spawn sandbox grants across a resume
+  needs a persisted record, like the GUI group restriction (#3033). That is a change of its own, and
+  it covers the reviewer and the network as well.
 
 The reviewer (it neither commits nor pushes), and a codex cell the user opens themselves.
