@@ -23,10 +23,16 @@ cells; with it, each cell resumes its session from its conversation, the same as
 - **Hold.** While the offer is open the grid sends nothing, not even on leaving: its first change
   would overwrite the copy it is offering. Restore or Dismiss releases it.
 - **Left out of the offer:** cells already here, and sessions a terminal is showing now (another
-  tab's cells — the GET answers the attached ids), which would otherwise be fought over.
+  tab's cells — the GET answers the attached ids), which would otherwise be fought over. Restore asks
+  again at the moment it runs, since the bar can sit on screen while another tab opens one of them.
+- **A copy that failed to send stays pending**, so leaving the page sends it; no timed retry.
+- **The legacy key is dropped only after the new key was stored**, as before the move.
 
 ## Accepted limits
 
+- Only cells in the copy are offered. A running session the copy does not hold (the copy was last
+  written by another grid, or the session started after the last write) is not discovered here; it
+  is still listed under Settings, sessions that survived a restart.
 - Last writer wins between two open grids: the copy is whichever grid changed last.
 - A cell whose session has no conversation on disk resumes as a new session, as a normal reload does.
 - On a full disk the server cannot write either; the copy then holds the layout from before.
