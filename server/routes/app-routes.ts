@@ -140,6 +140,7 @@ import { mountTranslationRoutes } from "../backends/media/translation.js";
 import { mountHtmlDispatchRoute, mountHtmlFileRoute, mountHtmlPreviewRoute } from "../backends/plugins/html.js";
 import { mountShapeScriptDispatchRoute } from "../backends/plugins/shapescript.js";
 import { mountPresentPathRoot } from "../backends/files/presentPathRoot.js";
+import { mountJingleScriptCaller } from "../backends/files/jinglescriptFiles.js";
 import { cwdForSession } from "../session/session-cwd.js";
 import { mountMulmoScriptDispatchRoute, mountMulmoScriptMediaRoute } from "../backends/plugins/mulmoscript.js";
 import { CLAUDE_CWD, MULMOTERMINAL_HOME, PORT, SESSION_ID_RE } from "../config/env.js";
@@ -312,6 +313,7 @@ function mountIssueSessions(
     spawn: implementerSpawn(deps.spawnIssueSession),
     recordSpawn: (child, parent) => spawnedSessions.recordSpawn(child, parent),
     markVisible: (session, agent) => markUnplacedSession(session, agent),
+    now: () => Date.now(),
   });
   startIssueSessionWatch({
     sessions: issueSessions,
@@ -341,6 +343,9 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
   // next to one of the dispatch routes because more than one of them can take that path,
   // and all of them must see the same, already-absolute value.
   mountPresentPathRoot(app, { cwdForSession, workspace: CLAUDE_CWD });
+  // manageJingleScript resolves against the session in its file ops instead
+  // (backends/files/jinglescriptFiles.ts); this tells them which session called.
+  mountJingleScriptCaller(app, { cwdForSession });
 
   // The GUI-plugin tool routes this server answers itself: spawnBackgroundChat,
   // manageAccounting, manageCollection (routes/plugin-routes.ts). ALL of them must precede

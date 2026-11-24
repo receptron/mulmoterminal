@@ -145,7 +145,10 @@ describe("reportPtyExit — what the exit frame tells the browser", () => {
 
     reportPtyExit("s-1", exiting, { ...EXIT, exitCode: clientExitCode ?? EXIT.exitCode }, vi.fn());
 
-    expect(frames).toEqual([{ type: "exit", exitCode: 0, lifetimeMs: 60_000, reattached: false, ended, exitUnrecorded: false }]);
+    // #3446: only the close route's frame says the close was asked for, so only it closes a worktree cell.
+    expect(frames).toEqual([
+      { type: "exit", exitCode: 0, lifetimeMs: 60_000, reattached: false, ended, exitUnrecorded: false, closedOnRequest: !!closeRequested },
+    ]);
   });
 
   // A reattached pty's lifetime is not the agent's; the browser needs to know which it got.
@@ -156,7 +159,7 @@ describe("reportPtyExit — what the exit frame tells the browser", () => {
 
     reportPtyExit("s-1", exiting, EXIT, vi.fn());
 
-    expect(frames).toEqual([{ type: "exit", exitCode: 0, lifetimeMs: 60_000, reattached: true, ended: true, exitUnrecorded: false }]);
+    expect(frames).toEqual([{ type: "exit", exitCode: 0, lifetimeMs: 60_000, reattached: true, ended: true, exitUnrecorded: false, closedOnRequest: false }]);
   });
 
   it("sends the frame before the reap tears the session down", () => {
@@ -194,7 +197,7 @@ describe("reportPtyExit — a stale exit after the id was reused", () => {
 
     reportPtyExit("s-1", old, EXIT, vi.fn());
 
-    expect(frames).toEqual([{ type: "exit", exitCode: 0, lifetimeMs: 60_000, reattached: false, ended: false, exitUnrecorded: false }]);
+    expect(frames).toEqual([{ type: "exit", exitCode: 0, lifetimeMs: 60_000, reattached: false, ended: false, exitUnrecorded: false, closedOnRequest: false }]);
   });
 });
 

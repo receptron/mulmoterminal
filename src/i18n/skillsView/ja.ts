@@ -14,6 +14,13 @@ export const skillsViewJa = {
     noMatch: "この検索に合うスキルはありません。",
     pick: "スキルを選ぶと SKILL.md を表示します。",
     docFailed: "この SKILL.md を読み込めませんでした。",
+    usage: {
+      count: "{count} 回",
+      none: "記録なし",
+      detail: "Claude の会話 {count} 件で使われました。最後は {date} です。",
+      detailNoDate: "Claude の会話 {count} 件で使われました。",
+      detailNone: "Claude の会話の記録には、このスキルが使われたものがありません。",
+    },
     eval: {
       title: "効いているかを測る",
       intro: "このスキルがあると結果が良くなるのかを、小さな課題をスキルありとなしで解かせて比べます。まず課題を作ります。",

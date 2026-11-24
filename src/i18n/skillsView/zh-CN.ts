@@ -14,6 +14,13 @@ export const skillsViewZhCN = {
     noMatch: "没有与此搜索匹配的技能。",
     pick: "选择一个技能以查看其 SKILL.md。",
     docFailed: "无法读取此 SKILL.md。",
+    usage: {
+      count: "{count} 次",
+      none: "无记录",
+      detail: "在 {count} 个 Claude 对话中使用过，最近一次是 {date}。",
+      detailNoDate: "在 {count} 个 Claude 对话中使用过。",
+      detailNone: "Claude 的对话记录中没有使用过此技能。",
+    },
     eval: {
       title: "测一测是否有效",
       intro: "让小任务分别在有技能和没有技能时完成，比较结果是否变好。先创建任务。",

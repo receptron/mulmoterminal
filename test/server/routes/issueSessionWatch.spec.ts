@@ -19,6 +19,7 @@ const ENTRY: IssueSession = {
   agent: "claude",
   worktree: "/wt/7",
   branch: "issue/7",
+  startedAtMs: 0,
   finished: null,
   blockedTold: false,
   prUnreadable: 0,

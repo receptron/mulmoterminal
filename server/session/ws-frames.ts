@@ -43,6 +43,8 @@ export interface PtyExitReport {
   ended: boolean;
   /** The agent's exit should have been recorded and was not (a full disk), so its code says nothing. */
   exitUnrecorded: boolean;
+  /** The server ended it and asked for its cell to close, which a worktree cell does too. */
+  closedOnRequest: boolean;
 }
 
 export function sendExitAndClose(socket: FrameSocket | null | undefined, report: PtyExitReport): void {

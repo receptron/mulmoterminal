@@ -83,11 +83,18 @@ export const exitCodeOf = (msg: { exitCode?: unknown }): number | null => (typeo
 /** What an `exit` frame says about the SESSION rather than the pty: whether the server reaped it,
  *  and how long the pty lived (null when the frame names none). Missing reads as "not ended", so a
  *  frame without the field never closes a cell. */
-export const sessionExitOf = (msg: { ended?: unknown; lifetimeMs?: unknown; reattached?: unknown; exitUnrecorded?: unknown }): SessionExit => ({
+export const sessionExitOf = (msg: {
+  ended?: unknown;
+  lifetimeMs?: unknown;
+  reattached?: unknown;
+  exitUnrecorded?: unknown;
+  closedOnRequest?: unknown;
+}): SessionExit => ({
   sessionEnded: msg.ended === true,
   lifetimeMs: typeof msg.lifetimeMs === "number" && Number.isFinite(msg.lifetimeMs) ? msg.lifetimeMs : null,
   reattached: msg.reattached === true,
   exitUnrecorded: msg.exitUnrecorded === true,
+  closedOnRequest: msg.closedOnRequest === true,
 });
 
 /** `messageEffect` for a frame as it arrived. */
@@ -99,6 +106,7 @@ export interface SessionExit {
   lifetimeMs: number | null;
   reattached: boolean;
   exitUnrecorded: boolean;
+  closedOnRequest: boolean;
 }
 
 /** A `paneMode` frame's copy-mode flag (#2207), or null for any frame that does not carry one. Null

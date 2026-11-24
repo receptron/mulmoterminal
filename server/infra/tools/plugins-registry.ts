@@ -30,7 +30,8 @@ import { generateImage } from "../../backends/media/image-gen.js";
 import { markdownHostApp } from "../../backends/plugins/markdown.js";
 import { artifactsFileOps } from "../../backends/plugins/artifacts.js";
 import { chartSources } from "../../backends/plugins/chartSources.js";
-import { htmlByPath, jingleScriptByPath, shapeScriptByPath } from "../../backends/files/openPath.js";
+import { htmlByPath, shapeScriptByPath } from "../../backends/files/openPath.js";
+import { jingleScriptFileOps } from "../../backends/files/jinglescriptFiles.js";
 import { createPluginRuntime } from "./pluginRuntime.js";
 import { resolvePluginTools } from "./tool-precedence.js";
 import { HOST_TOOL_DEFINITIONS } from "./host-tools.js";
@@ -72,8 +73,9 @@ const APP_CONTEXT = { generateImage, ...markdownHostApp };
 const BY_PATH_BY_TOOL: Readonly<Record<string, FileOps>> = {
   presentHtml: htmlByPath,
   presentShapeScript: shapeScriptByPath,
-  // @gui-chat-plugin/jinglescript 0.6.0: checkScore / renderScore read a `.json` score by `path`.
-  manageJingleScript: jingleScriptByPath,
+  // A `.json` score named by `path`, and (1.5) the render / compose files the plugin creates,
+  // both under the calling session's directory.
+  manageJingleScript: jingleScriptFileOps,
 };
 
 function filesContextFor(toolName: string): { artifacts: FileOps; byPath?: FileOps } {

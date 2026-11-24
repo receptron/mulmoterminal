@@ -9,6 +9,7 @@ const ended = (over: Partial<EndedCellExit> = {}): EndedCellExit => ({
   worktreeCell: false,
   exitCode: 0,
   exitUnrecorded: false,
+  closedOnRequest: false,
   ...over,
 });
 
@@ -69,5 +70,17 @@ describe("shouldCloseEndedCell", () => {
     expect(shouldCloseEndedCell(ended({ exitUnrecorded: true }))).toBe(false);
     expect(shouldCloseEndedCell(ended({ exitUnrecorded: true, reattached: true }))).toBe(false);
     expect(shouldCloseEndedCell(ended({ exitUnrecorded: true, exitCode: null }))).toBe(false);
+  });
+
+  // #3446: the server ended it and asked for the cell to go — a startIssueSession implementer whose
+  // PR ended, in its worktree — so there is nobody to ask about the worktree.
+  it("closes a cell the server asked to close, even a worktree cell", () => {
+    expect(shouldCloseEndedCell(ended({ closedOnRequest: true, worktreeCell: true }))).toBe(true);
+    expect(shouldCloseEndedCell(ended({ closedOnRequest: true, worktreeCell: true, lifetimeMs: 0 }))).toBe(true);
+    expect(shouldCloseEndedCell(ended({ closedOnRequest: true, exitUnrecorded: true }))).toBe(true);
+  });
+
+  it("does not close on a close request for a session that did not end", () => {
+    expect(shouldCloseEndedCell(ended({ closedOnRequest: true, sessionEnded: false }))).toBe(false);
   });
 });

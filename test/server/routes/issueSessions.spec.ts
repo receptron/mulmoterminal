@@ -19,6 +19,7 @@ const entry = (session: string, issue = 7, repo = "owner/repo"): IssueSession =>
   agent: "claude",
   worktree: `/wt/${issue}`,
   branch: `issue/${issue}`,
+  startedAtMs: 0,
   finished: null,
   blockedTold: false,
   prUnreadable: 0,
@@ -95,6 +96,7 @@ describe("what the implementer and the caller are told", () => {
     expect(seed).toContain('"mulmoterminal-issue-to-merge"');
     expect(seed).toContain("owner/repo#7");
     expect(seed).toContain("parent-1");
+    expect(seed).toMatch(/Work on the branch it is on and open the PR from that branch/);
     expect(seed.startsWith("/")).toBe(false);
   });
 
