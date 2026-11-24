@@ -9,7 +9,19 @@ import { MULMOTERMINAL_HOME } from "../config/env.js";
 import { claudeAdapter } from "../agents/claude/claude.js";
 import { rememberedSessionCwds } from "../session/registry.js";
 import { skillDocFile, type SkillDocSource } from "../backends/skills/skillCatalog.js";
-import { isBaselineFor, maxImproveCostUsd, maxRunCostUsd, plannedAttempts, SKILL_EVAL_AUTHOR_SKILL, type SkillEvalRun } from "../../common/skillEval.js";
+import {
+  isBaselineFor,
+  ladderAttempts,
+  maxImproveCostUsd,
+  maxLadderCostUsd,
+  maxRunCostUsd,
+  plannedAttempts,
+  SKILL_EVAL_AUTHOR_SKILL,
+  type SkillEvalOverview,
+  type SkillEvalRun,
+  type SkillEvalRunMode,
+  type SkillEvalSet,
+} from "../../common/skillEval.js";
 import { isEditableSkill } from "../backends/skills/skillEdit.js";
 import { adoptCandidate } from "../backends/skillEval/evalAdopt.js";
 import type { SpawnIssueSession } from "../session/spawn/issue-session-spawn.js";
@@ -105,6 +117,11 @@ async function baselineOf(skill: ResolvedSkill, setHash: string): Promise<SkillE
   return newestRunWhere(skill.evalDir, (run) => isBaselineFor(run, setHash, skillHash));
 }
 
+const estimateOf = (set: SkillEvalSet): NonNullable<SkillEvalOverview["estimate"]> => ({
+  ...{ attempts: plannedAttempts(set), maxCostUsd: maxRunCostUsd(set), maxImproveCostUsd: maxImproveCostUsd(set) },
+  ...{ ladderAttempts: ladderAttempts(set), maxLadderCostUsd: maxLadderCostUsd(set) },
+});
+
 async function overview(ctx: Context, query: Record<string, unknown>, res: Response): Promise<void> {
   const skill = await resolveSkill(ctx.root, query, ctx.cwds);
   if (skill === null) return fail(res, 404, SKILL_NOT_FOUND);
@@ -112,7 +129,7 @@ async function overview(ctx: Context, query: Record<string, unknown>, res: Respo
   const set = read.kind === "ok" ? read.set : null;
   res.json({
     ...{ skill: skill.id, dir: skill.evalDir, set, setHash: read.kind === "ok" ? read.hash : null, setError: read.kind === "invalid" ? read.error : null },
-    estimate: set === null ? null : { attempts: plannedAttempts(set), maxCostUsd: maxRunCostUsd(set), maxImproveCostUsd: maxImproveCostUsd(set) },
+    estimate: set === null ? null : estimateOf(set),
     editable: isEditableSkill(skill.source, skill.slug),
     baseline: read.kind === "ok" ? await baselineOf(skill, read.hash) : null,
     ...{ runs: (await listRuns(skill.evalDir)).map(runView), activeRunId: activeRunId(skill.evalDir) },
@@ -127,13 +144,14 @@ async function oneRun(ctx: Context, query: Record<string, unknown>, runId: strin
   res.json(runView(run));
 }
 
-/** Starts measuring the skill as it is, or with `improve`, an improvement written from its last measurement. */
-async function startRun(ctx: Context, body: Record<string, unknown>, res: Response, improve: boolean): Promise<void> {
+async function startRun(ctx: Context, body: Record<string, unknown>, res: Response, mode: SkillEvalRunMode): Promise<void> {
+  const improve = mode === "improve";
   const skill = await resolveSkill(ctx.root, body, ctx.cwds);
   if (skill === null) return fail(res, 404, SKILL_NOT_FOUND);
   const read = await readEvalSet(skill.evalDir, skill.id);
   if (read.kind === "absent") return fail(res, 404, "no evaluation is set up for this skill");
   if (read.kind === "invalid") return fail(res, 400, read.error);
+  if (mode === "ladder" && ladderAttempts(read.set) === 0) return fail(res, 400, "there is no task the skill should help with");
   const improveFrom = improve ? await baselineOf(skill, read.hash) : null;
   if (improve && improveFrom === null) return fail(res, 400, "measure the skill as it is now, with these tasks, first");
   const skillText = await readFile(skill.file, "utf8");
@@ -147,6 +165,7 @@ async function startRun(ctx: Context, body: Record<string, unknown>, res: Respon
     skillText,
     skillHash: textHash(skillText),
     improveFrom,
+    ladder: mode === "ladder",
   };
   const started = await startEvalRun(start, ctx.attemptDeps);
   if (started === null) return fail(res, 409, "another evaluation is running");
@@ -175,8 +194,9 @@ export function mountSkillEvalRoutes(app: Express, deps: SkillEvalRouteDeps = {}
   };
   app.get("/api/skill-evals", (req, res) => overview(ctx, req.query, res));
   app.get("/api/skill-evals/runs/:id", (req, res) => oneRun(ctx, req.query, req.params.id, res));
-  app.post("/api/skill-evals/runs", (req, res) => startRun(ctx, requestBody(req.body), res, false));
-  app.post("/api/skill-evals/improve", (req, res) => startRun(ctx, requestBody(req.body), res, true));
+  app.post("/api/skill-evals/runs", (req, res) => startRun(ctx, requestBody(req.body), res, "measure"));
+  app.post("/api/skill-evals/improve", (req, res) => startRun(ctx, requestBody(req.body), res, "improve"));
+  app.post("/api/skill-evals/ladder", (req, res) => startRun(ctx, requestBody(req.body), res, "ladder"));
   app.post("/api/skill-evals/adopt", (req, res) => adopt(ctx, requestBody(req.body), res));
   app.post("/api/skill-evals/author", (req, res) => startAuthoring(ctx, requestBody(req.body), res));
   app.post("/api/skill-evals/runs/:id/stop", (req, res) => {

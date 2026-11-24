@@ -1,7 +1,7 @@
 // The Skills viewer's side of a skill evaluation (#3438): what is set up for a skill and its runs,
 // starting and stopping a run, and starting the cell that drafts the test tasks with the user.
 import type { SkillSource } from "../../common/skillCatalog";
-import { skillEvalOverviewSchema, type SkillEvalOverview } from "../../common/skillEval";
+import { skillEvalOverviewSchema, type SkillEvalOverview, type SkillEvalRunMode } from "../../common/skillEval";
 import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
 
@@ -28,9 +28,15 @@ export async function loadSkillEval(source: SkillSource, slug: string): Promise<
 export type SkillEvalStartResult = { kind: "started"; id: string } | { kind: "busy" } | { kind: "failed"; error: string };
 
 /** Measures the skill as it is, or with `improve`, an improvement written from its last measurement (#3448). */
-export async function startSkillEvalRun(source: SkillSource, slug: string, improve = false): Promise<SkillEvalStartResult> {
+const START_PATH: Record<SkillEvalRunMode, string> = {
+  measure: "/api/skill-evals/runs",
+  improve: "/api/skill-evals/improve",
+  ladder: "/api/skill-evals/ladder",
+};
+
+export async function startSkillEvalRun(source: SkillSource, slug: string, mode: SkillEvalRunMode = "measure"): Promise<SkillEvalStartResult> {
   try {
-    const res = await fetchWithTimeout(improve ? "/api/skill-evals/improve" : "/api/skill-evals/runs", post(skillFields(source, slug)));
+    const res = await fetchWithTimeout(START_PATH[mode], post(skillFields(source, slug)));
     if (res.status === 409) return { kind: "busy" };
     const answer = await jsonBody(res);
     if (res.ok && typeof answer.id === "string") return { kind: "started", id: answer.id };

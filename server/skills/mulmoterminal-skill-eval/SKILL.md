@@ -106,8 +106,10 @@ Write `cases.json` in the folder the request gave:
 - `skill` must be exactly the skill's name (`plugin:slug` for a plugin's).
 - `id`: lowercase letters, digits and `-`, unique.
 - Optional: `model` (default `haiku`), `judgeModel` (the model that checks rubric items, default
-  `haiku`), `repeats` (default 3, at most 5), `maxBudgetUsdPerAttempt` (default 0.5),
-  `allowedTools` (for example `["Bash(python3 *)"]`). At most 20 tasks.
+  `haiku`), `improveModel` (the model that writes an improvement, default `sonnet`), `ladder` (the
+  models **Find the cheapest model** tries, cheapest first, default `["haiku", "sonnet", "opus"]`),
+  `repeats` (default 3, at most 5), `maxBudgetUsdPerAttempt` (default 0.5), `allowedTools` (for
+  example `["Bash(python3 *)"]`). At most 20 tasks.
 - A task's starting files go in `files/<id>/` in that folder — they are copied
   into the empty folder before the task runs. Write them yourself; keep them small and made up, never
   copied from the user's real files.

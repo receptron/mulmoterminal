@@ -71,6 +71,22 @@ export const skillsViewEn = {
         readOnly: "This skill cannot be changed here. Read the improvement and edit the skill where it lives.",
         tag: "improvement",
       },
+      ladder: {
+        start: "Find the cheapest model",
+        confirm:
+          "The tasks the skill should help with are run with the skill on each model, cheapest first, stopping at the first that passes them all: at most {attempts} runs, spending at most {max} (usually far less). Start?",
+        running: "Trying models, cheapest first… {done} / at most {total}",
+        title: "Which model is enough",
+        enough: "{model} is enough: it passed as often as the best model did, and it is the cheapest that did.",
+        none: "No model passed with the skill. If the skill was not read, fix its description; if the work is analysis, a stronger model may help more than a skill.",
+        notMeasured: "Not measured: a cheaper model already passed everything.",
+        shaky: "Only one model passed at all, so this choice rests on one row. Add tasks and search again before relying on it.",
+        hint: "A guide, not a setting: the model a skill runs on is chosen per conversation. Search again when the skill, the tasks or the available models change.",
+        model: "Model",
+        tag: "model search",
+        enoughShort: "enough: {model}",
+        noneShort: "no model was enough",
+      },
       verdict: { helps: "It helps", hurts: "It makes things worse", "no-evidence": "No evidence of a difference", pending: "Not enough results yet" },
       verdictWhy: {
         helps: "The pass rate with the skill beat the one without by more than the runs without it varied ({spread}).",
