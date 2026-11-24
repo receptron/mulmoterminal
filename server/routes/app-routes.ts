@@ -20,6 +20,8 @@ import { sessionToken } from "../session/credentials/token-sessions.js";
 import { noteMovedFrom, takeMovedFrom } from "../session/credentials/rotation-notice.js";
 import { rotationLoginLabel } from "../../common/tokenRotation.js";
 import { survivingSessions } from "../session/reaping/surviving-sessions.js";
+import { mountGridLayoutRoutes } from "./grid-layout-routes.js";
+import { GRID_LAYOUT_FILE } from "../config/grid-layout.js";
 import { armedReapIntervalHours } from "../session/reaping/reap-schedule.js";
 import {
   getCwdPresets,
@@ -160,6 +162,10 @@ import { mountSpaFallback } from "../infra/http/spa-fallback.js";
 import { mountRateLimitRoutes, type RateLimitRouteDeps } from "../agents/rate-limit/rate-limit-routes.js";
 import { mountLoadRoute } from "./load-routes.js";
 import { workspaceForRoute } from "./routeParams.js";
+import { reviewWorkspaces } from "./review-workspaces.js";
+import { git } from "../git/worktrees.js";
+import { mulmoterminalHome } from "../infra/fs/mulmoterminal-home.js";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
 
 export interface AppRouteDeps extends SessionActivityDeps {
   /** Which agents could be started, as checked once at server start (#2229). */
@@ -257,6 +263,19 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     prState: fetchPrReviewState,
     agentOf: (session) => ptys.get(session)?.agent,
     close: (session) => endTmuxSession(tmuxRouteDeps(deps), session, true),
+    workspaces: reviewWorkspaces({
+      cloneOf: cloneOfRepo,
+      root: () => path.join(mulmoterminalHome(), "review-worktrees"),
+      worktree: {
+        git: (args, cwd) => git(args, cwd),
+        exists: existsSync,
+        isSymlink: (dir) => lstatSync(dir, { throwIfNoEntry: false })?.isSymbolicLink() === true,
+        realpath: (dir) => realpathSync(dir),
+      },
+      spawn: deps.spawnIssueSession,
+      recordSpawn: (child, parent) => spawnedSessions.recordSpawn(child, parent),
+      markVisible: (session, agent) => markUnplacedSession(session, agent),
+    }),
   });
   const issueSessions = new Map<string, IssueSession>();
   const isRunning = (session: string): boolean => ptys.has(session);
@@ -467,6 +486,7 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
   mountSessionFacingRoutes(app, deps);
   mountSwitchToken(app, deps);
   mountProcessesPageRoutes(app, deps);
+  mountGridLayoutRoutes(app, { file: GRID_LAYOUT_FILE, isAllowedOrigin: deps.isAllowedOrigin, attachedSessionIds });
 }
 
 // The session-facing half: hooks, tool history, and everything the browser asks about a
@@ -638,6 +658,10 @@ function mountSessionFacingRoutes(app: Express, deps: AppRouteDeps): void {
   // both directions, so they can't drift apart.
 
   mountTmuxRoutes(app, tmuxRouteDeps(deps));
+}
+
+function attachedSessionIds(): string[] {
+  return [...ptys].filter(([, entry]) => entry.ws).map(([id]) => id);
 }
 
 /** The tmux routes' production wiring, exported so a spec can hold it to what the routes assume. */
