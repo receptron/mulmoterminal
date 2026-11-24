@@ -25,6 +25,11 @@ export function agentArgs(model: string, budgetUsd: number, allowedTools: readon
   ];
 }
 
+/** The writer of an improvement (#3448): it edits the copy in its folder and may run nothing. */
+export function improveArgs(model: string, budgetUsd: number): string[] {
+  return agentArgs(model, budgetUsd, []);
+}
+
 /** With the skill on a "use" case, the request names it: unnamed, a skill is read about half the time. */
 export function agentPrompt(evalCase: SkillEvalCase, arm: SkillEvalArm, skillSlug: string): string {
   if (arm === "with" && evalCase.kind === "use") return `Use the "${skillSlug}" skill for this task.\n\n${evalCase.prompt}`;

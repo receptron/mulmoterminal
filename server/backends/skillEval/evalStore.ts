@@ -76,15 +76,28 @@ export async function readRun(evalDir: string, runId: string): Promise<SkillEval
   return RUN_ID_RE.test(runId) ? readRunFile(path.join(runsDir(evalDir), `${runId}.json`)) : null;
 }
 
-/** The newest runs first. A file that does not parse is passed over. */
-export async function listRuns(evalDir: string): Promise<SkillEvalRun[]> {
+async function runIdsNewestFirst(evalDir: string): Promise<string[]> {
   const names = await readdir(runsDir(evalDir)).catch((): string[] => []);
   const ids = names
     .filter((name) => name.endsWith(".json"))
     .map((name) => name.slice(0, -".json".length))
     .filter((id) => RUN_ID_RE.test(id));
   // A run id starts with its start time, zero-padded, so the newest sorts last.
-  const newest = ids.toSorted((a, b) => b.localeCompare(a)).slice(0, LISTED_RUNS_MAX);
+  return ids.toSorted((a, b) => b.localeCompare(a));
+}
+
+/** The newest run `accept` takes, looking past the listed ones; read one at a time, since it is usually recent. */
+export async function newestRunWhere(evalDir: string, accept: (run: SkillEvalRun) => boolean): Promise<SkillEvalRun | null> {
+  for (const id of await runIdsNewestFirst(evalDir)) {
+    const run = await readRun(evalDir, id);
+    if (run !== null && accept(run)) return run;
+  }
+  return null;
+}
+
+/** The newest runs first. A file that does not parse is passed over. */
+export async function listRuns(evalDir: string): Promise<SkillEvalRun[]> {
+  const newest = (await runIdsNewestFirst(evalDir)).slice(0, LISTED_RUNS_MAX);
   const runs = await Promise.all(newest.map((id) => readRun(evalDir, id)));
   return runs.filter((run): run is SkillEvalRun => run !== null);
 }

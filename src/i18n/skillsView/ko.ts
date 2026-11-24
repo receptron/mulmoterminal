@@ -52,6 +52,25 @@ export const skillsViewKo = {
       spent: "이 평가에 든 비용: {cost}(채점 포함)",
       perCase: "과제별 합격 수",
       avoidTag: "(쓰면 안 됨)",
+      improve: {
+        start: "개선안을 만들어 측정",
+        confirm:
+          "AI가 마지막 결과를 바탕으로 SKILL.md 개선안을 쓰고, 같은 과제로 {attempts}회 측정합니다. 비용 상한은 {max}입니다(실제로는 보통 훨씬 적습니다). 지금의 SKILL.md는 바꾸지 않습니다. 시작할까요?",
+        writing: "개선안을 쓰는 중…",
+        running: "개선안을 측정하는 중… {done} / {total}",
+        title: "개선안",
+        failed: "개선안을 만들 수 없었습니다: {error}",
+        compare: "스킬 있음의 합격률: 지금의 스킬 {before} → 개선안 {after}",
+        overfit:
+          "개선안은 같은 과제를 보고 만들고 같은 과제로 측정했습니다. 과제에 맞췄을 뿐일 수도 있으니, 채택한 뒤 새 과제를 더해 다시 측정하면 확실합니다.",
+        show: "개선안의 SKILL.md 보기",
+        adopt: "채택",
+        adopted: "채택했습니다. 이전 SKILL.md는 {backup}에 남아 있습니다.",
+        changed: "측정한 뒤 SKILL.md가 바뀌어 있어 덮어쓰지 않았습니다.",
+        adoptFailed: "채택할 수 없었습니다. {error}",
+        readOnly: "이 스킬은 여기서 바꿀 수 없습니다. 내용을 보고 원래 위치에서 고쳐 주세요.",
+        tag: "개선안",
+      },
       verdict: { helps: "효과가 있습니다", hurts: "역효과입니다", "no-evidence": "차이가 있다는 증거가 없습니다", pending: "아직 판정할 수 없습니다" },
       verdictWhy: {
         helps: "스킬 있음의 합격률이 스킬 없음보다, 없음끼리의 회차별 흔들림({spread})보다 크게 높았습니다.",

@@ -27,9 +27,10 @@ export async function loadSkillEval(source: SkillSource, slug: string): Promise<
 
 export type SkillEvalStartResult = { kind: "started"; id: string } | { kind: "busy" } | { kind: "failed"; error: string };
 
-export async function startSkillEvalRun(source: SkillSource, slug: string): Promise<SkillEvalStartResult> {
+/** Measures the skill as it is, or with `improve`, an improvement written from its last measurement (#3448). */
+export async function startSkillEvalRun(source: SkillSource, slug: string, improve = false): Promise<SkillEvalStartResult> {
   try {
-    const res = await fetchWithTimeout("/api/skill-evals/runs", post(skillFields(source, slug)));
+    const res = await fetchWithTimeout(improve ? "/api/skill-evals/improve" : "/api/skill-evals/runs", post(skillFields(source, slug)));
     if (res.status === 409) return { kind: "busy" };
     const answer = await jsonBody(res);
     if (res.ok && typeof answer.id === "string") return { kind: "started", id: answer.id };
@@ -55,5 +56,20 @@ export async function startSkillEvalAuthoring(source: SkillSource, slug: string)
     return res.ok && typeof answer.chatId === "string" ? answer.chatId : null;
   } catch {
     return null;
+  }
+}
+
+export type SkillEvalAdoptResult = { kind: "adopted"; backup: string } | { kind: "changed" } | { kind: "failed"; error: string };
+
+/** Writes a measured improvement over the skill's SKILL.md, keeping the text it replaces (#3448). */
+export async function adoptSkillEvalCandidate(source: SkillSource, slug: string, runId: string): Promise<SkillEvalAdoptResult> {
+  try {
+    const res = await fetchWithTimeout("/api/skill-evals/adopt", post({ ...skillFields(source, slug), runId }));
+    if (res.status === 409) return { kind: "changed" };
+    const answer = await jsonBody(res);
+    if (res.ok && typeof answer.backup === "string") return { kind: "adopted", backup: answer.backup };
+    return { kind: "failed", error: typeof answer.error === "string" ? answer.error : "" };
+  } catch {
+    return { kind: "failed", error: "" };
   }
 }
