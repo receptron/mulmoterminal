@@ -72,12 +72,17 @@ describe("closeImplementer", () => {
     expect([...loops.keys()]).toEqual(["owner/repo#10"]);
   });
 
-  it("leaves the worktree when the cell would not close", async () => {
+  it("leaves the worktree, and keeps the implementer to close again, when the cell would not close", async () => {
     stillOpen.add(IMPLEMENTER);
     const result = await closeImplementer(deps(), entry());
     expect(removeWorktree).not.toHaveBeenCalled();
     expect(result.worktree).toBeNull();
     expect(result.implementerClosed).toBe(false);
+    expect(sessions.has(IMPLEMENTER)).toBe(true);
+    stillOpen.delete(IMPLEMENTER);
+    const again = sessions.get(IMPLEMENTER);
+    if (again === undefined) throw new Error("expected it kept");
+    expect((await closeImplementer(deps(), again)).worktree).toEqual({ removed: true });
   });
 
   it("reports a reviewer that would not close, or threw, and still closes the implementer", async () => {

@@ -74,7 +74,9 @@ function worktreeText(entry: IssueSession, outcome: WorktreeOutcome | null): str
 /** What was closed and what was kept, after the implementer line. */
 export function closeSummary(entry: IssueSession, result: CloseResult): string {
   const lines = [
-    result.implementerClosed ? `Closed implementer session ${entry.session}.` : `Could not close implementer session ${entry.session}: close its cell by hand.`,
+    result.implementerClosed
+      ? `Closed implementer session ${entry.session}.`
+      : `Could not close implementer session ${entry.session}: call closeIssueSession again, or close its cell by hand.`,
     ...reviewerText(result),
     worktreeText(entry, result.worktree),
   ];

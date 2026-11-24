@@ -42,13 +42,15 @@ async function worktreeAfterClose(deps: IssueSessionCloseDeps, worktree: string)
   }
 }
 
-/** Forgotten first, before any await, so a second close of the same implementer finds nothing. The
- *  worktree goes only once the cell is gone: its shell stands in it. */
+/** Forgotten first, before any await, so a second close of the same implementer finds nothing, and
+ *  remembered again when its cell would not close, so the starter can try again. The worktree goes
+ *  only once the cell is gone: its shell stands in it. */
 export async function closeImplementer(deps: IssueSessionCloseDeps, entry: IssueSession): Promise<CloseResult> {
   deps.sessions.delete(entry.session);
   if (entry.finished === null) entry.finished = "ended";
   const reviewers = closeReviewers(deps, entry.session);
   const implementerClosed = closeOne(deps, entry.session);
+  if (!implementerClosed) deps.sessions.set(entry.session, entry);
   const worktree = implementerClosed ? await worktreeAfterClose(deps, entry.worktree) : null;
   return { reviewersClosed: reviewers.closed, reviewersLeft: reviewers.left, implementerClosed, worktree };
 }

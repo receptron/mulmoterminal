@@ -101,7 +101,7 @@ describe("closeSummary", () => {
 
   it("asks for the cell to be closed by hand, and leaves the worktree, when the implementer did not close", () => {
     const text = closeSummary(entry(), { ...closed, implementerClosed: false, worktree: null });
-    expect(text).toContain(`Could not close implementer session ${IMPLEMENTER}: close its cell by hand.`);
+    expect(text).toContain(`Could not close implementer session ${IMPLEMENTER}: call closeIssueSession again, or close its cell by hand.`);
     expect(text).toContain("Left its worktree /wt/7, since its cell is still open.");
   });
 
