@@ -17,7 +17,7 @@ branch and merged it, which the watch never saw.
 
 ## Fix
 
-- `IssueSession.startedAtMs`, taken when the start begins (`now` injected). The watch passes it to
+- `IssueSession.startedAtMs`, taken as the agent is spawned, after the worktree was found or cut (`now` injected) — an earlier attempt's PR that closes during that wait is still an earlier attempt's. The watch passes it to
   `prOf`; `parseBranchPr(stdout, sinceMs)` skips a CLOSED or MERGED row whose end time
   (`mergedAt`, else `closedAt`) is before it. An OPEN row always counts (a reopened PR); a row whose
   end time is missing or unparsable counts, as before.
