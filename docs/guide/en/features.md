@@ -33,6 +33,7 @@ MulmoTerminal — a browser terminal for parallel coding agents — organized by
 | Seven kinds of notification sound | Besides finished and input-waiting: a Run cell succeeding or failing, a session exiting, a PR going red, and a hidden background worker that ended without finishing. **Only the first two are on by default**; the rest are opt-in ([config](config.html#sounds)) |
 | Worktree isolation | Git worktrees so many agents can run on the same repo without colliding (→ [Worktrees](worktree.html)) |
 | Session persistence (tmux) | If tmux is available, each session runs inside tmux and **reconnects** across reloads and server restarts |
+| Layout copy | Which cells the grid shows is kept in the browser, and a copy goes to `~/.mulmoterminal/grid-layout.json`. A browser that comes up without its own (a full disk, a cleared profile, the app opened at another address) shows a bar at the bottom — **Restore** opens those cells again, resuming each session from its conversation; **Dismiss** starts from the empty grid. Cells another tab is showing are left out |
 | Phone companion (RemoteHost) | **Web Push to your phone** on finished / input-waiting turns, plus **watch, reply, and start a new terminal** from the phone — with your own one-tap chips (→ [From your phone](phone.html)) |
 
 ## 2. See — what each agent is doing and where

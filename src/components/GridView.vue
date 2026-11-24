@@ -3,6 +3,7 @@ import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } 
 import TerminalGrid from "./TerminalGrid.vue";
 import AppSettingsModal from "./AppSettingsModal.vue";
 import LaunchPanel from "./LaunchPanel.vue";
+import { loadGridState, saveGridState } from "../composables/gridLayoutMirror";
 import { cellForAgent, cellForPanelResume, cellForPanelStart, type PanelResume, type PanelStart } from "./launchCell";
 import AppToolbar from "./AppToolbar.vue";
 import GuideLinks from "./GuideLinks.vue";
@@ -12,7 +13,6 @@ import { rosterRow, type RosterLookups, type RowChrome } from "./rosterRow";
 import { markUnreadTarget } from "./markUnreadKey";
 import type { BundledSkillName } from "../../common/bundledSkills";
 import {
-  initialState,
   setSession,
   setCwd,
   setCellAgent,
@@ -39,8 +39,6 @@ import {
   countByStatus,
   zoomedUid,
   runningCount,
-  STATE_KEY,
-  LEGACY_KEY,
   type GridState,
   type Cell,
   type SortMode,
@@ -103,16 +101,8 @@ import { isFilesPaneAction } from "./filesPaneActions";
 // own specs, and overlayOrigin reads the same singleton for the same reason.
 const onTerminalsRoute = () => router.currentRoute.value.name === "terminals";
 
-const init = initialState(localStorage.getItem(STATE_KEY), localStorage.getItem(LEGACY_KEY));
-const state = ref<GridState>(init.state);
-const persist = () => localStorage.setItem(STATE_KEY, JSON.stringify(state.value));
-// Write the migrated state before dropping the legacy key, so a reload between
-// migration and the first change can't lose the sessions.
-if (init.migrated) {
-  persist();
-  localStorage.removeItem(LEGACY_KEY);
-}
-watch(state, persist, { deep: true });
+const state = ref<GridState>(loadGridState());
+watch(state, () => saveGridState(state.value), { deep: true });
 
 // Feed the tab-close guard: warn on close/reload while any cell runs a session or
 // command (counts every page, not just the mounted one).
