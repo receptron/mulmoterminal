@@ -32,6 +32,8 @@ export interface ReviewLoop {
   /** The session that asked: the author, told how each round ended. */
   author: string;
   reviewer: string;
+  /** The worktree MulmoTerminal checked the PR's head out in for a reviewer it started, else null. */
+  workspace: string | null;
   rounds: ReviewRound[];
   running: boolean;
 }
@@ -53,12 +55,15 @@ function targetOf(record: Record<string, unknown>): ReviewTarget | null {
 
 const TARGET_REQUIRED = "`repo` must be owner/repo and `pr` a pull request number.";
 
-export function parseReviewRequest(body: unknown): Parsed<ReviewTarget & { reviewer: string }> {
+/** `reviewer` null: MulmoTerminal keeps the PR's reviewer, starting one when there is none. */
+export function parseReviewRequest(body: unknown): Parsed<ReviewTarget & { reviewer: string | null }> {
   const record = isRecord(body) ? body : {};
   const target = targetOf(record);
   if (target === null) return { ok: false, error: TARGET_REQUIRED };
+  if (record.reviewer === undefined || record.reviewer === null) return { ok: true, ...target, reviewer: null };
   const reviewer = typeof record.reviewer === "string" && SESSION_ID_RE.test(record.reviewer) ? record.reviewer : null;
-  if (reviewer === null) return { ok: false, error: "`reviewer` must be the chatId spawnBackgroundChat returned for the reviewer session." };
+  if (reviewer === null)
+    return { ok: false, error: "`reviewer`, when given, must be the chatId of a reviewer session you started; leave it out to have one started." };
   return { ok: true, ...target, reviewer };
 }
 
@@ -84,7 +89,16 @@ export function reviewerRefusal(loops: Iterable<ReviewLoop>, target: ReviewTarge
 
 /** What the author is told when the reviewer session stops running mid-round. */
 export const reviewerGoneMessage = (loop: ReviewLoop): string =>
-  `[requestReview] ${loop.repo}#${loop.pr}: reviewer session ${loop.reviewer} is no longer running, so round ${loop.rounds.length + 1} did not finish and was not counted. Call endReview, start a new reviewer, and call requestReview with it — or ask the user.`;
+  `[requestReview] ${loop.repo}#${loop.pr}: reviewer session ${loop.reviewer} is no longer running, so round ${loop.rounds.length + 1} did not finish and was not counted. ${
+    loop.workspace === null
+      ? "Call endReview, start a new reviewer, and call requestReview with it — or ask the user."
+      : "Call requestReview again without `reviewer` and MulmoTerminal starts a new one — or ask the user."
+  }`;
+
+/** What the author is told, once per round, when the reviewer stops on a question or a permission
+ *  prompt: nothing else would say so before the round's whole wait ran out. */
+export const reviewerHeldMessage = (loop: ReviewLoop): string =>
+  `[requestReview] ${loop.repo}#${loop.pr}: reviewer session ${loop.reviewer} is waiting for the user — a question or a permission prompt in its cell — so round ${loop.rounds.length + 1} is paused. Tell the user to answer it in that cell; the round goes on by itself once it is answered.`;
 
 export const lgtmCountOn = (rounds: readonly ReviewRound[], head: string): number =>
   rounds.filter((round) => round.head === head && round.verdict === "lgtm").length;
