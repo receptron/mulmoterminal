@@ -665,7 +665,7 @@ MulmoTerminal の「**拡張**」の柱がここ。稼働中ターミナルの�
 - どれか一つでも間違っていると（このアプリが動かさないエージェント、範囲外の数、綴りを間違えた項目名）、既定のレビュー役に置き換えるのではなく**キーごと**無視され、設定 → Directory settings の *ignored* に出ます。正しく読めたものは **Review** として表示されます。
 - ファイルにだけ書けます。そのリポジトリの作業を始める clone のものが読まれ、worktree にも引き継がれます。
 
-キーがあれば、セッションは二つの道具で往復を回します。リポジトリと PR の番号を渡して `requestReview` を呼ぶと、MulmoTerminal がレビュー役を自分で起動します。宣言されたエージェントを、`~/.mulmoterminal/review-worktrees/` に PR の head を取り出した worktree で（実装役のチェックアウトには触れません）、見えるセルとして起動します。codex のレビュー役は `gh` で PR を読み、コメントするので、そこでは通信が許されます。自分で開いた codex のセルは、自分のサンドボックス設定のままです。同じレビュー役がその PR の以降の往復も受け持ち、往復ごとに worktree を新しい head へ進めます。レビュー役が止まっていれば、新しく起動します。（セッションが `spawnBackgroundChat` で自分で起動したレビュー役を `reviewer` に渡すこともできます。）MulmoTerminal がレビュー役に、従う `skill` を名指しした依頼を送り、返事を待ち、往復の結果（判定、残りの往復の数、merge の条件を満たしたか）を呼んだセッションに打ち込みます。往復の途中でレビュー役が質問や承認の確認で止まったら、呼んだセッションに一度だけ、そのレビュー役のセルを添えて知らせます。呼んだセッションは、どこで答えればよいかを利用者に伝えます。`maxRounds` を超える往復、修正を求められた head の再レビュー、宣言と違うエージェントのレビュー役は断ります。merge はしません。merge するのはセッションです。PR を merge したら `endReview` でレビュー役を閉じ、MulmoTerminal が作った worktree も消します。レビュー役には、返事と PR に投稿するコメントを `REVIEW VERDICT: LGTM (head <sha>)` か `REVIEW VERDICT: CHANGES REQUESTED (head <sha>)` で始めるよう頼みます。GitHub ボードはこの行を `CODEX VERDICT:` の行と同じように数えます。往復の記録はメモリ上にだけあり、再起動すると数え直しになります。
+キーがあれば、セッションは二つの道具で往復を回します。リポジトリと PR の番号を渡して `requestReview` を呼ぶと、MulmoTerminal がレビュー役を自分で起動します。宣言されたエージェントを、`~/.mulmoterminal/review-worktrees/` に PR の head を取り出した worktree で（実装役のチェックアウトには触れません）、見えるセルとして起動します。codex のレビュー役は `gh` で PR を読み、コメントするので、そこでは通信が許されます。承認の確認では止まりません。サンドボックスが断った操作は、失敗としてレビュー役に返ります。自分で開いた codex のセルは、自分のサンドボックスと承認の設定のままです。同じレビュー役がその PR の以降の往復も受け持ち、往復ごとに worktree を新しい head へ進めます。レビュー役が止まっていれば、新しく起動します。（セッションが `spawnBackgroundChat` で自分で起動したレビュー役を `reviewer` に渡すこともできます。）MulmoTerminal がレビュー役に、従う `skill` を名指しした依頼を送り、返事を待ち、往復の結果（判定、残りの往復の数、merge の条件を満たしたか）を呼んだセッションに打ち込みます。往復の途中でレビュー役が質問や承認の確認で止まったら、呼んだセッションに一度だけ、そのレビュー役のセルを添えて知らせます。呼んだセッションは、どこで答えればよいかを利用者に伝えます。`maxRounds` を超える往復、修正を求められた head の再レビュー、宣言と違うエージェントのレビュー役は断ります。merge はしません。merge するのはセッションです。PR を merge したら `endReview` でレビュー役を閉じ、MulmoTerminal が作った worktree も消します。レビュー役には、返事と PR に投稿するコメントを `REVIEW VERDICT: LGTM (head <sha>)` か `REVIEW VERDICT: CHANGES REQUESTED (head <sha>)` で始めるよう頼みます。GitHub ボードはこの行を `CODEX VERDICT:` の行と同じように数えます。往復の記録はメモリ上にだけあり、再起動すると数え直しになります。
 
 ### このディレクトリの返信まとめ（`appendSystemPrompt`）
 
@@ -681,7 +681,7 @@ MulmoTerminal の「**拡張**」の柱がここ。稼働中ターミナルの�
 セッションは `startIssueSession` の道具で、issue を自分の実装役に渡せます。実装役は issue の worktree と
 セルを一つずつ持ち、[レビューの往復](#dir-review)を経て merge まで進めます。
 codex の実装役は `gh` と `git` で issue を読み、push し、PR を開くので、codex のレビュー役と同じく通信が許されます。
-commit できるように、worktree を切り出した元のクローンにある git の管理情報（worktree 自身の git ディレクトリと、共通の objects・refs・logs）にも書けます。クローンの `config` とフックには書けません。`extensions.worktreeConfig` を有効にしたクローンでは、git がその git ディレクトリから設定を読むので、どこにも書けません。
+commit できるように、worktree を切り出した元のクローンにある git の管理情報（worktree 自身の git ディレクトリと、共通の objects・refs・logs）にも書けます。クローンの `config` とフックには書けません。`extensions.worktreeConfig` を有効にしたクローンでは、git がその git ディレクトリから設定を読むので、どこにも書けません。レビュー役と同じく、承認の確認では止まりません。
 `~/.mulmoterminal/config.json` の `maxIssueSessions` は、それを同時にいくつまで走らせるかです。数えるのは
 すべてのリポジトリを合わせた数で、超える起動は、どれかが終わるまで断られます。
 MulmoTerminal は実装役を一つずつ見ていて、PR が merge されたとき、閉じられたとき、セッションが終わったとき、

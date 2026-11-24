@@ -5,6 +5,7 @@ import { codexPermissionHookOverride } from "./codex-hook.js";
 // back from the rollout file afterwards — while resume replays a known rollout id via the
 // `resume` subcommand. Global flags precede the subcommand (codex's clap layout).
 export const CODEX_NETWORK_ACCESS = "sandbox_workspace_write.network_access=true";
+export const CODEX_NEVER_ASK = 'approval_policy="never"';
 
 // A JSON string is a TOML basic string, escapes included, so a Windows path keeps its backslashes.
 export const codexWritableRoots = (roots: readonly string[]): string =>
@@ -42,6 +43,9 @@ export interface CodexArgsInput {
   // Let the sandbox reach the network, for a session whose job needs it (a reviewer or an implementer
   // talking to GitHub with gh). Absent: whatever the user's own codex config says.
   networkAccess?: boolean;
+  // Never stop on an approval prompt: what the sandbox refuses comes back to codex as a failure. For a
+  // session nobody is watching (a reviewer or an implementer). Absent: the user's own codex config.
+  neverAsk?: boolean;
   // More paths the sandbox may write, beside the working directory (a worktree's git metadata).
   writableRoots?: readonly string[];
 }
@@ -71,6 +75,7 @@ export function buildCodexArgs(input: CodexArgsInput): string[] {
   }
   if (input.permissionHook) args.push("-c", codexPermissionHookOverride());
   if (input.networkAccess === true) args.push("-c", CODEX_NETWORK_ACCESS);
+  if (input.neverAsk === true) args.push("-c", CODEX_NEVER_ASK);
   if (input.writableRoots?.length) args.push("-c", codexWritableRoots(input.writableRoots));
   if (input.resume) args.push("resume", input.resume);
   return args;

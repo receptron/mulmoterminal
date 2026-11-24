@@ -42,7 +42,7 @@ export function reviewWorkspaces(deps: ReviewWorkspaceDeps): ReviewWorkspaces {
       if (placed !== null) return placed;
       cloneOfWorkspace.set(workspace, clone);
       try {
-        const spawned = await deps.spawn(spec.agent, workspace, spec.seed, true, null, { networkAccess: true });
+        const spawned = await deps.spawn(spec.agent, workspace, spec.seed, true, null, { networkAccess: true, neverAsk: true });
         deps.recordSpawn(spawned.sessionId, spec.author);
         deps.markVisible(spawned.sessionId, spec.agent);
         return { session: spawned.sessionId, workspace };

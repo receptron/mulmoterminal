@@ -198,13 +198,14 @@ describe("startIssueSession", () => {
 // The wiring app-routes uses: without `allTools` the implementer is a project cell, and the review
 // loop's tools never reach it.
 describe("implementerSpawn", () => {
-  it("runs the seed at once, on the default login, with every GUI tool, the network and the worktree's git metadata", async () => {
+  it("runs the seed at once, on the default login, with every GUI tool, the network, no approval prompts and the worktree's git metadata", async () => {
     const spawnIssueSession = vi.fn(async () => ({ sessionId: "s-1", agent: "codex" as const, seedRuns: true }));
     const gitRootsOf = vi.fn(async (cwd: string) => [`${cwd}.git`]);
     await implementerSpawn(spawnIssueSession, gitRootsOf)("codex", "/wt/7", "the seed");
     expect(spawnIssueSession).toHaveBeenCalledWith("codex", "/wt/7", "the seed", true, null, {
       allTools: true,
       networkAccess: true,
+      neverAsk: true,
       writableRoots: ["/wt/7.git"],
     });
   });

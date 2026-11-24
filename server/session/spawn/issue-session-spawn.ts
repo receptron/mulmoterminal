@@ -45,6 +45,8 @@ export interface IssueSessionOptions {
   /** Let codex's sandbox reach the network (a reviewer or an implementer, both of which talk to
    *  GitHub). The other agents have no such sandbox switch, and ignore it. */
   networkAccess?: boolean;
+  /** Never stop codex on an approval prompt (a session nobody is watching). The other agents ignore it. */
+  neverAsk?: boolean;
   /** More paths codex's sandbox may write (the worktree's git metadata, for an implementer). The
    *  other agents ignore it. */
   writableRoots?: readonly string[];
@@ -68,6 +70,7 @@ interface SpawnRequest {
   claudePermissionMode: string | undefined;
   allTools: boolean;
   networkAccess: boolean;
+  neverAsk: boolean;
   writableRoots: readonly string[];
 }
 
@@ -117,10 +120,11 @@ const AGENT_SPAWN: Record<TerminalAgent, AgentSpawn> = {
   claude: async ({ sessionId, cwd, seed, run, claudePermissionMode, allTools }, deps) => {
     deps.spawnClaudePty(sessionId, null, null, issueSpawnOptions(cwd, seed, run, claudePermissionMode, allTools));
   },
-  codex: async ({ sessionId, cwd, seed, allTools, networkAccess, writableRoots }, deps) => {
+  codex: async ({ sessionId, cwd, seed, allTools, networkAccess, neverAsk, writableRoots }, deps) => {
     deps.spawnCodexPty(sessionId, null, null, cwd, allTools, {
       ...(await perSpawnMcp(deps, cwd, seed, allTools)),
       ...(networkAccess ? { networkAccess } : {}),
+      ...(neverAsk ? { neverAsk } : {}),
       ...(writableRoots.length > 0 ? { writableRoots } : {}),
     });
   },
@@ -156,6 +160,7 @@ export function createIssueSessionSpawner(deps: IssueSessionSpawnDeps): SpawnIss
         claudePermissionMode: options.claudePermissionMode,
         allTools: options.allTools === true,
         networkAccess: options.networkAccess === true,
+        neverAsk: options.neverAsk === true,
         writableRoots: options.writableRoots ?? [],
       },
       deps,

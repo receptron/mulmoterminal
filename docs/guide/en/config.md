@@ -728,7 +728,8 @@ With the key set, the session runs the loop through two tools. It calls `request
 repository and the PR number, and MulmoTerminal starts the reviewer itself: the declared agent, in a
 worktree of the PR's head under `~/.mulmoterminal/review-worktrees/` (never the author's checkout),
 as a cell you can see. A codex reviewer's sandbox may reach the network there, because it reads and
-comments on the PR with `gh`; a codex cell you open yourself keeps your own sandbox. The same reviewer
+comments on the PR with `gh`, and it never stops on an approval prompt: what its sandbox refuses comes
+back to it as a failure. A codex cell you open yourself keeps your own sandbox and approval settings. The same reviewer
 takes the PR's later rounds, its worktree moved to each new head, and a new one is started if it has
 stopped. (A session may still start a reviewer of its own with `spawnBackgroundChat` and name it as
 `reviewer`.) MulmoTerminal sends the reviewer the request, naming the `skill` to follow, waits for its answer, and types how
@@ -758,7 +759,8 @@ gets the issue's worktree and a cell, and takes the issue to merge through the
 reviewer's does, because it reads the issue, pushes and opens the PR with `gh` and `git`. It may also
 write the worktree's git metadata in the clone it was cut from (its own git directory and the shared
 objects, refs and logs), so it can commit; never the clone's `config` or hooks, and nothing at all
-in a clone with `extensions.worktreeConfig` on, where git reads config from that git directory. `maxIssueSessions` in `~/.mulmoterminal/config.json` is how many of
+in a clone with `extensions.worktreeConfig` on, where git reads config from that git directory. Like the reviewer, it never stops on an approval
+prompt. `maxIssueSessions` in `~/.mulmoterminal/config.json` is how many of
 them may run at once, across every repository. A start past it is refused until one finishes.
 MulmoTerminal follows each one and types a `[startIssueSession]` line into the session that started
 it when its PR is merged or closed, when its session ends, and when it stops on the user (a question
