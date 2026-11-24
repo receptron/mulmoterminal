@@ -10,6 +10,7 @@ import MarkdownProse from "./MarkdownProse.vue";
 import FullScreenOverlay from "./FullScreenOverlay.vue";
 import SkillsShPane from "./SkillsShPane.vue";
 import SkillDocEditor from "./SkillDocEditor.vue";
+import SkillEvalPanel from "./SkillEvalPanel.vue";
 import { useSkillsView } from "../composables/useSkillsView";
 import { useEscapeToClose } from "../composables/useEscapeToClose";
 import { loadSkillCatalog, loadSkillDoc, loadSkillUsage } from "../composables/useSkillCatalog";
@@ -219,6 +220,7 @@ async function reload(): Promise<void> {
             </button>
           </p>
           <p v-if="usage" data-testid="skills-usage-detail" class="m-0 mb-3 font-sans text-[12px] text-secondary">{{ usageDetail(picked.skill) }}</p>
+          <SkillEvalPanel v-if="!editing" :source="picked.source" :skill="picked.skill" />
           <p v-if="docFailed" data-testid="skills-doc-error" class="m-0 font-sans text-[13px] text-err-text">{{ t("skillsView.docFailed") }}</p>
           <SkillDocEditor
             v-else-if="editing && raw !== null && docVersion !== null"
