@@ -23,10 +23,15 @@ export interface EndedCellExit {
   /** The agent was started under the exit recorder and left no record — the record's write failed,
    *  which a full disk does to every agent at once. How it ended is unknown, so it is not a clean end. */
   exitUnrecorded: boolean;
+  /** The server ended the session and asked for its cell to go (#3067): a startIssueSession
+   *  implementer whose PR ended, a reviewer endReview closed. Nobody is there to ask about a worktree. */
+  closedOnRequest: boolean;
 }
 
 export function shouldCloseEndedCell(exit: EndedCellExit): boolean {
-  if (!exit.sessionEnded || exit.worktreeCell || exit.exitUnrecorded) return false;
+  if (!exit.sessionEnded) return false;
+  if (exit.closedOnRequest) return true;
+  if (exit.worktreeCell || exit.exitUnrecorded) return false;
   if (exit.exitCode !== null && exit.exitCode !== 0) return false;
   if (exit.reattached) return true;
   return exit.lifetimeMs !== null && exit.lifetimeMs >= STARTUP_WINDOW_MS;

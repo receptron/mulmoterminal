@@ -115,21 +115,32 @@ function unrecordedExit(sessionId: string, entry: PtyEntry, clientExitCode: numb
 export function reportPtyExit(
   sessionId: string,
   entry: PtyEntry,
-  exit: Omit<PtyExitReport, "ended" | "reattached" | "exitUnrecorded">,
+  exit: Omit<PtyExitReport, "ended" | "reattached" | "exitUnrecorded" | "closedOnRequest">,
   reap: (id: string) => void,
 ): PtyExitDisposition {
   const disposition = decidePtyExit(sessionId, entry);
   const { exitCode, exitUnrecorded } = programExit(sessionId, entry, disposition, exit.exitCode);
   const reattached = !!entry.reattached;
   const sessionEnded = sessionEndedForCell(disposition, !!entry.closeRequested);
-  sendExitAndClose(entry.ws, { ...exit, exitCode, reattached, ended: sessionEnded, exitUnrecorded });
+  const closeAsked = closedOnRequest(disposition, !!entry.closeRequested);
+  sendExitAndClose(entry.ws, { ...exit, exitCode, reattached, ended: sessionEnded, exitUnrecorded, closedOnRequest: closeAsked });
   // The cell nobody opened yet (an agent's spawnBackgroundChat with no grid on screen) gets the
   // same answer an open one would: if that cell would have closed itself, no grid should adopt the
   // session later and resume it as a new cell (#3055).
   const worktreeCell = worktreeLabel(entry.cwd) !== null;
   // A shell's code is its last command's, not a crash, so a launcher or bot job is decided as before.
   const closeExitCode = entry.agent === "shell" ? null : exitCode;
-  if (shouldCloseEndedCell({ sessionEnded, lifetimeMs: exit.lifetimeMs, reattached, worktreeCell, exitCode: closeExitCode, exitUnrecorded }))
+  if (
+    shouldCloseEndedCell({
+      sessionEnded,
+      lifetimeMs: exit.lifetimeMs,
+      reattached,
+      worktreeCell,
+      exitCode: closeExitCode,
+      exitUnrecorded,
+      closedOnRequest: closeAsked,
+    })
+  )
     markSessionPlaced(sessionId);
   applyPtyExit(sessionId, disposition, reap);
   return disposition;
