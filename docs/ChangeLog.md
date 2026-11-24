@@ -8,6 +8,71 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@13.7.0 — 2026-11-25
+
+> **Setup guide:** [13.7.0 — Hand an issue to an agent, and measure your skills](https://receptron.github.io/mulmoterminal/guide/en/v13.7.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.7.0.html))
+
+### Sessions that talk to the sessions they started (#3405, #3406)
+
+For #3404.
+
+- New host tools `sendToSession { session, message }` (types into a session the caller started and presses Enter) and `waitForSessionReply { session, waitSeconds? }` (waits for that session's answer to that exact send; each send is tagged so a repeated message is not matched to an older reply).
+- `spawnBackgroundChat` takes an `agent` and records the caller as the new session's parent; only the parent may address it. Its `hidden` description is corrected.
+- Sends are refused while a question dialog is open; a dialog that opens between paste and Enter is reported as text left in the input. Line breaks arrive as spaces. Parentage is kept in memory, so a restart forgets it.
+
+### A server-driven review loop (#3408, #3410, #3429, #3430, #3431, #3412, #3439)
+
+For #3407, #3409 and #3425.
+
+- `.mulmoterminal.json` accepts `review: { reviewer, maxRounds, requiredLgtm, skill }` (defaults codex, 10, 1, `mulmoterminal-review`). Any invalid field drops the whole block, so a typo never becomes a reviewer; muse cannot review because its replies cannot be read back. Worktrees inherit it. The `reviewSettings` tool and a Review row in Settings → Directory settings show it.
+- `requestReview { repo, pr, reviewer? }` runs one round: it checks the caller, the declaration, the PR and the round limit, sends the reviewer a request the server builds, and returns at once; in the background it reads the verdict (`REVIEW VERDICT:` as well as `CODEX VERDICT:`), re-reads the head and CI, and types the result into the author, including whether the merge condition is met. It never merges.
+- Without `reviewer`, MulmoTerminal starts the declared reviewer as a visible cell in a worktree detached at the PR head (`~/.mulmoterminal/review-worktrees/`), reuses it for later rounds and moves it to the new head. `endReview` closes the cell and removes the worktree.
+- The author is told once per round, with the reviewer's cell, when the reviewer stops on a question or permission prompt.
+- New bundled skill `mulmoterminal-review`: one complete round, every finding with severity, site, sibling sites and the smallest fix, UNVERIFIED for what could not be run, and the verdict line first.
+- The GitHub board's badge reads **Verdict N** instead of **Codex N**, and a card is marked **Ready to merge** when the repository declares `review`, the newest push has the required LGTMs and CI passed, by the same rule as `requestReview`.
+- This repository declares its own review settings.
+
+### Issue to merge, and dispatching issues (#3411, #3416, #3417, #3418, #3433, #3441, #3447)
+
+For #3409, #3413, #3428, #3440 and #3446.
+
+- New bundled skill `mulmoterminal-issue-to-merge`: read the issue, ask only what is open, implement on the worktree's branch, open a PR, run rounds through `requestReview`, and merge only once the merge condition is met with CI re-checked. The repository's own rules win over its defaults.
+- `startIssueSession { repo, issue, agent }` cuts the issue's worktree and starts an implementer (claude, codex or copilot) there as a visible cell running that skill. New global key `maxIssueSessions` (1–8, default 2) bounds them machine-wide.
+- A server watch types a `[startIssueSession]` line into the starter when the implementer's PR merges or closes, its session ends, or it stops on the user. `sendToSession`, the review request and queued deliveries now also hold while a permission prompt is open.
+- New bundled skill `mulmoterminal-dispatch-issues` hands the issues the user named to implementers until the limit refuses, starts the next as one merges, and tells the user about the rest; it never answers for an implementer and never merges.
+- `closeIssueSession { session, force? }` closes an implementer's review loops, its cell, and its local worktree and branch (kept, with the reason, when it holds uncommitted or unpushed work). The watch does this automatically once the PR merges or closes.
+- A cell the server asked to close leaves the grid instead of staying as `[session ended]`.
+- The watch ignores a PR from an earlier attempt that ended before this one started, and implementers keep the issue branch.
+
+### Codex started by the server runs unattended (#3452, #3455, #3461)
+
+For #3451, #3454 and #3459.
+
+- A codex implementer or reviewer started by MulmoTerminal gets sandbox network access, write access to its worktree's git metadata (not the clone's config or hooks), and `approval_policy="never"`, so a refusal returns to codex as a failure instead of a prompt nobody watches. Codex cells the user opens are unchanged.
+
+### Skill evaluation in the Skills viewer (#3442, #3443, #3450, #3456, #3460)
+
+For #3437, #3438, #3448, #3453 and #3458.
+
+- Each skill row shows how many Claude conversations used it, and the detail the last use, from the Library index (`GET /api/library/skill-usage`). No cost figure, since a conversation's cost is not the skill's share.
+- **Does it help?** runs each test task with and without the skill, isolated in a temp directory, and reports pass rate, cost per pass and a verdict that says "helps" or "hurts" only when the gap exceeds the no-skill spread. Data lives under `~/.mulmoterminal/skill-evals/<skill>/`. New bundled skill `mulmoterminal-skill-eval` drafts the tasks for the user to approve.
+- **Improve and measure** writes a candidate SKILL.md from the latest measurement and measures it on the same tasks; **Adopt** backs up the current one and installs it, refused if anything changed since. Plugin and bundled skills are view-only.
+- **Find the cheapest model** runs the tasks on a `ladder` of models, cheapest first, and stops at the first that passes everything. It writes nothing to config.
+- On Windows a briefly locked run record no longer ends a measurement; saves report whether they landed, the final one is retried, and an interrupted run says why.
+
+### Surviving a full disk (#3426, #3432, #3415)
+
+For #3424, #3427 and #3414.
+
+- An agent started under the exit recorder that leaves no record keeps its cell with a red banner, instead of tmux's exit 0 being read as a clean `/exit` that closed every cell.
+- The grid layout is mirrored to `~/.mulmoterminal/grid-layout.json`, and a grid that loads empty offers the saved cells in a Restore / Dismiss bar; nothing is written until the user answers, and cells another tab shows are left out.
+- Saved launcher directories are checked on load and when the launch panel opens: a deleted one is hidden at once and removed from `config.json` a day later; one that may only be unreachable is hidden until it is back. Settings still lists every saved entry.
+
+### Dependencies and docs (#3419, #3436, #3422, #3445, #3457, #3463)
+
+- Dependency update; jinglescript 1.5.1 renders files again, under the calling session's `jinglescript/` folder (#3435).
+- README's API table lists the new session, review and issue tools and the codex approval behaviour (#3421, #3444, #3449, #3462).
+
 ## mulmoterminal@13.6.0 — 2026-11-22
 
 > **Setup guide:** [13.6.0 — Send a turn to the terminal beside you](https://receptron.github.io/mulmoterminal/guide/en/v13.6.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.6.0.html))
