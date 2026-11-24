@@ -8,6 +8,37 @@ export type GitRun = (args: string[], cwd: string) => Promise<{ ok: boolean; std
 export interface ReviewWorktreeDeps {
   git: GitRun;
   exists: (dir: string) => boolean;
+  /** True for a symbolic link (not followed): one could point the forced checkout anywhere. */
+  isSymlink: (dir: string) => boolean;
+  realpath: (dir: string) => string;
+}
+
+const WORKTREE_LINE = "worktree ";
+
+/** Whether `git worktree list --porcelain` names `dir` among the clone's worktrees, compared by real
+ *  path since git prints resolved ones. */
+export function listsWorktree(porcelain: string, dir: string, realpath: (p: string) => string): boolean {
+  const wanted = realpath(dir);
+  return porcelain
+    .split("\n")
+    .filter((line) => line.startsWith(WORKTREE_LINE))
+    .some((line) => {
+      const listed = line.slice(WORKTREE_LINE.length);
+      try {
+        return realpath(listed) === wanted;
+      } catch {
+        return false;
+      }
+    });
+}
+
+/** An existing path is moved only when it is a worktree of this clone and not a link: a forced
+ *  checkout throws away whatever is there, so a directory nobody made for a review is refused. */
+async function ownedWorktree(deps: ReviewWorktreeDeps, clone: string, dir: string): Promise<string | null> {
+  if (deps.isSymlink(dir)) return `${dir} is a symbolic link, not a review worktree`;
+  const listed = await deps.git(["worktree", "list", "--porcelain"], clone);
+  if (!listed.ok) return `could not list the worktrees of ${clone}`;
+  return listsWorktree(listed.stdout, dir, deps.realpath) ? null : `${dir} exists and is not a worktree of ${clone}; remove it to review here`;
 }
 
 const SLUG_UNSAFE = /[^A-Za-z0-9._-]/g;
@@ -22,7 +53,10 @@ export function reviewWorktreeDir(root: string, repo: string, pr: number): strin
 export async function checkoutReviewHead(deps: ReviewWorktreeDeps, clone: string, dir: string, pr: number, head: string): Promise<string | null> {
   const fetched = await deps.git(["fetch", "--quiet", "origin", `pull/${pr}/head`], clone);
   if (!fetched.ok) return `could not fetch pull/${pr}/head into ${clone}`;
-  const placed = deps.exists(dir)
+  const present = deps.exists(dir) || deps.isSymlink(dir);
+  const refusal = present ? await ownedWorktree(deps, clone, dir) : null;
+  if (refusal !== null) return refusal;
+  const placed = present
     ? await deps.git(["checkout", "--quiet", "--force", "--detach", head], dir)
     : await deps.git(["worktree", "add", "--quiet", "--detach", dir, head], clone);
   return placed.ok ? null : `could not check out ${head} in ${dir}`;

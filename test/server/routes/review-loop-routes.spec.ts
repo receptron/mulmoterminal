@@ -43,6 +43,8 @@ const moveReviewer = vi.fn<(loop: ReviewLoop, head: string) => Promise<string | 
 const dropWorkspace = vi.fn<(loop: ReviewLoop) => Promise<void>>();
 /** Sessions whose agent reported a permission prompt it is still waiting on. */
 let permissionPending: Set<string>;
+/** Sessions whose replies the turn reader refuses. */
+let unreadable: Set<string>;
 let reply: string | null;
 let settings: ReviewSettings | string;
 let pr: PrReviewState | string;
@@ -79,7 +81,7 @@ function routes(): { requestRoute: Handler; endRoute: Handler } {
     send,
     openQuestion,
     permissionPending: (session) => permissionPending.has(session),
-    turnReader: () => readTurn,
+    turnReader: (session) => (unreadable.has(session) ? `Replies from session ${session} cannot be read yet.` : readTurn),
     sleep: (ms) => sleep(ms),
     now: () => (clock_ms += TICK_MS),
     nonce: () => "nonce000",
@@ -120,6 +122,7 @@ beforeEach(() => {
   openQuestion.mockReset();
   openQuestion.mockImplementation(async () => null);
   permissionPending = new Set();
+  unreadable = new Set();
   close.mockReset();
   close.mockImplementation(() => true);
   startReviewer.mockReset();
@@ -481,6 +484,58 @@ describe("a reviewer MulmoTerminal starts (requestReview without `reviewer`)", (
     arrange();
     expect(await call(routes().requestRoute, req(UNNAMED))).toMatch(reason);
     expect(startReviewer).not.toHaveBeenCalled();
+  });
+
+  it("closes a reviewer that finished starting after endReview, and removes its worktree", async () => {
+    let finish = (): void => undefined;
+    startReviewer.mockImplementation(async () => {
+      await new Promise<void>((resolve) => (finish = resolve));
+      spawned.recordSpawn(REVIEWER2, AUTHOR);
+      return { session: REVIEWER2, workspace: WORKSPACE };
+    });
+    const { requestRoute, endRoute } = routes();
+    const starting = call(requestRoute, req(UNNAMED));
+    await vi.waitFor(() => expect(startReviewer).toHaveBeenCalled());
+    expect(await call(endRoute, req(UNNAMED))).toMatch(/while its reviewer was starting/);
+    expect(close).not.toHaveBeenCalled();
+    finish();
+    expect(await starting).toMatch(/ended while its reviewer was starting, so the reviewer was closed/);
+    expect(close).toHaveBeenCalledWith(REVIEWER2);
+    expect(dropWorkspace).toHaveBeenCalledWith(expect.objectContaining({ reviewer: REVIEWER2, workspace: WORKSPACE }));
+    expect(loops.size).toBe(0);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing when endReview lands while the worktree is being moved", async () => {
+    reply = "REVIEW VERDICT: CHANGES REQUESTED (head aaaaaaa)";
+    const { requestRoute, endRoute } = routes();
+    await call(requestRoute, req(UNNAMED));
+    await roundsEnded(1);
+    pr = { open: true, head: NEXT, ci: "passing" };
+    let finish = (): void => undefined;
+    moveReviewer.mockImplementation(async () => {
+      await new Promise<void>((resolve) => (finish = resolve));
+      return null;
+    });
+    const moving = call(requestRoute, req(UNNAMED));
+    await vi.waitFor(() => expect(moveReviewer).toHaveBeenCalled());
+    await call(endRoute, req(UNNAMED));
+    finish();
+    expect(await moving).toMatch(/ended while its reviewer's worktree was being moved; nothing was sent/);
+    expect(send).not.toHaveBeenCalledWith(REVIEWER2, expect.anything(), expect.anything());
+  });
+
+  it("closes a reviewer it started but cannot read, and leaves no loop", async () => {
+    const { requestRoute } = routes();
+    startReviewer.mockImplementation(async () => {
+      spawned.recordSpawn(OTHER, AUTHOR);
+      return { session: OTHER, workspace: WORKSPACE };
+    });
+    unreadable.add(OTHER);
+    expect(await call(requestRoute, req(UNNAMED))).toMatch(/cannot be read/);
+    expect(close).toHaveBeenCalledWith(OTHER);
+    expect(dropWorkspace).toHaveBeenCalledWith(expect.objectContaining({ workspace: WORKSPACE }));
+    expect(loops.size).toBe(0);
   });
 
   it("removes the worktree when endReview closes the reviewer, and keeps it while the reviewer still runs", async () => {

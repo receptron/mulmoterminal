@@ -117,13 +117,20 @@ function liveLoop(deps: ReviewLoopRouteDeps, key: string): ReviewLoop | undefine
   const loop = deps.loops.get(key);
   if (loop === undefined || deps.agentOf(loop.author) !== undefined) return loop;
   deps.loops.delete(key);
-  try {
-    if (!deps.close(loop.reviewer)) console.error(`[requestReview] reviewer session ${loop.reviewer} of ${key} is still running after close.`);
-  } catch (err) {
-    console.error(`[requestReview] could not close reviewer session ${loop.reviewer} of ${key}: ${messageOf(err)}`);
-  }
+  closeReviewer(deps, loop.reviewer, key);
   void deps.workspaces.drop(loop);
   return undefined;
+}
+
+/** Closes a reviewer, logging rather than throwing. A loop whose first reviewer is still starting
+ *  names none yet (""), and that start ends its own reviewer once it sees the loop gone. */
+function closeReviewer(deps: ReviewLoopRouteDeps, reviewer: string, key: string): void {
+  if (reviewer === "") return;
+  try {
+    if (!deps.close(reviewer)) console.error(`[requestReview] reviewer session ${reviewer} of ${key} is still running after close.`);
+  } catch (err) {
+    console.error(`[requestReview] could not close reviewer session ${reviewer} of ${key}: ${messageOf(err)}`);
+  }
 }
 
 type Checked = { settings: ReviewSettings; head: string };
@@ -176,6 +183,12 @@ function claimRound(deps: ReviewLoopRouteDeps, caller: string, request: NamedReq
   return loop;
 }
 
+/** A reviewer started for a round that will not run: closed, and its worktree removed. */
+async function abandonReviewer(deps: ReviewLoopRouteDeps, loop: ReviewLoop, started: { session: string; workspace: string }): Promise<void> {
+  closeReviewer(deps, started.session, loopKey(loop));
+  await deps.workspaces.drop({ ...loop, reviewer: started.session, workspace: started.workspace });
+}
+
 /** A claim given back: a loop that never ran a round goes, so the next request starts clean. */
 function releaseClaim(deps: ReviewLoopRouteDeps, loop: ReviewLoop): void {
   loop.running = false;
@@ -209,6 +222,8 @@ async function sendRound(deps: ReviewLoopRouteDeps, caller: string, request: Nam
     loop.running = false;
     return `Could not move reviewer session ${loop.reviewer} to ${checked.head}: ${moved}`;
   }
+  if (deps.loops.get(loopKey(loop)) !== loop)
+    return `The review of ${loop.repo}#${loop.pr} ended while its reviewer's worktree was being moved; nothing was sent.`;
   const sent = roundText(deps, loop, checked);
   try {
     await deps.send(loop.reviewer, sent, { blocked: async () => inputHeld(deps, loop.reviewer) });
@@ -238,12 +253,19 @@ async function startRound(deps: ReviewLoopRouteDeps, caller: string, request: Re
     releaseClaim(deps, loop);
     return `Could not start a ${settings.reviewer} reviewer for ${request.repo}#${request.pr}: ${started}`;
   }
-  Object.assign(loop, { reviewer: started.session, workspace: started.workspace });
+  // endReview, or another session taking over from a gone author, may have dropped the loop during
+  // the start: nothing would ever end a reviewer started for it, so it is ended here.
+  if (deps.loops.get(loopKey(loop)) !== loop) {
+    await abandonReviewer(deps, loop, started);
+    return `The review of ${request.repo}#${request.pr} ended while its reviewer was starting, so the reviewer was closed.`;
+  }
   const readTurn = deps.turnReader(started.session);
   if (typeof readTurn === "string") {
-    loop.running = false;
+    await abandonReviewer(deps, loop, started);
+    releaseClaim(deps, loop);
     return readTurn;
   }
+  Object.assign(loop, { reviewer: started.session, workspace: started.workspace });
   return launch(deps, loop, checked, sent, readTurn);
 }
 
@@ -278,6 +300,8 @@ function mountEnd(app: Express, deps: ReviewLoopRouteDeps): void {
     if (loop === undefined) return res.json({ message: `No review of ${request.repo}#${request.pr} is running.` });
     if (loop.author !== caller) return res.json({ message: `Another session is running the review of ${loop.repo}#${loop.pr}.` });
     deps.loops.delete(key);
+    if (loop.reviewer === "")
+      return res.json({ message: `Ended the review of ${loop.repo}#${loop.pr} while its reviewer was starting; it is closed as it starts.` });
     const notClosed = `Ended the review of ${loop.repo}#${loop.pr}, but reviewer session ${loop.reviewer} could not be closed`;
     try {
       if (!deps.close(loop.reviewer)) return res.json({ message: `${notClosed}: it is still running. Close its cell by hand.` });

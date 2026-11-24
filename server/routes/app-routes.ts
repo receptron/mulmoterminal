@@ -162,7 +162,7 @@ import { workspaceForRoute } from "./routeParams.js";
 import { reviewWorkspaces } from "./review-workspaces.js";
 import { git } from "../git/worktrees.js";
 import { mulmoterminalHome } from "../infra/fs/mulmoterminal-home.js";
-import { existsSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
 
 export interface AppRouteDeps extends SessionActivityDeps {
   /** Which agents could be started, as checked once at server start (#2229). */
@@ -263,7 +263,12 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     workspaces: reviewWorkspaces({
       cloneOf: cloneOfRepo,
       root: () => path.join(mulmoterminalHome(), "review-worktrees"),
-      worktree: { git: (args, cwd) => git(args, cwd), exists: existsSync },
+      worktree: {
+        git: (args, cwd) => git(args, cwd),
+        exists: existsSync,
+        isSymlink: (dir) => lstatSync(dir, { throwIfNoEntry: false })?.isSymbolicLink() === true,
+        realpath: (dir) => realpathSync(dir),
+      },
       spawn: deps.spawnIssueSession,
       recordSpawn: (child, parent) => spawnedSessions.recordSpawn(child, parent),
       markVisible: (session, agent) => markUnplacedSession(session, agent),
