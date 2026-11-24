@@ -66,9 +66,13 @@ function usageDetail(skill: CatalogSkill): string {
   return t("skillsView.usage.detail", { count: used.conversations, date: usageDate(used.lastUsedAt) });
 }
 
-// Apart from the catalog, so a slow index never holds the list back.
+// Apart from the catalog, so a slow index never holds the list back. Each opening counts as a new
+// read: an answer for an earlier one that arrives late must not replace a newer one.
+let usageRead = 0;
 async function refreshUsage(): Promise<void> {
-  usage.value = await loadSkillUsage();
+  const read = ++usageRead;
+  const answer = await loadSkillUsage();
+  if (read === usageRead) usage.value = answer;
 }
 
 async function refresh(): Promise<void> {
