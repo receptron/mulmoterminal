@@ -20,6 +20,8 @@ export interface IssueSession {
   agent: FullGuiMcpAgent;
   worktree: string;
   branch: string | null;
+  /** When it was started: a PR from its branch that was over before this is an earlier attempt's. */
+  startedAtMs: number;
   /** Set once, by the watch; a finished implementer no longer holds a place, even while its cell stays open. */
   finished: IssueSessionEnd | null;
   /** The caller was told it is waiting on the user, and is not told again until that changes. */
@@ -77,7 +79,7 @@ export function runningFor(
 /** The implementer's first turn. Prose rather than a `/skill` line, which codex and copilot do not read. */
 export function implementerSeed(request: { repo: string; issue: number }, parent: string): string {
   return [
-    `Use the "mulmoterminal-issue-to-merge" skill to take ${request.repo}#${request.issue} to merge, working in this directory, which is the issue's worktree.`,
+    `Use the "mulmoterminal-issue-to-merge" skill to take ${request.repo}#${request.issue} to merge, working in this directory, which is the issue's worktree. Work on the branch it is on and open the PR from that branch: it is how your PR is followed.`,
     `Session ${parent} started you and is told when you finish or stop. Ask your questions here, in this session: the user answers them in this cell.`,
   ].join("\n\n");
 }

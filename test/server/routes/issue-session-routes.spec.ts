@@ -23,6 +23,7 @@ let limit: number;
 let clone: string | null;
 let work: (spawnSeeded: (cwd: string, seed: string) => Promise<SpawnedSession>) => Promise<StartIssueWorkResult & Partial<SpawnedSession>>;
 let nextId: number;
+const STARTED_AT_MS = 1_790_000_000_000;
 const spawn = vi.fn<IssueSessionRouteDeps["spawn"]>();
 const recordSpawn = vi.fn<IssueSessionRouteDeps["recordSpawn"]>();
 const markVisible = vi.fn<IssueSessionRouteDeps["markVisible"]>();
@@ -37,6 +38,7 @@ function route(): Handler {
     isGitHub: (repo) => !repo.startsWith("gitlab.com/"),
     limit: () => limit,
     cloneOf: async () => clone,
+    now: () => STARTED_AT_MS,
     startWork,
     spawn,
     recordSpawn,
@@ -96,6 +98,7 @@ describe("startIssueSession", () => {
     expect(recordSpawn).toHaveBeenCalledWith("s-1", PARENT);
     expect(markVisible).toHaveBeenCalledWith("s-1", "codex");
     expect(sessions.get("s-1")).toMatchObject({ parent: PARENT, repo: "owner/repo", issue: 7, branch: "issue/7-thing", worktree: "/wt/7" });
+    expect(sessions.get("s-1")?.startedAtMs).toBe(STARTED_AT_MS);
   });
 
   it("refuses a call without a caller, or with a bad request, before touching anything", async () => {

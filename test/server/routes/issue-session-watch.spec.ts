@@ -15,6 +15,7 @@ const entry = (session: string, issue: number, parent = "parent"): IssueSession 
   agent: "claude",
   worktree: `/wt/${issue}`,
   branch: `issue/${issue}`,
+  startedAtMs: 0,
   finished: null,
   blockedTold: false,
   prUnreadable: 0,
@@ -59,6 +60,15 @@ describe("watchIssueSessions", () => {
     prs.set("issue/7", { number: 9, state: "OPEN" });
     await watchIssueSessions(deps());
     expect(deliver).not.toHaveBeenCalled();
+  });
+
+  // #3440: the lookup is told when the implementer started, so an earlier attempt's PR is not its answer.
+  it("asks for the branch's PR since the implementer started", async () => {
+    const started = sessions.values().next().value;
+    if (started === undefined) throw new Error("no implementer");
+    started.startedAtMs = 1234;
+    await watchIssueSessions(deps());
+    expect(prOf).toHaveBeenCalledWith(started.repo, started.branch, 1234);
   });
 
   it("records a merge, frees its place, tells the starter once, and stops looking at it", async () => {

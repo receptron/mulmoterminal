@@ -38,6 +38,10 @@ lets MulmoTerminal tell that session you are waiting for the user. Ask here, in 
 ## 3. Implement
 
 - Branch from an up-to-date default branch (`git fetch` first). Never work on the default branch.
+  When another session started you, you are already on the issue's branch in its worktree: work on
+  that branch and open the PR from it — bring it up to date by merging the default branch into it,
+  never by switching to a new one. The session that started you follows your PR by that branch, and
+  a PR from any other is one it cannot see.
 - Follow the repository's workflow: a plan file if it keeps them, its tests, its format/lint/
   typecheck commands. Run them and fix what fails before opening the PR.
 - Add files one by one; never `git add .`.

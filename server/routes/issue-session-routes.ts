@@ -40,6 +40,7 @@ export interface IssueSessionRouteDeps {
   recordSpawn: (child: string, parent: string) => void;
   /** Give the implementer a cell, as a visible spawnBackgroundChat session gets one. */
   markVisible: (session: string, agent: FullGuiMcpAgent) => void;
+  now: () => number;
 }
 
 /** The implementer's spawn: the issue spawner, running its seed at once, on the default login, with
@@ -61,6 +62,7 @@ function workFailure(deps: IssueSessionRouteDeps, request: StartRequest, work: S
 
 /** The implementer, recorded, or why there is none. */
 async function startImplementer(deps: IssueSessionRouteDeps, parent: string, request: StartRequest, dir: string): Promise<IssueSession | string> {
+  const startedAtMs = deps.now();
   const work = await deps.startWork(request.repo, request.issue, dir, (cwd) => deps.spawn(request.agent, cwd, implementerSeed(request, parent)));
   if (!work.ok || work.outcome === "resumed" || work.sessionId === undefined || work.worktree === undefined) return workFailure(deps, request, work);
   const entry: IssueSession = {
@@ -69,6 +71,7 @@ async function startImplementer(deps: IssueSessionRouteDeps, parent: string, req
     ...request,
     worktree: work.worktree,
     branch: work.branch ?? null,
+    startedAtMs,
     finished: null,
     blockedTold: false,
     prUnreadable: 0,
