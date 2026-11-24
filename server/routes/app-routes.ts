@@ -53,14 +53,17 @@ import type { IssueSession } from "./issueSessions.js";
 import { startIssueWork } from "../git/issue-work.js";
 import { forgeFromRepoEntry } from "../git/forge-host.js";
 import { startIssueSessionWatch } from "./issue-session-watch.js";
+import { closeImplementer, mountIssueSessionCloseRoute, type IssueSessionCloseDeps } from "./issue-session-close.js";
+import { closeSummary } from "./issueSessionClose.js";
+import { removeImplementerWorktree } from "../git/implementer-worktree.js";
 import { fetchBranchPr } from "../git/pr-of-branch.js";
-import { deliverWhenFree, inputHeld } from "./deliverWhenFree.js";
+import { deliverWhenFree, inputHeld, type DeliveryDeps } from "./deliverWhenFree.js";
 import { waitingOnPermission } from "./issueSessionWatch.js";
 import { mountTerminalReplyRoutes } from "./terminal-reply-routes.js";
 import { randomUUID } from "node:crypto";
 import { mountSessionAskRoutes } from "./session-ask-routes.js";
 import { mountReviewSettingsRoute, reviewSettingsAnswer } from "./review-settings-route.js";
-import { mountReviewLoopRoutes } from "./review-loop-routes.js";
+import { mountReviewLoopRoutes, type ReviewWorkspaces } from "./review-loop-routes.js";
 import type { ReviewLoop } from "./reviewLoop.js";
 import { fetchPrReviewState } from "../git/pr-review-state.js";
 import { defaultCloneOf } from "../../common/repoDirs.js";
@@ -242,6 +245,23 @@ async function reviewSettingsOf(repo: string): Promise<ReviewSettings | string> 
   return review ?? reviewSettingsAnswer(repo, dir, null).message;
 }
 
+/** The worktrees MulmoTerminal starts reviewers in, on the PR's head. */
+function reviewerWorkspaces(deps: AppRouteDeps): ReviewWorkspaces {
+  return reviewWorkspaces({
+    cloneOf: cloneOfRepo,
+    root: () => path.join(mulmoterminalHome(), "review-worktrees"),
+    worktree: {
+      git: (args, cwd) => git(args, cwd),
+      exists: existsSync,
+      isSymlink: (dir) => lstatSync(dir, { throwIfNoEntry: false })?.isSymbolicLink() === true,
+      realpath: (dir) => realpathSync(dir),
+    },
+    spawn: deps.spawnIssueSession,
+    recordSpawn: (child, parent) => spawnedSessions.recordSpawn(child, parent),
+    markVisible: (session, agent) => markUnplacedSession(session, agent),
+  });
+}
+
 function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
   mountReviewSettingsRoute(app, { cloneOf: cloneOfRepo, reviewOf: (dir) => loadDirConfig(dir).review });
   const ask = {
@@ -255,28 +275,32 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     nonce: () => randomUUID().slice(0, ASK_NONCE_CHARS),
   };
   mountSessionAskRoutes(app, ask);
+  const loops = new Map<string, ReviewLoop>();
+  const close = (session: string): boolean => endTmuxSession(tmuxRouteDeps(deps), session, true);
+  const workspaces = reviewerWorkspaces(deps);
   mountReviewLoopRoutes(app, {
     ...ask,
-    loops: new Map<string, ReviewLoop>(),
+    loops,
     settingsOf: reviewSettingsOf,
     prState: fetchPrReviewState,
     agentOf: (session) => ptys.get(session)?.agent,
-    close: (session) => endTmuxSession(tmuxRouteDeps(deps), session, true),
-    workspaces: reviewWorkspaces({
-      cloneOf: cloneOfRepo,
-      root: () => path.join(mulmoterminalHome(), "review-worktrees"),
-      worktree: {
-        git: (args, cwd) => git(args, cwd),
-        exists: existsSync,
-        isSymlink: (dir) => lstatSync(dir, { throwIfNoEntry: false })?.isSymbolicLink() === true,
-        realpath: (dir) => realpathSync(dir),
-      },
-      spawn: deps.spawnIssueSession,
-      recordSpawn: (child, parent) => spawnedSessions.recordSpawn(child, parent),
-      markVisible: (session, agent) => markUnplacedSession(session, agent),
-    }),
+    close,
+    workspaces,
   });
+  mountIssueSessions(app, deps, ask, { loops, close, dropWorkspace: (loop) => workspaces.drop(loop) });
+}
+
+/** startIssueSession, the watch over its implementers, and closeIssueSession, which reaches the
+ *  review loops so an implementer's reviewers close with it. */
+function mountIssueSessions(
+  app: Express,
+  deps: AppRouteDeps,
+  ask: DeliveryDeps,
+  review: Pick<IssueSessionCloseDeps, "loops" | "close" | "dropWorkspace">,
+): void {
   const issueSessions = new Map<string, IssueSession>();
+  const closeDeps = { sessions: issueSessions, ...review, removeWorktree: removeImplementerWorktree };
+  mountIssueSessionCloseRoute(app, closeDeps);
   const isRunning = (session: string): boolean => ptys.has(session);
   mountIssueSessionRoutes(app, {
     sessions: issueSessions,
@@ -296,6 +320,7 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     blocked: (session) => inputHeld(ask, session),
     deliver: (parent, text, ended) => deliverWhenFree(ask, parent, text, ended, "startIssueSession"),
     limit: getMaxIssueSessions,
+    closeFinished: async (entry) => closeSummary(entry, await closeImplementer(closeDeps, entry)),
   });
 }
 

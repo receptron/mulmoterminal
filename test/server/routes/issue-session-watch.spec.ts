@@ -26,6 +26,7 @@ let prs: Map<string, BranchPr | null>;
 let blockedSessions: Set<string>;
 const deliver = vi.fn<IssueSessionWatchDeps["deliver"]>();
 const prOf = vi.fn<IssueSessionWatchDeps["prOf"]>();
+const closeFinished = vi.fn<IssueSessionWatchDeps["closeFinished"]>();
 
 function deps(): IssueSessionWatchDeps {
   return {
@@ -35,6 +36,7 @@ function deps(): IssueSessionWatchDeps {
     blocked: async (session) => blockedSessions.has(session),
     deliver,
     limit: () => 2,
+    closeFinished,
   };
 }
 
@@ -52,6 +54,8 @@ beforeEach(() => {
   deliver.mockImplementation(async () => undefined);
   prOf.mockReset();
   prOf.mockImplementation(async (_repo, branch) => prs.get(branch) ?? null);
+  closeFinished.mockReset();
+  closeFinished.mockImplementation(async (closing) => `Closed implementer session ${closing.session}.`);
 });
 
 describe("watchIssueSessions", () => {
@@ -114,6 +118,46 @@ describe("watchIssueSessions", () => {
     expect(ended?.()).toBe(true);
     running.add("parent");
     expect(ended?.()).toBe(false);
+  });
+
+  it("closes an implementer once its PR is merged or closed, and says so in the line", async () => {
+    prs.set("issue/7", { number: 9, state: "MERGED" });
+    prs.set("issue/8", { number: 10, state: "CLOSED" });
+    await watchIssueSessions(deps());
+    expect(closeFinished.mock.calls.map(([closing]) => closing.session).sort()).toEqual(["s-1", "s-2"]);
+    expect(told().map(([, text]) => text)).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/was merged\. .* Closed implementer session s-1\.$/),
+        expect.stringMatching(/Closed implementer session s-2\.$/),
+      ]),
+    );
+  });
+
+  it("leaves an implementer whose session ended, or that is waiting, for the starter to close", async () => {
+    running.delete("s-2");
+    blockedSessions.add("s-1");
+    await watchIssueSessions(deps());
+    expect(closeFinished).not.toHaveBeenCalled();
+  });
+
+  it("still tells the starter about the merge when the close throws", async () => {
+    prs.set("issue/7", { number: 9, state: "MERGED" });
+    closeFinished.mockRejectedValue(new Error("tmux gone"));
+    await watchIssueSessions(deps());
+    expect(told()[0]?.[1]).toContain("was merged. 1 of 2 implementers are running; start the next issue if one is left. Could not close it: tmux gone.");
+  });
+
+  it("says nothing about an implementer closeIssueSession closed while gh was asked", async () => {
+    prOf.mockImplementation(async (_repo, branch) => {
+      if (branch === "issue/7") sessions.delete("s-1");
+      return { number: 9, state: "MERGED" };
+    });
+    await watchIssueSessions(deps());
+    expect(
+      told()
+        .map(([, text]) => text)
+        .some((text) => text.includes("s-1")),
+    ).toBe(false);
   });
 
   it("does not ask gh about an implementer with no branch", async () => {
