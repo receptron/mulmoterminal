@@ -27,13 +27,22 @@ const entry = (over: Partial<IssueSession> = {}): IssueSession => ({
   ...over,
 });
 
-const loop = (pr: number, author: string, reviewer: string): ReviewLoop => ({ repo: "owner/repo", pr, author, reviewer, rounds: [], running: false });
+const loop = (pr: number, author: string, reviewer: string): ReviewLoop => ({
+  repo: "owner/repo",
+  pr,
+  author,
+  reviewer,
+  workspace: null,
+  rounds: [],
+  running: false,
+});
 
 let sessions: Map<string, IssueSession>;
 let loops: Map<string, ReviewLoop>;
 let calls: string[];
 let stillOpen: Set<string>;
 const removeWorktree = vi.fn<IssueSessionCloseDeps["removeWorktree"]>();
+const dropWorkspace = vi.fn<IssueSessionCloseDeps["dropWorkspace"]>();
 
 function deps(): IssueSessionCloseDeps {
   return {
@@ -44,6 +53,7 @@ function deps(): IssueSessionCloseDeps {
       if (session === "throws") throw new Error("tmux gone");
       return !stillOpen.has(session);
     },
+    dropWorkspace,
     removeWorktree,
   };
 }
@@ -56,6 +66,8 @@ beforeEach(() => {
   ]);
   calls = [];
   stillOpen = new Set();
+  dropWorkspace.mockReset();
+  dropWorkspace.mockImplementation(async (dropped) => void calls.push(`drop ${dropped.reviewer}`));
   removeWorktree.mockReset();
   removeWorktree.mockImplementation(async (worktree) => {
     calls.push(`remove ${worktree}`);
@@ -66,7 +78,7 @@ beforeEach(() => {
 describe("closeImplementer", () => {
   it("closes its reviewers, then its cell, then its worktree, and forgets it", async () => {
     const result = await closeImplementer(deps(), entry());
-    expect(calls).toEqual(["close r-mine", `close ${IMPLEMENTER}`, "remove /wt/7"]);
+    expect(calls).toEqual(["close r-mine", "drop r-mine", `close ${IMPLEMENTER}`, "remove /wt/7"]);
     expect(result).toEqual({ reviewersClosed: ["r-mine"], reviewersLeft: [], implementerClosed: true, worktree: { removed: true } });
     expect(sessions.has(IMPLEMENTER)).toBe(false);
     expect([...loops.keys()]).toEqual(["owner/repo#10"]);
@@ -85,12 +97,21 @@ describe("closeImplementer", () => {
     expect((await closeImplementer(deps(), again)).worktree).toEqual({ removed: true });
   });
 
-  it("reports a reviewer that would not close, or threw, and still closes the implementer", async () => {
+  it("reports a reviewer that would not close, or threw, keeps its worktree, and still closes the implementer", async () => {
     loops.set("owner/repo#11", loop(11, IMPLEMENTER, "throws"));
     stillOpen.add("r-mine");
     const result = await closeImplementer(deps(), entry());
     expect(result.reviewersLeft).toEqual(["r-mine", "throws"]);
+    expect(dropWorkspace).not.toHaveBeenCalled();
     expect(result.implementerClosed).toBe(true);
+  });
+
+  it("ends a loop whose reviewer is still starting without closing anything for it", async () => {
+    loops.set("owner/repo#9", loop(9, IMPLEMENTER, ""));
+    const result = await closeImplementer(deps(), entry());
+    expect(calls).toEqual([`close ${IMPLEMENTER}`, "remove /wt/7"]);
+    expect(result.reviewersClosed).toEqual([]);
+    expect(loops.has("owner/repo#9")).toBe(false);
   });
 
   it("answers a worktree removal that threw as kept", async () => {

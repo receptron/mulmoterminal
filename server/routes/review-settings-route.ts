@@ -17,9 +17,9 @@ export function reviewSettingsAnswer(repo: string, dir: string | null, review: R
   if (dir === null) return { message: `No local clone of ${repo} is known to MulmoTerminal, so its review settings cannot be read.` };
   if (review === null)
     return { message: `${repo} (${dir}) declares no review settings: no \`review\` in its .mulmoterminal.json, or one that does not validate.` };
-  const { reviewer, maxRounds, requiredLgtm } = review;
+  const { reviewer, maxRounds, requiredLgtm, skill } = review;
   return {
-    message: `${repo} (${dir}): reviewer ${reviewer}, at most ${maxRounds} rounds, mergeable with ${requiredLgtm} LGTM on the current head and every CI check passing.`,
+    message: `${repo} (${dir}): reviewer ${reviewer} following the ${skill} skill, at most ${maxRounds} rounds, mergeable with ${requiredLgtm} LGTM on the current head and every CI check passing.`,
     jsonData: { repo, dir, ...review },
   };
 }

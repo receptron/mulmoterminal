@@ -7,6 +7,7 @@ import { ptySpawn, type PtySpawnEnv } from "./pty-spawn.js";
 import { ptyStartLine } from "./pty-exit-log.js";
 import { registerPty } from "./pty-register.js";
 import { SESSION_AGENT_ENV } from "../../infra/process/tmux-pane-exit.js";
+import { tmuxIsPsmux } from "../../infra/process/tmux.js";
 import type { PtyEntry } from "../types.js";
 
 export interface AgentPtyStart {
@@ -47,7 +48,7 @@ export function startAgentPty(start: AgentPtyStart): StartedAgentPty {
   const { term, tmux, reattached } = ptySpawn(sessionId, file, args, cwd, true, recordingSpawnEnv(spawnEnv, agent));
   const spawnedAtMs = Date.now();
   console.log(ptyStartLine({ agent, pid: term.pid, cwd, tmux, reattached, sessionId, note }));
-  const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, reattached, active: false, agent };
+  const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, reattached, active: false, agent, recordsExit: tmux && !tmuxIsPsmux() };
   registerPty(sessionId, entry);
   return { entry, spawnedAtMs, reattached };
 }

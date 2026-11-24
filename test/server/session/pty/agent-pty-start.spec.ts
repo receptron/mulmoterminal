@@ -19,7 +19,7 @@ interface SpawnCall {
 }
 const spawnCalls: SpawnCall[] = [];
 const order: string[] = [];
-const outcome = { tmux: true, reattached: false, pid: 1, throws: false };
+const outcome = { tmux: true, reattached: false, pid: 1, throws: false, psmux: false };
 
 vi.mock("../../../../server/session/pty/pty-spawn.js", () => ({
   ptySpawn: (sessionId: string, file: string, args: string[], cwd: string, persistent: boolean, options?: PtySpawnEnv) => {
@@ -29,6 +29,9 @@ vi.mock("../../../../server/session/pty/pty-spawn.js", () => ({
     return { term: { pid: outcome.pid }, tmux: outcome.tmux, reattached: outcome.reattached };
   },
 }));
+
+// psmux starts panes with no shell to run the exit recorder in.
+vi.mock("../../../../server/infra/process/tmux.js", () => ({ tmuxIsPsmux: () => outcome.psmux }));
 
 // Only the pty table: the real registry hydrates its logs from the user's home on import.
 vi.mock("../../../../server/session/registry.js", () => ({ ptys: new Map() }));
@@ -83,7 +86,7 @@ describe("startAgentPty", () => {
     for (let index = 1; index <= GENERATED_STARTS; index += 1) {
       const start = generateStart(index);
       agents.add(start.agent);
-      Object.assign(outcome, { tmux: random.fraction() < 0.5, reattached: random.fraction() < 0.5, pid: index, throws: false });
+      Object.assign(outcome, { tmux: random.fraction() < 0.5, reattached: random.fraction() < 0.5, pid: index, throws: false, psmux: random.fraction() < 0.3 });
       spawnCalls.length = 0;
       order.length = 0;
       logged = [];
@@ -109,6 +112,7 @@ describe("startAgentPty", () => {
         reattached: outcome.reattached,
         active: false,
         agent: start.agent,
+        recordsExit: outcome.tmux && !outcome.psmux,
       });
       expect(ptys.get(start.sessionId)).toBe(entry);
       expect(spawnedAtMs).toBe(clockMs);

@@ -13,6 +13,8 @@ export interface IssueSessionCloseDeps {
   loops: Map<string, ReviewLoop>;
   /** End the session and close its cell; false when its tmux session is still there. */
   close: (session: string) => boolean;
+  /** Removes a closed reviewer's worktree, as endReview does. Never throws. */
+  dropWorkspace: (loop: ReviewLoop) => Promise<void>;
   removeWorktree: (worktree: string) => Promise<WorktreeOutcome>;
 }
 
@@ -25,13 +27,16 @@ function closeOne(deps: IssueSessionCloseDeps, session: string): boolean {
   }
 }
 
-/** The review loops the implementer ran, ended, and their reviewers closed. */
-function closeReviewers(deps: IssueSessionCloseDeps, implementer: string): { closed: string[]; left: string[] } {
+/** The review loops the implementer ran, ended, and their reviewers closed with their worktrees. A
+ *  loop whose reviewer is still starting names none yet (""); that start ends its reviewer itself
+ *  once it sees the loop gone. */
+async function closeReviewers(deps: IssueSessionCloseDeps, implementer: string): Promise<{ closed: string[]; left: string[] }> {
   const authored = [...deps.loops].filter(([, loop]) => loop.author === implementer);
   authored.forEach(([key]) => deps.loops.delete(key));
-  const reviewers = authored.map(([, loop]) => loop.reviewer);
-  const closed = reviewers.filter((reviewer) => closeOne(deps, reviewer));
-  return { closed, left: reviewers.filter((reviewer) => !closed.includes(reviewer)) };
+  const started = authored.map(([, loop]) => loop).filter((loop) => loop.reviewer !== "");
+  const closed = started.filter((loop) => closeOne(deps, loop.reviewer));
+  await Promise.all(closed.map((loop) => deps.dropWorkspace(loop)));
+  return { closed: closed.map((loop) => loop.reviewer), left: started.filter((loop) => !closed.includes(loop)).map((loop) => loop.reviewer) };
 }
 
 async function worktreeAfterClose(deps: IssueSessionCloseDeps, worktree: string): Promise<WorktreeOutcome> {
@@ -48,7 +53,7 @@ async function worktreeAfterClose(deps: IssueSessionCloseDeps, worktree: string)
 export async function closeImplementer(deps: IssueSessionCloseDeps, entry: IssueSession): Promise<CloseResult> {
   deps.sessions.delete(entry.session);
   if (entry.finished === null) entry.finished = "ended";
-  const reviewers = closeReviewers(deps, entry.session);
+  const reviewers = await closeReviewers(deps, entry.session);
   const implementerClosed = closeOne(deps, entry.session);
   if (!implementerClosed) deps.sessions.set(entry.session, entry);
   const worktree = implementerClosed ? await worktreeAfterClose(deps, entry.worktree) : null;

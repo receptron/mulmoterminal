@@ -83,17 +83,30 @@ function applyPtyExit(sessionId: string, disposition: PtyExitDisposition, reap: 
   }
 }
 
+interface ProgramExit {
+  exitCode: number;
+  exitUnrecorded: boolean;
+}
+
 /** The program's own exit code when its recorder wrote one (#3272), else the client's. Asked only on a
  *  reap: a `keep` is a session still running, and a `gone` was ended by us, not by the program. */
-function programExitCode(sessionId: string, entry: PtyEntry, disposition: PtyExitDisposition, clientExitCode: number): number {
+function programExit(sessionId: string, entry: PtyEntry, disposition: PtyExitDisposition, clientExitCode: number): ProgramExit {
   // The reap SIGHUPs the tmux client, which exits 1 on it: that is our close, not a crash (#3300).
-  if (closedOnRequest(disposition, !!entry.closeRequested)) return 0;
-  if (disposition !== "reap" || !entry.tmux) return clientExitCode;
+  if (closedOnRequest(disposition, !!entry.closeRequested)) return { exitCode: 0, exitUnrecorded: false };
+  if (disposition !== "reap" || !entry.tmux) return { exitCode: clientExitCode, exitUnrecorded: false };
   const record = tmuxTakePaneExitRecord(sessionId);
   const recorded = record === null ? null : parsePaneExitRecord(record);
-  if (recorded === null) return clientExitCode;
+  if (recorded === null) return unrecordedExit(sessionId, entry, clientExitCode);
   if (recorded !== 0) console.log(`[pty] ${sessionId} program exited ${recorded} — keeping its cell`);
-  return recorded;
+  return { exitCode: recorded, exitUnrecorded: false };
+}
+
+// The client's code is tmux's, 0 whatever the program did, so a recorder that could not write must not
+// read as a clean end: on a full disk every agent fails at once, and each cell would close itself.
+function unrecordedExit(sessionId: string, entry: PtyEntry, clientExitCode: number): ProgramExit {
+  if (!entry.recordsExit) return { exitCode: clientExitCode, exitUnrecorded: false };
+  console.log(`[pty] ${sessionId} left no exit record (is the disk full?) — keeping its cell`);
+  return { exitCode: clientExitCode, exitUnrecorded: true };
 }
 
 /** A persistent pty's exit, end to end: decide, tell the browser whether the SESSION ended (only a
@@ -102,21 +115,22 @@ function programExitCode(sessionId: string, entry: PtyEntry, disposition: PtyExi
 export function reportPtyExit(
   sessionId: string,
   entry: PtyEntry,
-  exit: Omit<PtyExitReport, "ended" | "reattached">,
+  exit: Omit<PtyExitReport, "ended" | "reattached" | "exitUnrecorded">,
   reap: (id: string) => void,
 ): PtyExitDisposition {
   const disposition = decidePtyExit(sessionId, entry);
-  const exitCode = programExitCode(sessionId, entry, disposition, exit.exitCode);
+  const { exitCode, exitUnrecorded } = programExit(sessionId, entry, disposition, exit.exitCode);
   const reattached = !!entry.reattached;
   const sessionEnded = sessionEndedForCell(disposition, !!entry.closeRequested);
-  sendExitAndClose(entry.ws, { ...exit, exitCode, reattached, ended: sessionEnded });
+  sendExitAndClose(entry.ws, { ...exit, exitCode, reattached, ended: sessionEnded, exitUnrecorded });
   // The cell nobody opened yet (an agent's spawnBackgroundChat with no grid on screen) gets the
   // same answer an open one would: if that cell would have closed itself, no grid should adopt the
   // session later and resume it as a new cell (#3055).
   const worktreeCell = worktreeLabel(entry.cwd) !== null;
   // A shell's code is its last command's, not a crash, so a launcher or bot job is decided as before.
   const closeExitCode = entry.agent === "shell" ? null : exitCode;
-  if (shouldCloseEndedCell({ sessionEnded, lifetimeMs: exit.lifetimeMs, reattached, worktreeCell, exitCode: closeExitCode })) markSessionPlaced(sessionId);
+  if (shouldCloseEndedCell({ sessionEnded, lifetimeMs: exit.lifetimeMs, reattached, worktreeCell, exitCode: closeExitCode, exitUnrecorded }))
+    markSessionPlaced(sessionId);
   applyPtyExit(sessionId, disposition, reap);
   return disposition;
 }

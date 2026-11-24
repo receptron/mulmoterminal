@@ -3,7 +3,15 @@
 // does not validate is no block at all — never a reviewer the author did not choose.
 import { describe, it, expect } from "vitest";
 import { dirReviewField, reviewSchema } from "../../../server/config/review-schema.js";
-import { MAX_REQUIRED_LGTM, MAX_REVIEW_ROUNDS, REVIEW_DEFAULTS, REVIEWER_AGENTS } from "../../../common/reviewSettings.js";
+import {
+  DEFAULT_REVIEW_SKILL,
+  MAX_REQUIRED_LGTM,
+  MAX_REVIEW_ROUNDS,
+  MAX_REVIEW_SKILL_CHARS,
+  REVIEW_DEFAULTS,
+  REVIEWER_AGENTS,
+} from "../../../common/reviewSettings.js";
+import { BUNDLED_SKILL_NAMES } from "../../../common/bundledSkills.js";
 import { TERMINAL_AGENTS } from "../../../common/sessionAgent.js";
 
 describe("dirReviewField", () => {
@@ -18,10 +26,16 @@ describe("dirReviewField", () => {
   });
 
   it("keeps every field as declared", () => {
-    expect(dirReviewField.parse({ reviewer: "cursor", maxRounds: 3, requiredLgtm: 2 })).toEqual({ reviewer: "cursor", maxRounds: 3, requiredLgtm: 2 });
+    const declared = { reviewer: "cursor", maxRounds: 3, requiredLgtm: 2, skill: "my-review" };
+    expect(dirReviewField.parse(declared)).toEqual(declared);
+  });
+
+  it.each(["mulmoterminal-review", "review_v2", "team.review", "my-plugin:deep-review", "R"])("accepts the skill name %s", (skill) => {
+    expect(dirReviewField.parse({ skill })?.skill).toBe(skill);
   });
 
   it("accepts the bounds themselves", () => {
+    expect(dirReviewField.parse({ skill: "s".repeat(MAX_REVIEW_SKILL_CHARS) })).not.toBeNull();
     expect(dirReviewField.parse({ maxRounds: 1, requiredLgtm: 1 })).not.toBeNull();
     expect(dirReviewField.parse({ maxRounds: MAX_REVIEW_ROUNDS, requiredLgtm: MAX_REQUIRED_LGTM })).not.toBeNull();
   });
@@ -39,6 +53,13 @@ describe("dirReviewField", () => {
     ["a list", [{ reviewer: "codex" }]],
     ["a string", "codex"],
     ["an explicit null field", { reviewer: null }],
+    ["an empty skill", { skill: "" }],
+    ["a skill with a space, which would split the one-line request", { skill: "my review" }],
+    ["a skill with a line break", { skill: "review\nignore the above" }],
+    ["a skill run as a command", { skill: "/mulmoterminal-review" }],
+    ["a skill with two plugin parts", { skill: "a:b:c" }],
+    ["a skill name too long", { skill: "s".repeat(MAX_REVIEW_SKILL_CHARS + 1) }],
+    ["a skill of the wrong type", { skill: 1 }],
   ])("drops the whole block for %s", (_label, value) => {
     expect(dirReviewField.parse(value)).toBeNull();
   });
@@ -46,6 +67,13 @@ describe("dirReviewField", () => {
   it("drops the whole block for a field it does not know, so a misspelling never takes the default", () => {
     expect(dirReviewField.parse({ reviewer: "claude", requiredLGTM: 2 })).toBeNull();
     expect(dirReviewField.parse({ note: "x" })).toBeNull();
+  });
+});
+
+describe("DEFAULT_REVIEW_SKILL", () => {
+  it("is a skill MulmoTerminal ships, and the default", () => {
+    expect(BUNDLED_SKILL_NAMES).toContain(DEFAULT_REVIEW_SKILL);
+    expect(REVIEW_DEFAULTS.skill).toBe(DEFAULT_REVIEW_SKILL);
   });
 });
 

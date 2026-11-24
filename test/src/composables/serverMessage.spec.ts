@@ -14,6 +14,14 @@ describe("messageEffect", () => {
     expect([e.terminal, e.callsOnExit]).toEqual([true, true]);
   });
 
+  // The client's 0 is all there is, so the banner must not read as a clean end.
+  it("says an unrecorded exit was not recorded, in red, whatever the code", () => {
+    const banner = messageEffect("exit", false, undefined, 0, true).banner ?? "";
+    expect(banner).toContain("how it ended was not recorded");
+    expect(banner).toContain("\x1b[31m");
+    expect(messageEffect("exit", false, undefined, 0).banner).not.toContain("not recorded");
+  });
+
   // A Run command finished vs an agent session ended — only the wording differs.
   it("words the exit banner by whether the slot is a command", () => {
     expect(messageEffect("exit", true).banner).toContain("[finished]");
@@ -101,8 +109,24 @@ describe("copyModeOf", () => {
 
 describe("sessionExitOf", () => {
   it("reads a reaped session and its lifetime", () => {
-    expect(sessionExitOf({ ended: true, lifetimeMs: 5000, reattached: true })).toEqual({ sessionEnded: true, lifetimeMs: 5000, reattached: true });
-    expect(sessionExitOf({ ended: false, lifetimeMs: 0, reattached: false })).toEqual({ sessionEnded: false, lifetimeMs: 0, reattached: false });
+    expect(sessionExitOf({ ended: true, lifetimeMs: 5000, reattached: true })).toEqual({
+      sessionEnded: true,
+      lifetimeMs: 5000,
+      reattached: true,
+      exitUnrecorded: false,
+    });
+    expect(sessionExitOf({ ended: false, lifetimeMs: 0, reattached: false })).toEqual({
+      sessionEnded: false,
+      lifetimeMs: 0,
+      reattached: false,
+      exitUnrecorded: false,
+    });
+  });
+
+  it("reads an unrecorded exit only from a literal true", () => {
+    expect(sessionExitOf({ exitUnrecorded: true }).exitUnrecorded).toBe(true);
+    expect(sessionExitOf({ exitUnrecorded: "true" }).exitUnrecorded).toBe(false);
+    expect(sessionExitOf({}).exitUnrecorded).toBe(false);
   });
 
   // Anything but a literal true must not close a cell: a frame from an older server has no field.

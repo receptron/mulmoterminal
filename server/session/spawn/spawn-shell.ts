@@ -31,7 +31,7 @@ export function createShellSpawners(deps: SpawnDeps) {
     term.onExit(({ exitCode, signal }) => {
       const lifetimeMs = Date.now() - spawnedAtMs;
       console.log(ptyExitLine({ agent: "command", exitCode, signal, lifetimeMs, cwd }));
-      sendExitAndClose(ws, { exitCode, signal, lifetimeMs, reattached: false, ended: false });
+      sendExitAndClose(ws, { exitCode, signal, lifetimeMs, reattached: false, ended: false, exitUnrecorded: false });
     });
     return term;
   }

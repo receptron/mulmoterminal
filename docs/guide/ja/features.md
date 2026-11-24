@@ -33,6 +33,7 @@ MulmoTerminal（Claude Code / Codex を並列に回すブラウザ端末）の�
 | 通知音は7種類から選ぶ | 完了・入力待ちのほか、Run セルの成功/失敗・セッション終了・PR の CI 落ち・裏の補助処理の失敗にも鳴らせる。**既定 ON は最初の2つだけ**で、残りは opt-in（[設定](config.html#sounds)） |
 | worktree 隔離 | 同じリポに複数エージェントを走らせても衝突しない git worktree（→ [worktree](worktree.html)） |
 | セッション永続化（tmux） | tmux があれば各セッションは tmux 内で走り、リロード／サーバ再起動を跨いで**再接続** |
+| レイアウトの控え | グリッドにどのセルを並べているかはブラウザに保存され、控えが `~/.mulmoterminal/grid-layout.json` にも書かれます。ブラウザ側の保存が失われた状態で開くと（ディスク満杯、ブラウザのデータ削除、別のアドレスで開いた場合）、下にバーが出ます。**戻す** でそのセルを開き直し、各セッションは会話記録から再開します。**閉じる** なら空のグリッドから始めます。別のタブで表示中のセルは対象外です |
 | スマホ連携（RemoteHost） | タスク完了・入力待ちを**スマホへ Web Push**。スマホから**閲覧・返信・新規ターミナル起動**まででき、よく送る文はワンタップのチップに登録可（→ [スマホから使う](phone.html)） |
 
 ## 2. 可視化 — どこで何をしているか
@@ -224,6 +225,7 @@ Go・Java/Kotlin・C/C++/Objective-C・PHP・SQL は、その種類を最初に�
 | `/mulmoterminal-bug-report` | 「なんか変」と思ったら。同梱スキルが症状を聞き、**実際の設定とバージョンを読んで**仕様・設定で説明がつかないかを確かめ、既知の issue を検索し、それでも残ったものだけを報告用にまとめる（環境情報は自動収集、鍵はマスク） |
 | `/mulmoterminal-issue-to-merge` | issue を指定すると merge まで進める。issue で決まっていないことだけを聞き、ブランチで実装し、PR を開き、別のエージェントのセッションに往復ごとにレビューさせ（`requestReview`。MulmoTerminal が往復ごとに依頼を送り、返事を待ち、結果を打ち返す）、指摘を直し、リポジトリが宣言した条件を満たしたら merge する。誰がレビューするか、いつ merge してよいかはリポジトリの `review` 設定で決まる（[設定](config.html#dir-review)）。レビューの道具がある、Claude・Codex・Copilot のワークスペースのセルから使う（プロジェクトのセルには道具が無い） |
 | `/mulmoterminal-dispatch-issues` | 複数の issue を指定すると、それぞれを実装役に渡す（`startIssueSession`）。実装役は issue の worktree とセルを一つずつ持ち、`/mulmoterminal-issue-to-merge` を進める。同時に走るのは `maxIssueSessions` まで（[設定](config.html#max-issue-sessions)）。MulmoTerminal は、実装役が merge された・閉じられた・終わった・利用者を待っているときに渡した側のセッションへ知らせ、空きが出たら次の issue を始める。merge された・閉じられた実装役は、セルと worktree が自動で閉じられる。終わった実装役は、渡した側が `closeIssueSession` で閉じる。実装役の質問には、そのセルで答える。Claude・Codex・Copilot のワークスペースのセルから使う |
+| `/mulmoterminal-review` | その往復でレビュー役が既定で従うスキル。一回の往復で指摘を全部出し、それぞれに重さ、同じ間違いがある他の場所、直す最小の変更を付ける。正しさ・並行性・権限・影響範囲・互換性・テスト・PR の主張を一つずつ答え、head を名指しした判定の行で始めて PR に投稿する。リポジトリは自分のスキルを指定してもよい（`review.skill`、[設定](config.html#dir-review)） |
 | `/mulmoterminal-help` / ツールバーのヘルプアイコン | MulmoTerminal について何でも質問できる——何ができるか、機能や画面の各部の使い方、設定の仕方、今の版と最新版で何が新しいか。同梱のガイド・変更履歴・ソースを読んで答え、確認した場所を添える。歯車の隣のアイコンを押すと一回で開く。何も変更しない |
 
 ![セルのヘッダー。Skill メニューの隣で Mulmo のドロップダウンが開き、プロジェクトが宣言したデッキとワークスペースの stories のデッキが 1 件ずつ並んでいる](../images/mulmo-menu.png)

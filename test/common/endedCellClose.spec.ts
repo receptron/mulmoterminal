@@ -8,6 +8,7 @@ const ended = (over: Partial<EndedCellExit> = {}): EndedCellExit => ({
   reattached: false,
   worktreeCell: false,
   exitCode: 0,
+  exitUnrecorded: false,
   ...over,
 });
 
@@ -61,5 +62,12 @@ describe("shouldCloseEndedCell", () => {
   // Its close asks whether to keep the worktree, which is not asked unprompted.
   it("keeps a worktree cell", () => {
     expect(shouldCloseEndedCell(ended({ worktreeCell: true }))).toBe(false);
+  });
+
+  // A full disk: the agent left no record of how it ended, so it is not known to have ended cleanly.
+  it("keeps a cell whose exit went unrecorded, however it would otherwise close", () => {
+    expect(shouldCloseEndedCell(ended({ exitUnrecorded: true }))).toBe(false);
+    expect(shouldCloseEndedCell(ended({ exitUnrecorded: true, reattached: true }))).toBe(false);
+    expect(shouldCloseEndedCell(ended({ exitUnrecorded: true, exitCode: null }))).toBe(false);
   });
 });

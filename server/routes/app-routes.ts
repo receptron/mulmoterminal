@@ -20,6 +20,8 @@ import { sessionToken } from "../session/credentials/token-sessions.js";
 import { noteMovedFrom, takeMovedFrom } from "../session/credentials/rotation-notice.js";
 import { rotationLoginLabel } from "../../common/tokenRotation.js";
 import { survivingSessions } from "../session/reaping/surviving-sessions.js";
+import { mountGridLayoutRoutes } from "./grid-layout-routes.js";
+import { GRID_LAYOUT_FILE } from "../config/grid-layout.js";
 import { armedReapIntervalHours } from "../session/reaping/reap-schedule.js";
 import {
   getCwdPresets,
@@ -51,7 +53,7 @@ import type { IssueSession } from "./issueSessions.js";
 import { startIssueWork } from "../git/issue-work.js";
 import { forgeFromRepoEntry } from "../git/forge-host.js";
 import { startIssueSessionWatch } from "./issue-session-watch.js";
-import { closeImplementer, mountIssueSessionCloseRoute } from "./issue-session-close.js";
+import { closeImplementer, mountIssueSessionCloseRoute, type IssueSessionCloseDeps } from "./issue-session-close.js";
 import { closeSummary } from "./issueSessionClose.js";
 import { removeImplementerWorktree } from "../git/implementer-worktree.js";
 import { fetchBranchPr } from "../git/pr-of-branch.js";
@@ -61,7 +63,7 @@ import { mountTerminalReplyRoutes } from "./terminal-reply-routes.js";
 import { randomUUID } from "node:crypto";
 import { mountSessionAskRoutes } from "./session-ask-routes.js";
 import { mountReviewSettingsRoute, reviewSettingsAnswer } from "./review-settings-route.js";
-import { mountReviewLoopRoutes } from "./review-loop-routes.js";
+import { mountReviewLoopRoutes, type ReviewWorkspaces } from "./review-loop-routes.js";
 import type { ReviewLoop } from "./reviewLoop.js";
 import { fetchPrReviewState } from "../git/pr-review-state.js";
 import { defaultCloneOf } from "../../common/repoDirs.js";
@@ -162,6 +164,10 @@ import { mountSpaFallback } from "../infra/http/spa-fallback.js";
 import { mountRateLimitRoutes, type RateLimitRouteDeps } from "../agents/rate-limit/rate-limit-routes.js";
 import { mountLoadRoute } from "./load-routes.js";
 import { workspaceForRoute } from "./routeParams.js";
+import { reviewWorkspaces } from "./review-workspaces.js";
+import { git } from "../git/worktrees.js";
+import { mulmoterminalHome } from "../infra/fs/mulmoterminal-home.js";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
 
 export interface AppRouteDeps extends SessionActivityDeps {
   /** Which agents could be started, as checked once at server start (#2229). */
@@ -239,6 +245,23 @@ async function reviewSettingsOf(repo: string): Promise<ReviewSettings | string> 
   return review ?? reviewSettingsAnswer(repo, dir, null).message;
 }
 
+/** The worktrees MulmoTerminal starts reviewers in, on the PR's head. */
+function reviewerWorkspaces(deps: AppRouteDeps): ReviewWorkspaces {
+  return reviewWorkspaces({
+    cloneOf: cloneOfRepo,
+    root: () => path.join(mulmoterminalHome(), "review-worktrees"),
+    worktree: {
+      git: (args, cwd) => git(args, cwd),
+      exists: existsSync,
+      isSymlink: (dir) => lstatSync(dir, { throwIfNoEntry: false })?.isSymbolicLink() === true,
+      realpath: (dir) => realpathSync(dir),
+    },
+    spawn: deps.spawnIssueSession,
+    recordSpawn: (child, parent) => spawnedSessions.recordSpawn(child, parent),
+    markVisible: (session, agent) => markUnplacedSession(session, agent),
+  });
+}
+
 function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
   mountReviewSettingsRoute(app, { cloneOf: cloneOfRepo, reviewOf: (dir) => loadDirConfig(dir).review });
   const ask = {
@@ -254,6 +277,7 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
   mountSessionAskRoutes(app, ask);
   const loops = new Map<string, ReviewLoop>();
   const close = (session: string): boolean => endTmuxSession(tmuxRouteDeps(deps), session, true);
+  const workspaces = reviewerWorkspaces(deps);
   mountReviewLoopRoutes(app, {
     ...ask,
     loops,
@@ -261,8 +285,9 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     prState: fetchPrReviewState,
     agentOf: (session) => ptys.get(session)?.agent,
     close,
+    workspaces,
   });
-  mountIssueSessions(app, deps, ask, { loops, close });
+  mountIssueSessions(app, deps, ask, { loops, close, dropWorkspace: (loop) => workspaces.drop(loop) });
 }
 
 /** startIssueSession, the watch over its implementers, and closeIssueSession, which reaches the
@@ -271,7 +296,7 @@ function mountIssueSessions(
   app: Express,
   deps: AppRouteDeps,
   ask: DeliveryDeps,
-  review: { loops: Map<string, ReviewLoop>; close: (session: string) => boolean },
+  review: Pick<IssueSessionCloseDeps, "loops" | "close" | "dropWorkspace">,
 ): void {
   const issueSessions = new Map<string, IssueSession>();
   const closeDeps = { sessions: issueSessions, ...review, removeWorktree: removeImplementerWorktree };
@@ -482,6 +507,7 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
   mountSessionFacingRoutes(app, deps);
   mountSwitchToken(app, deps);
   mountProcessesPageRoutes(app, deps);
+  mountGridLayoutRoutes(app, { file: GRID_LAYOUT_FILE, isAllowedOrigin: deps.isAllowedOrigin, attachedSessionIds });
 }
 
 // The session-facing half: hooks, tool history, and everything the browser asks about a
@@ -653,6 +679,10 @@ function mountSessionFacingRoutes(app: Express, deps: AppRouteDeps): void {
   // both directions, so they can't drift apart.
 
   mountTmuxRoutes(app, tmuxRouteDeps(deps));
+}
+
+function attachedSessionIds(): string[] {
+  return [...ptys].filter(([, entry]) => entry.ws).map(([id]) => id);
 }
 
 /** The tmux routes' production wiring, exported so a spec can hold it to what the routes assume. */

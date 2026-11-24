@@ -28,7 +28,7 @@ export const CLOSE_ISSUE_SESSION: ToolDefinition = {
   type: "function",
   name: "closeIssueSession",
   description:
-    "Close an implementer session you started with startIssueSession: end the review loops it ran and close their reviewer cells, close its cell, then remove its local worktree and local branch (the remote branch stays). A worktree with uncommitted changes or commits no remote has is kept, and the answer says so. Refused for an implementer still at work — its PR neither merged nor closed — unless force is true. MulmoTerminal already closes an implementer on its own once its PR is merged or closed.",
+    "Close an implementer session you started with startIssueSession: end the review loops it ran and close their reviewers and their worktrees, close its cell, then remove its local worktree and local branch (the remote branch stays). A worktree with uncommitted changes or commits no remote has is kept, and the answer says so. Refused for an implementer still at work — its PR neither merged nor closed — unless force is true. MulmoTerminal already closes an implementer on its own once its PR is merged or closed.",
   prompt:
     "Use `closeIssueSession` for an implementer whose session ended, or when the user asks to close one. Pass `force: true` only when the user says to close one that is still working.",
   parameters: {

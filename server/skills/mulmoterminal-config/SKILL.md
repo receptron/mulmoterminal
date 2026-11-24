@@ -213,7 +213,7 @@ Read by a session that drives a review, through the `reviewSettings` tool (given
 **Nothing reviews automatically until this key is set.**
 
 ```json
-{ "review": { "reviewer": "codex", "maxRounds": 10, "requiredLgtm": 1 } }
+{ "review": { "reviewer": "codex", "maxRounds": 10, "requiredLgtm": 1, "skill": "mulmoterminal-review" } }
 ```
 
 - `reviewer` — `claude`, `codex`, `antigravity`, `grok`, `copilot` or `cursor` (default `codex`).
@@ -221,12 +221,14 @@ Read by a session that drives a review, through the `reviewSettings` tool (given
 - `maxRounds` — review rounds before a person is asked, 1-50 (default 10).
 - `requiredLgtm` — LGTMs naming the current head that make a PR mergeable, 1-5 (default 1). Every
   CI check passing is required on top.
+- `skill` — the skill the reviewer follows each round, a name or `plugin:name` (default the bundled
+  `mulmoterminal-review`). The verdict line and the PR comment are asked for whatever it says.
 - Any wrong field, including a misspelt field name, drops the **whole key** (shown under *ignored*);
   it never falls back to a default. Write it to the clone the repository's work starts in; worktrees inherit it.
 - No Settings control: the file is the only way to set it. Settings shows it as **Review**.
-- With it set, `requestReview { repo, pr, reviewer }` runs one round at a time against a reviewer
-  session the caller started, and types each round's result into the caller; `endReview` closes the
-  reviewer. Verdicts are `REVIEW VERDICT: …` lines, counted by the board like `CODEX VERDICT:`.
+- With it set, `requestReview { repo, pr }` runs one round at a time: MulmoTerminal starts the
+  reviewer (the declared agent, in a worktree of the PR's head, network allowed for codex) and types
+  each round's result into the caller; `endReview` closes the reviewer and removes the worktree. Verdicts are `REVIEW VERDICT: …` lines, counted by the board like `CODEX VERDICT:`.
 
 ### `maxIssueSessions` — how many issues run at once
 

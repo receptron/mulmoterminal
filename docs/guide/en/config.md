@@ -703,7 +703,7 @@ reviews automatically until the key is set; a session that drives a review reads
 `reviewSettings` tool, given the repository as `owner/repo`.
 
 ```json
-{ "review": { "reviewer": "codex", "maxRounds": 10, "requiredLgtm": 1 } }
+{ "review": { "reviewer": "codex", "maxRounds": 10, "requiredLgtm": 1, "skill": "mulmoterminal-review" } }
 ```
 
 - **`reviewer`** — the agent that reviews: `claude`, `codex`, `antigravity`, `grok`, `copilot` or
@@ -711,20 +711,32 @@ reviews automatically until the key is set; a session that drives a review reads
 - **`maxRounds`** — how many review rounds before a person is asked, 1 to 50. Default 10.
 - **`requiredLgtm`** — how many LGTMs naming the PR's current head make it mergeable, 1 to 5.
   Default 1. Every CI check passing is always required as well.
-- Omit any field for its default; `"review": {}` takes all three defaults.
+- **`skill`** — the skill the reviewer is asked to follow for each round: a skill name, or
+  `plugin:name`. Default `mulmoterminal-review`, which ships with MulmoTerminal: one complete round
+  per request, every finding with its severity, every other place the same mistake appears and the
+  smallest fix, and what the reviewer could not run marked as unverified. Name your own to review
+  your way. Whatever the skill says, the reviewer is still asked to open its reply with the verdict
+  line and post it on the PR, because that is what the rounds are counted by.
+- Omit any field for its default; `"review": {}` takes all four defaults.
 - If any field is wrong (an agent this app does not run, a number out of range, a misspelt field name), the **whole key**
   is ignored rather than falling back to a default reviewer, and Settings → Directory settings lists
   it under *ignored*. Settings shows a valid one as **Review**.
 - The file is the only way to set it. It is read from the clone that work on the repository starts
   in, and a worktree inherits it.
 
-With the key set, the session runs the loop through two tools. It starts a reviewer session with the
-declared agent (`spawnBackgroundChat`) and calls `requestReview` with the repository, the PR number
-and that session. MulmoTerminal sends the reviewer the request, waits for its answer, and types how
+With the key set, the session runs the loop through two tools. It calls `requestReview` with the
+repository and the PR number, and MulmoTerminal starts the reviewer itself: the declared agent, in a
+worktree of the PR's head under `~/.mulmoterminal/review-worktrees/` (never the author's checkout),
+as a cell you can see. A codex reviewer's sandbox may reach the network there, because it reads and
+comments on the PR with `gh`; a codex cell you open yourself keeps your own sandbox. The same reviewer
+takes the PR's later rounds, its worktree moved to each new head, and a new one is started if it has
+stopped. (A session may still start a reviewer of its own with `spawnBackgroundChat` and name it as
+`reviewer`.) MulmoTerminal sends the reviewer the request, naming the `skill` to follow, waits for its answer, and types how
 the round ended into the calling session: the verdict, the rounds left, and whether the merge
-condition is met. It refuses a round past `maxRounds`, a second review of a head that had changes
+condition is met. When the reviewer stops on a question or a permission prompt mid-round, the calling session is told
+once, with the reviewer's cell, so it can tell you where to answer. It refuses a round past `maxRounds`, a second review of a head that had changes
 requested, and a reviewer that is not the declared agent. It never merges; the session does.
-`endReview` closes the reviewer once the PR is merged. The reviewer is asked to open its reply, and
+`endReview` closes the reviewer once the PR is merged, and removes the worktree MulmoTerminal made. The reviewer is asked to open its reply, and
 the comment it posts on the PR, with `REVIEW VERDICT: LGTM (head <sha>)` or
 `REVIEW VERDICT: CHANGES REQUESTED (head <sha>)`, which the GitHub board counts like a
 `CODEX VERDICT:` line. The rounds are kept in memory, so a restart starts the count again.
@@ -749,8 +761,8 @@ it when its PR is merged or closed, when its session ends, and when it stops on 
 or a permission prompt) — as long as that session is still running; its implementers are followed
 either way, so their places come back. A merged or closed one no longer counts.
 
-When its PR is merged or closed, MulmoTerminal also closes the implementer: its reviewer cells, its
-own cell, then its local worktree and local branch (the remote branch stays, so the PR still leads to
+When its PR is merged or closed, MulmoTerminal also closes the implementer: its reviewers (cell and
+worktree), its own cell, then its local worktree and local branch (the remote branch stays, so the PR still leads to
 it). A worktree with uncommitted changes or commits no remote has is kept, and the line says so. One
 whose session ended on its own is left for the starting session, which closes it with
 `closeIssueSession` — the only session allowed to. That tool refuses an implementer still at work
