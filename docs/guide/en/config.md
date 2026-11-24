@@ -747,7 +747,14 @@ them may run at once, across every repository. A start past it is refused until 
 MulmoTerminal follows each one and types a `[startIssueSession]` line into the session that started
 it when its PR is merged or closed, when its session ends, and when it stops on the user (a question
 or a permission prompt) — as long as that session is still running; its implementers are followed
-either way, so their places come back. A merged or closed one no longer counts, even while its cell stays open.
+either way, so their places come back. A merged or closed one no longer counts.
+
+When its PR is merged or closed, MulmoTerminal also closes the implementer: its reviewer cells, its
+own cell, then its local worktree and local branch (the remote branch stays, so the PR still leads to
+it). A worktree with uncommitted changes or commits no remote has is kept, and the line says so. One
+whose session ended on its own is left for the starting session, which closes it with
+`closeIssueSession` — the only session allowed to. That tool refuses an implementer still at work
+unless it is passed `force: true`.
 
 ```json
 { "maxIssueSessions": 3 }

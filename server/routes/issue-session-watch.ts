@@ -19,6 +19,8 @@ export interface IssueSessionWatchDeps {
   /** Type the line into `parent` once nothing holds its input, unless `ended` says it is gone. */
   deliver: (parent: string, text: string, ended: () => boolean) => Promise<void>;
   limit: () => number;
+  /** Close an implementer whose PR was merged or closed (#3428), answering what it closed and kept. */
+  closeFinished: (entry: IssueSession) => Promise<string>;
 }
 
 async function observe(deps: IssueSessionWatchDeps, entry: IssueSession): Promise<ImplementerObservation> {
@@ -30,14 +32,27 @@ async function observe(deps: IssueSessionWatchDeps, entry: IssueSession): Promis
   return { running, pr, blocked };
 }
 
+/** A close that failed must not keep the starter from hearing that the PR ended. */
+async function closeFinished(deps: IssueSessionWatchDeps, entry: IssueSession): Promise<string> {
+  try {
+    return await deps.closeFinished(entry);
+  } catch (err) {
+    return `Could not close it: ${messageOf(err)}. Close its cell with closeIssueSession.`;
+  }
+}
+
 /** One look at one implementer: record what it came to, and tell its starter when that is news. */
 async function watchOne(deps: IssueSessionWatchDeps, entry: IssueSession): Promise<void> {
-  const step = watchStep(await observe(deps, entry), entry);
+  const observed = await observe(deps, entry);
+  // closeIssueSession closed it while gh was asked: its starter already knows.
+  if (deps.sessions.get(entry.session) !== entry) return;
+  const step = watchStep(observed, entry);
   entry.blockedTold = step.blockedTold;
   entry.prUnreadable = step.prUnreadable;
   if (step.finished !== null) entry.finished = step.finished;
   if (step.event === null) return;
-  const text = watchMessage(entry, step.event, runningCount(deps.sessions.values(), deps.isRunning, 0), deps.limit());
+  const closed = step.finished === "merged" || step.finished === "closed" ? ` ${await closeFinished(deps, entry)}` : "";
+  const text = `${watchMessage(entry, step.event, runningCount(deps.sessions.values(), deps.isRunning, 0), deps.limit())}${closed}`;
   // Not awaited: a dialog holding one starter's input must not hold back the look at the others.
   deps
     .deliver(entry.parent, text, () => !deps.isRunning(entry.parent))

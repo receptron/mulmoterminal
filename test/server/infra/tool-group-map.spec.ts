@@ -19,6 +19,7 @@ describe("the group map against the real registry", () => {
       "requestReview",
       "endReview",
       "startIssueSession",
+      "closeIssueSession",
     ]);
   });
 

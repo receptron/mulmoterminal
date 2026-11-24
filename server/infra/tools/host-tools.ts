@@ -17,7 +17,7 @@ import { REQUEST_CHECK, SHOW_IN_PANE } from "./pane-tools.js";
 import { SEND_TO_SESSION, WAIT_FOR_SESSION_REPLY } from "./session-ask-tools.js";
 import { REVIEW_SETTINGS } from "./review-settings-tool.js";
 import { END_REVIEW, REQUEST_REVIEW } from "./review-loop-tools.js";
-import { START_ISSUE_SESSION } from "./issue-session-tool.js";
+import { CLOSE_ISSUE_SESSION, START_ISSUE_SESSION } from "./issue-session-tool.js";
 import { TERMINAL_AGENTS } from "../../../common/sessionAgent.js";
 
 // Mirrors MulmoClaude's spawnBackgroundChat signature (message/role/hidden) so the
@@ -104,4 +104,5 @@ export const HOST_TOOL_DEFINITIONS: ToolDefinition[] = [
   REQUEST_REVIEW,
   END_REVIEW,
   START_ISSUE_SESSION,
+  CLOSE_ISSUE_SESSION,
 ];

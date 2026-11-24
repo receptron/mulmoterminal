@@ -1,5 +1,6 @@
 // startIssueSession (#3413): a session hands an issue to an implementer of its own, in the issue's
-// worktree, carrying the review tools (routes/issue-session-routes.ts). Host tool, in no tool group,
+// worktree, carrying the review tools (routes/issue-session-routes.ts); closeIssueSession closes one
+// (routes/issue-session-close.ts). Host tools, in no tool group,
 // beside spawnBackgroundChat. MulmoClaude has no counterpart.
 import type { ToolDefinition } from "gui-chat-protocol";
 import { FULL_GUI_MCP_AGENTS } from "../../../common/guiMcpAgents.js";
@@ -20,5 +21,22 @@ export const START_ISSUE_SESSION: ToolDefinition = {
       agent: { type: "string", enum: [...FULL_GUI_MCP_AGENTS], description: "Which agent implements it (default claude)." },
     },
     required: ["repo", "issue"],
+  },
+};
+
+export const CLOSE_ISSUE_SESSION: ToolDefinition = {
+  type: "function",
+  name: "closeIssueSession",
+  description:
+    "Close an implementer session you started with startIssueSession: end the review loops it ran and close their reviewer cells, close its cell, then remove its local worktree and local branch (the remote branch stays). A worktree with uncommitted changes or commits no remote has is kept, and the answer says so. Refused for an implementer still at work — its PR neither merged nor closed — unless force is true. MulmoTerminal already closes an implementer on its own once its PR is merged or closed.",
+  prompt:
+    "Use `closeIssueSession` for an implementer whose session ended, or when the user asks to close one. Pass `force: true` only when the user says to close one that is still working.",
+  parameters: {
+    type: "object",
+    properties: {
+      session: { type: "string", description: "The chatId startIssueSession returned for the implementer." },
+      force: { type: "boolean", description: "Close it even though its PR is still open. Only on the user's word." },
+    },
+    required: ["session"],
   },
 };

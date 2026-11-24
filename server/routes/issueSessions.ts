@@ -20,7 +20,7 @@ export interface IssueSession {
   agent: FullGuiMcpAgent;
   worktree: string;
   branch: string | null;
-  /** Set once, by the watch; a finished implementer no longer holds a place, even while its cell stays open. */
+  /** Set once, by the watch or a close; a finished implementer no longer holds a place. */
   finished: IssueSessionEnd | null;
   /** The caller was told it is waiting on the user, and is not told again until that changes. */
   blockedTold: boolean;

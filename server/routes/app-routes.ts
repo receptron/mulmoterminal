@@ -51,8 +51,11 @@ import type { IssueSession } from "./issueSessions.js";
 import { startIssueWork } from "../git/issue-work.js";
 import { forgeFromRepoEntry } from "../git/forge-host.js";
 import { startIssueSessionWatch } from "./issue-session-watch.js";
+import { closeImplementer, mountIssueSessionCloseRoute } from "./issue-session-close.js";
+import { closeSummary } from "./issueSessionClose.js";
+import { removeImplementerWorktree } from "../git/implementer-worktree.js";
 import { fetchBranchPr } from "../git/pr-of-branch.js";
-import { deliverWhenFree, inputHeld } from "./deliverWhenFree.js";
+import { deliverWhenFree, inputHeld, type DeliveryDeps } from "./deliverWhenFree.js";
 import { waitingOnPermission } from "./issueSessionWatch.js";
 import { mountTerminalReplyRoutes } from "./terminal-reply-routes.js";
 import { randomUUID } from "node:crypto";
@@ -249,15 +252,30 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     nonce: () => randomUUID().slice(0, ASK_NONCE_CHARS),
   };
   mountSessionAskRoutes(app, ask);
+  const loops = new Map<string, ReviewLoop>();
+  const close = (session: string): boolean => endTmuxSession(tmuxRouteDeps(deps), session, true);
   mountReviewLoopRoutes(app, {
     ...ask,
-    loops: new Map<string, ReviewLoop>(),
+    loops,
     settingsOf: reviewSettingsOf,
     prState: fetchPrReviewState,
     agentOf: (session) => ptys.get(session)?.agent,
-    close: (session) => endTmuxSession(tmuxRouteDeps(deps), session, true),
+    close,
   });
+  mountIssueSessions(app, deps, ask, { loops, close });
+}
+
+/** startIssueSession, the watch over its implementers, and closeIssueSession, which reaches the
+ *  review loops so an implementer's reviewers close with it. */
+function mountIssueSessions(
+  app: Express,
+  deps: AppRouteDeps,
+  ask: DeliveryDeps,
+  review: { loops: Map<string, ReviewLoop>; close: (session: string) => boolean },
+): void {
   const issueSessions = new Map<string, IssueSession>();
+  const closeDeps = { sessions: issueSessions, ...review, removeWorktree: removeImplementerWorktree };
+  mountIssueSessionCloseRoute(app, closeDeps);
   const isRunning = (session: string): boolean => ptys.has(session);
   mountIssueSessionRoutes(app, {
     sessions: issueSessions,
@@ -277,6 +295,7 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     blocked: (session) => inputHeld(ask, session),
     deliver: (parent, text, ended) => deliverWhenFree(ask, parent, text, ended, "startIssueSession"),
     limit: getMaxIssueSessions,
+    closeFinished: async (entry) => closeSummary(entry, await closeImplementer(closeDeps, entry)),
   });
 }
 
