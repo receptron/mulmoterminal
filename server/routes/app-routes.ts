@@ -49,6 +49,7 @@ import { mountAgentAvailabilityRoutes } from "../routes/agent-availability-route
 import type { AgentAvailability } from "../../common/agentAvailability.js";
 import { mountIssueWorkRoutes } from "../routes/issue-work-routes.js";
 import { implementerSpawn, mountIssueSessionRoutes } from "./issue-session-routes.js";
+import { worktreeGitRoots } from "../git/worktree-git-dirs.js";
 import type { IssueSession } from "./issueSessions.js";
 import { startIssueWork } from "../git/issue-work.js";
 import { forgeFromRepoEntry } from "../git/forge-host.js";
@@ -310,7 +311,7 @@ function mountIssueSessions(
     limit: getMaxIssueSessions,
     cloneOf: cloneOfRepo,
     startWork: (repo, issue, dir, spawnSeeded) => startIssueWork(repo, issue, dir, { spawnSeeded }),
-    spawn: implementerSpawn(deps.spawnIssueSession),
+    spawn: implementerSpawn(deps.spawnIssueSession, worktreeGitRoots),
     recordSpawn: (child, parent) => spawnedSessions.recordSpawn(child, parent),
     markVisible: (session, agent) => markUnplacedSession(session, agent),
     now: () => Date.now(),

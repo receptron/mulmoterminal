@@ -6,7 +6,8 @@ import { cp, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import { plannedAttempts, type SkillEvalArm, type SkillEvalCase, type SkillEvalRun, type SkillEvalSet } from "../../../common/skillEval.js";
 import { runAttempt, type AttemptDeps, type AttemptPlan } from "./evalAttempt.js";
-import { caseFilesDir, writeRun } from "./evalStore.js";
+import { caseFilesDir, textHash, writeRun } from "./evalStore.js";
+import { candidateDir, writeCandidate } from "./evalImprove.js";
 
 /** Attempts in flight at once: enough to finish a set in minutes, few enough not to hit a rate limit. */
 export const EVAL_CONCURRENCY = 2;
@@ -20,6 +21,8 @@ export interface EvalStart {
   skillSlug: string;
   skillText: string;
   skillHash: string;
+  /** Measure an improvement written from this finished run, instead of the skill as it is (#3448). */
+  improveFrom?: SkillEvalRun | null;
 }
 
 interface ActiveRun {
@@ -46,11 +49,29 @@ export function attemptOrder(set: SkillEvalSet): { evalCase: SkillEvalCase; arm:
 const newRunId = (now_ms: number): string => `${String(now_ms).padStart(13, "0")}-${randomBytes(4).toString("hex")}`;
 
 function initialRun(start: EvalStart, id: string, now_ms: number): SkillEvalRun {
+  const improving = start.improveFrom != null;
   return {
     ...{ id, skill: start.set.skill, status: "running", startedAt: now_ms, finishedAt: null, model: start.set.model, repeats: start.set.repeats },
-    ...{ skillText: start.skillText, skillHash: start.skillHash, setHash: start.setHash, cases: start.set.cases },
-    ...{ plannedAttempts: plannedAttempts(start.set), attempts: [] },
+    // An improvement's text is not known until it has been written.
+    ...{ skillText: improving ? "" : start.skillText, skillHash: improving ? "" : start.skillHash, setHash: start.setHash, cases: start.set.cases },
+    ...{ plannedAttempts: plannedAttempts(start.set), attempts: [], candidateId: improving ? id : null, note: "", improveCostUsd: 0 },
+    ...{ baseSkillHash: improving ? start.skillHash : "", baseRunId: start.improveFrom?.id ?? null },
   };
+}
+
+/** The folder the attempts copy the skill from: the snapshot, or for an improvement run the improvement,
+ *  written first from the snapshot. Null when it could not be written, which ends the run. */
+async function measuredSkill(run: SkillEvalRun, start: EvalStart, skillCopy: string, save: () => Promise<void>, deps: AttemptDeps): Promise<string | null> {
+  if (start.improveFrom == null) return skillCopy;
+  const written = await writeCandidate(start.set, skillCopy, start.improveFrom, candidateDir(start.evalDir, run.id), deps);
+  if (written.kind === "failed") {
+    Object.assign(run, { improveCostUsd: written.costUsd, note: written.error });
+    return null;
+  }
+  const { candidate } = written;
+  Object.assign(run, { improveCostUsd: candidate.costUsd, note: candidate.note, skillText: candidate.skillText, skillHash: textHash(candidate.skillText) });
+  await save();
+  return candidate.dir;
 }
 
 /** Every attempt copies the skill from `skillCopy`, taken once at the start: an edit made while the run
@@ -94,7 +115,12 @@ function finalStatus(failed: boolean, stopRequested: boolean): SkillEvalRun["sta
 async function execute(run: SkillEvalRun, self: ActiveRun, start: EvalStart, skillCopy: string, deps: AttemptDeps): Promise<void> {
   const save = serialSaver(start.evalDir, run);
   try {
-    const queue = plansOf(start, skillCopy);
+    const skillDir = await measuredSkill(run, start, skillCopy, save, deps);
+    if (skillDir === null) {
+      run.status = "interrupted";
+      return;
+    }
+    const queue = plansOf(start, skillDir);
     // The run is released only once every worker has settled, so a new one never overlaps an old attempt.
     const workers = await Promise.allSettled(Array.from({ length: EVAL_CONCURRENCY }, () => drain(queue, run, self, save, deps)));
     run.status = finalStatus(
@@ -123,7 +149,8 @@ export async function startEvalRun(start: EvalStart, deps: AttemptDeps): Promise
     throw err;
   });
   try {
-    await cp(start.skillDir, skillCopy, { recursive: true });
+    // Dereferenced, so nothing that edits the copy can write through a link into the skill itself.
+    await cp(start.skillDir, skillCopy, { recursive: true, dereference: true });
     await writeRun(start.evalDir, run);
   } catch (err) {
     await rm(skillCopy, { recursive: true, force: true });

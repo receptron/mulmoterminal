@@ -111,7 +111,7 @@ describe("createIssueSessionSpawner", () => {
     expect(groupsFor).not.toHaveBeenCalled();
   });
 
-  // #3425: a reviewer reads and comments on its PR with gh, which codex's default sandbox cannot reach.
+  // A reviewer or an implementer talks to GitHub with gh, which codex's default sandbox cannot reach.
   it("lets codex's sandbox reach the network only when asked, and changes nothing for the others", async () => {
     const { spawn, calls } = setup();
     await spawn("codex", CWD, SEED, true, null, { networkAccess: true });
@@ -119,6 +119,18 @@ describe("createIssueSessionSpawner", () => {
     await spawn("codex", CWD, SEED, true, null);
     expect(calls.map((c) => c.args)).toEqual([
       ["s-1", null, null, CWD, false, { mcpGroups: GROUPS, initialPrompt: SEED, networkAccess: true }],
+      ["s-1", null, null, { cwd: CWD, attachGuiMcp: false, initialPrompt: SEED }],
+      ["s-1", null, null, CWD, false, { mcpGroups: GROUPS, initialPrompt: SEED }],
+    ]);
+  });
+
+  it("hands codex the extra writable roots, and nothing to the others or for an empty list", async () => {
+    const { spawn, calls } = setup();
+    await spawn("codex", CWD, SEED, true, null, { writableRoots: ["/repo/.git/objects"] });
+    await spawn("claude", CWD, SEED, true, null, { writableRoots: ["/repo/.git/objects"] });
+    await spawn("codex", CWD, SEED, true, null, { writableRoots: [] });
+    expect(calls.map((c) => c.args)).toEqual([
+      ["s-1", null, null, CWD, false, { mcpGroups: GROUPS, initialPrompt: SEED, writableRoots: ["/repo/.git/objects"] }],
       ["s-1", null, null, { cwd: CWD, attachGuiMcp: false, initialPrompt: SEED }],
       ["s-1", null, null, CWD, false, { mcpGroups: GROUPS, initialPrompt: SEED }],
     ]);
