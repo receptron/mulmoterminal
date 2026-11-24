@@ -57,7 +57,7 @@ describe("reviewWorkspaces.start", () => {
     const { workspaces, gitCalls, spawn, recordSpawn, markVisible } = setup();
     expect(await workspaces.start(SPEC)).toEqual({ session: "rev-1", workspace: WORKSPACE });
     expect(gitCalls.map(([, args]) => args)).toEqual(["fetch --quiet origin pull/7/head", `worktree add --quiet --detach ${WORKSPACE} ${HEAD}`]);
-    expect(spawn).toHaveBeenCalledWith("codex", WORKSPACE, SPEC.seed, true, null, { networkAccess: true });
+    expect(spawn).toHaveBeenCalledWith("codex", WORKSPACE, SPEC.seed, true, null, { networkAccess: true, neverAsk: true });
     expect(recordSpawn).toHaveBeenCalledWith("rev-1", AUTHOR);
     expect(markVisible).toHaveBeenCalledWith("rev-1", "codex");
   });

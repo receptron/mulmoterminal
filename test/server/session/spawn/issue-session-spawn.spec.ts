@@ -124,6 +124,16 @@ describe("createIssueSessionSpawner", () => {
     ]);
   });
 
+  it("turns codex's approval prompts off only when asked, and changes nothing for the others", async () => {
+    const { spawn, calls } = setup();
+    await spawn("codex", CWD, SEED, true, null, { neverAsk: true });
+    await spawn("claude", CWD, SEED, true, null, { neverAsk: true });
+    expect(calls.map((c) => c.args)).toEqual([
+      ["s-1", null, null, CWD, false, { mcpGroups: GROUPS, initialPrompt: SEED, neverAsk: true }],
+      ["s-1", null, null, { cwd: CWD, attachGuiMcp: false, initialPrompt: SEED }],
+    ]);
+  });
+
   it("hands codex the extra writable roots, and nothing to the others or for an empty list", async () => {
     const { spawn, calls } = setup();
     await spawn("codex", CWD, SEED, true, null, { writableRoots: ["/repo/.git/objects"] });
