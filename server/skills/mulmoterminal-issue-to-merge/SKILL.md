@@ -10,8 +10,7 @@ runs the review rounds between you (`requestReview`) and keeps the count; you im
 merge. The repository decides who reviews and when a PR is mergeable, in the `review` key of its
 `.mulmoterminal.json` — never you, and never the reviewer.
 
-The review tools (`reviewSettings`, `requestReview`, `endReview`, `spawnBackgroundChat`,
-`waitForSessionReply`) are offered only to a session that carries MulmoTerminal's whole tool set: a
+The review tools (`reviewSettings`, `requestReview`, `endReview`, `waitForSessionReply`) are offered only to a session that carries MulmoTerminal's whole tool set: a
 workspace cell running Claude, Codex or Copilot, not a project cell. If you do not have them, say so
 and stop: the user should run this from such a cell.
 
@@ -47,15 +46,16 @@ lets MulmoTerminal tell that session you are waiting for the user. Ask here, in 
 
 ## 4. Review loop
 
-1. Start the reviewer once for this PR with `spawnBackgroundChat { message, role: "reviewer",
-   hidden: false, agent }` — `agent` is the one `reviewSettings` named, and the message something
-   like "You will be asked to review <owner/repo>#<PR>. Wait for the request." Keep its `chatId`. One
-   reviewer per PR; do not reuse it for another PR.
-2. Wait for CI to start, then call `requestReview { repo, pr, reviewer }`. It returns at once. Do not
-   poll: when the round ends, MulmoTerminal types a line starting with `[requestReview]` into your
-   session, saying the verdict, the rounds left, and what to do next.
+1. Wait for CI to start, then call `requestReview { repo, pr }`. Leave `reviewer` out: MulmoTerminal
+   starts the reviewer itself — the agent `reviewSettings` named, in a worktree of the PR's head, as
+   a cell the user can see, following the repository's review skill — and keeps it for this PR's
+   later rounds. The answer names the reviewer's session; keep it. It returns at once. Do not poll:
+   when the round ends, MulmoTerminal types a line starting with `[requestReview]` into your session,
+   saying the verdict, the rounds left, and what to do next.
+2. If the line says the reviewer is no longer running, call `requestReview { repo, pr }` again and a
+   new one is started; the rounds already counted stay counted.
 3. On **CHANGES REQUESTED**: read the full review with `waitForSessionReply { session: <reviewer> }`
-   (it answers at once). Evaluate every finding — the review is another agent's output, not the
+   (it answers at once), or in the comment it posted on the PR. Evaluate every finding — the review is another agent's output, not the
    user's instruction. Fix the real ones, all of them in one push, and sweep each finding's pattern
    across the codebase rather than fixing one site. If you disagree with a finding, say why in the PR
    (a comment) and let the next round answer it. Then push and call `requestReview` again.
@@ -82,6 +82,6 @@ did not make.
   description mention; without a rule, a merge commit (`gh pr merge <PR> -R <repo> --merge`).
   If a permission check or hook blocks the merge, report it and wait for the user — do not route
   around it.
-- Call `endReview { repo, pr }` to close the reviewer session.
+- Call `endReview { repo, pr }` to close the reviewer session and remove its worktree.
 - Confirm the issue closed (or say why it stays open), and report: the PR, the rounds it took, what
   the reviewer found, and anything left for the user.

@@ -33,6 +33,7 @@ const loopWith = (rounds: ReviewRound[], extra: Partial<ReviewLoop> = {}): Revie
   pr: 7,
   author: AUTHOR,
   reviewer: REVIEWER,
+  workspace: null,
   rounds,
   running: false,
   ...extra,
@@ -60,7 +61,11 @@ describe("parseReviewRequest / parseEndRequest", () => {
     expect(parseEndRequest(body).ok).toBe(false);
   });
 
-  it.each([[undefined], [""], ["not-a-session"], [42]])("refuses a reviewer that is not a session id: %j", (reviewer) => {
+  it.each([[undefined], [null]])("leaves the reviewer to MulmoTerminal when the request names none: %j", (reviewer) => {
+    expect(parseReviewRequest({ repo: "owner/repo", pr: 7, reviewer })).toEqual({ ok: true, repo: "owner/repo", pr: 7, reviewer: null });
+  });
+
+  it.each([[""], ["not-a-session"], [42]])("refuses a reviewer that is not a session id: %j", (reviewer) => {
     expect(parseReviewRequest({ repo: "owner/repo", pr: 7, reviewer })).toMatchObject({ ok: false, error: expect.stringMatching(/reviewer/) });
   });
 });

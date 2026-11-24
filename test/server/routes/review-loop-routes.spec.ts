@@ -11,6 +11,7 @@ import type { ReviewSettings } from "../../../common/reviewSettings.js";
 import { mountReviewLoopRoutes } from "../../../server/routes/review-loop-routes.js";
 import { DELIVERY_ATTEMPTS } from "../../../server/routes/deliverWhenFree.js";
 import { REVIEW_WAIT_MS, type ReviewLoop } from "../../../server/routes/reviewLoop.js";
+import type { ReviewerStart } from "../../../server/routes/review-loop-routes.js";
 import type { PrReviewState } from "../../../server/git/pr-review-state.js";
 import { createSpawnedSessions, type SpawnedSessions } from "../../../server/session/spawned-sessions.js";
 import { InputBlockedError, type SendOptions } from "../../../server/backends/remoteHost/terminalInput.js";
@@ -35,6 +36,11 @@ type Handler = (req: Req, res: { json: (body: { message?: string }) => void }) =
 const send = vi.fn<(sessionId: string, text: string, options: SendOptions) => Promise<unknown>>(async () => undefined);
 const openQuestion = vi.fn<(sessionId: string) => Promise<AskQuestionEvent | null>>(async () => null);
 const close = vi.fn<(session: string) => boolean>(() => true);
+const WORKSPACE = "/review/owner-repo-pr7";
+/** The reviewer MulmoTerminal starts when a request names none. */
+const startReviewer = vi.fn<(spec: ReviewerStart) => Promise<{ session: string; workspace: string } | string>>();
+const moveReviewer = vi.fn<(loop: ReviewLoop, head: string) => Promise<string | null>>();
+const dropWorkspace = vi.fn<(loop: ReviewLoop) => Promise<void>>();
 /** Sessions whose agent reported a permission prompt it is still waiting on. */
 let permissionPending: Set<string>;
 let reply: string | null;
@@ -52,7 +58,8 @@ let clock_ms = 0;
 const TICK_MS = 1000;
 
 /** What the reviewer last received, so its turn can answer exactly that prompt. */
-const sentToReviewer = (): string => send.mock.calls.filter(([session]) => REVIEWERS.has(session)).at(-1)?.[1] ?? "";
+const sentToReviewer = (): string =>
+  send.mock.calls.filter(([session]) => REVIEWERS.has(session)).at(-1)?.[1] ?? startReviewer.mock.calls.at(-1)?.[0].seed ?? "";
 const typedToAuthor = (): string[] => send.mock.calls.filter(([session]) => session === AUTHOR).map(([, text]) => text);
 
 function agentOf(session: string): string | undefined {
@@ -84,6 +91,7 @@ function routes(): { requestRoute: Handler; endRoute: Handler } {
     },
     agentOf,
     close,
+    workspaces: { start: startReviewer, move: moveReviewer, drop: dropWorkspace },
   });
   const requestRoute = map["/api/plugin/requestReview"];
   const endRoute = map["/api/plugin/endReview"];
@@ -114,6 +122,15 @@ beforeEach(() => {
   permissionPending = new Set();
   close.mockReset();
   close.mockImplementation(() => true);
+  startReviewer.mockReset();
+  startReviewer.mockImplementation(async () => {
+    spawned.recordSpawn(REVIEWER2, AUTHOR);
+    return { session: REVIEWER2, workspace: WORKSPACE };
+  });
+  moveReviewer.mockReset();
+  moveReviewer.mockImplementation(async () => null);
+  dropWorkspace.mockReset();
+  dropWorkspace.mockImplementation(async () => undefined);
   reply = "REVIEW VERDICT: LGTM (head aaaaaaa)\n- nothing";
   settings = SETTINGS;
   pr = { open: true, head: HEAD, ci: "passing" };
@@ -299,14 +316,17 @@ describe("findings of the first review round", () => {
   it("holds the claim until the round's result is written, so the next round cannot slip in", async () => {
     let release = (): void => undefined;
     const { requestRoute } = routes();
-    await call(requestRoute, req(BODY));
-    // Only the round's own read of the PR waits; the second request's checks read it at once.
+    // Only the round's own read of the PR (the second) waits; both requests' checks read it at once.
+    // Counted rather than armed after the first call returns, which would race the round's read.
     let held = false;
+    let reads = 0;
     prGate = async () => {
-      if (held) return;
+      reads += 1;
+      if (reads !== 2) return;
       held = true;
       await new Promise<void>((resolve) => (release = resolve));
     };
+    await call(requestRoute, req(BODY));
     await vi.waitFor(() => expect(held).toBe(true));
     pr = { open: true, head: NEXT, ci: "passing" };
     expect(await call(requestRoute, req(BODY))).toMatch(/still running/);
@@ -372,5 +392,116 @@ describe("endReview", () => {
     expect(await call(endRoute, req({ repo: "owner/repo", pr: 7 }, OTHER))).toMatch(/Another session/);
     expect(await call(endRoute, req({ repo: "owner/repo", pr: 8 }))).toMatch(/No review of owner\/repo#8/);
     expect(close).not.toHaveBeenCalled();
+  });
+});
+
+describe("a reviewer MulmoTerminal starts (requestReview without `reviewer`)", () => {
+  const UNNAMED = { repo: "owner/repo", pr: 7 };
+
+  it("starts the declared agent on the PR's head with the round as its first message, and types the result into the author", async () => {
+    const answer = await call(routes().requestRoute, req(UNNAMED));
+    expect(answer).toMatch(new RegExp(`Round 1 of owner/repo#7 was sent to reviewer session ${REVIEWER2}`));
+    expect(startReviewer).toHaveBeenCalledTimes(1);
+    const spec = startReviewer.mock.calls[0]?.[0];
+    expect(spec).toMatchObject({ repo: "owner/repo", pr: 7, head: HEAD, agent: "codex", author: AUTHOR });
+    expect(spec?.seed).toMatch(/^Review pull request #7 of owner\/repo at head a{40} .*Follow the team-review skill.* \[sendToSession nonce000\]$/);
+    expect(send).not.toHaveBeenCalled();
+    expect(loops.get("owner/repo#7")).toMatchObject({ reviewer: REVIEWER2, workspace: WORKSPACE });
+    await roundsEnded(1);
+    expect(typedToAuthor()[0]).toMatch(/Merge condition met/);
+  });
+
+  it("keeps the reviewer for the next round, moving its worktree to the new head before it is asked", async () => {
+    reply = "REVIEW VERDICT: CHANGES REQUESTED (head aaaaaaa)\n- fix it";
+    await call(routes().requestRoute, req(UNNAMED));
+    await roundsEnded(1);
+    pr = { open: true, head: NEXT, ci: "passing" };
+    reply = "REVIEW VERDICT: LGTM (head bbbbbbb)";
+    expect(await call(routes().requestRoute, req(UNNAMED))).toMatch(/Round 2 of owner\/repo#7 was sent/);
+    expect(startReviewer).toHaveBeenCalledTimes(1);
+    expect(moveReviewer).toHaveBeenCalledWith(expect.objectContaining({ workspace: WORKSPACE }), NEXT);
+    const askedAt = send.mock.calls.findIndex(([session]) => session === REVIEWER2);
+    expect(askedAt).toBeGreaterThanOrEqual(0);
+    expect(moveReviewer.mock.invocationCallOrder[0]).toBeLessThan(send.mock.invocationCallOrder[askedAt] ?? 0);
+    await roundsEnded(2);
+  });
+
+  it("asks nothing when the worktree cannot be moved, and leaves the loop free for another try", async () => {
+    reply = "REVIEW VERDICT: CHANGES REQUESTED (head aaaaaaa)";
+    await call(routes().requestRoute, req(UNNAMED));
+    await roundsEnded(1);
+    pr = { open: true, head: NEXT, ci: "passing" };
+    moveReviewer.mockImplementation(async () => "could not fetch");
+    expect(await call(routes().requestRoute, req(UNNAMED))).toMatch(/Could not move reviewer session .* could not fetch/);
+    expect(send).not.toHaveBeenCalledWith(REVIEWER2, expect.anything(), expect.anything());
+    expect(loops.get("owner/repo#7")?.running).toBe(false);
+  });
+
+  it("starts a new reviewer when the one it started has stopped, keeping the rounds counted so far", async () => {
+    reply = "REVIEW VERDICT: CHANGES REQUESTED (head aaaaaaa)";
+    await call(routes().requestRoute, req(UNNAMED));
+    await roundsEnded(1);
+    agent = undefined;
+    startReviewer.mockImplementation(async () => {
+      agent = "codex";
+      spawned.recordSpawn(REVIEWER, AUTHOR);
+      return { session: REVIEWER, workspace: WORKSPACE };
+    });
+    pr = { open: true, head: NEXT, ci: "passing" };
+    expect(await call(routes().requestRoute, req(UNNAMED))).toMatch(new RegExp(`Round 2 of owner/repo#7 was sent to reviewer session ${REVIEWER}`));
+    expect(loops.get("owner/repo#7")?.reviewer).toBe(REVIEWER);
+  });
+
+  it("tells the author to ask again without a reviewer when the one it started stops mid-round", async () => {
+    reply = null;
+    sleep = async () => {
+      agent = undefined;
+    };
+    await call(routes().requestRoute, req(UNNAMED));
+    await roundsEnded(1);
+    expect(typedToAuthor()[0]).toMatch(/no longer running.*Call requestReview again without `reviewer`/);
+  });
+
+  it("says why when the reviewer cannot be started, and keeps no loop", async () => {
+    startReviewer.mockImplementation(async () => "no local clone of owner/repo is known to MulmoTerminal");
+    expect(await call(routes().requestRoute, req(UNNAMED))).toMatch(/Could not start a codex reviewer for owner\/repo#7: no local clone/);
+    expect(loops.size).toBe(0);
+    startReviewer.mockImplementation(async () => {
+      throw new Error("spawn failed");
+    });
+    expect(await call(routes().requestRoute, req(UNNAMED))).toMatch(/spawn failed/);
+    expect(loops.size).toBe(0);
+  });
+
+  it.each<[string, () => void, RegExp]>([
+    ["a repository that declares no review", () => (settings = "owner/repo declares no review settings"), /declares no review settings/],
+    ["a closed PR", () => (pr = { open: false, head: HEAD, ci: "passing" }), /is not open/],
+    ["a PR gh cannot read", () => (pr = "no such PR"), /Could not read owner\/repo#7/],
+  ])("starts nothing for %s", async (_label, arrange, reason) => {
+    arrange();
+    expect(await call(routes().requestRoute, req(UNNAMED))).toMatch(reason);
+    expect(startReviewer).not.toHaveBeenCalled();
+  });
+
+  it("removes the worktree when endReview closes the reviewer, and keeps it while the reviewer still runs", async () => {
+    await call(routes().requestRoute, req(UNNAMED));
+    await roundsEnded(1);
+    close.mockImplementation(() => false);
+    expect(await call(routes().endRoute, req(UNNAMED))).toMatch(/still running/);
+    expect(dropWorkspace).not.toHaveBeenCalled();
+    loops.set("owner/repo#7", { repo: "owner/repo", pr: 7, author: AUTHOR, reviewer: REVIEWER2, workspace: WORKSPACE, rounds: [], running: false });
+    close.mockImplementation(() => true);
+    expect(await call(routes().endRoute, req(UNNAMED))).toMatch(/closed reviewer session/);
+    expect(dropWorkspace).toHaveBeenCalledWith(expect.objectContaining({ workspace: WORKSPACE }));
+    expect(close.mock.invocationCallOrder.at(-1)).toBeLessThan(dropWorkspace.mock.invocationCallOrder[0] ?? 0);
+  });
+
+  it("removes the worktree when the author is gone and another session takes the PR", async () => {
+    await call(routes().requestRoute, req(UNNAMED));
+    await roundsEnded(1);
+    running.delete(AUTHOR);
+    spawned.recordSpawn(REVIEWER, OTHER);
+    await call(routes().requestRoute, req(BODY, OTHER));
+    expect(dropWorkspace).toHaveBeenCalledWith(expect.objectContaining({ workspace: WORKSPACE }));
   });
 });
