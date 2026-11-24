@@ -168,7 +168,7 @@ function mountRequest(app: Express, deps: ReviewLoopRouteDeps): void {
     if (typeof loop === "string") return res.json({ message: loop });
     const key = loopKey(loop);
     const round = loop.rounds.length + 1;
-    const sent = `${reviewPrompt({ ...request, head: checked.head, round, maxRounds: checked.settings.maxRounds })}${askTag(deps.nonce())}`;
+    const sent = `${reviewPrompt({ ...request, head: checked.head, round, maxRounds: checked.settings.maxRounds, skill: checked.settings.skill })}${askTag(deps.nonce())}`;
     const blocked = async (): Promise<boolean> => inputHeld(deps, request.reviewer);
     try {
       await deps.send(request.reviewer, sent, { blocked });

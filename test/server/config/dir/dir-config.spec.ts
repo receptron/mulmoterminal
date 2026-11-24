@@ -187,7 +187,7 @@ describe("loadDirConfig", () => {
       addDirs: null,
       appendSystemPrompt: false,
       worktreeEnv: { PORT: { kind: "port", base: 3000 } },
-      review: { reviewer: "claude", maxRounds: 4, requiredLgtm: 1 },
+      review: { reviewer: "claude", maxRounds: 4, requiredLgtm: 1, skill: "mulmoterminal-review" },
     });
     cleanup();
   });

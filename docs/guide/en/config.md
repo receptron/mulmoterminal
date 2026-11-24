@@ -703,7 +703,7 @@ reviews automatically until the key is set; a session that drives a review reads
 `reviewSettings` tool, given the repository as `owner/repo`.
 
 ```json
-{ "review": { "reviewer": "codex", "maxRounds": 10, "requiredLgtm": 1 } }
+{ "review": { "reviewer": "codex", "maxRounds": 10, "requiredLgtm": 1, "skill": "mulmoterminal-review" } }
 ```
 
 - **`reviewer`** — the agent that reviews: `claude`, `codex`, `antigravity`, `grok`, `copilot` or
@@ -711,7 +711,13 @@ reviews automatically until the key is set; a session that drives a review reads
 - **`maxRounds`** — how many review rounds before a person is asked, 1 to 50. Default 10.
 - **`requiredLgtm`** — how many LGTMs naming the PR's current head make it mergeable, 1 to 5.
   Default 1. Every CI check passing is always required as well.
-- Omit any field for its default; `"review": {}` takes all three defaults.
+- **`skill`** — the skill the reviewer is asked to follow for each round: a skill name, or
+  `plugin:name`. Default `mulmoterminal-review`, which ships with MulmoTerminal: one complete round
+  per request, every finding with its severity, every other place the same mistake appears and the
+  smallest fix, and what the reviewer could not run marked as unverified. Name your own to review
+  your way. Whatever the skill says, the reviewer is still asked to open its reply with the verdict
+  line and post it on the PR, because that is what the rounds are counted by.
+- Omit any field for its default; `"review": {}` takes all four defaults.
 - If any field is wrong (an agent this app does not run, a number out of range, a misspelt field name), the **whole key**
   is ignored rather than falling back to a default reviewer, and Settings → Directory settings lists
   it under *ignored*. Settings shows a valid one as **Review**.
@@ -720,7 +726,7 @@ reviews automatically until the key is set; a session that drives a review reads
 
 With the key set, the session runs the loop through two tools. It starts a reviewer session with the
 declared agent (`spawnBackgroundChat`) and calls `requestReview` with the repository, the PR number
-and that session. MulmoTerminal sends the reviewer the request, waits for its answer, and types how
+and that session. MulmoTerminal sends the reviewer the request, naming the `skill` to follow, waits for its answer, and types how
 the round ended into the calling session: the verdict, the rounds left, and whether the merge
 condition is met. It refuses a round past `maxRounds`, a second review of a head that had changes
 requested, and a reviewer that is not the declared agent. It never merges; the session does.
