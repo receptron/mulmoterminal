@@ -30,6 +30,8 @@ export interface AttemptPlan {
   evalCase: SkillEvalCase;
   arm: SkillEvalArm;
   round: number;
+  /** The model the agent runs on: the set's own, or one step of a search for the cheapest (#3453). */
+  model: string;
   skillDir: string;
   skillSlug: string;
   /** The case's starting files, when it has any. */
@@ -60,7 +62,7 @@ async function prepareDir(plan: AttemptPlan, tmpRoot: string): Promise<string> {
 async function runAgent(plan: AttemptPlan, work: string, deps: AttemptDeps): Promise<StreamOutcome> {
   const ran = await deps.runClaude({
     bin: deps.claudeBin,
-    args: agentArgs(plan.set.model, plan.set.maxBudgetUsdPerAttempt, plan.set.allowedTools),
+    args: agentArgs(plan.model, plan.set.maxBudgetUsdPerAttempt, plan.set.allowedTools),
     prompt: agentPrompt(plan.evalCase, plan.arm, plan.skillSlug),
     cwd: work,
     timeoutMs: ATTEMPT_TIMEOUT_MS,
@@ -118,7 +120,7 @@ export async function runAttempt(plan: AttemptPlan, deps: AttemptDeps): Promise<
     return {
       ...{ caseId: plan.evalCase.id, arm: plan.arm, round: plan.round, pass: graded.pass, skillInvoked: outcome.skillInvoked },
       ...{ costUsd: outcome.costUsd, gradingCostUsd: graded.costUsd, durationMs: deps.now() - startedAt },
-      ...{ finalText: keep(outcome.finalText), checkOutput: keep(graded.output), denied: outcome.denied, error: outcome.error },
+      ...{ finalText: keep(outcome.finalText), checkOutput: keep(graded.output), denied: outcome.denied, error: outcome.error, model: plan.model },
     };
   } finally {
     await rm(work, { recursive: true, force: true });

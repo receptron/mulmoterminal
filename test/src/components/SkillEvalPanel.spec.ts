@@ -15,7 +15,7 @@ let authoring: Promise<string | null> = Promise.resolve("chat-1");
 let starting: Promise<{ kind: "started"; id: string }> = Promise.resolve({ kind: "started", id: "r" });
 vi.mock("../../../src/composables/skillEvalApi", () => ({
   loadSkillEval: () => loads.shift() ?? Promise.resolve(overview),
-  startSkillEvalRun: (_source: unknown, _slug: string, improve?: boolean) => (calls.push(improve ? "improve" : "start"), starting),
+  startSkillEvalRun: (_source: unknown, _slug: string, mode?: string) => (calls.push(mode === undefined || mode === "measure" ? "start" : mode), starting),
   adoptSkillEvalCandidate: (_source: unknown, _slug: string, runId: string) => (
     calls.push(`adopt ${runId}`),
     Promise.resolve({ kind: "adopted", backup: "/b/1.md" })
@@ -36,6 +36,7 @@ const set = {
   model: "haiku",
   judgeModel: "haiku",
   improveModel: "sonnet",
+  ladder: ["haiku", "sonnet"],
   repeats: 1,
   maxBudgetUsdPerAttempt: 0.5,
   allowedTools: [],
@@ -45,7 +46,7 @@ const set = {
 function run(passWith: boolean, passWithout: boolean, extra: Partial<SkillEvalRun> = {}): SkillEvalRun {
   const attempt = (arm: "with" | "without", pass: boolean) => ({
     ...{ caseId: "a", arm, round: 0, pass, skillInvoked: arm === "with", costUsd: 0.02, gradingCostUsd: 0, durationMs: 1 },
-    ...{ finalText: "", checkOutput: "", denied: [], error: null },
+    ...{ finalText: "", checkOutput: "", denied: [], error: null, model: "haiku" },
   });
   return {
     ...{ id: "1795000000000-aaaaaaaa", skill: "weekly", status: "done", startedAt: 1, finishedAt: 2, model: "haiku", repeats: 1 },
@@ -60,6 +61,7 @@ function run(passWith: boolean, passWithout: boolean, extra: Partial<SkillEvalRu
       improveCostUsd: 0,
       baseSkillHash: "",
       baseRunId: null,
+      ladder: [],
     },
     attempts: [attempt("with", passWith), attempt("without", passWithout)],
     ...extra,
@@ -68,7 +70,7 @@ function run(passWith: boolean, passWithout: boolean, extra: Partial<SkillEvalRu
 
 const base = {
   ...{ skill: "weekly", dir: "/h/.mulmoterminal/skill-evals/weekly", setHash: "s", setError: null, editable: true, baseline: null },
-  ...{ estimate: { attempts: 2, maxCostUsd: 1, maxImproveCostUsd: 2 }, activeRunId: null },
+  ...{ estimate: { attempts: 2, maxCostUsd: 1, maxImproveCostUsd: 2, ladderAttempts: 2, maxLadderCostUsd: 1.5 }, activeRunId: null },
 };
 const mountPanel = async () => {
   const wrapper = mount(SkillEvalPanel, { props: { source, skill }, global: { plugins: [i18n] } });
@@ -255,5 +257,61 @@ describe("SkillEvalPanel", () => {
     overview = { ...base, editable: false, set, runs: [improved, run(false, false)] };
     const wrapper = await mountPanel();
     expect(wrapper.find("[data-testid=skill-eval-adopt]").exists()).toBe(false);
+  });
+  describe("searching for the cheapest model", () => {
+    const tried = (model: string, pass: boolean, round: number) => ({
+      ...{ caseId: "a", arm: "with" as const, round, pass, skillInvoked: true, costUsd: 0.1, gradingCostUsd: 0, durationMs: 1 },
+      ...{ finalText: "", checkOutput: "", denied: [], error: null, model },
+    });
+    const search = (attempts: ReturnType<typeof tried>[], extra: Partial<SkillEvalRun> = {}) =>
+      run(false, false, { id: "1795000000002-cccccccc", ladder: ["haiku", "sonnet", "opus"], attempts, plannedAttempts: 6, ...extra });
+
+    it("names the search's price before it starts, and starts it", async () => {
+      overview = { ...base, set, runs: [] };
+      const wrapper = await mountPanel();
+      await wrapper.find("[data-testid=skill-eval-ladder]").trigger("click");
+      expect(wrapper.find("[data-testid=skill-eval-confirm]").text()).toContain("$1.50");
+      await wrapper.find("[data-testid=skill-eval-go]").trigger("click");
+      await flushPromises();
+      expect(calls).toEqual(["ladder"]);
+    });
+
+    it("offers no search when no task is one the skill should help with", async () => {
+      overview = { ...base, set, runs: [], estimate: { ...base.estimate, ladderAttempts: 0 } };
+      expect((await mountPanel()).find("[data-testid=skill-eval-ladder]").exists()).toBe(false);
+    });
+
+    it("shows each model cheapest first, the one that is enough, and the ones it did not need to measure", async () => {
+      overview = { ...base, set, runs: [search([tried("haiku", false, 0), tried("haiku", false, 1), tried("sonnet", true, 0), tried("sonnet", true, 1)])] };
+      const wrapper = await mountPanel();
+      expect(wrapper.find("[data-testid=skill-eval-result]").exists()).toBe(false);
+      expect(wrapper.find("[data-testid=skill-eval-ladder-enough]").text()).toContain("sonnet is enough");
+      const rows = wrapper.findAll("[data-testid=skill-eval-ladder-step]").map((row) => row.text());
+      expect(rows[0]).toContain("0% (0/2)");
+      expect(rows[1]).toContain("100% (2/2)");
+      expect(rows[1]).toContain("$0.100");
+      expect(rows[2]).toContain("Not measured");
+      expect(wrapper.text()).toContain("Only one model passed");
+    });
+
+    it("names no model for a search that was stopped, here and among the earlier results", async () => {
+      const stopped = search([tried("haiku", true, 0)], { status: "stopped" });
+      overview = { ...base, set, runs: [stopped, stopped] };
+      const wrapper = await mountPanel();
+      expect(wrapper.find("[data-testid=skill-eval-ladder-enough]").text()).toContain("did not finish");
+      expect(wrapper.find("[data-testid=skill-eval-earlier]").text()).toContain("not finished");
+      expect(wrapper.findAll("[data-testid=skill-eval-ladder-step]")[1]?.text()).toContain("the search ended before it");
+    });
+
+    it("says how far a running search has got, and what an earlier one found", async () => {
+      const going = search([tried("haiku", false, 0)], { status: "running" });
+      overview = { ...base, set, runs: [going], activeRunId: going.id };
+      const wrapper = await mountPanel();
+      expect(wrapper.find("[data-testid=skill-eval-progress]").text()).toContain("Trying models, cheapest first… 1 / at most 6");
+      expect(wrapper.findAll("[data-testid=skill-eval-ladder-step]")[1]?.text()).toContain("Not measured yet");
+      wrapper.unmount();
+      overview = { ...base, set, runs: [run(true, false), search([tried("haiku", true, 0), tried("haiku", true, 1)])] };
+      expect((await mountPanel()).find("[data-testid=skill-eval-earlier]").text()).toContain("enough: haiku · done · model search");
+    });
   });
 });

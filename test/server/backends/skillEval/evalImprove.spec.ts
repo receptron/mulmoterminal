@@ -10,10 +10,11 @@ import path from "node:path";
 import type { ClaudeRunRequest, ClaudeRunResult } from "../../../../server/backends/skillEval/runClaude";
 import type { AttemptDeps } from "../../../../server/backends/skillEval/evalAttempt";
 import { candidateDir, improvePrompt, improveReport } from "../../../../server/backends/skillEval/evalImprove";
-import { readRun, skillEvalFolder } from "../../../../server/backends/skillEval/evalStore";
+import { skillEvalFolder } from "../../../../server/backends/skillEval/evalStore";
 import { isBaselineFor, type SkillEvalAttempt, type SkillEvalRun } from "../../../../common/skillEval";
 import { mountSkillEvalRoutes } from "../../../../server/routes/skill-eval-routes";
 import { jsonPost, routeCall } from "../../../helpers/routeCall";
+import { finishedSkillEvalRun } from "../../../helpers/finishedSkillEvalRun";
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
@@ -92,21 +93,10 @@ function setUp(writer: Writer = improvesIt) {
   return { call, fields, evalDir, skillDir, prompts, tmpRoot };
 }
 
-// A read that lands while the record is being replaced can come back empty on Windows: that is not an end.
-async function finished(evalDir: string, id: string): Promise<SkillEvalRun | null> {
-  const ended = (run: SkillEvalRun | null): run is SkillEvalRun => run !== null && run.status !== "running";
-  for (let i = 0; i < 300; i++) {
-    const run = await readRun(evalDir, id);
-    if (ended(run)) return run;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  return readRun(evalDir, id);
-}
-
 async function measure(env: ReturnType<typeof setUp>, url: string): Promise<SkillEvalRun | null> {
   const started = await env.call(url, jsonPost(env.fields));
   expect(started.status).toBe(202);
-  return finished(env.evalDir, String(started.body.id));
+  return finishedSkillEvalRun(env.evalDir, String(started.body.id));
 }
 
 describe("improving a skill", () => {
@@ -225,13 +215,13 @@ describe("improving a skill", () => {
 describe("what the writer is given", () => {
   const attempt = (arm: "with" | "without", pass: boolean, extra: Partial<SkillEvalAttempt> = {}): SkillEvalAttempt => ({
     ...{ caseId: "plain", arm, round: 0, pass, skillInvoked: arm === "with", costUsd: 0, gradingCostUsd: 0, durationMs: 0 },
-    ...{ finalText: "", checkOutput: "", denied: [], error: null },
+    ...{ finalText: "", checkOutput: "", denied: [], error: null, model: "haiku" },
     ...extra,
   });
   const run = (attempts: SkillEvalAttempt[], extra: Partial<SkillEvalRun> = {}): SkillEvalRun => ({
     ...{ id: "1795000000000-aaaaaaaa", skill: "weekly", status: "done", startedAt: 1, finishedAt: 2, model: "haiku", repeats: 1 },
     ...{ skillText: ORIGINAL, skillHash: "h", setHash: "s", cases: SET.cases as SkillEvalRun["cases"], plannedAttempts: 2 },
-    ...{ attempts, candidateId: null, note: "", improveCostUsd: 0, baseSkillHash: "", baseRunId: null },
+    ...{ attempts, candidateId: null, note: "", improveCostUsd: 0, baseSkillHash: "", baseRunId: null, ladder: [] },
     ...extra,
   });
 

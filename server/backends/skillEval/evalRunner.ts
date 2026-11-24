@@ -4,10 +4,11 @@
 import { randomBytes } from "node:crypto";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
-import { plannedAttempts, type SkillEvalArm, type SkillEvalCase, type SkillEvalRun, type SkillEvalSet } from "../../../common/skillEval.js";
+import { ladderAttempts, plannedAttempts, type SkillEvalArm, type SkillEvalCase, type SkillEvalRun, type SkillEvalSet } from "../../../common/skillEval.js";
 import { runAttempt, type AttemptDeps, type AttemptPlan } from "./evalAttempt.js";
 import { caseFilesDir, textHash, writeRun } from "./evalStore.js";
 import { candidateDir, writeCandidate } from "./evalImprove.js";
+import { ladderStepPassedAll } from "../../../common/skillEvalLadder.js";
 
 /** Attempts in flight at once: enough to finish a set in minutes, few enough not to hit a rate limit. */
 export const EVAL_CONCURRENCY = 2;
@@ -23,6 +24,8 @@ export interface EvalStart {
   skillHash: string;
   /** Measure an improvement written from this finished run, instead of the skill as it is (#3448). */
   improveFrom?: SkillEvalRun | null;
+  /** Search the set's ladder for the cheapest model that is enough, instead of measuring with and without (#3453). */
+  ladder?: boolean;
 }
 
 interface ActiveRun {
@@ -46,6 +49,15 @@ export function attemptOrder(set: SkillEvalSet): { evalCase: SkillEvalCase; arm:
   );
 }
 
+type PlannedAttempt = ReturnType<typeof attemptOrder>[number];
+
+/** One step of the search: each "use" case with the skill, round by round, on that step's model. */
+export function ladderOrder(set: SkillEvalSet): PlannedAttempt[] {
+  return Array.from({ length: set.repeats }, (_, round) => round).flatMap((round) =>
+    set.cases.filter((evalCase) => evalCase.kind === "use").map((evalCase) => ({ evalCase, arm: "with" as const, round })),
+  );
+}
+
 const newRunId = (now_ms: number): string => `${String(now_ms).padStart(13, "0")}-${randomBytes(4).toString("hex")}`;
 
 function initialRun(start: EvalStart, id: string, now_ms: number): SkillEvalRun {
@@ -54,8 +66,14 @@ function initialRun(start: EvalStart, id: string, now_ms: number): SkillEvalRun 
     ...{ id, skill: start.set.skill, status: "running", startedAt: now_ms, finishedAt: null, model: start.set.model, repeats: start.set.repeats },
     // An improvement's text is not known until it has been written.
     ...{ skillText: improving ? "" : start.skillText, skillHash: improving ? "" : start.skillHash, setHash: start.setHash, cases: start.set.cases },
-    ...{ plannedAttempts: plannedAttempts(start.set), attempts: [], candidateId: improving ? id : null, note: "", improveCostUsd: 0 },
-    ...{ baseSkillHash: improving ? start.skillHash : "", baseRunId: start.improveFrom?.id ?? null },
+    ...{
+      plannedAttempts: start.ladder ? ladderAttempts(start.set) : plannedAttempts(start.set),
+      attempts: [],
+      candidateId: improving ? id : null,
+      note: "",
+      improveCostUsd: 0,
+    },
+    ...{ baseSkillHash: improving ? start.skillHash : "", baseRunId: start.improveFrom?.id ?? null, ladder: start.ladder ? start.set.ladder : [] },
   };
 }
 
@@ -76,10 +94,10 @@ async function measuredSkill(run: SkillEvalRun, start: EvalStart, skillCopy: str
 
 /** Every attempt copies the skill from `skillCopy`, taken once at the start: an edit made while the run
  *  goes on must not reach its later rounds, which are recorded as measuring the text read at the start. */
-function plansOf(start: EvalStart, skillCopy: string): AttemptPlan[] {
-  return attemptOrder(start.set).map(({ evalCase, arm, round }) => {
+function plansOf(start: EvalStart, skillCopy: string, order: PlannedAttempt[], model: string): AttemptPlan[] {
+  return order.map(({ evalCase, arm, round }) => {
     const filesDir = caseFilesDir(start.evalDir, evalCase.id);
-    return { set: start.set, evalCase, arm, round, skillDir: skillCopy, skillSlug: start.skillSlug, filesDir };
+    return { set: start.set, evalCase, arm, round, model, skillDir: skillCopy, skillSlug: start.skillSlug, filesDir };
   });
 }
 
@@ -112,6 +130,38 @@ function finalStatus(failed: boolean, stopRequested: boolean): SkillEvalRun["sta
   return stopRequested ? "stopped" : "done";
 }
 
+interface Measuring {
+  run: SkillEvalRun;
+  self: ActiveRun;
+  save: () => Promise<void>;
+  deps: AttemptDeps;
+}
+
+/** Every plan, a few at a time; true when a worker failed. The run is released only once every worker has
+ *  settled, so a new one never overlaps an old attempt. */
+async function measurePlans(plans: AttemptPlan[], measuring: Measuring): Promise<boolean> {
+  const { run, self, save, deps } = measuring;
+  const queue = [...plans];
+  const workers = await Promise.allSettled(Array.from({ length: EVAL_CONCURRENCY }, () => drain(queue, run, self, save, deps)));
+  return workers.some((worker) => worker.status === "rejected");
+}
+
+/** One model after another, cheapest first, until one passes everything; true when a worker failed. */
+async function climbLadder(start: EvalStart, skillDir: string, measuring: Measuring): Promise<boolean> {
+  for (const model of start.set.ladder) {
+    const plans = plansOf(start, skillDir, ladderOrder(start.set), model);
+    if (await measurePlans(plans, measuring)) return true;
+    const stepAttempts = measuring.run.attempts.filter((attempt) => attempt.model === model);
+    if (measuring.self.stopRequested || ladderStepPassedAll(stepAttempts, plans.length)) return false;
+  }
+  return false;
+}
+
+async function measureSkill(start: EvalStart, skillDir: string, measuring: Measuring): Promise<boolean> {
+  if (start.ladder) return climbLadder(start, skillDir, measuring);
+  return measurePlans(plansOf(start, skillDir, attemptOrder(start.set), start.set.model), measuring);
+}
+
 async function execute(run: SkillEvalRun, self: ActiveRun, start: EvalStart, skillCopy: string, deps: AttemptDeps): Promise<void> {
   const save = serialSaver(start.evalDir, run);
   try {
@@ -120,13 +170,8 @@ async function execute(run: SkillEvalRun, self: ActiveRun, start: EvalStart, ski
       run.status = "interrupted";
       return;
     }
-    const queue = plansOf(start, skillDir);
-    // The run is released only once every worker has settled, so a new one never overlaps an old attempt.
-    const workers = await Promise.allSettled(Array.from({ length: EVAL_CONCURRENCY }, () => drain(queue, run, self, save, deps)));
-    run.status = finalStatus(
-      workers.some((worker) => worker.status === "rejected"),
-      self.stopRequested,
-    );
+    const failed = await measureSkill(start, skillDir, { run, self, save, deps });
+    run.status = finalStatus(failed, self.stopRequested);
   } catch {
     run.status = "interrupted";
   } finally {
