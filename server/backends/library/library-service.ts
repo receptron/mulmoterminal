@@ -13,12 +13,14 @@ import {
   prCreators,
   retrospectiveRows,
   retrospectiveSpendInputs,
+  skillUsage,
   type ConversationFilter,
 } from "./index-queries.js";
 import type { LibraryIndex } from "./library-index.js";
 import { inReadSnapshot, readLease } from "./index-store.js";
 import { searchLibrary } from "./library-search.js";
 import type { RepeatDetail, RepeatList } from "../../../common/libraryRepeats.js";
+import type { SkillUsage } from "../../../common/skillUsage.js";
 import { candidateOf, occurrencesOf, repeatCandidates, repeatGroups, REPEAT_LISTED_MAX, type RepeatPrompt, type RepeatRules } from "./repeat-detect.js";
 import { automatedSessions, promptLogReader } from "./repeat-source.js";
 import { isTemporaryCwd } from "./temporary-path.js";
@@ -48,6 +50,8 @@ export interface LibraryService {
   repeat(id: string): Promise<RepeatDetail | null>;
   /** The retrospective's totals for the weeks up to now. */
   retrospective(now_ms: number): Promise<LibraryRetrospective>;
+  /** How often each skill ran in the conversations the Library lists (#3437). */
+  skillUsage(): Promise<SkillUsage[]>;
 }
 
 /** Where the repeated-instruction check reads from, and its clock. */
@@ -102,6 +106,7 @@ export function createLocalLibraryService(index: LibraryIndex, options: LibraryS
         const read = inReadSnapshot(index.db, () => ({ rows: retrospectiveRows(index.db, since_ms), spend: retrospectiveSpendInputs(index.db, since_ms) }));
         return retrospective(read.rows, splitSpend(read.spend), now_ms);
       }),
+    skillUsage: () => answer(() => skillUsage(index.db)),
     memorySource: (file) =>
       answer(() => {
         const row = memorySource(index.db, file);
