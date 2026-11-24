@@ -12,6 +12,7 @@
 // the prompt and the other is a redundant read of a file the pane was going to read anyway.
 import { describe, it, expect, vi } from "vitest";
 import { applyBoundary } from "../../../server/session/activity/codex-activity-track.js";
+import { lastHookEvent } from "../../../server/session/registry.js";
 
 const SESSION = "11111111-2222-4333-8444-555555555555";
 
@@ -54,5 +55,15 @@ describe("a codex turn tells the prompts pane to reload", () => {
     expect(d.setWorking).toHaveBeenCalledWith(SESSION, true, "UserPromptSubmit");
     applyBoundary(SESSION, "completed", d);
     expect(d.setWorking).toHaveBeenCalledWith(SESSION, false, "Stop");
+  });
+
+  // #3413: a boundary is codex's hook, so it moves the newest event on — an approval answered is followed by one.
+  it("moves the newest hook event on at each boundary", () => {
+    lastHookEvent.set(SESSION, "Notification");
+    applyBoundary(SESSION, "completed", deps());
+    expect(lastHookEvent.get(SESSION)).toBe("Stop");
+    applyBoundary(SESSION, "started", deps());
+    expect(lastHookEvent.get(SESSION)).toBe("UserPromptSubmit");
+    lastHookEvent.delete(SESSION);
   });
 });

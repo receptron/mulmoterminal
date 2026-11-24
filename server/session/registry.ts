@@ -44,6 +44,11 @@ import type { Activity, KnownSession, PtyEntry } from "./types.js";
 // copilot and cursor send their own and are translated into them before this is reached.
 export const activity = new Map<string, Activity>(); // id -> { working, event, at }
 
+// The newest hook event each session reported, whether or not it moved a flag (#3413). `activity`'s
+// event moves only with a flag, and `waiting` doubles as the unread mark — so a cell nobody looks at
+// keeps it set from its first Stop, and a later Notification moves nothing there.
+export const lastHookEvent = new Map<string, string>();
+
 // Live ptys keyed by session id. A pty outlives its WebSocket while the session
 // is still "working", so switching away doesn't interrupt Claude mid-turn; it
 // is reaped once the session goes idle (Stop hook) or the process exits. `ws`

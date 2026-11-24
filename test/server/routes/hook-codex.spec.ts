@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import express from "express";
 import { routeCall, jsonPost } from "../../helpers/routeCall";
 import { mountHookRoute } from "../../../server/routes/hook-routes";
-import { ptys } from "../../../server/session/registry";
+import { lastHookEvent, ptys } from "../../../server/session/registry";
 
 vi.mock("../../../server/session/session-reads.js", () => ({
   latestUserPrompt: vi.fn(async () => null),
@@ -72,6 +72,18 @@ describe("/api/hook with x-mt-agent: codex", () => {
     liveCell(true);
     await postCodex({ "x-mt-session": ID });
     expect(deps.setWaiting).not.toHaveBeenCalled();
+  });
+
+  // #3413: the flag stays off for a watched cell, but the session IS blocked, and the implementer
+  // watch has to see it; an id with no pty is not recorded, since nothing would ever reap it.
+  it("records the block as the newest hook event, watched cell or not, for a live session only", async () => {
+    lastHookEvent.delete(ID);
+    await postCodex({ "x-mt-session": ID });
+    expect(lastHookEvent.has(ID)).toBe(false);
+    liveCell(true);
+    await postCodex({ "x-mt-session": ID });
+    expect(lastHookEvent.get(ID)).toBe("Notification");
+    lastHookEvent.delete(ID);
   });
 
   it("does nothing without x-mt-session, even though codex's own id is a well-formed uuid", async () => {

@@ -7,6 +7,7 @@ import { promises as fs } from "node:fs";
 import { HOOK_EVENT_FOR, boundaryOutcome, type CodexTurnBoundary } from "../../agents/codex/codex-activity.js";
 import { notifyTaskFinished } from "./task-push.js";
 import { watchCodexActivity } from "./codex-activity-watch.js";
+import { lastHookEvent } from "../registry.js";
 
 export interface CodexActivityTrackDeps {
   setWorking: (id: string, working: boolean, event?: string) => void;
@@ -51,6 +52,8 @@ const sizeOf = (file: string) => async (): Promise<number | null> => {
  *  which boundary — not the tailing. */
 export function applyBoundary(sessionId: string, boundary: CodexTurnBoundary, deps: CodexActivityTrackDeps): void {
   const event = HOOK_EVENT_FOR[boundary];
+  // A turn boundary is codex's hook here: it moves the newest event on, as /api/hook does for the others (#3413).
+  lastHookEvent.set(sessionId, event);
   // BOTH boundaries, and not derived from the effects below: a `setWorking` that does not move the
   // flag publishes nothing, so reading the pane's signal off the activity row loses the prompt that
   // starts a turn while one is already open (#1749).

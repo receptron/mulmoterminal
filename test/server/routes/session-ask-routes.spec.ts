@@ -43,6 +43,7 @@ type Handler = (req: Req, res: FakeRes) => Promise<unknown>;
 
 const send = vi.fn<(sessionId: string, text: string, options: SendOptions) => Promise<unknown>>(async () => undefined);
 const openQuestion = vi.fn<(sessionId: string) => Promise<AskQuestionEvent | null>>(async () => null);
+let permissionPending = false;
 const turns: TurnSnapshot[] = [];
 const readTurn = vi.fn<() => Promise<TurnSnapshot>>(async () => turns.shift() ?? { prompt: null, reply: null });
 let turnReader: () => (() => Promise<TurnSnapshot>) | string = () => readTurn;
@@ -59,6 +60,7 @@ function routes(): { sendRoute: Handler; waitRoute: Handler } {
     spawned,
     send,
     openQuestion,
+    permissionPending: () => permissionPending,
     turnReader: () => turnReader(),
     sleep: async () => undefined,
     now: () => (clock_ms += TICK_MS),
@@ -84,6 +86,7 @@ async function call(handler: Handler, req: Req): Promise<string> {
 beforeEach(() => {
   send.mockClear();
   openQuestion.mockClear();
+  permissionPending = false;
   readTurn.mockClear();
   turns.length = 0;
   nonces.length = 0;
@@ -128,6 +131,16 @@ describe("sendToSession", () => {
     });
     const message = await call(routes().sendRoute, request({ session: CHILD, message: "hi" }));
     expect(message).toMatch(/question dialog/);
+    expect(spawned.lastSentTo(CHILD)).toBeUndefined();
+  });
+
+  // Its Enter would answer the prompt — the one thing typing must never do.
+  it("does not send while the session waits on a permission prompt", async () => {
+    permissionPending = true;
+    send.mockImplementationOnce(async (_id, _text, options) => {
+      if (await options.blocked?.()) throw new InputBlockedError();
+    });
+    expect(await call(routes().sendRoute, request({ session: CHILD, message: "hi" }))).toMatch(/permission prompt; nothing was sent/);
     expect(spawned.lastSentTo(CHILD)).toBeUndefined();
   });
 

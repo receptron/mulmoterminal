@@ -14,11 +14,18 @@ import { ASK_QUESTION_TOOL, parseAskQuestions, type AskQuestionDone, type AskQue
 import { watchOtherWrites } from "../session/write-to-session.js";
 import { dirConfigWriteTarget } from "../config/dir/dir-config.js";
 import { writtenFilePath } from "../files/tool-writes.js";
-import { activityHookEffects, claudeOwnSessionId, pushKindFor, resolveHookCwd, resolveHookSessionId } from "../session/activity/activity-hook.js";
+import {
+  activityHookEffects,
+  claudeOwnSessionId,
+  nextHookEvent,
+  pushKindFor,
+  resolveHookCwd,
+  resolveHookSessionId,
+} from "../session/activity/activity-hook.js";
 import { runCompletionHook } from "../session/activity/completion-hooks.js";
 import { messageOf } from "../errors.js";
 import { headerHookEffect } from "../session/activity/header-hook.js";
-import { claudeSessionIds, lastPrompts, lastResponses, ptys } from "../session/registry.js";
+import { claudeSessionIds, lastHookEvent, lastPrompts, lastResponses, ptys } from "../session/registry.js";
 import {
   clearedClaudeIdOf,
   clearedTranscripts,
@@ -344,6 +351,10 @@ async function handleHookRequest(deps: HookDeps, req: Request, res: Response) {
   }
   if (sessionId) {
     const entry = ptys.get(sessionId);
+    // As it ARRIVES, before any awaited work below: recorded later, a slow hook finishing second would
+    // overwrite the one after it, or write the record back after its session was reaped. Every hook,
+    // whatever flag it moves, and live sessions only — nothing reaps an id with no pty.
+    if (entry) noteHookEvent(sessionId, event, fields.notificationType);
     const active = !!(entry && entry.active);
     const cwd = resolveHookCwd(body.cwd, entry?.cwd);
     await applyHeaderHooks(deps, sessionId, event, body, cwd);
@@ -380,6 +391,11 @@ async function handleHookRequest(deps: HookDeps, req: Request, res: Response) {
     console.log(`[hook] ${event} for ${sessionId}`);
   }
   res.json({ ok: true });
+}
+
+function noteHookEvent(sessionId: string, event: string, notificationType: string | undefined): void {
+  const next = nextHookEvent(lastHookEvent.get(sessionId), event, notificationType);
+  if (next !== undefined) lastHookEvent.set(sessionId, next);
 }
 
 export function mountHookRoute(app: Express, deps: HookDeps) {

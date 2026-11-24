@@ -290,6 +290,11 @@ export function getSessionReapIntervalHours(): number {
   return config.sessionReapIntervalHours;
 }
 
+// Read at each startIssueSession, so a Reload config file reaches the next start without a restart.
+export function getMaxIssueSessions(): number {
+  return config.maxIssueSessions;
+}
+
 // Told the new cadence when a save or a reload moves it. One listener: the sweep is armed in one place.
 let reapIntervalListener: ((hours: number) => void) | null = null;
 export function onSessionReapIntervalChanged(listener: (hours: number) => void): void {

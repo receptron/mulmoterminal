@@ -16,6 +16,7 @@
 // Everything else is the shared session registry, which is imported directly.
 import {
   activity,
+  lastHookEvent,
   aiTitles,
   claudeSessionIds,
   hiddenSessions,
@@ -192,6 +193,7 @@ function reap(deps: SessionLifecycleDeps, id: string) {
   deps.forgetTerminalSize(id);
   deps.forgetPaneMode(id);
   titleInFlight.delete(id);
+  lastHookEvent.delete(id);
   lastTitledUserTurns.delete(id);
   lastTitleAttemptMs.delete(id);
   if (shouldForgetActivity(activity.get(id))) {

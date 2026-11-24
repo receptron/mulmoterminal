@@ -738,6 +738,25 @@ the comment it posts on the PR, with `REVIEW VERDICT: LGTM (head <sha>)` or
 Whether this project's sessions are asked to end a reply with a summary. Omit it to follow the
 global setting, which is on. → [Turning off the closing summary](#append-system-prompt)
 
+## How many issues run at once (`maxIssueSessions`) {#max-issue-sessions}
+
+A session can hand issues to implementers of its own with the `startIssueSession` tool: each one
+gets the issue's worktree and a cell, and takes the issue to merge through the
+[review loop](#dir-review). `maxIssueSessions` in `~/.mulmoterminal/config.json` is how many of
+them may run at once, across every repository. A start past it is refused until one finishes.
+MulmoTerminal follows each one and types a `[startIssueSession]` line into the session that started
+it when its PR is merged or closed, when its session ends, and when it stops on the user (a question
+or a permission prompt) — as long as that session is still running; its implementers are followed
+either way, so their places come back. A merged or closed one no longer counts, even while its cell stays open.
+
+```json
+{ "maxIssueSessions": 3 }
+```
+
+- 1 to 8. Default 2. Anything else is taken as the default, never as "no limit".
+- Each implementer starts a reviewer of its own, so the sessions running are double this.
+- There is no Settings control. **Reload config file** applies a change to the next start.
+
 ## Make your own colour scheme (`themes`) {#custom-themes}
 
 Beyond the four built-ins (Midnight / Nord / Daylight / Solarized Light), define your own in

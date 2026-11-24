@@ -36,8 +36,13 @@ describe("issueSpawnOptions", () => {
 
   // A worktree session is a working session in a repository, the same shape as a grid dev
   // terminal, so the project's own MCP servers load — running the seed does not change that.
-  it("never attaches the GUI MCP", () => {
+  it("does not attach the GUI MCP unless asked for every tool", () => {
     expect(issueSpawnOptions("/wt/1253", SEED, true).attachGuiMcp).toBe(false);
     expect(issueSpawnOptions("/wt/1253", SEED, false).attachGuiMcp).toBe(false);
+  });
+
+  // #3413: an implementer a session started runs the review loop, whose tools only the all-tools url has.
+  it("attaches the GUI MCP when every tool is asked for", () => {
+    expect(issueSpawnOptions("/wt/1253", SEED, true, undefined, true)).toEqual({ cwd: "/wt/1253", attachGuiMcp: true, initialPrompt: SEED });
   });
 });

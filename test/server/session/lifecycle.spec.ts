@@ -10,6 +10,7 @@ import { createSessionLifecycle } from "../../../server/session/lifecycle.js";
 import type { WorkPhase } from "../../../server/session/activity/workPhase.js";
 import {
   activity,
+  lastHookEvent,
   aiTitles,
   hiddenSessions,
   knownSessions,
@@ -55,7 +56,7 @@ const makeDeps = (workPhase: WorkPhase | null = null) => ({
 const fakeEntry = (over: Record<string, unknown> = {}) => ({ term: { kill: vi.fn() }, ws: null, cwd: "/work", tmux: false, agent: "claude", ...over }) as never;
 
 const clearRegistry = () => {
-  for (const map of [ptys, activity, knownSessions, lastPrompts, lastResponses, aiTitles, launchChoices]) map.clear();
+  for (const map of [ptys, activity, lastHookEvent, knownSessions, lastPrompts, lastResponses, aiTitles, launchChoices]) map.clear();
   hiddenSessions.clear();
   clearedTranscripts.clear();
 };
@@ -157,6 +158,20 @@ describe("reap", () => {
 });
 
 describe("setWorking / setWaiting", () => {
+  // #3413: the newest hook event is kept where hooks come in; a flag set from anywhere else — the
+  // user marking a cell unread, a cell being viewed — must not move it, and reap forgets it.
+  it("leaves the newest hook event alone, and forgets it on reap", () => {
+    const lifecycle = createSessionLifecycle(makeDeps());
+    lastHookEvent.set(ID, "Notification");
+    lifecycle.setWaiting(ID, true, "MarkedUnread");
+    lifecycle.setWaiting(ID, false);
+    lifecycle.setWorking(ID, true, "UserPromptSubmit");
+    expect(lastHookEvent.get(ID)).toBe("Notification");
+    ptys.set(ID, fakeEntry());
+    lifecycle.reap(ID);
+    expect(lastHookEvent.has(ID)).toBe(false);
+  });
+
   it("publishes a row when the flag actually changes", () => {
     const deps = makeDeps();
     ptys.set(ID, fakeEntry({ ws: {} }));

@@ -66,6 +66,8 @@ const REACHABLE_BY: Record<string, Reachable> = {
   // config-file only, and a default of 0 meant the feature did not exist for anyone who had not
   // opened config.json — the argument for a control rather than against one.
   sessionReapIntervalHours: { ui: true, skill: CONFIG_SKILL },
+  // Config.json only: it bounds what a session may start on its own, which no control here starts (#3413).
+  maxIssueSessions: { skill: CONFIG_SKILL },
   terminalSubmit: { ui: true, skill: "mulmoterminal-keys" },
   keymap: { ui: true, skill: "mulmoterminal-keys" },
   // Beside keymap: both decide what reaches an action, and neither has a control (#2540).

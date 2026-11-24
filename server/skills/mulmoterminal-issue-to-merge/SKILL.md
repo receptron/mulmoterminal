@@ -32,6 +32,10 @@ user may correct) and open (a real choice). Ask about the open ones before writi
 are easier to see than describe. Put your assumptions in the same message so the user can correct
 them. If nothing is open, say what you assumed and go on.
 
+When another session started you for this issue (your first message says so), ask with your question
+tool (`AskUserQuestion`) where you have one, rather than in plain text at the end of a turn: that is what
+lets MulmoTerminal tell that session you are waiting for the user. Ask here, in your own cell, either way.
+
 ## 3. Implement
 
 - Branch from an up-to-date default branch (`git fetch` first). Never work on the default branch.
