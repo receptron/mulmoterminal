@@ -24,6 +24,7 @@ import { createByPathFileOps, resolveHtmlFileRequestPath, HTML_EXTENSIONS, MARKD
 import { SHAPE_EXTENSIONS } from "@gui-chat-plugin/shapescript";
 import { STORY_SCRIPT_EXTENSIONS } from "@mulmoclaude/mulmoscript-plugin";
 import type { FileOps } from "gui-chat-protocol";
+import { JINGLESCRIPT_SCORE_EXTENSIONS } from "./jinglescriptFilePath.js";
 
 // Injected at boot (server/index.ts), like the artifacts backend: the ops below are
 // bound into the plugin registry's closures at import time, so the root is read PER
@@ -38,6 +39,9 @@ function rootFor(): string {
   if (!workspace) throw new Error("open-path backend not initialised (missing workspace)");
   return workspace;
 }
+
+/** The workspace these ops resolve against, for a caller that has no session to resolve with. */
+export const openPathWorkspace = rootFor;
 
 // `satisfies`, not `as`: core declares its own structural echo of the protocol's
 // FileOps (it keeps no dependency on gui-chat-protocol), and these are independently
@@ -54,15 +58,10 @@ export const htmlByPath = createByPathFileOps({ rootFor, extensions: HTML_EXTENS
  *  `presentShapeScript(path: "models/lamp.shape")` is refused. */
 export const shapeScriptByPath = createByPathFileOps({ rootFor, extensions: SHAPE_EXTENSIONS }) satisfies FileOps;
 
-/** The score files `manageJingleScript` reads by `path` (@gui-chat-plugin/jinglescript 0.6.0).
- *  Declared here rather than imported: the package checks the same `.json` rule itself but does not
- *  export it, and this list is also what presentPathRoot.ts re-roots a relative `path` with. */
-export const JINGLESCRIPT_SCORE_EXTENSIONS = [".json"] as const;
-
-/** `files.byPath` for manageJingleScript — READS the `.json` score a `checkScore` / `renderScore`
- *  call names instead of passing it inline, so a long score need not travel in the tool call. The
- *  plugin never writes through it. Without it the plugin refuses `path` and asks for the score
- *  inline. */
+/** The score half of manageJingleScript's `files.byPath` — READS the `.json` score a `checkScore` /
+ *  `renderScore` call names instead of passing it inline. The plugin's own files (`jinglescript/…`,
+ *  which it creates) and the session-relative resolution are jinglescriptFiles.ts; this sees only an
+ *  absolute path or an `artifacts/…` one. */
 export const jingleScriptByPath = createByPathFileOps({ rootFor, extensions: JINGLESCRIPT_SCORE_EXTENSIONS }) satisfies FileOps;
 
 /** `files.byPath` for presentMulmoScript — reads/overwrites any `.json` MulmoScript the tool
