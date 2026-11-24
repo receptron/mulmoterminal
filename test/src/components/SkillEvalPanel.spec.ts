@@ -148,4 +148,18 @@ describe("SkillEvalPanel", () => {
     expect(calls).toEqual(["author"]);
     expect(placed).toHaveLength(1);
   });
+
+  it("follows a run it started even when the first read after starting fails", async () => {
+    vi.useFakeTimers();
+    overview = { ...base, set, runs: [] };
+    const wrapper = await mountPanel();
+    await wrapper.find("[data-testid=skill-eval-measure]").trigger("click");
+    loads.push(Promise.resolve(null));
+    await wrapper.find("[data-testid=skill-eval-go]").trigger("click");
+    await vi.advanceTimersByTimeAsync(0);
+    overview = { ...base, set, runs: [run(true, false, { status: "running", attempts: [] })], activeRunId: "1795000000000-aaaaaaaa" };
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(wrapper.find("[data-testid=skill-eval-progress]").exists()).toBe(true);
+    wrapper.unmount();
+  });
 });

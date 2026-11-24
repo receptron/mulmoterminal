@@ -57,7 +57,11 @@ async function refresh(): Promise<void> {
   overview.value = read;
   loadFailed.value = false;
   if (read.activeRunId === null) stopPolling();
-  else poll ??= setInterval(() => void refresh(), POLL_MS);
+  else startPolling();
+}
+
+function startPolling(): void {
+  poll ??= setInterval(() => void refresh(), POLL_MS);
 }
 
 watch(
@@ -82,7 +86,11 @@ async function measure(): Promise<void> {
   const started = await startSkillEvalRun(props.source, props.skill.slug);
   if (started.kind === "busy") notice.value = t("skillsView.eval.busy");
   else if (started.kind === "failed") notice.value = t("skillsView.eval.startFailed", { error: started.error });
-  else notice.value = null;
+  else {
+    notice.value = null;
+    // Polled from here, not only once a read has seen the run: that read may fail.
+    startPolling();
+  }
   await refresh();
 }
 
