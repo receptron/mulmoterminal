@@ -85,6 +85,8 @@ export const skillsViewZhCN = {
         tag: "模型寻找",
         enoughShort: "够用的模型：{model}",
         noneShort: "没有够用的模型",
+        unfinished: "寻找没有进行到底，因此没有确定够用的模型。请重新寻找。",
+        unfinishedShort: "未完成",
       },
       verdict: { helps: "有效", hurts: "有反效果", "no-evidence": "没有差异的证据", pending: "尚无法判定" },
       verdictWhy: {

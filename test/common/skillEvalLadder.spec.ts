@@ -18,7 +18,7 @@ const step = (model: string, passes: number, of: number): SkillEvalAttempt[] => 
 
 describe("summarizeLadder", () => {
   it("picks the cheapest model that passed as often as the best one", () => {
-    const summary = summarizeLadder(LADDER, [...step("haiku", 1, 3), ...step("sonnet", 2, 3), ...step("opus", 2, 3)]);
+    const summary = summarizeLadder(LADDER, [...step("haiku", 1, 3), ...step("sonnet", 2, 3), ...step("opus", 2, 3)], true);
     expect(summary.enough).toBe("sonnet");
     expect(summary.steps.map((s) => [s.model, s.passes, s.attempts])).toEqual([
       ["haiku", 1, 3],
@@ -29,7 +29,7 @@ describe("summarizeLadder", () => {
   });
 
   it("leaves the models above a step that passed everything unmeasured, and is not shaky about it", () => {
-    const summary = summarizeLadder(LADDER, step("haiku", 3, 3));
+    const summary = summarizeLadder(LADDER, step("haiku", 3, 3), true);
     expect(summary.enough).toBe("haiku");
     expect(summary.steps.map((s) => s.measured)).toEqual([true, false, false]);
     expect(summary.steps[1]).toMatchObject({ passRate: null, costPerPassUsd: null });
@@ -37,22 +37,28 @@ describe("summarizeLadder", () => {
   });
 
   it("names no model when none passed, and calls a choice resting on one model shaky", () => {
-    expect(summarizeLadder(LADDER, [...step("haiku", 0, 3), ...step("sonnet", 0, 3), ...step("opus", 0, 3)]).enough).toBeNull();
-    expect(summarizeLadder(LADDER, []).enough).toBeNull();
-    const onlyOpus = summarizeLadder(LADDER, [...step("haiku", 0, 3), ...step("sonnet", 0, 3), ...step("opus", 2, 3)]);
+    expect(summarizeLadder(LADDER, [...step("haiku", 0, 3), ...step("sonnet", 0, 3), ...step("opus", 0, 3)], true).enough).toBeNull();
+    expect(summarizeLadder(LADDER, [], true).enough).toBeNull();
+    const onlyOpus = summarizeLadder(LADDER, [...step("haiku", 0, 3), ...step("sonnet", 0, 3), ...step("opus", 2, 3)], true);
     expect(onlyOpus).toMatchObject({ enough: "opus", shaky: true });
   });
 
   it("counts a pass only when the skill was read, and costs a pass with the failures included", () => {
     const attempts = [attempt("haiku", true), attempt("haiku", true, { skillInvoked: false }), attempt("haiku", false)];
-    const [haiku] = summarizeLadder(["haiku"], attempts).steps;
+    const [haiku] = summarizeLadder(["haiku"], attempts, true).steps;
     expect(haiku).toMatchObject({ passes: 1, attempts: 3 });
     expect(haiku?.costPerPassUsd).toBeCloseTo(0.3);
-    expect(summarizeLadder(["haiku"], attempts).gradingCostUsd).toBeCloseTo(0.03);
+    expect(summarizeLadder(["haiku"], attempts, true).gradingCostUsd).toBeCloseTo(0.03);
+  });
+
+  it("names no model for a search that did not finish, whatever its partial steps passed", () => {
+    const stopped = summarizeLadder(LADDER, step("haiku", 1, 1), false);
+    expect(stopped).toMatchObject({ enough: null, finished: false });
+    expect(stopped.steps[0]?.passes).toBe(1);
   });
 
   it("ignores attempts on a model that is not on the ladder", () => {
-    expect(summarizeLadder(["haiku"], step("other", 3, 3))).toMatchObject({ enough: null, steps: [{ model: "haiku", measured: false }] });
+    expect(summarizeLadder(["haiku"], step("other", 3, 3), true)).toMatchObject({ enough: null, steps: [{ model: "haiku", measured: false }] });
   });
 });
 
@@ -75,6 +81,7 @@ describe("the ladder in a set and a run", () => {
     expect(set.ladder).toEqual(LADDER);
     expect(skillEvalSetSchema.parse({ version: 1, skill: "s", ladder: ["a"], cases: [useCase] }).ladder).toEqual(["a"]);
     expect(skillEvalSetSchema.safeParse({ version: 1, skill: "s", ladder: [], cases: [useCase] }).success).toBe(false);
+    expect(skillEvalSetSchema.safeParse({ version: 1, skill: "s", ladder: ["a", "a"], cases: [useCase] }).success).toBe(false);
   });
 
   it("plans the use cases on every model, and caps the cost with their grading", () => {

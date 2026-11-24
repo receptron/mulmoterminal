@@ -86,6 +86,8 @@ export const skillsViewKo = {
         tag: "모델 찾기",
         enoughShort: "충분한 모델: {model}",
         noneShort: "충분한 모델 없음",
+        unfinished: "탐색이 끝까지 진행되지 않아 충분한 모델을 정하지 않았습니다. 다시 찾아 주세요.",
+        unfinishedShort: "중간에 종료",
       },
       verdict: { helps: "효과가 있습니다", hurts: "역효과입니다", "no-evidence": "차이가 있다는 증거가 없습니다", pending: "아직 판정할 수 없습니다" },
       verdictWhy: {

@@ -86,6 +86,8 @@ export const skillsViewEn = {
         tag: "model search",
         enoughShort: "enough: {model}",
         noneShort: "no model was enough",
+        unfinished: "The search did not finish, so no model is named. Search again to find one.",
+        unfinishedShort: "not finished",
       },
       verdict: { helps: "It helps", hurts: "It makes things worse", "no-evidence": "No evidence of a difference", pending: "Not enough results yet" },
       verdictWhy: {

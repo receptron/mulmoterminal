@@ -86,6 +86,8 @@ export const skillsViewJa = {
         tag: "モデル探し",
         enoughShort: "足りるモデル: {model}",
         noneShort: "足りるモデルなし",
+        unfinished: "探索が最後まで終わらなかったので、足りるモデルは決めていません。もう一度探してください。",
+        unfinishedShort: "途中で終了",
       },
       verdict: { helps: "効いています", hurts: "逆効果です", "no-evidence": "差がある証拠はありません", pending: "まだ判定できません" },
       verdictWhy: {

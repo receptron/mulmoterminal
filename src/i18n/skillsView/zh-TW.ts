@@ -85,6 +85,8 @@ export const skillsViewZhTW = {
         tag: "模型尋找",
         enoughShort: "夠用的模型：{model}",
         noneShort: "沒有夠用的模型",
+        unfinished: "尋找沒有進行到底，因此沒有確定夠用的模型。請重新尋找。",
+        unfinishedShort: "未完成",
       },
       verdict: { helps: "有效", hurts: "有反效果", "no-evidence": "沒有差異的證據", pending: "尚無法判定" },
       verdictWhy: {

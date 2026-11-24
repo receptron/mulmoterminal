@@ -10,7 +10,11 @@ import { summarizeLadder } from "../../common/skillEvalLadder";
 const props = defineProps<{ run: SkillEvalRun }>();
 const { t } = useI18n();
 
-const summary = computed(() => summarizeLadder(props.run.ladder, props.run.attempts));
+const summary = computed(() => summarizeLadder(props.run.ladder, props.run.attempts, props.run.status === "done"));
+const verdict = computed(() => {
+  if (!summary.value.finished) return t("skillsView.eval.ladder.unfinished");
+  return summary.value.enough ? t("skillsView.eval.ladder.enough", { model: summary.value.enough }) : t("skillsView.eval.ladder.none");
+});
 const spentUsd = computed(() => summary.value.steps.reduce((total, step) => total + step.costUsd, 0) + summary.value.gradingCostUsd);
 const percent = (rate: number | null): string => (rate === null ? "—" : `${String(Math.round(rate * 100))}%`);
 const usd = (value: number | null): string => (value === null ? "—" : `$${value.toFixed(3)}`);
@@ -19,8 +23,8 @@ const usd = (value: number | null): string => (value === null ? "—" : `$${valu
 <template>
   <div data-testid="skill-eval-ladder-result" class="rounded border border-border p-2">
     <p class="m-0 mb-1 text-[13px] font-[650]">{{ t("skillsView.eval.ladder.title") }}</p>
-    <p data-testid="skill-eval-ladder-enough" class="m-0 mb-2" :class="summary.enough ? 'text-ok' : 'text-fg'">
-      {{ summary.enough ? t("skillsView.eval.ladder.enough", { model: summary.enough }) : t("skillsView.eval.ladder.none") }}
+    <p v-if="run.status !== 'running'" data-testid="skill-eval-ladder-enough" class="m-0 mb-2" :class="summary.enough ? 'text-ok' : 'text-fg'">
+      {{ verdict }}
     </p>
     <table class="mb-2 w-full border-collapse text-left">
       <thead>

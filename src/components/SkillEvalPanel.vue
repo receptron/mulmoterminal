@@ -63,7 +63,8 @@ const progressKey = (run: SkillEvalRun): string => {
 /** One line for an earlier run: a search names the model it found, a measurement its verdict. */
 function earlierVerdict(run: SkillEvalRun): string {
   if (run.ladder.length === 0) return t(`skillsView.eval.verdict.${summarizeSkillEval(run.cases, run.attempts, run.repeats).verdict}`);
-  const { enough } = summarizeLadder(run.ladder, run.attempts);
+  const { enough, finished } = summarizeLadder(run.ladder, run.attempts, run.status === "done");
+  if (!finished) return t("skillsView.eval.ladder.unfinishedShort");
   return enough === null ? t("skillsView.eval.ladder.noneShort") : t("skillsView.eval.ladder.enoughShort", { model: enough });
 }
 const usd = (value: number): string => `$${value.toFixed(2)}`;

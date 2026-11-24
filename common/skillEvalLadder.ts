@@ -18,8 +18,10 @@ export interface SkillEvalLadderStep {
 
 export interface SkillEvalLadderSummary {
   steps: SkillEvalLadderStep[];
-  /** The cheapest model that passed as often as the best one; null when none passed at all. */
+  /** The cheapest model that passed as often as the best one; null when none passed, or the search did not finish. */
   enough: string | null;
+  /** The search ran to its end: a stopped or interrupted one measured a step only in part, so it names no model. */
+  finished: boolean;
   /** Only one model passed anything: the choice rests on that one row. */
   shaky: boolean;
   gradingCostUsd: number;
@@ -42,7 +44,7 @@ export function ladderStepPassedAll(stepAttempts: readonly SkillEvalAttempt[], p
   return planned > 0 && stepAttempts.length === planned && stepAttempts.every(counts);
 }
 
-export function summarizeLadder(ladder: readonly string[], attempts: readonly SkillEvalAttempt[]): SkillEvalLadderSummary {
+export function summarizeLadder(ladder: readonly string[], attempts: readonly SkillEvalAttempt[], finished: boolean): SkillEvalLadderSummary {
   const steps = ladder.map((model) =>
     stepOf(
       model,
@@ -50,10 +52,11 @@ export function summarizeLadder(ladder: readonly string[], attempts: readonly Sk
     ),
   );
   const best = Math.max(0, ...steps.map((step) => step.passes));
-  const enough = best === 0 ? null : (steps.find((step) => step.passes === best)?.model ?? null);
+  const enough = !finished || best === 0 ? null : (steps.find((step) => step.passes === best)?.model ?? null);
   return {
     steps,
     enough,
+    finished,
     // A search that stopped at its first model is not shaky: nothing cheaper exists to compare it with.
     shaky: steps.filter((step) => step.measured).length > 1 && steps.filter((step) => step.passes > 0).length === 1,
     gradingCostUsd: sum(attempts.map((a) => a.gradingCostUsd)),

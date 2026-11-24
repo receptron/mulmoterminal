@@ -294,6 +294,14 @@ describe("SkillEvalPanel", () => {
       expect(wrapper.text()).toContain("Only one model passed");
     });
 
+    it("names no model for a search that was stopped, here and among the earlier results", async () => {
+      const stopped = search([tried("haiku", true, 0)], { status: "stopped" });
+      overview = { ...base, set, runs: [stopped, stopped] };
+      const wrapper = await mountPanel();
+      expect(wrapper.find("[data-testid=skill-eval-ladder-enough]").text()).toContain("did not finish");
+      expect(wrapper.find("[data-testid=skill-eval-earlier]").text()).toContain("not finished");
+    });
+
     it("says how far a running search has got, and what an earlier one found", async () => {
       const going = search([tried("haiku", false, 0)], { status: "running" });
       overview = { ...base, set, runs: [going], activeRunId: going.id };

@@ -42,7 +42,12 @@ export const skillEvalSetSchema = z.object({
   /** The model that writes an improved SKILL.md (#3448). */
   improveModel: z.string().min(1).default(SKILL_EVAL_DEFAULT_IMPROVE_MODEL),
   /** Cheapest first: the search stops at the first that passes everything. */
-  ladder: z.array(z.string().min(1)).min(1).max(SKILL_EVAL_MAX_LADDER).default(SKILL_EVAL_DEFAULT_LADDER),
+  ladder: z
+    .array(z.string().min(1))
+    .min(1)
+    .max(SKILL_EVAL_MAX_LADDER)
+    .refine((models) => new Set(models).size === models.length, "ladder models must be unique")
+    .default(SKILL_EVAL_DEFAULT_LADDER),
   repeats: z.number().int().min(1).max(SKILL_EVAL_MAX_REPEATS).default(SKILL_EVAL_DEFAULT_REPEATS),
   maxBudgetUsdPerAttempt: z.number().positive().max(10).default(SKILL_EVAL_DEFAULT_BUDGET_USD),
   /** Tools beyond file edits the agent may use without asking, in claude's `--allowedTools` form. */
