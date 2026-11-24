@@ -175,7 +175,12 @@ describe("two manageJingleScript calls in flight at once", () => {
 
   const app = express();
   app.use(express.json());
-  mountJingleScriptCaller(app, { cwdForSession: (id) => (id === SESSION ? project : id === SESSION_B ? projectB : ws) });
+  const sessionDirs = (): ReadonlyMap<string, string> =>
+    new Map([
+      [SESSION, project],
+      [SESSION_B, projectB],
+    ]);
+  mountJingleScriptCaller(app, { cwdForSession: (id) => (id === null ? ws : (sessionDirs().get(id) ?? ws)) });
   // Each call parks on its own gate before writing, so both are suspended across an await at the same time.
   app.post("/api/plugin/:toolName", async (req, res) => {
     const session = req.get(SESSION_HEADER) ?? "";
