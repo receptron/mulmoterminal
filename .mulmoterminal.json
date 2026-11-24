@@ -5,5 +5,10 @@
   "cellColor": "#f2f2fb",
   "cellBorderColor": "#5156d6",
   "dotColor": "#5156d6",
-  "buttonColor": "#cfd0f7"
+  "buttonColor": "#cfd0f7",
+  "review": {
+    "reviewer": "codex",
+    "maxRounds": 10,
+    "requiredLgtm": 1
+  }
 }
