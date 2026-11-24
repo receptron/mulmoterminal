@@ -159,6 +159,10 @@ import { mountSpaFallback } from "../infra/http/spa-fallback.js";
 import { mountRateLimitRoutes, type RateLimitRouteDeps } from "../agents/rate-limit/rate-limit-routes.js";
 import { mountLoadRoute } from "./load-routes.js";
 import { workspaceForRoute } from "./routeParams.js";
+import { reviewWorkspaces } from "./review-workspaces.js";
+import { git } from "../git/worktrees.js";
+import { mulmoterminalHome } from "../infra/fs/mulmoterminal-home.js";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
 
 export interface AppRouteDeps extends SessionActivityDeps {
   /** Which agents could be started, as checked once at server start (#2229). */
@@ -256,6 +260,19 @@ function mountReviewRoutes(app: Express, deps: AppRouteDeps): void {
     prState: fetchPrReviewState,
     agentOf: (session) => ptys.get(session)?.agent,
     close: (session) => endTmuxSession(tmuxRouteDeps(deps), session, true),
+    workspaces: reviewWorkspaces({
+      cloneOf: cloneOfRepo,
+      root: () => path.join(mulmoterminalHome(), "review-worktrees"),
+      worktree: {
+        git: (args, cwd) => git(args, cwd),
+        exists: existsSync,
+        isSymlink: (dir) => lstatSync(dir, { throwIfNoEntry: false })?.isSymbolicLink() === true,
+        realpath: (dir) => realpathSync(dir),
+      },
+      spawn: deps.spawnIssueSession,
+      recordSpawn: (child, parent) => spawnedSessions.recordSpawn(child, parent),
+      markVisible: (session, agent) => markUnplacedSession(session, agent),
+    }),
   });
   const issueSessions = new Map<string, IssueSession>();
   const isRunning = (session: string): boolean => ptys.has(session);

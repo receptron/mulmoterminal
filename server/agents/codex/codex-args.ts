@@ -4,6 +4,8 @@ import { codexPermissionHookOverride } from "./codex-hook.js";
 // (there is no `--session-id` like claude has), so a fresh session passes no id — the id is read
 // back from the rollout file afterwards — while resume replays a known rollout id via the
 // `resume` subcommand. Global flags precede the subcommand (codex's clap layout).
+export const CODEX_NETWORK_ACCESS = "sandbox_workspace_write.network_access=true";
+
 export interface GuiMcpServer {
   /** The MCP server id codex registers it under — `mulmoterminal-gui`, or `mulmoterminal-<group>`. */
   id: string;
@@ -33,6 +35,9 @@ export interface CodexArgsInput {
   guiMcpServers: readonly GuiMcpServer[];
   // Register the PermissionRequest hook that reports an approval dialog (see codex-hook.ts).
   permissionHook: boolean;
+  // Let the sandbox reach the network, for a session whose job needs it (a reviewer reading and
+  // commenting on its PR with gh). Absent: whatever the user's own codex config says.
+  networkAccess?: boolean;
 }
 
 // NOTE: a seed prompt is NOT passed here as a positional [PROMPT] — a long collection-action prompt
@@ -59,6 +64,7 @@ export function buildCodexArgs(input: CodexArgsInput): string[] {
     if (server.autoApprove) args.push("-c", `mcp_servers.${server.id}.default_tools_approval_mode="approve"`);
   }
   if (input.permissionHook) args.push("-c", codexPermissionHookOverride());
+  if (input.networkAccess === true) args.push("-c", CODEX_NETWORK_ACCESS);
   if (input.resume) args.push("resume", input.resume);
   return args;
 }

@@ -724,13 +724,18 @@ reviews automatically until the key is set; a session that drives a review reads
 - The file is the only way to set it. It is read from the clone that work on the repository starts
   in, and a worktree inherits it.
 
-With the key set, the session runs the loop through two tools. It starts a reviewer session with the
-declared agent (`spawnBackgroundChat`) and calls `requestReview` with the repository, the PR number
-and that session. MulmoTerminal sends the reviewer the request, naming the `skill` to follow, waits for its answer, and types how
+With the key set, the session runs the loop through two tools. It calls `requestReview` with the
+repository and the PR number, and MulmoTerminal starts the reviewer itself: the declared agent, in a
+worktree of the PR's head under `~/.mulmoterminal/review-worktrees/` (never the author's checkout),
+as a cell you can see. A codex reviewer's sandbox may reach the network there, because it reads and
+comments on the PR with `gh`; a codex cell you open yourself keeps your own sandbox. The same reviewer
+takes the PR's later rounds, its worktree moved to each new head, and a new one is started if it has
+stopped. (A session may still start a reviewer of its own with `spawnBackgroundChat` and name it as
+`reviewer`.) MulmoTerminal sends the reviewer the request, naming the `skill` to follow, waits for its answer, and types how
 the round ended into the calling session: the verdict, the rounds left, and whether the merge
 condition is met. It refuses a round past `maxRounds`, a second review of a head that had changes
 requested, and a reviewer that is not the declared agent. It never merges; the session does.
-`endReview` closes the reviewer once the PR is merged. The reviewer is asked to open its reply, and
+`endReview` closes the reviewer once the PR is merged, and removes the worktree MulmoTerminal made. The reviewer is asked to open its reply, and
 the comment it posts on the PR, with `REVIEW VERDICT: LGTM (head <sha>)` or
 `REVIEW VERDICT: CHANGES REQUESTED (head <sha>)`, which the GitHub board counts like a
 `CODEX VERDICT:` line. The rounds are kept in memory, so a restart starts the count again.

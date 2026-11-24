@@ -1,11 +1,17 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { buildCodexArgs } from "../../../../server/agents/codex/codex-args.js";
+import { buildCodexArgs, CODEX_NETWORK_ACCESS } from "../../../../server/agents/codex/codex-args.js";
 import { codexPermissionHookOverride } from "../../../../server/agents/codex/codex-hook.js";
 
 const base = { resume: null, model: null, guiMcpServers: [], permissionHook: false };
 
 describe("buildCodexArgs", () => {
+  it("lets the sandbox reach the network only when asked, ahead of the resume subcommand", () => {
+    expect(buildCodexArgs({ ...base, networkAccess: true, resume: "id1" })).toEqual(["-c", CODEX_NETWORK_ACCESS, "resume", "id1"]);
+    expect(CODEX_NETWORK_ACCESS).toBe("sandbox_workspace_write.network_access=true");
+    expect(buildCodexArgs({ ...base, networkAccess: false })).toEqual([]);
+  });
+
   it("passes no id for a fresh session (codex mints its own)", () => {
     expect(buildCodexArgs({ ...base })).toEqual([]);
   });
