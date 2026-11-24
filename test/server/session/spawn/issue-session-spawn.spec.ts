@@ -111,7 +111,7 @@ describe("createIssueSessionSpawner", () => {
     expect(groupsFor).not.toHaveBeenCalled();
   });
 
-  // #3425: a reviewer reads and comments on its PR with gh, which codex's default sandbox cannot reach.
+  // A reviewer or an implementer talks to GitHub with gh, which codex's default sandbox cannot reach.
   it("lets codex's sandbox reach the network only when asked, and changes nothing for the others", async () => {
     const { spawn, calls } = setup();
     await spawn("codex", CWD, SEED, true, null, { networkAccess: true });

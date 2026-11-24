@@ -99,7 +99,7 @@ export function createCodexSpawner(deps: SpawnDeps) {
       mcpGroups?: readonly ToolGroup[];
       /** Limit this session to these GUI tool groups, for this spawn and every later one (#3033). */
       guiGroups?: readonly ToolGroup[] | undefined;
-      /** Let the sandbox reach the network, for this spawn only (a reviewer, #3425). */
+      /** Let the sandbox reach the network, for this spawn only (a reviewer or an implementer). */
       networkAccess?: boolean;
     } = {},
   ): PtyEntry {
