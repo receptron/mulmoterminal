@@ -159,3 +159,55 @@ describe("the manageJingleScript route", () => {
     expect(existsSync(path.join(ws, "jinglescript", "routed.wav"))).toBe(true);
   });
 });
+
+describe("two manageJingleScript calls in flight at once", () => {
+  const SESSION_B = "66666666-7777-8888-9999-000000000000";
+  let projectB: string;
+  const gates = new Map<string, () => void>();
+
+  beforeEach(() => {
+    projectB = mkdtempSync(path.join(tmpdir(), "mt-jingle-project-b-"));
+  });
+  afterEach(() => {
+    rmSync(projectB, { recursive: true, force: true });
+    gates.clear();
+  });
+
+  const app = express();
+  app.use(express.json());
+  mountJingleScriptCaller(app, { cwdForSession: (id) => (id === SESSION ? project : id === SESSION_B ? projectB : ws) });
+  // Each call parks on its own gate before writing, so both are suspended across an await at the same time.
+  app.post("/api/plugin/:toolName", async (req, res) => {
+    const session = req.get(SESSION_HEADER) ?? "";
+    await new Promise<void>((release) => {
+      gates.set(session, release);
+    });
+    await jingleScriptFileOps.write("jinglescript/routed.wav", "x");
+    res.json({ ok: true });
+  });
+  const request = appRequest(app);
+  const post = (sessionId: string) =>
+    request("/api/plugin/manageJingleScript", { method: "POST", headers: { "content-type": "application/json", [SESSION_HEADER]: sessionId }, body: "{}" });
+
+  const parked = async (session: string): Promise<() => void> => {
+    for (let attempt = 0; attempt < 200 && !gates.has(session); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+    const release = gates.get(session);
+    if (!release) throw new Error(`call for ${session} never reached its gate`);
+    return release;
+  };
+
+  it("keeps each session's writes in its own directory when released in the opposite order", async () => {
+    const first = post(SESSION);
+    const second = post(SESSION_B);
+    const releaseFirst = await parked(SESSION);
+    const releaseSecond = await parked(SESSION_B);
+    releaseSecond();
+    expect((await second).status).toBe(200);
+    releaseFirst();
+    expect((await first).status).toBe(200);
+
+    expect(existsSync(path.join(project, "jinglescript", "routed.wav"))).toBe(true);
+    expect(existsSync(path.join(projectB, "jinglescript", "routed.wav"))).toBe(true);
+    expect(existsSync(path.join(ws, "jinglescript"))).toBe(false);
+  });
+});
