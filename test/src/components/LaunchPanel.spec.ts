@@ -41,6 +41,21 @@ describe("LaunchPanel", () => {
     expect((w.find('[data-testid="cell-dir-input"]').element as HTMLInputElement).value).toBe("/home/me/workspace");
   });
 
+  // #3414: the panel's own missing-directory check can hide the saved directory the handed-in dir was
+  // picked from, and the host then hands in another. The field follows it — until the user chooses.
+  it("follows a handed-in directory that changes after opening, until the user picks one", async () => {
+    const w = mountPanel("/home/me/missing");
+    await flushPromises();
+    await w.setProps({ initialDir: "/home/me/valid" });
+    const input = () => (w.find('[data-testid="cell-dir-input"]').element as HTMLInputElement).value;
+    expect(input()).toBe("/home/me/valid");
+
+    w.findComponent({ name: "CellLaunchForm" }).vm.$emit("update:dir", "/home/me/custom");
+    await flushPromises();
+    await w.setProps({ initialDir: "/home/me/elsewhere" });
+    expect(input()).toBe("/home/me/custom");
+  });
+
   // The form's own `start` carries only the dir. In a cell the picker's state WAS the cell's, so
   // nothing had to say what was picked; a host outside the grid has to be told.
   it("reports the picked agent alongside the directory on start", async () => {

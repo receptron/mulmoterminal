@@ -290,6 +290,31 @@ describe("GridView settings wiring", () => {
   });
 });
 
+// #3414: a saved directory that is out of reach (an unplugged drive) is hidden from the launch
+// surfaces but stays listed in Settings, the one place it can still be seen.
+describe("GridView out-of-reach saved directories", () => {
+  const KEPT = { label: "kept", path: "/w/kept" };
+  const USB = { label: "usb", path: "/Volumes/USB/p" };
+  const DirSettingsStub = { name: "SettingsModal", props: ["dirPaths"], template: '<div class="settings-stub" />' };
+
+  it("lists the out-of-reach directory in Settings but not in the launch panel", async () => {
+    globalThis.fetch = vi.fn(async (url: FetchUrl) => {
+      const u = String(url);
+      if (u === "/api/config/cwd-presets/prune-missing")
+        return { ok: true, json: async () => ({ cwdPresets: [KEPT, USB], unreachable: [USB.path] }) } as Response;
+      if (u.includes("/api/config")) return { ok: true, json: async () => ({ cwd: "/w", home: "/w", cwdPresets: [KEPT, USB] }) } as Response;
+      return { ok: true, json: async () => ({}) } as Response;
+    }) as typeof fetch;
+    const w = mount(GridView, { global: { stubs: { TerminalGrid: true, AppToolbar: ToolbarStub, SettingsModal: DirSettingsStub } } });
+    await flushPromises();
+
+    expect(w.findComponent({ name: "TerminalGrid" }).props("presets")).toEqual([KEPT]);
+    await w.find(".open-settings").trigger("click");
+    expect(w.findComponent(DirSettingsStub).props("dirPaths")).toEqual([KEPT.path, USB.path]);
+    w.unmount();
+  });
+});
+
 // --- Keyboard shortcut wiring (#829) -------------------------------------------------
 //
 // The pure transforms are covered in gridTabs.spec.ts. What is covered HERE is the wiring

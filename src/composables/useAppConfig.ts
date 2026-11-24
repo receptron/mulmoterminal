@@ -1,5 +1,5 @@
 import { sanitizeTokenRotation, TOKEN_ROTATION_OFF, type TokenRotation } from "../../common/tokenRotation";
-import { getCurrentScope, onScopeDispose, ref, type Ref } from "vue";
+import { computed, getCurrentScope, onScopeDispose, ref, type Ref } from "vue";
 import { presetLabel, type CwdPreset } from "../components/presets";
 import { isManagedWorktreePath, worktreeLabel } from "../../common/worktreePath";
 import type { Launcher } from "../components/launchers";
@@ -250,6 +250,7 @@ function createPresetMutations(
   hasAuthoritativeList: () => boolean,
   recordPresetOnServer: (path: string, label: string) => Promise<boolean>,
   removePresetOnServer: (path: string) => Promise<boolean>,
+  pruneMissingOnServer: () => Promise<boolean>,
 ) {
   let presetWrite: Promise<unknown> = Promise.resolve();
   function serialize(mutate: () => Promise<void>): Promise<void> {
@@ -354,7 +355,31 @@ function createPresetMutations(
     }
   }
 
-  return { recordPreset, removePreset, migrateLegacyRecents };
+  // Forget deleted directories and refresh which saved ones are out of reach. Serialized like the
+  // others so it never interleaves with a record or remove.
+  // `isStale` is asked when the check's turn comes, not when it is queued: a view that went away while
+  // it waited behind another write must not start it.
+  function pruneMissingPresets(isStale?: () => boolean): Promise<void> {
+    return serialize(async () => {
+      if (isStale?.()) return;
+      await pruneMissingOnServer();
+    });
+  }
+
+  return { recordPreset, removePreset, migrateLegacyRecents, pruneMissingPresets };
+}
+
+type MutateOneOnServer = (url: string, body: Record<string, string>, adoptExtra?: (saved: Record<string, unknown>) => void) => Promise<boolean>;
+
+// Deleted directories leave the saved list; ones that are only out of reach (an unmounted drive)
+// stay saved and are named here, so the launcher can hide them until they come back (#3414).
+function createUnreachableTracker(mutateOneOnServer: MutateOneOnServer) {
+  const unreachablePresetPaths = ref<string[]>([]);
+  const pruneMissingOnServer = () =>
+    mutateOneOnServer("/api/config/cwd-presets/prune-missing", {}, (saved) => {
+      unreachablePresetPaths.value = stringsOf(saved.unreachable);
+    });
+  return { unreachablePresetPaths, pruneMissingOnServer };
 }
 
 // The directory-preset subsystem: savePresets + the mutations above, owning the version
@@ -415,17 +440,20 @@ function createPresetManager(presets: Ref<CwdPreset[]>, saving: Ref<boolean>, er
    *  its own copy was empty or stale — which is the point.
    *
    *  A failed call leaves the list exactly as it was: the directory is simply not recorded, and
-   *  the next launch tries again. It counts as a local write (`version++`) so a GET already in
-   *  flight cannot re-adopt the pre-change list over it (#164). */
-  async function mutateOneOnServer(url: string, body: Record<string, string>): Promise<boolean> {
-    version++;
+   *  the next launch tries again. An adopted answer counts as a local write (`version++`) so a GET
+   *  already in flight cannot re-adopt the pre-change list over it (#164). Only an ADOPTED one: a
+   *  failed call wrote nothing, and bumping anyway made the config read's retry discard the good
+   *  list it brought, leaving the launcher empty. */
+  const mutateOneOnServer: MutateOneOnServer = async (url, body, adoptExtra) => {
     try {
       const res = await fetchWithTimeout(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(`save failed (${res.status})`);
       const saved: unknown = await res.json();
       if (isRecord(saved) && isUnknownArray(saved.cwdPresets)) {
+        version++;
         presets.value = saved.cwdPresets.filter(isCwdPreset);
         loaded = true;
+        adoptExtra?.(saved);
       }
       error.value = null;
       return true;
@@ -433,16 +461,18 @@ function createPresetManager(presets: Ref<CwdPreset[]>, saving: Ref<boolean>, er
       error.value = "Couldn't save presets. Check the server and try again.";
       return false;
     }
-  }
+  };
 
   const recordPresetOnServer = (path: string, label: string) => mutateOneOnServer("/api/config/cwd-presets/record", { path, label });
   const removePresetOnServer = (path: string) => mutateOneOnServer("/api/config/cwd-presets/remove", { path });
+  const { unreachablePresetPaths, pruneMissingOnServer } = createUnreachableTracker(mutateOneOnServer);
 
   return {
     savePresets,
-    ...createPresetMutations(presets, () => loaded, recordPresetOnServer, removePresetOnServer),
+    ...createPresetMutations(presets, () => loaded, recordPresetOnServer, removePresetOnServer, pruneMissingOnServer),
     snapshotVersion,
     adoptServerPresets,
+    unreachablePresetPaths,
   };
 }
 
@@ -673,6 +703,9 @@ interface ConfigReaderDeps {
   snapshotVersion: () => number;
   adoptServerPresets: (list: unknown, capturedVersion: number) => void;
   migrateLegacyRecents: () => Promise<void>;
+  /** Runs after every read whose answer was adopted — the first attempt or a background retry.
+   *  Handed the read's own staleness test, for work that starts later than this call. */
+  afterRead: (stale: () => boolean) => Promise<void>;
 }
 
 /** What one attempt is given: the signal that cancels it when it is no longer wanted, and the
@@ -693,7 +726,7 @@ type ConfigRead = (attempt: ReadAttempt) => Promise<boolean>;
  *  adopting it. Asking such a server nine more times returns the same body, so the reload is the
  *  user's move. Keeping one `try` around both halves quietly made a malformed body retryable —
  *  Codex caught exactly that on #1771. */
-function createConfigReader({ defaultCwd, snapshotVersion, adoptServerPresets, migrateLegacyRecents }: ConfigReaderDeps): ConfigRead {
+function createConfigReader({ defaultCwd, snapshotVersion, adoptServerPresets, migrateLegacyRecents, afterRead }: ConfigReaderDeps): ConfigRead {
   return async function readConfig({ signal, stale }: ReadAttempt): Promise<boolean> {
     const version = snapshotVersion();
     // Taken BEFORE the request, like `version` above and for a sibling reason: this answer must not
@@ -729,6 +762,9 @@ function createConfigReader({ defaultCwd, snapshotVersion, adoptServerPresets, m
       applyGlobalSettings(c, pinsMark, jobsMark);
       adoptServerSideSettings(c);
       await migrateLegacyRecents();
+      // Asked again after that await: a view that went away during it must not start a check.
+      if (stale()) return true;
+      await afterRead(stale);
     } catch {
       // Unreadable, or an adoption step that failed. The screen keeps whatever it already had —
       // and this still counts as answered, so no retry is armed.
@@ -826,6 +862,24 @@ function createConfigLoader(loadOnce: ConfigRead, unavailable: Ref<boolean>): ()
   };
 }
 
+// The missing-directory check runs after each adopted read — a background retry included, so a
+// first attempt lost to a restart still gets its check — and never alongside one. Off for a plain
+// `loadConfig`, whose callers count its requests.
+function createPruningConfigLoader(
+  deps: Omit<ConfigReaderDeps, "afterRead">,
+  unavailable: Ref<boolean>,
+  pruneMissingPresets: (isStale?: () => boolean) => Promise<void>,
+) {
+  let pruneAfterRead = false;
+  const afterRead = (stale: () => boolean) => (pruneAfterRead ? pruneMissingPresets(stale) : Promise.resolve());
+  const loadConfig = createConfigLoader(createConfigReader({ ...deps, afterRead }), unavailable);
+  const loadConfigThenPruneMissing = (): Promise<void> => {
+    pruneAfterRead = true;
+    return loadConfig();
+  };
+  return { loadConfig, loadConfigThenPruneMissing };
+}
+
 // Server config (default workspace dir, home, directory presets, custom sound)
 // shared by both the single view and the grid view so each can open the settings
 // modal without duplicating the fetch/save logic.
@@ -838,23 +892,33 @@ function createConfigLoader(loadOnce: ConfigRead, unavailable: Ref<boolean>): ()
 // user who has opened no directories. Take them from the shell that loaded them instead.
 export function useAppConfig() {
   const defaultCwd = ref<string | null>(null);
-  const presets = ref<CwdPreset[]>([]);
+  // Every saved directory, as the file has it. Launch surfaces get `presets` below; Settings lists
+  // this one, so an out-of-reach entry still has somewhere it can be seen.
+  const savedPresets = ref<CwdPreset[]>([]);
   const saving = ref(false);
   const error = ref<string | null>(null);
 
-  const { savePresets, recordPreset, removePreset, migrateLegacyRecents, snapshotVersion, adoptServerPresets } = createPresetManager(presets, saving, error);
+  const { savePresets, recordPreset, removePreset, migrateLegacyRecents, pruneMissingPresets, snapshotVersion, adoptServerPresets, unreachablePresetPaths } =
+    createPresetManager(savedPresets, saving, error);
+  // Out-of-reach directories stay saved but are offered nowhere until they come back (#3414).
+  const presets = computed(() => savedPresets.value.filter((preset) => !unreachablePresetPaths.value.includes(preset.path)));
 
   // Whether the config could not be read at all, after the retries gave up — what the launcher
   // shows instead of pretending the user has no saved directories. Per-call like `presets`, and
   // filled in for the caller that loads.
   const configUnavailable = ref(false);
-  const loadConfig = createConfigLoader(createConfigReader({ defaultCwd, snapshotVersion, adoptServerPresets, migrateLegacyRecents }), configUnavailable);
+  const { loadConfig, loadConfigThenPruneMissing } = createPruningConfigLoader(
+    { defaultCwd, snapshotVersion, adoptServerPresets, migrateLegacyRecents },
+    configUnavailable,
+    pruneMissingPresets,
+  );
 
   return {
     defaultCwd,
     storiesRoots,
     home,
     presets,
+    savedPresets: computed(() => savedPresets.value),
     configUnavailable,
     prRepos,
     gitlabHosts,
@@ -875,9 +939,11 @@ export function useAppConfig() {
     saving,
     error,
     loadConfig,
+    loadConfigThenPruneMissing,
     savePresets,
     recordPreset,
     removePreset,
+    pruneMissingPresets,
     savePushEnabled,
     savePushKinds,
     savePrRepos,

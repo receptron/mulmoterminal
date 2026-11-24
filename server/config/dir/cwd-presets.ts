@@ -1,8 +1,9 @@
 // Directory presets the launch form offers, persisted at config.json. Extracted
 // from index.ts so the sanitize/load/save logic is unit-testable.
-import { existsSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { type CwdPreset } from "../config-schema.js";
+import type { DirPresence, DirProbe } from "./missing-presets.js";
 import { readJsonFile } from "../../infra/fs/read-text-file.js";
 import { writeFileAtomicSync } from "../../files/atomic-write.js";
 import { isRecord } from "../../../common/isRecord.js";
@@ -54,6 +55,61 @@ export function loadPresets(file: string): CwdPreset[] {
     return [];
   }
 }
+
+const ABSENT_CODES = new Set(["ENOENT", "ENOTDIR"]);
+
+const isAbsentError = (err: unknown): boolean => isRecord(err) && typeof err.code === "string" && ABSENT_CODES.has(err.code);
+
+// Only a definite "not there" counts: EACCES or an I/O error reads as present, because the caller
+// deletes saved entries on `absent`. A link that is there but leads nowhere is told apart with lstat.
+export function probeDir(dir: string): DirPresence {
+  try {
+    statSync(dir);
+    return "present";
+  } catch (err) {
+    if (!isAbsentError(err)) return "present";
+  }
+  try {
+    lstatSync(dir);
+    return "dangling";
+  } catch (err) {
+    return isAbsentError(err) ? "absent" : "present";
+  }
+}
+
+// False when unsure (unreadable, gone): the caller deletes saved entries only on a true here.
+export function dirHasEntries(dir: string): boolean {
+  try {
+    return readdirSync(dir).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** When each suspected deletion was first seen. Unreadable or malformed reads as an empty record —
+ *  the safe direction, since an empty record only delays a deletion. */
+export function loadMissingSince(file: string): Record<string, number> {
+  try {
+    if (!existsSync(file)) return {};
+    const parsed: unknown = readJsonFile(file);
+    if (!isRecord(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1])));
+  } catch {
+    return {};
+  }
+}
+
+export function saveMissingSince(file: string, missingSince: Record<string, number>): boolean {
+  try {
+    writeFileAtomicSync(file, JSON.stringify(missingSince, null, 2));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The filesystem as `classifyMissingPresets` asks about it. */
+export const presetDirProbe: DirProbe = { presence: probeDir, hasEntries: dirHasEntries };
 
 // Persist; returns false on any write failure so the caller can surface it
 // instead of reporting a false success.

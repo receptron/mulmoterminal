@@ -8,7 +8,8 @@
 // on 2026-08-09 a terminal launched during the initial GET reduced five saved directories to one.
 // The routes below exist so the caller never holds the list at all.
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
+import { MISSING_CONFIRM_MS } from "../../../../server/config/dir/missing-presets";
 import express from "express";
 import { routeCall, jsonPost } from "../../../helpers/routeCall";
 import { isRecord } from "../../../../common/isRecord";
@@ -158,5 +159,196 @@ describe("POST /api/config/cwd-presets/remove", () => {
   it("refuses a request with no path", async () => {
     const { app } = await mountAgainstTempHome({ cwdPresets: TWO });
     expect((await routeCall(app)("/api/config/cwd-presets/remove", jsonPost({}))).status).toBe(400);
+  });
+});
+
+// #3414: a deleted directory leaves the list; one whose parent is gone too (an unmounted drive looks
+// like that) is kept on disk and only named, so the launcher can hide it until it comes back.
+describe("POST /api/config/cwd-presets/prune-missing", () => {
+  const missingSincePath = () => path.join(process.env.HOME ?? "", ".mulmoterminal", "missing-dirs.json");
+  const missingSince = (): Record<string, number> => (existsSync(missingSincePath()) ? JSON.parse(readFileSync(missingSincePath(), "utf8")) : {});
+  const writeMissingSince = (record: Record<string, number>) => writeFileSync(missingSincePath(), JSON.stringify(record));
+
+  function scratchTree() {
+    const root = realpathSync(mkdtempSync(path.join(tmpdir(), "mt-prune-")));
+    dirs.push(root);
+    const kept = path.join(root, "kept");
+    mkdirSync(kept);
+    return { kept, deleted: path.join(root, "deleted"), unmounted: path.join(root, "volume", "project") };
+  }
+
+  it("hides a deleted directory at first sight, records when, and keeps it in config.json", async () => {
+    const { kept, deleted, unmounted } = scratchTree();
+    const saved = [kept, deleted, unmounted].map((dir) => ({ label: path.basename(dir), path: dir }));
+    const { app, onDisk, onChanged } = await mountAgainstTempHome({ cwdPresets: saved });
+    const before = Date.now();
+    const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    expect(res.status).toBe(200);
+    expect(pathsOf(res.body)).toEqual([kept, deleted, unmounted]);
+    expect(res.body.unreachable).toEqual([deleted, unmounted]);
+    expect(onDisk().cwdPresets).toHaveLength(3);
+    const since = missingSince()[deleted];
+    expect(since).toBeGreaterThanOrEqual(before);
+    expect(Object.keys(missingSince())).toEqual([deleted]); // the unreachable one is never on the clock
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it("forgets it once a check a day later still finds it missing, keeping everything else", async () => {
+    const { kept, deleted, unmounted } = scratchTree();
+    const saved = [kept, deleted, unmounted].map((dir) => ({ label: path.basename(dir), path: dir }));
+    const { app, onDisk, onChanged } = await mountAgainstTempHome({ cwdPresets: saved, pushEnabled: true });
+    writeMissingSince({ [deleted]: Date.now() - MISSING_CONFIRM_MS - 1 });
+    const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    expect(pathsOf(res.body)).toEqual([kept, unmounted]);
+    expect(res.body.unreachable).toEqual([unmounted]);
+    expect(onDisk().cwdPresets.map((preset: { path: string }) => preset.path)).toEqual([kept, unmounted]);
+    expect(onDisk().pushEnabled).toBe(true);
+    expect(onChanged).toHaveBeenCalledTimes(1);
+    // Its time is dropped on the next check, once the entry has left the list.
+    await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    expect(missingSince()).toEqual({});
+  });
+
+  // A record that was not written may hold a time the directory has since reset, so it must not
+  // confirm anything: everything suspected is hidden, nothing is removed.
+  it("removes nothing when the first-seen record cannot be written", async () => {
+    const { kept, deleted } = scratchTree();
+    const saved = [kept, deleted].map((dir) => ({ label: path.basename(dir), path: dir }));
+    vi.doMock("../../../../server/config/dir/cwd-presets", async (importOriginal) => ({
+      ...(await importOriginal<typeof import("../../../../server/config/dir/cwd-presets")>()),
+      saveMissingSince: () => false,
+    }));
+    try {
+      const { app, onDisk, onChanged } = await mountAgainstTempHome({ cwdPresets: saved });
+      writeMissingSince({ [deleted]: Date.now() - MISSING_CONFIRM_MS - 1 });
+      const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+      expect(res.status).toBe(200);
+      expect(pathsOf(res.body)).toEqual([kept, deleted]);
+      expect(res.body.unreachable).toEqual([deleted]);
+      expect(onDisk().cwdPresets).toHaveLength(2);
+      expect(onChanged).not.toHaveBeenCalled();
+    } finally {
+      vi.doUnmock("../../../../server/config/dir/cwd-presets");
+    }
+  });
+
+  it("keeps waiting when the second check comes less than a day later", async () => {
+    const { kept, deleted } = scratchTree();
+    const saved = [kept, deleted].map((dir) => ({ label: path.basename(dir), path: dir }));
+    const { app, onDisk } = await mountAgainstTempHome({ cwdPresets: saved });
+    const firstSeen = Date.now() - MISSING_CONFIRM_MS + 60_000;
+    writeMissingSince({ [deleted]: firstSeen });
+    const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    expect(res.body.unreachable).toEqual([deleted]);
+    expect(onDisk().cwdPresets).toHaveLength(2);
+    expect(missingSince()).toEqual({ [deleted]: firstSeen });
+  });
+
+  it("starts the clock again for a directory that came back", async () => {
+    const { kept } = scratchTree();
+    const { app } = await mountAgainstTempHome({ cwdPresets: [{ label: "kept", path: kept }] });
+    writeMissingSince({ [kept]: Date.now() - MISSING_CONFIRM_MS - 1 });
+    const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    expect(pathsOf(res.body)).toEqual([kept]);
+    expect(missingSince()).toEqual({});
+  });
+
+  it("writes nothing when nothing was deleted", async () => {
+    const { kept, unmounted } = scratchTree();
+    const saved = [kept, unmounted].map((dir) => ({ label: path.basename(dir), path: dir }));
+    const { app, onChanged } = await mountAgainstTempHome({ cwdPresets: saved });
+    const { APP_CONFIG_FILE } = await import("../../../../server/config/config-routes.js");
+    const before = readFileSync(APP_CONFIG_FILE, "utf8");
+    const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    expect(pathsOf(res.body)).toEqual([kept, unmounted]);
+    expect(res.body.unreachable).toEqual([unmounted]);
+    expect(readFileSync(APP_CONFIG_FILE, "utf8")).toBe(before);
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it.skipIf(process.platform === "win32")("keeps a symlink whose target is missing, and names it", async () => {
+    const { kept } = scratchTree();
+    const link = path.join(path.dirname(kept), "usb-link");
+    symlinkSync(path.join(path.dirname(kept), "unmounted"), link);
+    const saved = [kept, link].map((dir) => ({ label: path.basename(dir), path: dir }));
+    const { app, onDisk } = await mountAgainstTempHome({ cwdPresets: saved });
+    const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    expect(pathsOf(res.body)).toEqual([kept, link]);
+    expect(res.body.unreachable).toEqual([link]);
+    expect(onDisk().cwdPresets).toHaveLength(2);
+  });
+
+  // An empty answer would be adopted as the whole list, and every chip would vanish.
+  it("refuses an unreadable config instead of answering it as empty, and leaves the file alone", async () => {
+    const { app } = await mountAgainstTempHome({});
+    const { APP_CONFIG_FILE } = await import("../../../../server/config/config-routes.js");
+    writeFileSync(APP_CONFIG_FILE, "{ not json");
+    const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    expect(res.status).toBe(409);
+    expect(readFileSync(APP_CONFIG_FILE, "utf8")).toBe("{ not json");
+  });
+
+  // Another process wrote the file since this one loaded it. The answer is adopted by the client as
+  // the whole list, so this process must start serving the same list.
+  it("brings this process's own view in line with the file it answered from", async () => {
+    const { kept } = scratchTree();
+    const { app, onChanged } = await mountAgainstTempHome({ cwdPresets: [] });
+    const { APP_CONFIG_FILE, getCwdPresets, getPrRepos } = await import("../../../../server/config/config-routes.js");
+    writeFileSync(APP_CONFIG_FILE, JSON.stringify({ cwdPresets: [{ label: "kept", path: kept }], prRepos: ["acme/web"] }));
+    expect(getCwdPresets()).toEqual([]);
+    const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    expect(pathsOf(res.body)).toEqual([kept]);
+    expect(getCwdPresets().map((preset) => preset.path)).toEqual([kept]);
+    expect(onChanged).toHaveBeenCalledTimes(1);
+    // Only the list: a prune is not a config reload, so another setting in the file is not applied.
+    expect(getPrRepos()).toEqual([]);
+  });
+
+  // The invariant, rather than one more case of it: what this process serves afterwards is exactly the
+  // list it answered — a rename or a reorder by another process included — while the subscribers of
+  // the list are woken only when a path changed.
+  it("serves exactly the list it answered, waking subscribers only for a path change", async () => {
+    const { kept } = scratchTree();
+    const other = path.join(path.dirname(kept), "other");
+    mkdirSync(other);
+    const { app, onChanged } = await mountAgainstTempHome({
+      cwdPresets: [
+        { label: "kept", path: kept },
+        { label: "other", path: other },
+      ],
+    });
+    const { APP_CONFIG_FILE } = await import("../../../../server/config/config-routes.js");
+    const renamedAndReordered = [
+      { label: "Other (renamed)", path: other },
+      { label: "kept", path: kept },
+    ];
+    writeFileSync(APP_CONFIG_FILE, JSON.stringify({ cwdPresets: renamedAndReordered }));
+    const pruned = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    const served = await routeCall(app)("/api/config");
+    expect(pruned.body.cwdPresets).toEqual(renamedAndReordered);
+    expect(served.body.cwdPresets).toEqual(pruned.body.cwdPresets);
+    expect(onChanged).toHaveBeenCalledTimes(1); // the order of paths moved
+    writeFileSync(APP_CONFIG_FILE, JSON.stringify({ cwdPresets: [{ label: "Other again", path: other }, renamedAndReordered[1]] }));
+    await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    const reserved = await routeCall(app)("/api/config");
+    expect(reserved.body.cwdPresets).toEqual([{ label: "Other again", path: other }, renamedAndReordered[1]]);
+    expect(onChanged).toHaveBeenCalledTimes(1); // a rename alone wakes nobody
+  });
+
+  it("serves the empty list it answered when config.json has gone missing", async () => {
+    const { kept } = scratchTree();
+    const { app } = await mountAgainstTempHome({ cwdPresets: [{ label: "kept", path: kept }] });
+    const { APP_CONFIG_FILE } = await import("../../../../server/config/config-routes.js");
+    rmSync(APP_CONFIG_FILE);
+    const pruned = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    const served = await routeCall(app)("/api/config");
+    expect(pruned.body.cwdPresets).toEqual([]);
+    expect(served.body.cwdPresets).toEqual([]);
+  });
+
+  it("answers an empty list for a config with no saved directories", async () => {
+    const { app } = await mountAgainstTempHome({});
+    const res = await routeCall(app)("/api/config/cwd-presets/prune-missing", jsonPost({}));
+    expect(res.body).toEqual({ cwdPresets: [], unreachable: [] });
   });
 });

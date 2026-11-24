@@ -60,6 +60,8 @@ import { withConfigLock, ConfigLockTimeout } from "./config-lock.js";
 import { mountConfigReloadRoute } from "./config-reload.js";
 import { mountKeymapBindingRoute } from "./keymap/keymap-binding-route.js";
 import { lastSegment } from "../../common/pathSegments.js";
+import { decidePrune } from "./dir/missing-presets.js";
+import { loadMissingSince, presetDirProbe, saveMissingSince } from "./dir/cwd-presets.js";
 
 export const APP_CONFIG_FILE = path.join(os.homedir(), ".mulmoterminal", "config.json");
 const CONFIG_FILE = APP_CONFIG_FILE;
@@ -254,6 +256,14 @@ function adoptReloaded(next: AppConfig, onCwdPresetsChanged?: CwdPresetsChanged)
   notifySavedChanges(previous, next, onCwdPresetsChanged);
 }
 
+// Serve exactly `presets` as the saved directories — labels and order included, since they are what
+// the client was just handed — and wake that list's subscribers only when a PATH changed.
+function adoptSavedPresets(presets: CwdPreset[], onCwdPresetsChanged?: CwdPresetsChanged): void {
+  const previous = config.cwdPresets;
+  config = { ...config, cwdPresets: presets };
+  if (!samePresets(previous, presets)) notifyPresetsChanged(onCwdPresetsChanged);
+}
+
 // Fire-and-forget by contract, like notifyPresetsChanged: the save already succeeded, and a
 // scheduler that fails to rebuild must not turn it into a 500.
 function notifySystemTaskSettingsChanged(): void {
@@ -429,6 +439,8 @@ function mountCwdPresetRoutes(app: Express, onCwdPresetsChanged?: CwdPresetsChan
     return void mutatePresets(res, (current) => current.filter((preset) => preset.path !== path_));
   });
 
+  mountPruneMissingPresetsRoute(app, onCwdPresetsChanged);
+
   /** Apply a one-entry change to the saved directories. Answers the resulting list. */
   function mutatePresets(res: Response, mutate: (current: CwdPreset[]) => CwdPreset[]) {
     return mutateConfigOnDisk(res, onCwdPresetsChanged, {
@@ -438,41 +450,90 @@ function mountCwdPresetRoutes(app: Express, onCwdPresetsChanged?: CwdPresetsChan
   }
 }
 
+const MISSING_SINCE_FILE = path.join(path.dirname(CONFIG_FILE), "missing-dirs.json");
+
+/** Forget saved directories that have stayed deleted across two checks a day apart, and name the
+ *  ones to hide meanwhile (#3414). The decision, the first-seen record and the write share ONE hold
+ *  of the config lock, so nothing recorded in between can be removed on a decision made before it. */
+function mountPruneMissingPresetsRoute(app: Express, onCwdPresetsChanged?: CwdPresetsChanged): void {
+  app.post("/api/config/cwd-presets/prune-missing", async (_req, res) => {
+    try {
+      await withConfigLock(CONFIG_FILE, () => pruneUnderLock(res, onCwdPresetsChanged));
+    } catch (err) {
+      answerLockFailure(res, err);
+    }
+  });
+}
+
+/** An unreadable file is refused rather than answered as an empty list, which a client would adopt —
+ *  and without the backup copy a write makes, since nothing is about to be written. */
+function pruneUnderLock(res: Response, onCwdPresetsChanged?: CwdPresetsChanged) {
+  const loaded = loadAppConfigResult(CONFIG_FILE);
+  if (loaded.status === "corrupt") return res.status(409).json({ error: "config.json is unreadable. Fix or remove it, then retry." });
+  const onDisk = loaded.status === "ok" ? loaded.config.cwdPresets : [];
+  const decision = decidePrune(
+    onDisk.map((preset) => preset.path),
+    presetDirProbe,
+    loadMissingSince(MISSING_SINCE_FILE),
+    Date.now(),
+  );
+  // A record that could not be written may still hold a time the directory has since reset (it came
+  // back), and would confirm its next absence at once. So nothing is removed on it — only hidden.
+  const recorded = saveMissingSince(MISSING_SINCE_FILE, decision.missingSince);
+  if (!recorded || decision.gone.length === 0) {
+    // The client adopts this list as the whole truth, so this process must serve the same one — as
+    // every write path does. Another mulmoterminal may have changed the file since we last read it.
+    // Only the list: a prune is not a config reload, and must not apply anyone's other settings.
+    // A missing file is an empty list here, exactly as a write treats it.
+    adoptSavedPresets(onDisk, onCwdPresetsChanged);
+    const hidden = new Set([...decision.unreachable, ...decision.gone]);
+    return res.json({ cwdPresets: onDisk, unreachable: onDisk.map((preset) => preset.path).filter((dir) => hidden.has(dir)) });
+  }
+  const forget = new Set(decision.gone);
+  return applyConfigChangeLocked(res, onCwdPresetsChanged, {
+    update: (base) => ({ cwdPresets: base.cwdPresets.filter((preset) => !forget.has(preset.path)) }),
+    answer: (next) => res.json({ cwdPresets: next.cwdPresets, unreachable: decision.unreachable }),
+  });
+}
+
 /** Apply a change to the config ON DISK, reading and writing the file the same way `POST /api/config`
  *  does — including refusing a config we could not parse, so a stray comma never costs the user the
  *  rest of their settings. */
-async function mutateConfigOnDisk(res: Response, onCwdPresetsChanged: CwdPresetsChanged | undefined, { refuse, update, answer }: OnDiskChange) {
+async function mutateConfigOnDisk(res: Response, onCwdPresetsChanged: CwdPresetsChanged | undefined, change: OnDiskChange) {
   // The READ and the WRITE are one critical section, held across processes: several mulmoterminals
   // share this file, and two that each read the old value before either writes both save one missing
   // the other's change. See `withConfigLock`.
   try {
-    await withConfigLock(CONFIG_FILE, () => {
-      const loaded = loadAppConfigResult(CONFIG_FILE);
-      if (loaded.status === "corrupt") {
-        const bak = backupCorruptConfig(CONFIG_FILE);
-        const backupNote = bak ? ` (backed up to ${path.basename(bak)})` : "";
-        return res.status(409).json({ error: `config.json is unreadable and was NOT overwritten${backupNote}. Fix or remove it, then retry.` });
-      }
-      const base = loaded.status === "ok" ? loaded.config : emptyConfig();
-      const unknownKeys = unknownKeysOf(loaded);
-      const refusal = refuse?.(base, unknownKeys) ?? null;
-      if (refusal !== null) return res.status(409).json(typeof refusal === "string" ? { error: refusal } : refusal);
-      const next = mergeConfigUpdate(base, update(base, unknownKeys));
-      if (!saveAppConfig(CONFIG_FILE, next, unknownKeys)) return res.status(500).json({ error: "failed to persist config" });
-      // Compared against what THIS PROCESS was serving, not against what was on disk. The two differ
-      // exactly when another mulmoterminal wrote the file since we booted — whatever field this change
-      // was about: adopting `next` silently takes over that instance's directories, and the collection
-      // watchers, which read the in-memory list (`getCwdPresets` → `listProjectRoots`), would never
-      // hear about the projects they now serve.
-      const presetsMoved = !samePresets(config.cwdPresets, next.cwdPresets);
-      config = next;
-      setTmuxPrefix(next.tmuxPrefix);
-      if (presetsMoved) notifyPresetsChanged(onCwdPresetsChanged);
-      return answer(next);
-    });
+    await withConfigLock(CONFIG_FILE, () => applyConfigChangeLocked(res, onCwdPresetsChanged, change));
   } catch (err) {
     answerLockFailure(res, err);
   }
+}
+
+/** The body of `mutateConfigOnDisk`, for a caller that already holds the config lock. */
+function applyConfigChangeLocked(res: Response, onCwdPresetsChanged: CwdPresetsChanged | undefined, { refuse, update, answer }: OnDiskChange) {
+  const loaded = loadAppConfigResult(CONFIG_FILE);
+  if (loaded.status === "corrupt") {
+    const bak = backupCorruptConfig(CONFIG_FILE);
+    const backupNote = bak ? ` (backed up to ${path.basename(bak)})` : "";
+    return res.status(409).json({ error: `config.json is unreadable and was NOT overwritten${backupNote}. Fix or remove it, then retry.` });
+  }
+  const base = loaded.status === "ok" ? loaded.config : emptyConfig();
+  const unknownKeys = unknownKeysOf(loaded);
+  const refusal = refuse?.(base, unknownKeys) ?? null;
+  if (refusal !== null) return res.status(409).json(typeof refusal === "string" ? { error: refusal } : refusal);
+  const next = mergeConfigUpdate(base, update(base, unknownKeys));
+  if (!saveAppConfig(CONFIG_FILE, next, unknownKeys)) return res.status(500).json({ error: "failed to persist config" });
+  // Compared against what THIS PROCESS was serving, not against what was on disk. The two differ
+  // exactly when another mulmoterminal wrote the file since we booted — whatever field this change
+  // was about: adopting `next` silently takes over that instance's directories, and the collection
+  // watchers, which read the in-memory list (`getCwdPresets` → `listProjectRoots`), would never
+  // hear about the projects they now serve.
+  const presetsMoved = !samePresets(config.cwdPresets, next.cwdPresets);
+  config = next;
+  setTmuxPrefix(next.tmuxPrefix);
+  if (presetsMoved) notifyPresetsChanged(onCwdPresetsChanged);
+  return answer(next);
 }
 
 /** The routes that change one entry of a global list against the file, never a client's copy of it —
