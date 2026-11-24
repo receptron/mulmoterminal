@@ -228,7 +228,7 @@ async function draft(): Promise<void> {
       </template>
       <p v-if="notice" data-testid="skill-eval-notice" class="m-0 mb-2 text-secondary">{{ notice }}</p>
       <SkillEvalCandidate
-        v-if="latest && latestSummary && latest.candidateId && !overview.activeRunId"
+        v-if="latest && latestSummary && latest.candidateId && latest.setHash === overview.setHash && !overview.activeRunId"
         :source="source"
         :skill="skill"
         :run="latest"

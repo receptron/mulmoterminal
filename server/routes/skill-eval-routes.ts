@@ -149,6 +149,8 @@ async function adopt(ctx: Context, body: Record<string, unknown>, res: Response)
   if (skill === null) return fail(res, 404, SKILL_NOT_FOUND);
   const run = typeof body.runId === "string" ? await readRun(skill.evalDir, body.runId) : null;
   if (run === null) return fail(res, 404, "run not found");
+  const read = await readEvalSet(skill.evalDir, skill.id);
+  if (read.kind !== "ok" || read.hash !== run.setHash) return fail(res, 400, "the tasks changed since this improvement was measured");
   const adopted = await adoptCandidate(skill.evalDir, runView(run), { source: skill.source, slug: skill.slug, cwds: await ctx.cwds() }, ctx.attemptDeps.now());
   if (adopted.kind === "changed") return fail(res, 409, "the skill changed since it was measured");
   if (adopted.kind === "refused") return fail(res, 400, adopted.error);

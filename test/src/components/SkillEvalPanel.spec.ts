@@ -224,6 +224,13 @@ describe("SkillEvalPanel", () => {
     expect(wrapper.find("[data-testid=skill-eval-adopt-notice]").text()).toContain("/b/1.md");
   });
 
+  it("does not set beside the skill an improvement measured on tasks that have since changed", async () => {
+    const improved = run(true, false, { id: "1795000000001-bbbbbbbb", candidateId: "1795000000001-bbbbbbbb", skillText: "better", setHash: "old tasks" });
+    overview = { ...base, set, runs: [improved, run(false, false)] };
+    const wrapper = await mountPanel();
+    expect(wrapper.find("[data-testid=skill-eval-adopt]").exists()).toBe(false);
+  });
+
   it("does not offer to adopt over a skill that cannot be edited here", async () => {
     const improved = run(true, false, { id: "1795000000001-bbbbbbbb", candidateId: "1795000000001-bbbbbbbb", skillText: "better" });
     overview = { ...base, editable: false, set, runs: [improved, run(false, false)] };

@@ -154,6 +154,21 @@ describe("improving a skill", () => {
     expect(readFileSync(path.join(env.skillDir, "SKILL.md"), "utf8")).toBe(ORIGINAL);
   });
 
+  it("refuses to adopt an improvement whose text or tasks changed after it was measured", async () => {
+    const edited = setUp();
+    await measure(edited, "/api/skill-evals/runs");
+    const tampered = await measure(edited, "/api/skill-evals/improve");
+    writeFileSync(path.join(candidateDir(edited.evalDir, tampered?.id ?? ""), "SKILL.md"), "unmeasured");
+    expect((await edited.call("/api/skill-evals/adopt", jsonPost({ ...edited.fields, runId: tampered?.id }))).status).toBe(400);
+    expect(readFileSync(path.join(edited.skillDir, "SKILL.md"), "utf8")).toBe(ORIGINAL);
+    const retasked = setUp();
+    await measure(retasked, "/api/skill-evals/runs");
+    const stale = await measure(retasked, "/api/skill-evals/improve");
+    writeFileSync(path.join(retasked.evalDir, "cases.json"), JSON.stringify({ ...SET, repeats: 2 }));
+    expect((await retasked.call("/api/skill-evals/adopt", jsonPost({ ...retasked.fields, runId: stale?.id }))).status).toBe(400);
+    expect(readFileSync(path.join(retasked.skillDir, "SKILL.md"), "utf8")).toBe(ORIGINAL);
+  });
+
   it("says whether the skill may be written over", async () => {
     const env = setUp();
     const overview = await env.call(`/api/skill-evals?slug=weekly&dir=${encodeURIComponent(env.fields.dir)}`);

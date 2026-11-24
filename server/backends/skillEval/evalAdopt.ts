@@ -1,6 +1,6 @@
 // Adopting an improvement (#3448): the measured candidate's SKILL.md replaces the skill's own, after the
 // text it replaces is kept under `versions/`. The write is made over the version just read, so an edit
-// that lands in between is refused rather than lost.
+// that lands in between is refused rather than lost, and only the text that was measured is written.
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { SkillEvalRun } from "../../../common/skillEval.js";
@@ -25,6 +25,7 @@ export async function adoptCandidate(evalDir: string, run: SkillEvalRun, request
   if (run.candidateId === null || run.status !== "done") return { kind: "refused", error: "only a finished improvement can be adopted" };
   const candidateText = await readFile(path.join(candidateDir(evalDir, run.candidateId), "SKILL.md"), "utf8").catch(() => null);
   if (candidateText === null) return { kind: "refused", error: "the improvement's SKILL.md is gone" };
+  if (textHash(candidateText) !== run.skillHash) return { kind: "refused", error: "the improvement changed since it was measured" };
   const current = await readSkillDoc(request);
   if (current === null) return { kind: "refused", error: "the skill could not be read" };
   const backup = await keepVersion(evalDir, current, now_ms);
