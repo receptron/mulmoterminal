@@ -20,6 +20,7 @@ import { terminalCopyModeEn } from "./terminalCopyMode/en";
 import { rowMenuEn } from "./rowMenu/en";
 import { focusModeEn } from "./focusMode/en";
 import { requestTimeoutEn } from "./requestTimeout/en";
+import { gridRestoreEn } from "./gridRestore/en";
 import { fileHistoryEn } from "./fileHistory/en";
 import { filesRecentEn } from "./filesRecent/en";
 import { dirConfigSaveEn } from "./dirConfigSave/en";
@@ -665,6 +666,7 @@ export const en = {
   headerButtons: headerButtonsEn,
   focusMode: focusModeEn,
   requestTimeout: requestTimeoutEn,
+  gridRestore: gridRestoreEn,
   settingsControls: settingsControlsEn,
   ...filesTreeEn,
   ...previewCodeCopyEn,

@@ -7,6 +7,7 @@ import { terminalCopyModeZhTW } from "./terminalCopyMode/zh-TW";
 import { rowMenuZhTW } from "./rowMenu/zh-TW";
 import { focusModeZhTW } from "./focusMode/zh-TW";
 import { requestTimeoutZhTW } from "./requestTimeout/zh-TW";
+import { gridRestoreZhTW } from "./gridRestore/zh-TW";
 import { fileHistoryZhTW } from "./fileHistory/zh-TW";
 import { filesRecentZhTW } from "./filesRecent/zh-TW";
 import { dirConfigSaveZhTW } from "./dirConfigSave/zh-TW";
@@ -632,6 +633,7 @@ export const zhTW: Messages = {
   headerButtons: headerButtonsZhTW,
   focusMode: focusModeZhTW,
   requestTimeout: requestTimeoutZhTW,
+  gridRestore: gridRestoreZhTW,
   settingsControls: settingsControlsZhTW,
   ...filesTreeZhTW,
   ...previewCodeCopyZhTW,

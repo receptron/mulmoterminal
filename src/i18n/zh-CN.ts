@@ -7,6 +7,7 @@ import { terminalCopyModeZhCN } from "./terminalCopyMode/zh-CN";
 import { rowMenuZhCN } from "./rowMenu/zh-CN";
 import { focusModeZhCN } from "./focusMode/zh-CN";
 import { requestTimeoutZhCN } from "./requestTimeout/zh-CN";
+import { gridRestoreZhCN } from "./gridRestore/zh-CN";
 import { fileHistoryZhCN } from "./fileHistory/zh-CN";
 import { filesRecentZhCN } from "./filesRecent/zh-CN";
 import { dirConfigSaveZhCN } from "./dirConfigSave/zh-CN";
@@ -627,6 +628,7 @@ export const zhCN: Messages = {
   headerButtons: headerButtonsZhCN,
   focusMode: focusModeZhCN,
   requestTimeout: requestTimeoutZhCN,
+  gridRestore: gridRestoreZhCN,
   settingsControls: settingsControlsZhCN,
   ...filesTreeZhCN,
   ...previewCodeCopyZhCN,

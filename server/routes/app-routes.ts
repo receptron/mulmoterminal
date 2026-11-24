@@ -20,6 +20,8 @@ import { sessionToken } from "../session/credentials/token-sessions.js";
 import { noteMovedFrom, takeMovedFrom } from "../session/credentials/rotation-notice.js";
 import { rotationLoginLabel } from "../../common/tokenRotation.js";
 import { survivingSessions } from "../session/reaping/surviving-sessions.js";
+import { mountGridLayoutRoutes } from "./grid-layout-routes.js";
+import { GRID_LAYOUT_FILE } from "../config/grid-layout.js";
 import { armedReapIntervalHours } from "../session/reaping/reap-schedule.js";
 import {
   getCwdPresets,
@@ -480,6 +482,7 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
   mountSessionFacingRoutes(app, deps);
   mountSwitchToken(app, deps);
   mountProcessesPageRoutes(app, deps);
+  mountGridLayoutRoutes(app, { file: GRID_LAYOUT_FILE, isAllowedOrigin: deps.isAllowedOrigin, attachedSessionIds });
 }
 
 // The session-facing half: hooks, tool history, and everything the browser asks about a
@@ -651,6 +654,10 @@ function mountSessionFacingRoutes(app: Express, deps: AppRouteDeps): void {
   // both directions, so they can't drift apart.
 
   mountTmuxRoutes(app, tmuxRouteDeps(deps));
+}
+
+function attachedSessionIds(): string[] {
+  return [...ptys].filter(([, entry]) => entry.ws).map(([id]) => id);
 }
 
 /** The tmux routes' production wiring, exported so a spec can hold it to what the routes assume. */
