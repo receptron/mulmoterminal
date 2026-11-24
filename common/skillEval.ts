@@ -101,6 +101,8 @@ export const skillEvalRunSchema = z.object({
   improveCostUsd: z.number().default(0),
   /** The hash of the skill on disk an improvement was written from: adopting it over any other text would lose an edit. */
   baseSkillHash: z.string().default(""),
+  /** The measurement an improvement was written from, and is compared with. */
+  baseRunId: z.string().nullable().default(null),
 });
 export type SkillEvalRun = z.infer<typeof skillEvalRunSchema>;
 
@@ -137,14 +139,16 @@ export const skillEvalOverviewSchema = z.object({
   estimate: z.object({ attempts: z.number(), maxCostUsd: z.number(), maxImproveCostUsd: z.number() }).nullable(),
   /** Whether an improvement may be written over this skill's SKILL.md: not a plugin's or a bundled one. */
   editable: z.boolean(),
+  /** The run the next improvement would be written from: the newest that `isBaselineFor` accepts, among all runs. */
+  baseline: skillEvalRunSchema.nullable(),
   /** The newest first. */
   runs: z.array(skillEvalRunSchema),
   activeRunId: z.string().nullable(),
 });
 export type SkillEvalOverview = z.infer<typeof skillEvalOverviewSchema>;
 
-/** The run an improvement is written from (#3448): the newest finished measurement of the skill itself
- *  on the current set — not an improvement's run, and not one made with tasks that have since changed. */
-export function latestBaseline(runs: readonly SkillEvalRun[], setHash: string): SkillEvalRun | null {
-  return runs.find((run) => run.candidateId === null && run.status === "done" && run.attempts.length > 0 && run.setHash === setHash) ?? null;
+/** Whether an improvement may be written from `run` (#3448): a finished measurement of the skill itself, as
+ *  its text is now, on the current set — its report would otherwise describe some other skill or tasks. */
+export function isBaselineFor(run: SkillEvalRun, setHash: string, skillHash: string): boolean {
+  return run.candidateId === null && run.status === "done" && run.attempts.length > 0 && run.setHash === setHash && run.skillHash === skillHash;
 }

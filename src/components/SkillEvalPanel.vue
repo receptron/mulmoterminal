@@ -6,7 +6,7 @@
 import { computed, onUnmounted, ref, shallowRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import type { CatalogSkill, SkillSource } from "../../common/skillCatalog";
-import { latestBaseline, type SkillEvalOverview, type SkillEvalRun } from "../../common/skillEval";
+import { type SkillEvalOverview, type SkillEvalRun } from "../../common/skillEval";
 import { summarizeSkillEval, type SkillEvalSummary } from "../../common/skillEvalSummary";
 import { loadSkillEval, startSkillEvalAuthoring, startSkillEvalRun, stopSkillEvalRun } from "../composables/skillEvalApi";
 import { placeSpawnedChat } from "../composables/useSpawnedChat";
@@ -35,9 +35,12 @@ const latestSummary = computed<SkillEvalSummary | null>(() =>
   latest.value ? summarizeSkillEval(latest.value.cases, latest.value.attempts, latest.value.repeats) : null,
 );
 const earlier = computed(() => (overview.value?.runs ?? []).slice(1));
-// What an improvement is written from, and what a measured one is compared with.
-const baseline = computed(() => (overview.value?.setHash ? latestBaseline(overview.value.runs, overview.value.setHash) : null));
-const baselineSummary = computed(() => (baseline.value ? summarizeSkillEval(baseline.value.cases, baseline.value.attempts, baseline.value.repeats) : null));
+// What the next improvement is written from, and what the measured one is compared with: the run it was written from.
+const baseline = computed(() => overview.value?.baseline ?? null);
+const comparedWith = computed(() => (overview.value?.runs ?? []).find((run) => run.id === latest.value?.baseRunId) ?? null);
+const baselineSummary = computed(() =>
+  comparedWith.value ? summarizeSkillEval(comparedWith.value.cases, comparedWith.value.attempts, comparedWith.value.repeats) : null,
+);
 const improving = computed(() => latest.value?.candidateId != null && latest.value.skillText === "");
 // The SKILL.md measured last is not the one measured the time before: the two results are of different texts.
 const skillTextChanged = computed(() => earlier.value.length > 0 && latest.value?.skillHash !== earlier.value[0]?.skillHash);

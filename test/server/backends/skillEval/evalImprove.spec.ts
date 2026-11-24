@@ -11,7 +11,7 @@ import type { ClaudeRunRequest, ClaudeRunResult } from "../../../../server/backe
 import type { AttemptDeps } from "../../../../server/backends/skillEval/evalAttempt";
 import { candidateDir, improvePrompt, improveReport } from "../../../../server/backends/skillEval/evalImprove";
 import { readRun, skillEvalFolder } from "../../../../server/backends/skillEval/evalStore";
-import { latestBaseline, type SkillEvalAttempt, type SkillEvalRun } from "../../../../common/skillEval";
+import { isBaselineFor, type SkillEvalAttempt, type SkillEvalRun } from "../../../../common/skillEval";
 import { mountSkillEvalRoutes } from "../../../../server/routes/skill-eval-routes";
 import { jsonPost, routeCall } from "../../../helpers/routeCall";
 
@@ -195,6 +195,20 @@ describe("improving a skill", () => {
     expect(existsSync(path.join(candidateDir(env.evalDir, improved?.id ?? ""), "hosts"))).toBe(false);
   });
 
+  it("finds the measurement to start from past the listed runs, and not once the skill was edited", async () => {
+    const env = setUp();
+    const baseline = await measure(env, "/api/skill-evals/runs");
+    const later = Array.from({ length: 25 }, (_, i) => ({ ...baseline, id: `1999999999${String(100 + i)}-aaaaaaaa`, candidateId: "x" }));
+    later.forEach((laterRun) => writeFileSync(path.join(env.evalDir, "runs", `${laterRun.id}.json`), JSON.stringify(laterRun)));
+    const query = `/api/skill-evals?slug=weekly&dir=${encodeURIComponent(env.fields.dir)}`;
+    expect((await env.call(query)).body).toMatchObject({ baseline: { id: baseline?.id } });
+    const improved = await measure(env, "/api/skill-evals/improve");
+    expect(improved?.baseRunId).toBe(baseline?.id);
+    writeFileSync(path.join(env.skillDir, "SKILL.md"), "edited by hand");
+    expect((await env.call(query)).body).toMatchObject({ baseline: null });
+    expect((await env.call("/api/skill-evals/improve", jsonPost(env.fields))).status).toBe(400);
+  });
+
   it("says whether the skill may be written over", async () => {
     const env = setUp();
     const overview = await env.call(`/api/skill-evals?slug=weekly&dir=${encodeURIComponent(env.fields.dir)}`);
@@ -211,7 +225,7 @@ describe("what the writer is given", () => {
   const run = (attempts: SkillEvalAttempt[], extra: Partial<SkillEvalRun> = {}): SkillEvalRun => ({
     ...{ id: "1795000000000-aaaaaaaa", skill: "weekly", status: "done", startedAt: 1, finishedAt: 2, model: "haiku", repeats: 1 },
     ...{ skillText: ORIGINAL, skillHash: "h", setHash: "s", cases: SET.cases as SkillEvalRun["cases"], plannedAttempts: 2 },
-    ...{ attempts, candidateId: null, note: "", improveCostUsd: 0, baseSkillHash: "" },
+    ...{ attempts, candidateId: null, note: "", improveCostUsd: 0, baseSkillHash: "", baseRunId: null },
     ...extra,
   });
 
@@ -230,12 +244,13 @@ describe("what the writer is given", () => {
     expect(prompt).toContain("description");
   });
 
-  it("starts from the newest finished measurement of the skill itself on the current tasks", () => {
-    const old = run([attempt("with", true)], { id: "a" });
-    const improvement = run([attempt("with", true)], { id: "b", candidateId: "b" });
-    const otherTasks = run([attempt("with", true)], { id: "c", setHash: "other" });
-    const stopped = run([attempt("with", true)], { id: "d", status: "stopped" });
-    expect(latestBaseline([improvement, otherTasks, stopped, old], "s")?.id).toBe("a");
-    expect(latestBaseline([improvement], "s")).toBeNull();
+  it("starts only from a finished measurement of the skill itself, as its text is now, on the current tasks", () => {
+    const measured = [attempt("with", true)];
+    expect(isBaselineFor(run(measured), "s", "h")).toBe(true);
+    expect(isBaselineFor(run(measured, { candidateId: "b" }), "s", "h")).toBe(false);
+    expect(isBaselineFor(run(measured, { setHash: "other" }), "s", "h")).toBe(false);
+    expect(isBaselineFor(run(measured), "s", "edited")).toBe(false);
+    expect(isBaselineFor(run(measured, { status: "stopped" }), "s", "h")).toBe(false);
+    expect(isBaselineFor(run([]), "s", "h")).toBe(false);
   });
 });

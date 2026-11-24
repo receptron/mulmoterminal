@@ -9,13 +9,13 @@ import { MULMOTERMINAL_HOME } from "../config/env.js";
 import { claudeAdapter } from "../agents/claude/claude.js";
 import { rememberedSessionCwds } from "../session/registry.js";
 import { skillDocFile, type SkillDocSource } from "../backends/skills/skillCatalog.js";
-import { latestBaseline, maxImproveCostUsd, maxRunCostUsd, plannedAttempts, SKILL_EVAL_AUTHOR_SKILL, type SkillEvalRun } from "../../common/skillEval.js";
+import { isBaselineFor, maxImproveCostUsd, maxRunCostUsd, plannedAttempts, SKILL_EVAL_AUTHOR_SKILL, type SkillEvalRun } from "../../common/skillEval.js";
 import { isEditableSkill } from "../backends/skills/skillEdit.js";
 import { adoptCandidate } from "../backends/skillEval/evalAdopt.js";
 import type { SpawnIssueSession } from "../session/spawn/issue-session-spawn.js";
 import { commandRunner, type AttemptDeps } from "../backends/skillEval/evalAttempt.js";
 import { runClaude } from "../backends/skillEval/runClaude.js";
-import { listRuns, readEvalSet, readRun, skillEvalFolder, textHash } from "../backends/skillEval/evalStore.js";
+import { listRuns, newestRunWhere, readEvalSet, readRun, skillEvalFolder, textHash } from "../backends/skillEval/evalStore.js";
 import { activeRunId, effectiveStatus, startEvalRun, stopEvalRun } from "../backends/skillEval/evalRunner.js";
 import { docSource } from "./skill-source-query.js";
 import { requestBody } from "./requestBody.js";
@@ -97,6 +97,14 @@ async function startAuthoring(ctx: Context, body: Record<string, unknown>, res: 
   }
 }
 
+/** The run the next improvement of `skill` would be written from, if it has one. */
+async function baselineOf(skill: ResolvedSkill, setHash: string): Promise<SkillEvalRun | null> {
+  const skillText = await readFile(skill.file, "utf8").catch(() => null);
+  if (skillText === null) return null;
+  const skillHash = textHash(skillText);
+  return newestRunWhere(skill.evalDir, (run) => isBaselineFor(run, setHash, skillHash));
+}
+
 async function overview(ctx: Context, query: Record<string, unknown>, res: Response): Promise<void> {
   const skill = await resolveSkill(ctx.root, query, ctx.cwds);
   if (skill === null) return fail(res, 404, SKILL_NOT_FOUND);
@@ -106,6 +114,7 @@ async function overview(ctx: Context, query: Record<string, unknown>, res: Respo
     ...{ skill: skill.id, dir: skill.evalDir, set, setHash: read.kind === "ok" ? read.hash : null, setError: read.kind === "invalid" ? read.error : null },
     estimate: set === null ? null : { attempts: plannedAttempts(set), maxCostUsd: maxRunCostUsd(set), maxImproveCostUsd: maxImproveCostUsd(set) },
     editable: isEditableSkill(skill.source, skill.slug),
+    baseline: read.kind === "ok" ? await baselineOf(skill, read.hash) : null,
     ...{ runs: (await listRuns(skill.evalDir)).map(runView), activeRunId: activeRunId(skill.evalDir) },
   });
 }
@@ -125,8 +134,8 @@ async function startRun(ctx: Context, body: Record<string, unknown>, res: Respon
   const read = await readEvalSet(skill.evalDir, skill.id);
   if (read.kind === "absent") return fail(res, 404, "no evaluation is set up for this skill");
   if (read.kind === "invalid") return fail(res, 400, read.error);
-  const improveFrom = improve ? latestBaseline(await listRuns(skill.evalDir), read.hash) : null;
-  if (improve && improveFrom === null) return fail(res, 400, "measure the skill with these tasks first");
+  const improveFrom = improve ? await baselineOf(skill, read.hash) : null;
+  if (improve && improveFrom === null) return fail(res, 400, "measure the skill as it is now, with these tasks, first");
   const skillText = await readFile(skill.file, "utf8");
   const skillDir = path.dirname(skill.file);
   const start = {

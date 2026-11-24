@@ -55,7 +55,7 @@ function initialRun(start: EvalStart, id: string, now_ms: number): SkillEvalRun 
     // An improvement's text is not known until it has been written.
     ...{ skillText: improving ? "" : start.skillText, skillHash: improving ? "" : start.skillHash, setHash: start.setHash, cases: start.set.cases },
     ...{ plannedAttempts: plannedAttempts(start.set), attempts: [], candidateId: improving ? id : null, note: "", improveCostUsd: 0 },
-    baseSkillHash: improving ? start.skillHash : "",
+    ...{ baseSkillHash: improving ? start.skillHash : "", baseRunId: start.improveFrom?.id ?? null },
   };
 }
 

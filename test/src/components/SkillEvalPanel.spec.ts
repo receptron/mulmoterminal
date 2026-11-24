@@ -59,6 +59,7 @@ function run(passWith: boolean, passWithout: boolean, extra: Partial<SkillEvalRu
       note: "",
       improveCostUsd: 0,
       baseSkillHash: "",
+      baseRunId: null,
     },
     attempts: [attempt("with", passWith), attempt("without", passWithout)],
     ...extra,
@@ -66,7 +67,7 @@ function run(passWith: boolean, passWithout: boolean, extra: Partial<SkillEvalRu
 }
 
 const base = {
-  ...{ skill: "weekly", dir: "/h/.mulmoterminal/skill-evals/weekly", setHash: "s", setError: null, editable: true },
+  ...{ skill: "weekly", dir: "/h/.mulmoterminal/skill-evals/weekly", setHash: "s", setError: null, editable: true, baseline: null },
   ...{ estimate: { attempts: 2, maxCostUsd: 1, maxImproveCostUsd: 2 }, activeRunId: null },
 };
 const mountPanel = async () => {
@@ -199,12 +200,10 @@ describe("SkillEvalPanel", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("offers an improvement only once the skill has been measured on the current tasks, and names its price", async () => {
-    overview = { ...base, set, runs: [] };
-    expect((await mountPanel()).find("[data-testid=skill-eval-improve]").exists()).toBe(false);
-    overview = { ...base, set, runs: [run(false, false, { setHash: "old tasks" })] };
-    expect((await mountPanel()).find("[data-testid=skill-eval-improve]").exists()).toBe(false);
+  it("offers an improvement only when there is a measurement to write it from, and names its price", async () => {
     overview = { ...base, set, runs: [run(false, false)] };
+    expect((await mountPanel()).find("[data-testid=skill-eval-improve]").exists()).toBe(false);
+    overview = { ...base, set, runs: [run(false, false)], baseline: run(false, false) };
     const wrapper = await mountPanel();
     await wrapper.find("[data-testid=skill-eval-improve]").trigger("click");
     expect(wrapper.find("[data-testid=skill-eval-confirm]").text()).toContain("$2.00");
@@ -223,6 +222,7 @@ describe("SkillEvalPanel", () => {
 
   it("sets a measured improvement beside the skill's own result, and adopts it", async () => {
     const improved = run(true, false, { id: "1795000000001-bbbbbbbb", candidateId: "1795000000001-bbbbbbbb", skillText: "better", note: "Shortened it." });
+    improved.baseRunId = "1795000000000-aaaaaaaa";
     overview = { ...base, set, runs: [improved, run(false, false)] };
     const wrapper = await mountPanel();
     expect(wrapper.find("[data-testid=skill-eval-compare]").text()).toBe("Pass rate with the skill: current 0% → improvement 100%");
