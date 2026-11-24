@@ -101,9 +101,11 @@ export function createCodexSpawner(deps: SpawnDeps) {
       guiGroups?: readonly ToolGroup[] | undefined;
       /** Let the sandbox reach the network, for this spawn only (a reviewer or an implementer). */
       networkAccess?: boolean;
+      /** More paths the sandbox may write, for this spawn only (an implementer's worktree git metadata). */
+      writableRoots?: readonly string[];
     } = {},
   ): PtyEntry {
-    const { initialPrompt = null, mcpGroups = [], guiGroups, networkAccess = false } = options;
+    const { initialPrompt = null, mcpGroups = [], guiGroups, networkAccess = false, writableRoots = [] } = options;
     const restrictedTo = codexSessionGuiRestriction(sessionId, guiGroups, resumeRolloutId);
     // codex reads skills from its mirror (~/.codex/skills), not from the workspace's own
     // `.claude/skills`, and the mirror is otherwise refreshed only at boot — so a skill created
@@ -142,7 +144,7 @@ export function createCodexSpawner(deps: SpawnDeps) {
     const { entry, spawnedAtMs, reattached } = spawnWithFullGuiClaim(claim, (allTools) => {
       const guiMcpServers = codexGuiMcpServers({ sessionId, port: PORT, groups: restrictedTo ?? mcpGroups, allTools });
       const permissionHook = wantsCodexPermissionHook(process.platform, initialPrompt !== null);
-      const args = buildCodexArgs({ resume: resumeRolloutId, model: deps.codexModel, guiMcpServers, permissionHook, networkAccess });
+      const args = buildCodexArgs({ resume: resumeRolloutId, model: deps.codexModel, guiMcpServers, permissionHook, networkAccess, writableRoots });
       const spawnEnv = {
         binEnvVar: codexAdapter.binEnvVar,
         // The session id is what the permission hook's constant command posts under.

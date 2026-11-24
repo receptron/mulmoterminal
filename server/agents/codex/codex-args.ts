@@ -6,6 +6,10 @@ import { codexPermissionHookOverride } from "./codex-hook.js";
 // `resume` subcommand. Global flags precede the subcommand (codex's clap layout).
 export const CODEX_NETWORK_ACCESS = "sandbox_workspace_write.network_access=true";
 
+// A JSON string is a TOML basic string, escapes included, so a Windows path keeps its backslashes.
+export const codexWritableRoots = (roots: readonly string[]): string =>
+  `sandbox_workspace_write.writable_roots=[${roots.map((root) => JSON.stringify(root)).join(",")}]`;
+
 export interface GuiMcpServer {
   /** The MCP server id codex registers it under — `mulmoterminal-gui`, or `mulmoterminal-<group>`. */
   id: string;
@@ -38,6 +42,8 @@ export interface CodexArgsInput {
   // Let the sandbox reach the network, for a session whose job needs it (a reviewer or an implementer
   // talking to GitHub with gh). Absent: whatever the user's own codex config says.
   networkAccess?: boolean;
+  // More paths the sandbox may write, beside the working directory (a worktree's git metadata).
+  writableRoots?: readonly string[];
 }
 
 // NOTE: a seed prompt is NOT passed here as a positional [PROMPT] — a long collection-action prompt
@@ -65,6 +71,7 @@ export function buildCodexArgs(input: CodexArgsInput): string[] {
   }
   if (input.permissionHook) args.push("-c", codexPermissionHookOverride());
   if (input.networkAccess === true) args.push("-c", CODEX_NETWORK_ACCESS);
+  if (input.writableRoots?.length) args.push("-c", codexWritableRoots(input.writableRoots));
   if (input.resume) args.push("resume", input.resume);
   return args;
 }

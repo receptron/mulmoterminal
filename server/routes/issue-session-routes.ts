@@ -45,11 +45,12 @@ export interface IssueSessionRouteDeps {
 
 /** The implementer's spawn: the issue spawner, running its seed at once, on the default login, with
  *  every GUI tool — the review loop's tools reach no other way — and, for codex, a sandbox that
- *  reaches the network, since reading the issue, pushing and opening the PR all go to GitHub. */
+ *  reaches the network and the worktree's git metadata, since it reads the issue, commits, pushes
+ *  and opens the PR. */
 export const implementerSpawn =
-  (spawnIssueSession: SpawnIssueSession): IssueSessionRouteDeps["spawn"] =>
-  (agent, cwd, seed) =>
-    spawnIssueSession(agent, cwd, seed, true, null, { allTools: true, networkAccess: true });
+  (spawnIssueSession: SpawnIssueSession, gitRootsOf: (cwd: string) => Promise<string[]>): IssueSessionRouteDeps["spawn"] =>
+  async (agent, cwd, seed) =>
+    spawnIssueSession(agent, cwd, seed, true, null, { allTools: true, networkAccess: true, writableRoots: await gitRootsOf(cwd) });
 
 function workFailure(deps: IssueSessionRouteDeps, request: StartRequest, work: StartedWork): string {
   // A second start for the same issue, queued behind the first in startIssueWork, finds the first's session there.
