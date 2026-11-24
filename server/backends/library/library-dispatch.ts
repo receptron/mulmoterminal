@@ -17,6 +17,7 @@ const METHODS: readonly LibraryMethod[] = [
   "repeats",
   "repeat",
   "retrospective",
+  "skillUsage",
 ];
 
 export const isLibraryRequest = (value: unknown): value is LibraryRequest =>
@@ -63,6 +64,8 @@ export function dispatchLibraryRequest(service: LibraryService, request: Library
       return service.repeat(text(first));
     case "retrospective":
       return service.retrospective(typeof first === "number" && Number.isFinite(first) ? first : Date.now());
+    case "skillUsage":
+      return service.skillUsage();
   }
 }
 

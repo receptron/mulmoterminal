@@ -82,6 +82,11 @@ export function mountLibraryRoutes(app: Express, deps: LibraryRouteDeps = {}): v
     const totals = await answer(res, call, "retrospective", [Date.now()]);
     if (totals !== undefined) res.json(totals);
   });
+  // How often each skill ran, for the Skills viewer (#3437).
+  app.get("/api/library/skill-usage", async (_req, res) => {
+    const skills = await answer(res, call, "skillUsage", []);
+    if (skills !== undefined) res.json({ skills });
+  });
   app.get("/api/library/status", async (_req, res) => {
     const status = await answer(res, call, "status", []);
     if (status !== undefined) res.json(status);

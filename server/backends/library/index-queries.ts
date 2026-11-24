@@ -8,6 +8,7 @@ import { isRecord } from "../../../common/isRecord.js";
 import { readString } from "../../../common/readString.js";
 import { TERMINAL_AGENTS, type TerminalAgent } from "../../../common/sessionAgent.js";
 import { AUTOMATED_ENTRYPOINT, type LibraryConversation } from "../../../common/library.js";
+import type { SkillUsage } from "../../../common/skillUsage.js";
 import { nullableNumber } from "./index-store.js";
 
 export interface ConversationFilter {
@@ -78,6 +79,27 @@ export function memorySourceQuery(file: string): { sql: string; params: SQLInput
       and exists (select 1 from json_each(c.memory_writes) j where j.value = ?) and ${where.sql}
     order by c.ended_at desc nulls last, c.path limit 1`;
   return { sql, params: [file, ...where.params] };
+}
+
+/** For each skill, how many of the conversations the Library lists ran it and when the last one ended —
+ *  the Library's own filter, so a `claude -p` run (a skill evaluation among them) is not counted as use. */
+export function skillUsage(db: DatabaseSync): SkillUsage[] {
+  const query = skillUsageQuery();
+  return db
+    .prepare(query.sql)
+    .all(...query.params)
+    .flatMap((row) =>
+      typeof row.id === "string" ? [{ id: row.id, conversations: Number(row.conversations), lastUsedAt: nullableNumber(row.last_used_at) }] : [],
+    );
+}
+
+/** The statement `skillUsage` runs, apart so its plan can be checked against the partial index. */
+export function skillUsageQuery(): { sql: string; params: SQLInputValue[] } {
+  const where = filterClause({});
+  const sql = `select j.value as id, count(distinct c.key) as conversations, max(c.ended_at) as last_used_at
+    from conversations c, json_each(c.skills) j
+    where c.skills != '[]' and ${where.sql} group by j.value order by conversations desc, id`;
+  return { sql, params: where.params };
 }
 
 /** What the retrospective counts for each conversation the Library lists that started at or after

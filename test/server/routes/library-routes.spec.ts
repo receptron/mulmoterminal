@@ -77,6 +77,16 @@ describe("/api/library", () => {
     expect(second.indexFinishedAt).toBe(0); // the pass this page reflects, which the screen compares with the status
   });
 
+  it("answers how often each skill ran, and 503 when the index cannot", async () => {
+    const usage = [{ id: "publish", conversations: 2, lastUsedAt: 5 }];
+    const app = express();
+    mountLibraryRoutes(app, { call: (method) => (method === "skillUsage" ? Promise.resolve(usage) : Promise.reject(new Error("unexpected"))) });
+    expect((await routeCall(app)("/api/library/skill-usage")).body).toEqual({ skills: usage });
+    const down = express();
+    mountLibraryRoutes(down, { call: () => Promise.reject(new Error("the library index is unavailable")) });
+    expect((await routeCall(down)("/api/library/skill-usage")).status).toBe(503);
+  });
+
   it("answers one conversation, or 404", async () => {
     const call = appWithConversations(1);
     expect((await call("/api/library/conversations/s0")).body).toMatchObject({ id: "s0", title: "title 0" });
