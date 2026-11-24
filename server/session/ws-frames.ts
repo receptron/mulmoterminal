@@ -41,6 +41,8 @@ export interface PtyExitReport {
   /** The pty attached to a program already running, so `lifetimeMs` is not the program's. */
   reattached: boolean;
   ended: boolean;
+  /** The agent's exit should have been recorded and was not (a full disk), so its code says nothing. */
+  exitUnrecorded: boolean;
 }
 
 export function sendExitAndClose(socket: FrameSocket | null | undefined, report: PtyExitReport): void {

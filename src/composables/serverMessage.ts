@@ -44,18 +44,25 @@ const line = (colour: string, text: string) => `\r\n${colour}${text}${RESET}\r\n
 // under tmux whatever the pane did print is wiped by the alt-screen restore on the way out. The
 // status is then the only evidence there was, so a non-zero one is named and coloured rather
 // than folded into the same "[session ended]" a clean exit gets (#1063).
-const exitBanner = (isCommand: boolean, exitCode: number | null): string => {
+const exitBanner = (isCommand: boolean, exitCode: number | null, exitUnrecorded: boolean): string => {
   const what = isCommand ? "finished" : "session ended";
+  if (exitUnrecorded) return line(RED, `[${what} — how it ended was not recorded; is the disk full?]`);
   if (exitCode === null || exitCode === 0) return line(GREEN, `[${what}]`);
   return line(RED, `[${what} — exit ${exitCode}]`);
 };
 
 // `isCommand` is whether this slot runs a one-off Run command rather than an agent session —
 // it only changes the wording of the exit banner.
-export function messageEffect(type: string | undefined, isCommand: boolean, errorMessage?: unknown, exitCode: number | null = null): MessageEffect {
+export function messageEffect(
+  type: string | undefined,
+  isCommand: boolean,
+  errorMessage?: unknown,
+  exitCode: number | null = null,
+  exitUnrecorded = false,
+): MessageEffect {
   switch (type) {
     case "exit":
-      return { terminal: true, callsOnExit: true, banner: exitBanner(isCommand, exitCode) };
+      return { terminal: true, callsOnExit: true, banner: exitBanner(isCommand, exitCode, exitUnrecorded) };
     case "superseded":
       return { terminal: true, callsOnExit: false, banner: line(GREEN, "[detached — this session is open in another window]") };
     case "error": {
@@ -76,16 +83,22 @@ export const exitCodeOf = (msg: { exitCode?: unknown }): number | null => (typeo
 /** What an `exit` frame says about the SESSION rather than the pty: whether the server reaped it,
  *  and how long the pty lived (null when the frame names none). Missing reads as "not ended", so a
  *  frame without the field never closes a cell. */
-export const sessionExitOf = (msg: { ended?: unknown; lifetimeMs?: unknown; reattached?: unknown }): SessionExit => ({
+export const sessionExitOf = (msg: { ended?: unknown; lifetimeMs?: unknown; reattached?: unknown; exitUnrecorded?: unknown }): SessionExit => ({
   sessionEnded: msg.ended === true,
   lifetimeMs: typeof msg.lifetimeMs === "number" && Number.isFinite(msg.lifetimeMs) ? msg.lifetimeMs : null,
   reattached: msg.reattached === true,
+  exitUnrecorded: msg.exitUnrecorded === true,
 });
+
+/** `messageEffect` for a frame as it arrived. */
+export const frameEffect = (msg: Record<string, unknown>, isCommand: boolean): MessageEffect =>
+  messageEffect(typeof msg.type === "string" ? msg.type : undefined, isCommand, msg.message, exitCodeOf(msg), sessionExitOf(msg).exitUnrecorded);
 
 export interface SessionExit {
   sessionEnded: boolean;
   lifetimeMs: number | null;
   reattached: boolean;
+  exitUnrecorded: boolean;
 }
 
 /** A `paneMode` frame's copy-mode flag (#2207), or null for any frame that does not carry one. Null

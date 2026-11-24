@@ -49,7 +49,7 @@ import { connectionWillReturn, reconnectDelayMs, shouldReconnect } from "./recon
 import type { RunCommand } from "../components/runCommand";
 import { readableSlot, type SlotCandidate, type SlotInfo } from "./readableSlot";
 import { makeEnterHandler, makeSendHandler } from "./terminalKeyHandlers";
-import { exitCodeOf, messageEffect, parseServerFrame, sessionExitOf, type SessionExit } from "./serverMessage";
+import { exitCodeOf, frameEffect, parseServerFrame, sessionExitOf, type SessionExit } from "./serverMessage";
 import { applySessionExit, applySessionOutput, applyViewFrame, type ConnViewState } from "./connViewFrames";
 import { enterSubmits, submitSequence, submittableLine, DEFAULT_TERMINAL_SUBMIT_MODE, type TerminalSubmitMode } from "../../common/terminalSubmit";
 import { TERMINAL_FONT_SIZE_DEFAULT } from "../../common/terminalFontSize";
@@ -667,7 +667,7 @@ function applySessionFrame(c: Conn, msg: Record<string, unknown>): void {
 // exit / superseded / error — a terminal message. messageEffect decides which retries, which
 // fires onExit (NOT superseded — the session is alive in another tab), and the wording.
 function applyTerminalFrame(c: Conn, msg: Record<string, unknown>): void {
-  const effect = messageEffect(typeof msg.type === "string" ? msg.type : undefined, !!c.target.command, msg.message, exitCodeOf(msg));
+  const effect = frameEffect(msg, !!c.target.command);
   if (!effect.terminal) return;
   c.sawExit = true;
   if (effect.banner) c.term.write(effect.banner);
