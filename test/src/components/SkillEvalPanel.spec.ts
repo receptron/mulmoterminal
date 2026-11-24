@@ -220,6 +220,15 @@ describe("SkillEvalPanel", () => {
     wrapper.unmount();
   });
 
+  it("shows what a writer that failed cost, once its run is over", async () => {
+    const failed = run(false, false, { id: "1795000000001-bbbbbbbb", status: "interrupted", attempts: [], candidateId: "1795000000001-bbbbbbbb" });
+    Object.assign(failed, { note: "the improvement changed nothing", improveCostUsd: 0.25 });
+    overview = { ...base, set, runs: [failed, run(false, false)] };
+    const wrapper = await mountPanel();
+    expect(wrapper.find("[data-testid=skill-eval-candidate-failed]").text()).toContain("the improvement changed nothing");
+    expect(wrapper.text()).toContain("$0.25");
+  });
+
   it("sets a measured improvement beside the skill's own result, and adopts it", async () => {
     const improved = run(true, false, { id: "1795000000001-bbbbbbbb", candidateId: "1795000000001-bbbbbbbb", skillText: "better", note: "Shortened it." });
     improved.baseRunId = "1795000000000-aaaaaaaa";

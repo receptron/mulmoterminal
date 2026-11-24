@@ -41,7 +41,8 @@ const comparedWith = computed(() => (overview.value?.runs ?? []).find((run) => r
 const baselineSummary = computed(() =>
   comparedWith.value ? summarizeSkillEval(comparedWith.value.cases, comparedWith.value.attempts, comparedWith.value.repeats) : null,
 );
-const improving = computed(() => latest.value?.candidateId != null && latest.value.skillText === "");
+// Only while the run goes on: a writer that failed leaves the text empty too, and its cost is still shown.
+const improving = computed(() => latest.value?.candidateId != null && latest.value.skillText === "" && overview.value?.activeRunId === latest.value.id);
 // The SKILL.md measured last is not the one measured the time before: the two results are of different texts.
 const skillTextChanged = computed(() => earlier.value.length > 0 && latest.value?.skillHash !== earlier.value[0]?.skillHash);
 const useCount = computed(() => overview.value?.set?.cases.filter((c) => c.kind === "use").length ?? 0);

@@ -81,7 +81,11 @@ async function keepCandidate(work: string, dir: string, before: string, note: st
   if (skillText === null) return { kind: "failed", error: "the improvement left no SKILL.md", costUsd };
   if (skillText === before) return { kind: "failed", error: "the improvement changed nothing", costUsd };
   // A link the writer made could point anywhere; the candidate keeps regular files only.
-  await cp(path.join(work, SKILL_FOLDER), dir, { recursive: true, filter: async (source) => !(await lstat(source)).isSymbolicLink() });
+  try {
+    await cp(path.join(work, SKILL_FOLDER), dir, { recursive: true, filter: async (source) => !(await lstat(source)).isSymbolicLink() });
+  } catch (err) {
+    return { kind: "failed", error: `the improvement could not be kept in ${dir}: ${String(err)}`, costUsd };
+  }
   return { kind: "ok", candidate: { dir, skillText, note, costUsd } };
 }
 
