@@ -145,7 +145,7 @@ describe("reportPtyExit — what the exit frame tells the browser", () => {
 
     reportPtyExit("s-1", exiting, { ...EXIT, exitCode: clientExitCode ?? EXIT.exitCode }, vi.fn());
 
-    expect(frames).toEqual([{ type: "exit", exitCode: 0, lifetimeMs: 60_000, reattached: false, ended }]);
+    expect(frames).toEqual([{ type: "exit", exitCode: 0, lifetimeMs: 60_000, reattached: false, ended, exitUnrecorded: false }]);
   });
 
   // A reattached pty's lifetime is not the agent's; the browser needs to know which it got.
@@ -156,7 +156,7 @@ describe("reportPtyExit — what the exit frame tells the browser", () => {
 
     reportPtyExit("s-1", exiting, EXIT, vi.fn());
 
-    expect(frames).toEqual([{ type: "exit", exitCode: 0, lifetimeMs: 60_000, reattached: true, ended: true }]);
+    expect(frames).toEqual([{ type: "exit", exitCode: 0, lifetimeMs: 60_000, reattached: true, ended: true, exitUnrecorded: false }]);
   });
 
   it("sends the frame before the reap tears the session down", () => {
@@ -194,7 +194,7 @@ describe("reportPtyExit — a stale exit after the id was reused", () => {
 
     reportPtyExit("s-1", old, EXIT, vi.fn());
 
-    expect(frames).toEqual([{ type: "exit", exitCode: 0, lifetimeMs: 60_000, reattached: false, ended: false }]);
+    expect(frames).toEqual([{ type: "exit", exitCode: 0, lifetimeMs: 60_000, reattached: false, ended: false, exitUnrecorded: false }]);
   });
 });
 
@@ -361,6 +361,40 @@ describe("reportPtyExit — the program's own exit code", () => {
     reportPtyExit("s-1", exiting, { ...EXIT, exitCode: 5 }, vi.fn());
 
     expect(frames[0]?.exitCode).toBe(5);
+  });
+
+  // A full disk fails the recorder's write, and the client's 0 would close every agent cell at once.
+  it.each([null, "", "garbage"])("keeps a recording agent's cell when its record is %j", (record) => {
+    const { exiting, frames } = registerRecording();
+    exiting.recordsExit = true;
+    takeRecord.mockReturnValue(record);
+
+    reportPtyExit("s-1", exiting, EXIT, vi.fn());
+
+    expect(frames[0]).toMatchObject({ exitCode: 0, ended: true, exitUnrecorded: true });
+    expect(placed.ids).toEqual([]);
+  });
+
+  it("does not call a recorded clean exit unrecorded", () => {
+    const { exiting, frames } = registerRecording();
+    exiting.recordsExit = true;
+    takeRecord.mockReturnValue("0");
+
+    reportPtyExit("s-1", exiting, EXIT, vi.fn());
+
+    expect(frames[0]).toMatchObject({ exitCode: 0, exitUnrecorded: false });
+    expect(placed.ids).toEqual(["s-1"]);
+  });
+
+  // Nothing was recorded because nothing was asked to record: a shell, or psmux.
+  it("closes as before when the program was not started under the recorder", () => {
+    const { exiting, frames } = registerRecording();
+    takeRecord.mockReturnValue(null);
+
+    reportPtyExit("s-1", exiting, EXIT, vi.fn());
+
+    expect(frames[0]).toMatchObject({ exitCode: 0, exitUnrecorded: false });
+    expect(placed.ids).toEqual(["s-1"]);
   });
 
   // A kept session is still running and a gone one was ended by us: neither has anything to read,
