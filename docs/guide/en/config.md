@@ -760,7 +760,8 @@ reviewer's does, because it reads the issue, pushes and opens the PR with `gh` a
 write the worktree's git metadata in the clone it was cut from (its own git directory and the shared
 objects, refs and logs), so it can commit; never the clone's `config` or hooks, and nothing at all
 in a clone with `extensions.worktreeConfig` on, where git reads config from that git directory. Like the reviewer, it never stops on an approval
-prompt. `maxIssueSessions` in `~/.mulmoterminal/config.json` is how many of
+prompt. Both keep these grants when their cell is reopened after codex has exited and the
+conversation is resumed. `maxIssueSessions` in `~/.mulmoterminal/config.json` is how many of
 them may run at once, across every repository. A start past it is refused until one finishes.
 MulmoTerminal follows each one and types a `[startIssueSession]` line into the session that started
 it when its PR is merged or closed, when its session ends, and when it stops on the user (a question

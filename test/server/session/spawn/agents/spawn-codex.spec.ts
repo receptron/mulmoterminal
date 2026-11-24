@@ -9,6 +9,7 @@ import { createCodexSpawner } from "../../../../../server/session/spawn/agents/s
 import { claimedCodexRollouts, ptys } from "../../../../../server/session/registry.js";
 import type { SpawnDeps } from "../../../../../server/session/spawn/spawn-deps.js";
 import { codexPermissionHookOverride } from "../../../../../server/agents/codex/codex-hook.js";
+import { CODEX_NETWORK_ACCESS, CODEX_NEVER_ASK, codexWritableRoots } from "../../../../../server/agents/codex/codex-args.js";
 
 const SID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee01";
 const ROLLOUT_ID = "11111111-2222-4333-8444-555555555555";
@@ -35,6 +36,12 @@ const mocks = vi.hoisted(() => ({
   // The rollouts that existed when the spawn took its snapshot.
   before: [] as string[],
   probe: null as (() => Promise<string | null>) | null,
+}));
+
+// The sandbox grants a spawn records go to a log under MULMOTERMINAL_HOME; keep that off the real one.
+vi.mock("../../../../../server/config/env.js", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  MULMOTERMINAL_HOME: (await import("node:fs")).mkdtempSync((await import("node:path")).join((await import("node:os")).tmpdir(), "mt-spawn-codex-")),
 }));
 
 vi.mock("../../../../../server/session/pty/pty-spawn.js", () => ({
@@ -139,6 +146,29 @@ describe("createCodexSpawner", () => {
     expect(mocks.watcherRuns).toBe(1);
     expect(mocks.tracked).toEqual([]);
     expect(ptys.get(SID)?.agent).toBe("codex");
+  });
+
+  // #3464: a cold resume reconnects with nothing but the session id, so the grants a server-started
+  // codex was spawned with have to come back from the record, or it loses gh, commits and never-ask.
+  it("brings a session's sandbox grants back on a cold resume that asks for none", () => {
+    const granted = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee02";
+    const roots = ["/clone/.git/worktrees/w", "/clone/.git/objects"];
+    spawn()(granted, null, null, "/w", false, { networkAccess: true, neverAsk: true, writableRoots: roots });
+    spawn()(granted, null, ROLLOUT_ID, "/w", false);
+    const resumed = mocks.argv.at(-1) ?? [];
+    expect(resumed).toContain(CODEX_NETWORK_ACCESS);
+    expect(resumed).toContain(CODEX_NEVER_ASK);
+    expect(resumed).toContain(codexWritableRoots(roots));
+    expect(resumed.slice(-2)).toEqual(["resume", ROLLOUT_ID]);
+  });
+
+  // A user's own codex cell, and a conversation reopened under its rollout id, keep the user's sandbox.
+  it("grants nothing to a session that was never spawned with grants", () => {
+    spawn()(SID, null, ROLLOUT_ID, "/w", false);
+    spawn()(ROLLOUT_ID, null, ROLLOUT_ID, "/w", false);
+    for (const argv of mocks.argv) {
+      expect(argv.join(" ")).not.toMatch(/network_access|approval_policy|writable_roots/);
+    }
   });
 
   it("tails a resumed rollout from the end, records the mapping, and runs no watcher", () => {
