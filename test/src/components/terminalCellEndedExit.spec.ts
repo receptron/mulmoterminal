@@ -56,7 +56,11 @@ const mountCell = (cwd = "/home/me/proj") =>
     },
   });
 
-async function exitWith(w: ReturnType<typeof mountCell>, session: { sessionEnded: boolean; lifetimeMs: number | null; reattached: boolean }, exitCode = 0) {
+async function exitWith(
+  w: ReturnType<typeof mountCell>,
+  session: { sessionEnded: boolean; lifetimeMs: number | null; reattached: boolean; closedOnRequest?: boolean },
+  exitCode = 0,
+) {
   await flushPromises();
   w.findComponent({ name: "TerminalView" }).vm.$emit("exit", exitCode, session);
   await flushPromises();
@@ -104,6 +108,14 @@ describe("an agent cell whose session ended on its own", () => {
     const w = mountCell(WORKTREE_CWD);
     await exitWith(w, { sessionEnded: true, lifetimeMs: 60_000, reattached: false });
     expect(w.emitted("close")).toBeUndefined();
+    w.unmount();
+  });
+
+  // #3446: a startIssueSession implementer the server closed once its PR ended, worktree and all.
+  it("closes a worktree cell when the server asked for the cell to go", async () => {
+    const w = mountCell(WORKTREE_CWD);
+    await exitWith(w, { sessionEnded: true, lifetimeMs: 60_000, reattached: false, closedOnRequest: true });
+    expect(w.emitted("close")).toHaveLength(1);
     w.unmount();
   });
 });

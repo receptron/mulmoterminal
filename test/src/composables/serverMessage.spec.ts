@@ -114,13 +114,23 @@ describe("sessionExitOf", () => {
       lifetimeMs: 5000,
       reattached: true,
       exitUnrecorded: false,
+      closedOnRequest: false,
     });
     expect(sessionExitOf({ ended: false, lifetimeMs: 0, reattached: false })).toEqual({
       sessionEnded: false,
       lifetimeMs: 0,
       reattached: false,
       exitUnrecorded: false,
+      closedOnRequest: false,
     });
+  });
+
+  // #3446: only a literal true may close a worktree cell the server did not mean to close.
+  it("reads a close the server asked for only from a literal true", () => {
+    expect(sessionExitOf({ ended: true, closedOnRequest: true }).closedOnRequest).toBe(true);
+    [{}, { closedOnRequest: "true" }, { closedOnRequest: 1 }, { closedOnRequest: null }].forEach((frame) =>
+      expect(sessionExitOf(frame).closedOnRequest, JSON.stringify(frame)).toBe(false),
+    );
   });
 
   it("reads an unrecorded exit only from a literal true", () => {
