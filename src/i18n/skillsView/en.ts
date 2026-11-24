@@ -14,6 +14,13 @@ export const skillsViewEn = {
     noMatch: "No skill matches this search.",
     pick: "Pick a skill to read its SKILL.md.",
     docFailed: "Could not read this SKILL.md.",
+    usage: {
+      count: "{count}×",
+      none: "unused",
+      detail: "Used in {count} Claude conversations, the last on {date}.",
+      detailNoDate: "Used in {count} Claude conversations.",
+      detailNone: "No Claude conversation on record used this skill.",
+    },
     edit: {
       edit: "Edit",
       label: "SKILL.md text",

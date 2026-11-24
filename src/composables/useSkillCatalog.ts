@@ -5,6 +5,7 @@ import { isUnknownArray } from "../../common/isUnknownArray";
 import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import type { CatalogSkill, SkillCatalog, SkillSource } from "../../common/skillCatalog";
+import { isSkillUsage, usageById, type SkillUsage } from "../../common/skillUsage";
 
 const isCatalogSkill = (value: unknown): value is CatalogSkill =>
   isRecord(value) &&
@@ -70,5 +71,18 @@ export async function saveSkillDoc(source: SkillSource, slug: string, text: stri
     return typeof data.version === "string" ? { kind: "saved", version: data.version } : { kind: "failed" };
   } catch {
     return { kind: "failed" };
+  }
+}
+
+/** How often each skill ran, by skill id, from the Library's index (#3437) — or null when the index
+ *  could not answer, which the viewer shows as nothing rather than as "never used". */
+export async function loadSkillUsage(): Promise<ReadonlyMap<string, SkillUsage> | null> {
+  try {
+    const res = await fetchWithTimeout("/api/library/skill-usage");
+    if (!res.ok) return null;
+    const data = await jsonBody(res);
+    return isUnknownArray(data.skills) ? usageById(data.skills.filter(isSkillUsage)) : null;
+  } catch {
+    return null;
   }
 }

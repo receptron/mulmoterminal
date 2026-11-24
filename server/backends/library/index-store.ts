@@ -40,6 +40,8 @@ create index if not exists conversations_cwd on conversations (cwd);
 create index if not exists conversations_with_prs on conversations (started_at) where prs != '[]';
 -- Likewise only the rows that wrote memory: looking up who wrote one reads just those.
 create index if not exists conversations_with_memory on conversations (ended_at) where memory_writes != '[]';
+-- And only the rows that ran a skill: counting skill use reads just those.
+create index if not exists conversations_with_skills on conversations (ended_at) where skills != '[]';
 create virtual table if not exists titles_fts using fts5 (title, content = 'conversations', content_rowid = 'key', tokenize = 'trigram');
 create trigger if not exists conversations_ai after insert on conversations begin insert into titles_fts (rowid, title) values (new.key, new.title); end;
 create trigger if not exists conversations_ad after delete on conversations begin

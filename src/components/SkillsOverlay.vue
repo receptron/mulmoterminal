@@ -12,15 +12,18 @@ import SkillsShPane from "./SkillsShPane.vue";
 import SkillDocEditor from "./SkillDocEditor.vue";
 import { useSkillsView } from "../composables/useSkillsView";
 import { useEscapeToClose } from "../composables/useEscapeToClose";
-import { loadSkillCatalog, loadSkillDoc } from "../composables/useSkillCatalog";
+import { loadSkillCatalog, loadSkillDoc, loadSkillUsage } from "../composables/useSkillCatalog";
+import type { SkillUsage } from "../../common/skillUsage";
 import { filterSkillCatalog, type CatalogSkill, type SkillCatalog, type SkillSource } from "../../common/skillCatalog";
 import { stripFrontmatter } from "../wikiMarkdown";
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const { isOpen, close } = useSkillsView();
 useEscapeToClose(isOpen, close);
 
 const catalog = shallowRef<SkillCatalog | null>(null);
+/** null until read, and when the Library's index could not say: then no count is shown at all. */
+const usage = shallowRef<ReadonlyMap<string, SkillUsage> | null>(null);
 const loadFailed = ref(false);
 const query = ref("");
 const chosenSourceKey = ref<string | null>(null);
@@ -54,9 +57,25 @@ function sourceLabel(source: SkillSource): string {
   return source.scope === "plugin" ? source.plugin : source.dir;
 }
 
+const usageOf = (skill: CatalogSkill): SkillUsage | null => usage.value?.get(skill.id) ?? null;
+const usageDate = (at_ms: number): string => new Date(at_ms).toLocaleDateString(locale.value, { year: "numeric", month: "numeric", day: "numeric" });
+function usageDetail(skill: CatalogSkill): string {
+  const used = usageOf(skill);
+  if (used === null) return t("skillsView.usage.detailNone");
+  if (used.lastUsedAt === null) return t("skillsView.usage.detailNoDate", { count: used.conversations });
+  return t("skillsView.usage.detail", { count: used.conversations, date: usageDate(used.lastUsedAt) });
+}
+
+// Apart from the catalog, so a slow index never holds the list back.
+async function refreshUsage(): Promise<void> {
+  usage.value = await loadSkillUsage();
+}
+
 async function refresh(): Promise<void> {
   catalog.value = null;
+  usage.value = null;
   loadFailed.value = false;
+  void refreshUsage();
   const read = await loadSkillCatalog();
   catalog.value = read;
   loadFailed.value = read === null;
@@ -171,6 +190,9 @@ async function reload(): Promise<void> {
             <span v-if="skill.overridesUser" data-testid="skills-overrides" class="flex-none font-sans text-[10px] text-warn">{{
               t("skillsView.overrides")
             }}</span>
+            <span v-if="usage" data-testid="skills-usage" class="ml-auto flex-none font-sans text-[10px] text-dim">{{
+              usageOf(skill) ? t("skillsView.usage.count", { count: usageOf(skill)?.conversations }) : t("skillsView.usage.none")
+            }}</span>
           </span>
           <span class="line-clamp-2 font-sans text-[11px] leading-snug text-secondary">{{ skill.description }}</span>
         </button>
@@ -192,6 +214,7 @@ async function reload(): Promise<void> {
               <span class="material-symbols-outlined text-[14px]">edit</span>{{ t("skillsView.edit.edit") }}
             </button>
           </p>
+          <p v-if="usage" data-testid="skills-usage-detail" class="m-0 mb-3 font-sans text-[12px] text-secondary">{{ usageDetail(picked.skill) }}</p>
           <p v-if="docFailed" data-testid="skills-doc-error" class="m-0 font-sans text-[13px] text-err-text">{{ t("skillsView.docFailed") }}</p>
           <SkillDocEditor
             v-else-if="editing && raw !== null && docVersion !== null"

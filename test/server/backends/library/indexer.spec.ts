@@ -18,6 +18,8 @@ import {
   prCreatorsQuery,
   retrospectiveRows,
   retrospectiveSpendInputs,
+  skillUsage,
+  skillUsageQuery,
 } from "../../../../server/backends/library/index-queries";
 import { retrospective } from "../../../../server/backends/library/retrospective";
 import { splitSpend } from "../../../../server/backends/library/spend-split";
@@ -160,6 +162,49 @@ describe("runIndexPass", () => {
       .all(...query.params)
       .map((row) => String(row.detail));
     expect(plan.join("\n")).toContain("conversations_with_memory");
+  });
+
+  describe("skill usage", () => {
+    const opened = (day: number, entrypoint = "cli", cwd = "/w/app"): string =>
+      line({ type: "user", cwd, entrypoint, timestamp: `2026-11-${String(day)}T08:00:00.000Z`, message: { content: "x" } });
+    const ran = (skill: string, day: number): string =>
+      line({
+        type: "assistant",
+        attributionSkill: skill,
+        timestamp: `2026-11-${String(day)}T09:00:00.000Z`,
+        message: { content: [{ type: "text", text: "ok" }] },
+      });
+
+    it("counts each skill once per conversation the Library lists, with when the last of them ended", async () => {
+      const { db, deps, transcript } = setup();
+      transcript("a", opened(10) + ran("publish", 10) + ran("publish", 10) + ran("tne:route", 10));
+      transcript("b", opened(12) + ran("publish", 12));
+      transcript("scripted", opened(14, "sdk-cli") + ran("publish", 14));
+      transcript("scratch", opened(15, "cli", "/tmp/x") + ran("publish", 15), "-tmp-x");
+      transcript("plain", opened(16));
+      await runIndexPass(deps);
+      expect(skillUsage(db)).toEqual([
+        { id: "publish", conversations: 2, lastUsedAt: Date.parse("2026-11-12T09:00:00.000Z") },
+        { id: "tne:route", conversations: 1, lastUsedAt: Date.parse("2026-11-10T09:00:00.000Z") },
+      ]);
+    });
+
+    it("answers nothing when no conversation ran a skill", async () => {
+      const { db, deps, transcript } = setup();
+      transcript("plain", opened(16));
+      await runIndexPass(deps);
+      expect(skillUsage(db)).toEqual([]);
+    });
+
+    it("reads only the rows that ran one, through the partial index", () => {
+      const { db } = setup();
+      const query = skillUsageQuery();
+      const plan = db
+        .prepare(`explain query plan ${query.sql}`)
+        .all(...query.params)
+        .map((row) => String(row.detail));
+      expect(plan.join("\n")).toContain("conversations_with_skills");
+    });
   });
 
   describe("what was spent", () => {

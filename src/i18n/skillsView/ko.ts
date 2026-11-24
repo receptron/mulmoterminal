@@ -14,6 +14,13 @@ export const skillsViewKo = {
     noMatch: "이 검색과 일치하는 스킬이 없습니다.",
     pick: "스킬을 선택하면 SKILL.md 를 표시합니다.",
     docFailed: "이 SKILL.md 를 읽을 수 없습니다.",
+    usage: {
+      count: "{count}회",
+      none: "기록 없음",
+      detail: "Claude 대화 {count}건에서 사용되었습니다. 마지막은 {date}입니다.",
+      detailNoDate: "Claude 대화 {count}건에서 사용되었습니다.",
+      detailNone: "Claude 대화 기록에는 이 스킬을 사용한 것이 없습니다.",
+    },
     edit: {
       edit: "편집",
       label: "SKILL.md 본문",
