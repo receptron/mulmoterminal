@@ -2,6 +2,7 @@
 // The reviewer MulmoTerminal starts (#3425): on the PR's head in a worktree of the repository's
 // clone, as the author's own session, visible, and with codex's sandbox allowed the network.
 import { describe, it, expect, vi } from "vitest";
+import path from "node:path";
 import { reviewWorkspaces, type ReviewWorkspaceDeps } from "../../../server/routes/review-workspaces.js";
 import type { ReviewLoop } from "../../../server/routes/reviewLoop.js";
 import type { SpawnIssueSession } from "../../../server/session/spawn/issue-session-spawn.js";
@@ -9,6 +10,8 @@ import type { SpawnIssueSession } from "../../../server/session/spawn/issue-sess
 const AUTHOR = "0b7d2c1e-1111-4222-8333-944455556666";
 const HEAD = "a".repeat(40);
 const NEXT = "b".repeat(40);
+// Built the way the code builds it, so the separator is the platform's (`\\` on Windows).
+const WORKSPACE = path.join("/review", "owner-repo-pr7");
 const SPEC = { repo: "owner/repo", pr: 7, head: HEAD, agent: "codex" as const, author: AUTHOR, seed: "Review pull request #7" };
 
 function setup(overrides: Partial<ReviewWorkspaceDeps> = {}) {
@@ -52,9 +55,9 @@ const loopOn = (workspace: string | null): ReviewLoop => ({
 describe("reviewWorkspaces.start", () => {
   it("checks the head out, then starts the agent there on the request, the author's and visible, with the network", async () => {
     const { workspaces, gitCalls, spawn, recordSpawn, markVisible } = setup();
-    expect(await workspaces.start(SPEC)).toEqual({ session: "rev-1", workspace: "/review/owner-repo-pr7" });
-    expect(gitCalls.map(([, args]) => args)).toEqual(["fetch --quiet origin pull/7/head", `worktree add --quiet --detach /review/owner-repo-pr7 ${HEAD}`]);
-    expect(spawn).toHaveBeenCalledWith("codex", "/review/owner-repo-pr7", SPEC.seed, true, null, { networkAccess: true });
+    expect(await workspaces.start(SPEC)).toEqual({ session: "rev-1", workspace: WORKSPACE });
+    expect(gitCalls.map(([, args]) => args)).toEqual(["fetch --quiet origin pull/7/head", `worktree add --quiet --detach ${WORKSPACE} ${HEAD}`]);
+    expect(spawn).toHaveBeenCalledWith("codex", WORKSPACE, SPEC.seed, true, null, { networkAccess: true });
     expect(recordSpawn).toHaveBeenCalledWith("rev-1", AUTHOR);
     expect(markVisible).toHaveBeenCalledWith("rev-1", "codex");
   });
@@ -82,7 +85,7 @@ describe("reviewWorkspaces.start, when the spawn fails", () => {
       }),
     });
     expect(await workspaces.start(SPEC)).toMatch(/could not start the reviewer: tmux refused/);
-    expect(gitCalls.at(-1)).toEqual(["/src/repo", "worktree remove --force /review/owner-repo-pr7"]);
+    expect(gitCalls.at(-1)).toEqual(["/src/repo", `worktree remove --force ${WORKSPACE}`]);
     expect(present.size).toBe(0);
   });
 });
@@ -123,7 +126,7 @@ describe("reviewWorkspaces.move / drop", () => {
     });
     const { workspaces } = setup({
       worktree: {
-        git: async (args) => (args[1] === "remove" ? remove() : { ok: true, stdout: "worktree /review/owner-repo-pr7" }),
+        git: async (args) => (args[1] === "remove" ? remove() : { ok: true, stdout: `worktree ${WORKSPACE}` }),
         exists: () => true,
         isSymlink: () => false,
         realpath: (dir) => dir,

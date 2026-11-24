@@ -43,8 +43,8 @@ describe("reviewWorktreeDir", () => {
 
   it("keeps a repository name that would leave the root inside it", () => {
     const dir = reviewWorktreeDir("/root", "../etc", 1);
-    expect(path.dirname(dir)).toBe("/root");
-    expect(path.basename(dir)).not.toMatch(/\//);
+    expect(path.dirname(dir)).toBe(path.join("/root"));
+    expect(path.basename(dir)).not.toMatch(/[/\\]/);
   });
 });
 
