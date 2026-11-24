@@ -15,7 +15,11 @@ let authoring: Promise<string | null> = Promise.resolve("chat-1");
 let starting: Promise<{ kind: "started"; id: string }> = Promise.resolve({ kind: "started", id: "r" });
 vi.mock("../../../src/composables/skillEvalApi", () => ({
   loadSkillEval: () => loads.shift() ?? Promise.resolve(overview),
-  startSkillEvalRun: () => (calls.push("start"), starting),
+  startSkillEvalRun: (_source: unknown, _slug: string, improve?: boolean) => (calls.push(improve ? "improve" : "start"), starting),
+  adoptSkillEvalCandidate: (_source: unknown, _slug: string, runId: string) => (
+    calls.push(`adopt ${runId}`),
+    Promise.resolve({ kind: "adopted", backup: "/b/1.md" })
+  ),
   stopSkillEvalRun: () => (calls.push("stop"), Promise.resolve(true)),
   startSkillEvalAuthoring: () => (calls.push("author"), authoring),
 }));
@@ -31,6 +35,7 @@ const set = {
   skill: "weekly",
   model: "haiku",
   judgeModel: "haiku",
+  improveModel: "sonnet",
   repeats: 1,
   maxBudgetUsdPerAttempt: 0.5,
   allowedTools: [],
@@ -44,13 +49,16 @@ function run(passWith: boolean, passWithout: boolean, extra: Partial<SkillEvalRu
   });
   return {
     ...{ id: "1795000000000-aaaaaaaa", skill: "weekly", status: "done", startedAt: 1, finishedAt: 2, model: "haiku", repeats: 1 },
-    ...{ skillText: "", skillHash: "h", setHash: "s", cases: [evalCase], plannedAttempts: 2 },
+    ...{ skillText: "", skillHash: "h", setHash: "s", cases: [evalCase], plannedAttempts: 2, candidateId: null, note: "", improveCostUsd: 0 },
     attempts: [attempt("with", passWith), attempt("without", passWithout)],
     ...extra,
   };
 }
 
-const base = { skill: "weekly", dir: "/h/.mulmoterminal/skill-evals/weekly", setError: null, estimate: { attempts: 2, maxCostUsd: 1 }, activeRunId: null };
+const base = {
+  ...{ skill: "weekly", dir: "/h/.mulmoterminal/skill-evals/weekly", setHash: "s", setError: null, editable: true },
+  ...{ estimate: { attempts: 2, maxCostUsd: 1, maxImproveCostUsd: 2 }, activeRunId: null },
+};
 const mountPanel = async () => {
   const wrapper = mount(SkillEvalPanel, { props: { source, skill }, global: { plugins: [i18n] } });
   await flushPromises();
@@ -179,5 +187,47 @@ describe("SkillEvalPanel", () => {
     answerStart({ kind: "started", id: "r" });
     await vi.advanceTimersByTimeAsync(0);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("offers an improvement only once the skill has been measured on the current tasks, and names its price", async () => {
+    overview = { ...base, set, runs: [] };
+    expect((await mountPanel()).find("[data-testid=skill-eval-improve]").exists()).toBe(false);
+    overview = { ...base, set, runs: [run(false, false, { setHash: "old tasks" })] };
+    expect((await mountPanel()).find("[data-testid=skill-eval-improve]").exists()).toBe(false);
+    overview = { ...base, set, runs: [run(false, false)] };
+    const wrapper = await mountPanel();
+    await wrapper.find("[data-testid=skill-eval-improve]").trigger("click");
+    expect(wrapper.find("[data-testid=skill-eval-confirm]").text()).toContain("$2.00");
+    await wrapper.find("[data-testid=skill-eval-go]").trigger("click");
+    await flushPromises();
+    expect(calls).toEqual(["improve"]);
+  });
+
+  it("says an improvement is being written before it is measured", async () => {
+    const writing = run(false, false, { id: "1795000000001-bbbbbbbb", status: "running", attempts: [], candidateId: "1795000000001-bbbbbbbb" });
+    overview = { ...base, set, runs: [writing, run(false, false)], activeRunId: writing.id };
+    const wrapper = await mountPanel();
+    expect(wrapper.find("[data-testid=skill-eval-progress]").text()).toContain("Writing an improvement");
+    wrapper.unmount();
+  });
+
+  it("sets a measured improvement beside the skill's own result, and adopts it", async () => {
+    const improved = run(true, false, { id: "1795000000001-bbbbbbbb", candidateId: "1795000000001-bbbbbbbb", skillText: "better", note: "Shortened it." });
+    overview = { ...base, set, runs: [improved, run(false, false)] };
+    const wrapper = await mountPanel();
+    expect(wrapper.find("[data-testid=skill-eval-compare]").text()).toBe("Pass rate with the skill: current 0% → improvement 100%");
+    expect(wrapper.find("[data-testid=skill-eval-candidate-text]").text()).toBe("better");
+    await wrapper.find("[data-testid=skill-eval-adopt]").trigger("click");
+    await flushPromises();
+    expect(calls).toEqual(["adopt 1795000000001-bbbbbbbb"]);
+    expect(wrapper.emitted("adopted")).toHaveLength(1);
+    expect(wrapper.find("[data-testid=skill-eval-adopt-notice]").text()).toContain("/b/1.md");
+  });
+
+  it("does not offer to adopt over a skill that cannot be edited here", async () => {
+    const improved = run(true, false, { id: "1795000000001-bbbbbbbb", candidateId: "1795000000001-bbbbbbbb", skillText: "better" });
+    overview = { ...base, editable: false, set, runs: [improved, run(false, false)] };
+    const wrapper = await mountPanel();
+    expect(wrapper.find("[data-testid=skill-eval-adopt]").exists()).toBe(false);
   });
 });

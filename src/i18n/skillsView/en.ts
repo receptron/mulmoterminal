@@ -52,6 +52,25 @@ export const skillsViewEn = {
       spent: "This evaluation cost {cost}, grading included.",
       perCase: "Passes per task",
       avoidTag: "(should not use)",
+      improve: {
+        start: "Improve and measure",
+        confirm:
+          "An AI writes an improved SKILL.md from the last result, then it is measured on the same tasks in {attempts} runs, spending at most {max} (usually far less). Your SKILL.md is not changed. Start?",
+        writing: "Writing an improvement…",
+        running: "Measuring the improvement… {done} / {total}",
+        title: "Improvement",
+        failed: "No improvement could be written: {error}",
+        compare: "Pass rate with the skill: current {before} → improvement {after}",
+        overfit:
+          "The improvement was written from these tasks and measured on them, so it may only fit them. After adopting it, add new tasks and measure again to be sure.",
+        show: "Show the improved SKILL.md",
+        adopt: "Adopt",
+        adopted: "Adopted. The previous SKILL.md is kept at {backup}.",
+        changed: "The SKILL.md changed after it was measured, so it was not overwritten.",
+        adoptFailed: "Could not adopt it. {error}",
+        readOnly: "This skill cannot be changed here. Read the improvement and edit the skill where it lives.",
+        tag: "improvement",
+      },
       verdict: { helps: "It helps", hurts: "It makes things worse", "no-evidence": "No evidence of a difference", pending: "Not enough results yet" },
       verdictWhy: {
         helps: "The pass rate with the skill beat the one without by more than the runs without it varied ({spread}).",

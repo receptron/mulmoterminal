@@ -52,6 +52,25 @@ export const skillsViewJa = {
       spent: "この評価にかかった費用: {cost}（採点を含む）",
       perCase: "課題ごとの合格数",
       avoidTag: "（使うべきでない）",
+      improve: {
+        start: "改善案を作って測る",
+        confirm:
+          "AI が最後の結果をもとに SKILL.md の改善案を書き、同じ課題で {attempts} 回測ります。費用の上限は {max} です（実際はふつうこれよりずっと少なくなります）。今の SKILL.md は変えません。始めますか？",
+        writing: "改善案を書いています…",
+        running: "改善案を測っています… {done} / {total}",
+        title: "改善案",
+        failed: "改善案を作れませんでした: {error}",
+        compare: "スキルありの合格率: 今のスキル {before} → 改善案 {after}",
+        overfit:
+          "改善案は同じ課題を見て作り、同じ課題で測っています。課題に合わせただけの改善かもしれないので、採用したあとは新しい課題を足して測り直すと確かです。",
+        show: "改善案の SKILL.md を見る",
+        adopt: "採用する",
+        adopted: "採用しました。前の SKILL.md は {backup} に残っています。",
+        changed: "測ったあとに SKILL.md が変わっていたので、上書きしませんでした。",
+        adoptFailed: "採用できませんでした。{error}",
+        readOnly: "このスキルはここでは書き換えられません。中身を見て、元の場所で直してください。",
+        tag: "改善案",
+      },
       verdict: { helps: "効いています", hurts: "逆効果です", "no-evidence": "差がある証拠はありません", pending: "まだ判定できません" },
       verdictWhy: {
         helps: "スキルありの合格率が、スキルなしを、なし同士の回ごとの揺れ（{spread}）より大きく上回りました。",

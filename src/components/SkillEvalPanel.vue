@@ -6,13 +6,15 @@
 import { computed, onUnmounted, ref, shallowRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import type { CatalogSkill, SkillSource } from "../../common/skillCatalog";
-import type { SkillEvalOverview, SkillEvalRun } from "../../common/skillEval";
+import { latestBaseline, type SkillEvalOverview, type SkillEvalRun } from "../../common/skillEval";
 import { summarizeSkillEval, type SkillEvalSummary } from "../../common/skillEvalSummary";
 import { loadSkillEval, startSkillEvalAuthoring, startSkillEvalRun, stopSkillEvalRun } from "../composables/skillEvalApi";
 import { placeSpawnedChat } from "../composables/useSpawnedChat";
 import SkillEvalResult from "./SkillEvalResult.vue";
+import SkillEvalCandidate from "./SkillEvalCandidate.vue";
 
 const props = defineProps<{ source: SkillSource; skill: CatalogSkill }>();
+const emit = defineEmits<{ adopted: [] }>();
 const { t, locale } = useI18n();
 
 // While a run is going, how often its record is read again.
@@ -21,7 +23,8 @@ const POLL_MS = 3000;
 const overview = shallowRef<SkillEvalOverview | null>(null);
 const loadFailed = ref(false);
 const notice = ref<string | null>(null);
-const confirming = ref(false);
+/** Which start is being confirmed: measuring the skill, or writing and measuring an improvement. */
+const confirming = ref<"measure" | "improve" | null>(null);
 const drafting = ref(false);
 let poll: ReturnType<typeof setInterval> | null = null;
 // Bumped when the skill changes or the panel goes: an answer for an earlier skill is dropped.
@@ -32,6 +35,10 @@ const latestSummary = computed<SkillEvalSummary | null>(() =>
   latest.value ? summarizeSkillEval(latest.value.cases, latest.value.attempts, latest.value.repeats) : null,
 );
 const earlier = computed(() => (overview.value?.runs ?? []).slice(1));
+// What an improvement is written from, and what a measured one is compared with.
+const baseline = computed(() => (overview.value?.setHash ? latestBaseline(overview.value.runs, overview.value.setHash) : null));
+const baselineSummary = computed(() => (baseline.value ? summarizeSkillEval(baseline.value.cases, baseline.value.attempts, baseline.value.repeats) : null));
+const improving = computed(() => latest.value?.candidateId != null && latest.value.skillText === "");
 // The SKILL.md measured last is not the one measured the time before: the two results are of different texts.
 const skillTextChanged = computed(() => earlier.value.length > 0 && latest.value?.skillHash !== earlier.value[0]?.skillHash);
 const useCount = computed(() => overview.value?.set?.cases.filter((c) => c.kind === "use").length ?? 0);
@@ -71,7 +78,7 @@ watch(
     stopPolling();
     overview.value = null;
     notice.value = null;
-    confirming.value = false;
+    confirming.value = null;
     void refresh();
   },
   { immediate: true },
@@ -82,9 +89,10 @@ onUnmounted(() => {
 });
 
 async function measure(): Promise<void> {
-  confirming.value = false;
+  const improve = confirming.value === "improve";
+  confirming.value = null;
   const asked = selection;
-  const started = await startSkillEvalRun(props.source, props.skill.slug);
+  const started = await startSkillEvalRun(props.source, props.skill.slug, improve);
   // Moved to another skill, or the panel is gone: nothing here should start polling.
   if (asked !== selection) return;
   if (started.kind === "busy") notice.value = t("skillsView.eval.busy");
@@ -100,6 +108,11 @@ async function measure(): Promise<void> {
 async function stop(): Promise<void> {
   const id = overview.value?.activeRunId;
   if (id) await stopSkillEvalRun(id);
+  await refresh();
+}
+
+async function onAdopted(): Promise<void> {
+  emit("adopted");
   await refresh();
 }
 
@@ -145,7 +158,13 @@ async function draft(): Promise<void> {
           {{ t("skillsView.eval.setSummary", { use: useCount, avoid: avoidCount, repeats: overview.set.repeats, model: overview.set.model }) }}
         </p>
         <div v-if="overview.activeRunId && latest" data-testid="skill-eval-progress" class="mb-2 flex items-center gap-2">
-          <span>{{ t("skillsView.eval.running", { done: latest.attempts.length, total: latest.plannedAttempts }) }}</span>
+          <span v-if="improving">{{ t("skillsView.eval.improve.writing") }}</span>
+          <span v-else>{{
+            t(latest.candidateId ? "skillsView.eval.improve.running" : "skillsView.eval.running", {
+              done: latest.attempts.length,
+              total: latest.plannedAttempts,
+            })
+          }}</span>
           <button
             type="button"
             data-testid="skill-eval-stop"
@@ -156,7 +175,10 @@ async function draft(): Promise<void> {
           </button>
         </div>
         <div v-else-if="confirming && overview.estimate" data-testid="skill-eval-confirm" class="mb-2 rounded border border-border bg-panel p-2">
-          <p class="m-0 mb-2">{{ t("skillsView.eval.confirm", { attempts: overview.estimate.attempts, max: usd(overview.estimate.maxCostUsd) }) }}</p>
+          <p v-if="confirming === 'improve'" class="m-0 mb-2">
+            {{ t("skillsView.eval.improve.confirm", { attempts: overview.estimate.attempts, max: usd(overview.estimate.maxImproveCostUsd) }) }}
+          </p>
+          <p v-else class="m-0 mb-2">{{ t("skillsView.eval.confirm", { attempts: overview.estimate.attempts, max: usd(overview.estimate.maxCostUsd) }) }}</p>
           <div class="flex gap-2">
             <button
               type="button"
@@ -169,7 +191,7 @@ async function draft(): Promise<void> {
             <button
               type="button"
               class="cursor-pointer rounded border border-border bg-transparent px-2 py-1 text-[12px] text-secondary"
-              @click="confirming = false"
+              @click="confirming = null"
             >
               {{ t("skillsView.edit.cancel") }}
             </button>
@@ -180,9 +202,18 @@ async function draft(): Promise<void> {
             type="button"
             data-testid="skill-eval-measure"
             class="cursor-pointer rounded border border-border bg-transparent px-2 py-1 text-[12px] text-fg hover:bg-hover"
-            @click="confirming = true"
+            @click="confirming = 'measure'"
           >
             {{ t("skillsView.eval.measure") }}
+          </button>
+          <button
+            v-if="baseline"
+            type="button"
+            data-testid="skill-eval-improve"
+            class="cursor-pointer rounded border border-border bg-transparent px-2 py-1 text-[12px] text-fg hover:bg-hover"
+            @click="confirming = 'improve'"
+          >
+            {{ t("skillsView.eval.improve.start") }}
           </button>
           <button
             type="button"
@@ -196,13 +227,23 @@ async function draft(): Promise<void> {
         </div>
       </template>
       <p v-if="notice" data-testid="skill-eval-notice" class="m-0 mb-2 text-secondary">{{ notice }}</p>
-      <SkillEvalResult v-if="latest && latestSummary" :run="latest" :summary="latestSummary" :skill-text-changed="skillTextChanged" />
+      <SkillEvalCandidate
+        v-if="latest && latestSummary && latest.candidateId && !overview.activeRunId"
+        :source="source"
+        :skill="skill"
+        :run="latest"
+        :summary="latestSummary"
+        :baseline-summary="baselineSummary"
+        :editable="overview.editable"
+        @adopted="onAdopted"
+      />
+      <SkillEvalResult v-if="latest && latestSummary && !improving" :run="latest" :summary="latestSummary" :skill-text-changed="skillTextChanged" />
       <details v-if="earlier.length" class="mt-2">
         <summary class="cursor-pointer text-secondary">{{ t("skillsView.eval.earlier", { count: earlier.length }) }}</summary>
         <ul class="m-0 mt-1 list-none p-0">
           <li v-for="run in earlier" :key="run.id" data-testid="skill-eval-earlier" class="py-0.5 text-secondary">
             {{ when(run.startedAt) }} · {{ t(`skillsView.eval.verdict.${summarizeSkillEval(run.cases, run.attempts, run.repeats).verdict}`) }} ·
-            {{ t(`skillsView.eval.status.${run.status}`) }}
+            {{ t(`skillsView.eval.status.${run.status}`) }}<template v-if="run.candidateId"> · {{ t("skillsView.eval.improve.tag") }}</template>
           </li>
         </ul>
       </details>

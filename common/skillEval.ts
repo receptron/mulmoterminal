@@ -12,6 +12,10 @@ export const SKILL_EVAL_DEFAULT_MODEL = "haiku";
 export const SKILL_EVAL_DEFAULT_BUDGET_USD = 0.5;
 /** What one grading of a rubric case may spend. */
 export const SKILL_EVAL_JUDGE_BUDGET_USD = 0.5;
+/** What writing one improvement may spend (#3448). */
+export const SKILL_EVAL_IMPROVE_BUDGET_USD = 1;
+/** Writing an improvement takes judgement about a whole skill: a stronger model than the runs use. */
+export const SKILL_EVAL_DEFAULT_IMPROVE_MODEL = "sonnet";
 
 const commandCheckSchema = z.object({ type: z.literal("command"), command: z.string().min(1) });
 const rubricCheckSchema = z.object({ type: z.literal("rubric"), items: z.array(z.string().min(1)).min(1) });
@@ -32,6 +36,8 @@ export const skillEvalSetSchema = z.object({
   model: z.string().min(1).default(SKILL_EVAL_DEFAULT_MODEL),
   /** The model that grades a rubric case. */
   judgeModel: z.string().min(1).default(SKILL_EVAL_DEFAULT_MODEL),
+  /** The model that writes an improved SKILL.md (#3448). */
+  improveModel: z.string().min(1).default(SKILL_EVAL_DEFAULT_IMPROVE_MODEL),
   repeats: z.number().int().min(1).max(SKILL_EVAL_MAX_REPEATS).default(SKILL_EVAL_DEFAULT_REPEATS),
   maxBudgetUsdPerAttempt: z.number().positive().max(10).default(SKILL_EVAL_DEFAULT_BUDGET_USD),
   /** Tools beyond file edits the agent may use without asking, in claude's `--allowedTools` form. */
@@ -87,6 +93,12 @@ export const skillEvalRunSchema = z.object({
   cases: z.array(skillEvalCaseSchema),
   plannedAttempts: z.number().int().min(0),
   attempts: z.array(skillEvalAttemptSchema),
+  /** Set when this run measured an improvement rather than the skill on disk (#3448): its folder under
+   *  `candidates/`. Its SKILL.md is `skillText`, empty while it is still being written. */
+  candidateId: z.string().nullable().default(null),
+  /** What the improvement changed, in the words of the model that wrote it. */
+  note: z.string().default(""),
+  improveCostUsd: z.number().default(0),
 });
 export type SkillEvalRun = z.infer<typeof skillEvalRunSchema>;
 
@@ -104,6 +116,10 @@ export function maxRunCostUsd(set: Pick<SkillEvalSet, "cases" | "repeats" | "max
   return plannedAttempts(set) * set.maxBudgetUsdPerAttempt + graded * SKILL_EVAL_JUDGE_BUDGET_USD;
 }
 
+/** The most writing an improvement and measuring it can spend. */
+export const maxImproveCostUsd = (set: Pick<SkillEvalSet, "cases" | "repeats" | "maxBudgetUsdPerAttempt">): number =>
+  SKILL_EVAL_IMPROVE_BUDGET_USD + maxRunCostUsd(set);
+
 /** The bundled skill that drafts a set with the user. */
 export const SKILL_EVAL_AUTHOR_SKILL: BundledSkillName = "mulmoterminal-skill-eval";
 
@@ -113,10 +129,20 @@ export const skillEvalOverviewSchema = z.object({
   /** Where its set and runs are kept. */
   dir: z.string(),
   set: skillEvalSetSchema.nullable(),
+  /** The hash of the set's file as it is now, to tell which runs measured these tasks. */
+  setHash: z.string().nullable(),
   setError: z.string().nullable(),
-  estimate: z.object({ attempts: z.number(), maxCostUsd: z.number() }).nullable(),
+  estimate: z.object({ attempts: z.number(), maxCostUsd: z.number(), maxImproveCostUsd: z.number() }).nullable(),
+  /** Whether an improvement may be written over this skill's SKILL.md: not a plugin's or a bundled one. */
+  editable: z.boolean(),
   /** The newest first. */
   runs: z.array(skillEvalRunSchema),
   activeRunId: z.string().nullable(),
 });
 export type SkillEvalOverview = z.infer<typeof skillEvalOverviewSchema>;
+
+/** The run an improvement is written from (#3448): the newest finished measurement of the skill itself
+ *  on the current set — not an improvement's run, and not one made with tasks that have since changed. */
+export function latestBaseline(runs: readonly SkillEvalRun[], setHash: string): SkillEvalRun | null {
+  return runs.find((run) => run.candidateId === null && run.status === "done" && run.attempts.length > 0 && run.setHash === setHash) ?? null;
+}
