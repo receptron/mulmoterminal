@@ -21,7 +21,12 @@ export const skillsViewEn = {
       detailNoDate: "Used in {count} Claude conversations.",
       detailNone: "No Claude conversation on record used this skill.",
     },
+    attention: "Needs attention",
+    attentionHint:
+      "Only the skills an evaluation found not helping, the ones with test tasks whose current SKILL.md has not been measured, and the ones conversations use that have no test tasks yet.",
+    attentionEmpty: "No skill needs attention.",
     eval: {
+      mark: { helps: "helps", hurts: "makes worse", "no-evidence": "no difference", pending: "no verdict", unmeasured: "not measured" },
       title: "Does it help?",
       intro: "Find out whether results are better with this skill: small test tasks are solved with and without it, and compared. Start by drafting the tasks.",
       draft: "Draft test tasks",
@@ -53,10 +58,22 @@ export const skillsViewEn = {
       interruptedBy: "It stopped partway because something failed: {reason}",
       perCase: "Passes per task",
       avoidTag: "(should not use)",
+      history: {
+        rates: "with the skill {with}, without {without}",
+        otherText: "measured another SKILL.md",
+      },
+      next: {
+        measure: "This SKILL.md has not been measured on these tasks yet. Measure it first.",
+        improve: "There is no evidence the skill helps. Next, have an AI write an improvement and measure it.",
+        improveAgain: "The last improvement did not pass more often than the skill. Try another, or change the tasks.",
+        adopt: "The improvement passed more often. Read it below, and adopt it if it looks right.",
+        ladder: "The skill helps. Next, find out whether a cheaper model is enough for it.",
+        done: "The skill helps, and the search for the cheapest model is done; its result is below. Measure again after you change the skill or the tasks.",
+      },
       improve: {
         start: "Improve and measure",
         confirm:
-          "An AI writes an improved SKILL.md from the last result, then it is measured on the same tasks in {attempts} runs, spending at most {max} (usually far less). Your SKILL.md is not changed. Start?",
+          "An AI writes an improved SKILL.md from the last result, then it is measured on the same tasks with the skill in {attempts} runs (the runs without it are reused from the last result), spending at most {max} (usually far less). Your SKILL.md is not changed. Start?",
         writing: "Writing an improvement…",
         running: "Measuring the improvement… {done} / {total}",
         title: "Improvement",
@@ -64,13 +81,16 @@ export const skillsViewEn = {
         compare: "Pass rate with the skill: current {before} → improvement {after}",
         overfit:
           "The improvement was written from these tasks and measured on them, so it may only fit them. After adopting it, add new tasks and measure again to be sure.",
-        show: "Show the improved SKILL.md",
+        show: "Show the whole improved SKILL.md",
+        diff: "What it changes in the SKILL.md it was written from:",
+        folded: "{count} unchanged lines",
         adopt: "Adopt",
         adopted: "Adopted. The previous SKILL.md is kept at {backup}.",
         changed: "The SKILL.md changed after it was measured, so it was not overwritten.",
         adoptFailed: "Could not adopt it. {error}",
         readOnly: "This skill cannot be changed here. Read the improvement and edit the skill where it lives.",
         tag: "improvement",
+        reused: "The runs without the skill are the ones from the measurement this improvement was written from: they were not run again.",
       },
       ladder: {
         start: "Find the cheapest model",

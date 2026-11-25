@@ -298,6 +298,7 @@ npx mulmoterminal@latest    # → http://localhost:34567 が開く
    - [全機能リスト](feature-list.html)（いまある機能をすべて、入った版つきで一行ずつ）
 6. [どの coding agent を使うか](agents.html)（Claude Code・Codex・Antigravity・Grok・Muse・Copilot・Cursor。何が要るか、どう会話を再開するか）
 7. [git worktree で作業を分ける](worktree.html)（1 つのリポジトリを、ぶつからずに複数のエージェントで）
+   - [issue をエージェントに渡して merge まで](issue-to-merge.html)（一つでもいくつでも。実装、別のセッションでのレビュー、merge）
 8. [セル同士を会話させる](conversation.html)（1往復の受け渡し・円卓・部屋）
 9. [設定方法](config.html)（設定モーダル・`config.json`・`.mulmoterminal.json`・**DSL 拡張**）
    - [ヘッダーをカスタマイズする](header.html)（自分のボタンとチップを最初から）と、[ヘッダーのリファレンス](header-reference.html)（変数・`when`・マージ）

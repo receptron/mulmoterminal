@@ -12,6 +12,7 @@ import { skillDocFile, type SkillDocSource } from "../backends/skills/skillCatal
 import {
   isBaselineFor,
   ladderAttempts,
+  improveAttempts,
   maxImproveCostUsd,
   maxLadderCostUsd,
   maxRunCostUsd,
@@ -24,6 +25,7 @@ import {
 } from "../../common/skillEval.js";
 import { isEditableSkill } from "../backends/skills/skillEdit.js";
 import { adoptCandidate } from "../backends/skillEval/evalAdopt.js";
+import { readEvalMarks } from "../backends/skillEval/evalMarks.js";
 import type { SpawnIssueSession } from "../session/spawn/issue-session-spawn.js";
 import { commandRunner, type AttemptDeps } from "../backends/skillEval/evalAttempt.js";
 import { runClaude } from "../backends/skillEval/runClaude.js";
@@ -109,16 +111,19 @@ async function startAuthoring(ctx: Context, body: Record<string, unknown>, res: 
   }
 }
 
-/** The run the next improvement of `skill` would be written from, if it has one. */
-async function baselineOf(skill: ResolvedSkill, setHash: string): Promise<SkillEvalRun | null> {
+const currentSkillHash = async (skill: ResolvedSkill): Promise<string | null> => {
   const skillText = await readFile(skill.file, "utf8").catch(() => null);
-  if (skillText === null) return null;
-  const skillHash = textHash(skillText);
+  return skillText === null ? null : textHash(skillText);
+};
+
+/** The run the next improvement of `skill` would be written from, if it has one. */
+async function baselineOf(skill: ResolvedSkill, setHash: string, skillHash: string | null): Promise<SkillEvalRun | null> {
+  if (skillHash === null) return null;
   return newestRunWhere(skill.evalDir, (run) => isBaselineFor(run, setHash, skillHash));
 }
 
 const estimateOf = (set: SkillEvalSet): NonNullable<SkillEvalOverview["estimate"]> => ({
-  ...{ attempts: plannedAttempts(set), maxCostUsd: maxRunCostUsd(set), maxImproveCostUsd: maxImproveCostUsd(set) },
+  ...{ attempts: plannedAttempts(set), maxCostUsd: maxRunCostUsd(set), improveAttempts: improveAttempts(set), maxImproveCostUsd: maxImproveCostUsd(set) },
   ...{ ladderAttempts: ladderAttempts(set), maxLadderCostUsd: maxLadderCostUsd(set) },
 });
 
@@ -127,11 +132,12 @@ async function overview(ctx: Context, query: Record<string, unknown>, res: Respo
   if (skill === null) return fail(res, 404, SKILL_NOT_FOUND);
   const read = await readEvalSet(skill.evalDir, skill.id);
   const set = read.kind === "ok" ? read.set : null;
+  const skillHash = await currentSkillHash(skill);
   res.json({
     ...{ skill: skill.id, dir: skill.evalDir, set, setHash: read.kind === "ok" ? read.hash : null, setError: read.kind === "invalid" ? read.error : null },
     estimate: set === null ? null : estimateOf(set),
     editable: isEditableSkill(skill.source, skill.slug),
-    baseline: read.kind === "ok" ? await baselineOf(skill, read.hash) : null,
+    ...{ skillHash, baseline: read.kind === "ok" ? await baselineOf(skill, read.hash, skillHash) : null },
     ...{ runs: (await listRuns(skill.evalDir)).map(runView), activeRunId: activeRunId(skill.evalDir) },
   });
 }
@@ -152,7 +158,7 @@ async function startRun(ctx: Context, body: Record<string, unknown>, res: Respon
   if (read.kind === "absent") return fail(res, 404, "no evaluation is set up for this skill");
   if (read.kind === "invalid") return fail(res, 400, read.error);
   if (mode === "ladder" && ladderAttempts(read.set) === 0) return fail(res, 400, "there is no task the skill should help with");
-  const improveFrom = improve ? await baselineOf(skill, read.hash) : null;
+  const improveFrom = improve ? await baselineOf(skill, read.hash, await currentSkillHash(skill)) : null;
   if (improve && improveFrom === null) return fail(res, 400, "measure the skill as it is now, with these tasks, first");
   const skillText = await readFile(skill.file, "utf8");
   const skillDir = path.dirname(skill.file);
@@ -193,6 +199,9 @@ export function mountSkillEvalRoutes(app: Express, deps: SkillEvalRouteDeps = {}
     spawnSession: deps.spawnSession ?? null,
   };
   app.get("/api/skill-evals", (req, res) => overview(ctx, req.query, res));
+  app.get("/api/skill-evals/marks", async (_req, res) => {
+    res.json({ marks: await readEvalMarks(ctx.root, { cwds: await ctx.cwds() }) });
+  });
   app.get("/api/skill-evals/runs/:id", (req, res) => oneRun(ctx, req.query, req.params.id, res));
   app.post("/api/skill-evals/runs", (req, res) => startRun(ctx, requestBody(req.body), res, "measure"));
   app.post("/api/skill-evals/improve", (req, res) => startRun(ctx, requestBody(req.body), res, "improve"));

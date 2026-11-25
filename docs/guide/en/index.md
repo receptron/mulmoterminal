@@ -273,6 +273,7 @@ installing Node.js / Claude Code / git / gh on macOS and Windows, the
    - [Feature list](feature-list.html) (every capability today, one line each with the release it arrived in)
 6. [Which coding agent](agents.html) (Claude Code, Codex, Antigravity, Grok, Muse, Copilot and Cursor: what each needs and how each resumes)
 7. [Isolating work in a git worktree](worktree.html) (several agents on one repository without colliding)
+   - [Hand an issue to agents and get it merged](issue-to-merge.html) (one issue or several: implement, review in another session, merge)
 8. [Making the cells talk to each other](conversation.html) (one-turn handoffs, round tables, the room)
 9. [Configuration](config.html) (settings modal · `config.json` · `.mulmoterminal.json` · the **DSL**)
    - [Customizing the header](header.html) (your own buttons and chips, from the beginning) and the [header reference](header-reference.html) (variables, `when`, merging)

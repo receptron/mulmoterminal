@@ -10,7 +10,7 @@ const avoidCase: SkillEvalCase = { id: "avoid", title: "avoid", kind: "avoid", p
 function attempt(caseId: string, arm: "with" | "without", round: number, pass: boolean, extra: Partial<SkillEvalAttempt> = {}): SkillEvalAttempt {
   return {
     ...{ caseId, arm, round, pass, skillInvoked: arm === "with", costUsd: 1, gradingCostUsd: 0, durationMs: 0 },
-    ...{ finalText: "", checkOutput: "", denied: [], error: null, model: "haiku" },
+    ...{ finalText: "", checkOutput: "", denied: [], error: null, model: "haiku", reusedFrom: "" },
     ...extra,
   };
 }
