@@ -83,11 +83,12 @@ describe("authorWriteRules", () => {
     const base = tmp();
     const root = path.join(base, "skill-evals");
     const evalDir = path.join(root, "weekly");
-    const real = path.join(realpathSync(base), "skill-evals", "weekly");
+    // The native resolver, as the code uses: on Windows it also expands a short name like RUNNER~1.
+    const real = path.join(realpathSync.native(base), "skill-evals", "weekly");
     const rules = await authorWriteRules(evalDir, root);
     expect(rules).toEqual([...new Set([...evalDirWriteRules(evalDir, root), ...evalDirWriteRules(real, path.dirname(real))])]);
     expect(rules).toContain(`Write(/${claudeRulePath(real)}/**)`);
-    expect(realpathSync(root)).toBe(path.dirname(real));
+    expect(realpathSync.native(root)).toBe(path.dirname(real));
   });
 
   it("names nothing for a folder that is a link to somewhere else, or one outside the root", async () => {
