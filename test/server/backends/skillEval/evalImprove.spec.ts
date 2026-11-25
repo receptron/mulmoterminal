@@ -264,6 +264,19 @@ describe("improving a skill", () => {
     expect((await env.call("/api/skill-evals/improve", jsonPost(env.fields))).status).toBe(400);
   });
 
+  it("stops taking a measurement as the starting point once a task's starting files change", async () => {
+    const env = setUp();
+    const filesDir = path.join(env.evalDir, "files", "plain");
+    mkdirSync(filesDir, { recursive: true });
+    writeFileSync(path.join(filesDir, "notes.md"), "Monday: met the team");
+    const baseline = await measure(env, "/api/skill-evals/runs");
+    const query = `/api/skill-evals?slug=weekly&dir=${encodeURIComponent(env.fields.dir)}`;
+    expect((await env.call(query)).body).toMatchObject({ baseline: { id: baseline?.id } });
+    writeFileSync(path.join(filesDir, "notes.md"), "Monday: met the client");
+    expect((await env.call(query)).body).toMatchObject({ baseline: null });
+    expect((await env.call("/api/skill-evals/improve", jsonPost(env.fields))).status).toBe(400);
+  });
+
   it("says whether the skill may be written over", async () => {
     const env = setUp();
     const overview = await env.call(`/api/skill-evals?slug=weekly&dir=${encodeURIComponent(env.fields.dir)}`);
