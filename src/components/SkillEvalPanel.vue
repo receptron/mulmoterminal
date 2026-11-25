@@ -8,6 +8,7 @@ import { useI18n } from "vue-i18n";
 import type { CatalogSkill, SkillSource } from "../../common/skillCatalog";
 import { freshAttempts, type SkillEvalOverview, type SkillEvalRun, type SkillEvalRunMode } from "../../common/skillEval";
 import { summarizeSkillEval, type SkillEvalSummary } from "../../common/skillEvalSummary";
+import { compareImprovement } from "../../common/skillEvalCompare";
 import { loadSkillEval, startSkillEvalAuthoring, startSkillEvalRun, stopSkillEvalRun } from "../composables/skillEvalApi";
 import { placeSpawnedChat } from "../composables/useSpawnedChat";
 import SkillEvalResult from "./SkillEvalResult.vue";
@@ -44,6 +45,7 @@ const comparedWith = computed(() => (overview.value?.runs ?? []).find((run) => r
 const baselineSummary = computed(() =>
   comparedWith.value ? summarizeSkillEval(comparedWith.value.cases, comparedWith.value.attempts, comparedWith.value.repeats) : null,
 );
+const comparison = computed(() => (comparedWith.value && latest.value ? compareImprovement(comparedWith.value, latest.value) : null));
 // Only while the run goes on: a writer that failed leaves the text empty too, and its cost is still shown.
 const improving = computed(() => latest.value?.candidateId != null && latest.value.skillText === "" && overview.value?.activeRunId === latest.value.id);
 // The SKILL.md measured last is not the one measured the time before: the two results are of different texts.
@@ -246,6 +248,7 @@ async function draft(): Promise<void> {
         :run="latest"
         :summary="latestSummary"
         :baseline-summary="baselineSummary"
+        :comparison="comparison"
         :editable="overview.editable"
         :base-text="comparedWith?.skillText ?? null"
         @adopted="onAdopted"

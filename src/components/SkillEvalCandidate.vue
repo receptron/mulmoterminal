@@ -8,6 +8,7 @@ import { useI18n } from "vue-i18n";
 import type { CatalogSkill, SkillSource } from "../../common/skillCatalog";
 import type { SkillEvalRun } from "../../common/skillEval";
 import type { SkillEvalSummary } from "../../common/skillEvalSummary";
+import type { SkillEvalComparison } from "../../common/skillEvalCompare";
 import { adoptSkillEvalCandidate } from "../composables/skillEvalApi";
 import { createDiffView } from "./cmDiffView";
 import { activeThemeVars } from "../composables/useTheme";
@@ -19,6 +20,8 @@ const props = defineProps<{
   run: SkillEvalRun;
   summary: SkillEvalSummary;
   baselineSummary: SkillEvalSummary | null;
+  /** Against the run it was written from, when that run is still listed. */
+  comparison: SkillEvalComparison | null;
   editable: boolean;
   /** The SKILL.md the improvement was written from, when that run is still listed. */
   baseText: string | null;
@@ -29,6 +32,11 @@ const { t, locale } = useI18n();
 const adopting = ref(false);
 const adoptNotice = ref<string | null>(null);
 const percent = (rate: number | null): string => (rate === null ? "—" : `${String(Math.round(rate * 100))}%`);
+const CHANGE_TONE: Record<SkillEvalComparison["change"], string> = { better: "text-ok", worse: "text-err-text", "no-evidence": "text-fg", pending: "text-dim" };
+const worseTitles = computed(() => {
+  const ids = new Set(props.comparison?.worseCaseIds ?? []);
+  return props.run.cases.filter((evalCase) => ids.has(evalCase.id)).map((evalCase) => evalCase.title);
+});
 const canAdopt = computed(() => props.editable && props.run.status === "done" && props.run.skillText !== "");
 
 // The change is shown as the improvement with what it took out in place (#3468): reading that is how someone
@@ -75,6 +83,12 @@ async function adopt(): Promise<void> {
     <template v-else>
       <p data-testid="skill-eval-compare" class="m-0 mb-1">
         {{ t("skillsView.eval.improve.compare", { before: percent(baselineSummary?.with.passRate ?? null), after: percent(summary.with.passRate) }) }}
+      </p>
+      <p v-if="comparison" data-testid="skill-eval-change" class="m-0 mb-1" :class="CHANGE_TONE[comparison.change]">
+        {{ t(`skillsView.eval.improve.change.${comparison.change}`, { spread: percent(comparison.spread) }) }}
+      </p>
+      <p v-if="worseTitles.length > 0" data-testid="skill-eval-worse-tasks" class="m-0 mb-1 text-err-text">
+        {{ t("skillsView.eval.improve.worseTasks", { tasks: worseTitles.join(", ") }) }}
       </p>
       <p v-if="run.note" class="m-0 mb-1 whitespace-pre-wrap text-secondary">{{ run.note }}</p>
       <p class="m-0 mb-2 text-dim">{{ t("skillsView.eval.improve.overfit") }}</p>

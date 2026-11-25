@@ -2,6 +2,7 @@
 // measured so far, so someone new to it is not left choosing among four buttons of equal weight. Pure.
 import type { SkillEvalOverview, SkillEvalRun } from "../../common/skillEval";
 import { summarizeSkillEval } from "../../common/skillEvalSummary";
+import { compareImprovement } from "../../common/skillEvalCompare";
 
 export type SkillEvalStep = "draft" | "measure" | "improve" | "adopt" | "ladder";
 
@@ -17,17 +18,9 @@ export interface SkillEvalNext {
 const NOTHING: SkillEvalNext = { step: null, reason: null };
 const next = (step: Exclude<SkillEvalStep, "draft">, reason: SkillEvalNextReason = step): SkillEvalNext => ({ step, reason });
 
-const withRate = (run: SkillEvalRun): number | null => summarizeSkillEval(run.cases, run.attempts, run.repeats).with.passRate;
-
 /** The improvements written from `baseline`, finished on the same tasks, the newest first. */
 const improvementsOf = (overview: SkillEvalOverview, baseline: SkillEvalRun): SkillEvalRun[] =>
   overview.runs.filter((run) => run.baseRunId === baseline.id && run.status === "done" && run.skillText !== "" && run.setHash === overview.setHash);
-
-function passesMore(improvement: SkillEvalRun, baseline: SkillEvalRun): boolean {
-  const after = withRate(improvement);
-  const before = withRate(baseline);
-  return after !== null && before !== null && after > before;
-}
 
 /** A search for the cheapest model already finished for the skill and tasks as they are now. */
 const searched = (overview: SkillEvalOverview, baseline: SkillEvalRun): boolean =>
@@ -38,10 +31,10 @@ function afterHelping(overview: SkillEvalOverview, baseline: SkillEvalRun): Skil
   return (overview.estimate?.ladderAttempts ?? 0) > 0 ? next("ladder") : NOTHING;
 }
 
-/** The improvement on screen — the newest run — when it was written from `baseline` and passes more than it. */
+/** The improvement on screen — the newest run — when it was written from `baseline` and passes more than chance would. */
 function betterImprovement(overview: SkillEvalOverview, baseline: SkillEvalRun): boolean {
   const [newest] = overview.runs;
-  return newest !== undefined && improvementsOf(overview, baseline).includes(newest) && passesMore(newest, baseline);
+  return newest !== undefined && improvementsOf(overview, baseline).includes(newest) && compareImprovement(baseline, newest).change === "better";
 }
 
 function afterNotHelping(overview: SkillEvalOverview, baseline: SkillEvalRun): SkillEvalNext {

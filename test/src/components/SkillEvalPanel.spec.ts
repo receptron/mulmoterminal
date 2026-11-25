@@ -253,12 +253,40 @@ describe("SkillEvalPanel", () => {
     expect(wrapper.text()).toContain("$0.25");
   });
 
+  it("says an improvement passed less often, naming the tasks, and still lets it be adopted", async () => {
+    const worse = run(false, false, { id: "1795000000001-bbbbbbbb", candidateId: "1795000000001-bbbbbbbb", skillText: "worse" });
+    worse.baseRunId = "1795000000000-aaaaaaaa";
+    overview = { ...base, set, runs: [worse, run(true, false)] };
+    const wrapper = await mountPanel();
+    expect(wrapper.find("[data-testid=skill-eval-change]").text()).toBe(
+      "The improvement passes less often than the skill it was written from, by more than the runs vary.",
+    );
+    expect(wrapper.find("[data-testid=skill-eval-worse-tasks]").text()).toBe(`Tasks it passed less often: ${evalCase.title}`);
+    expect(wrapper.find("[data-testid=skill-eval-adopt]").exists()).toBe(true);
+  });
+
+  it("says nothing about the change when the run it was written from is no longer listed", async () => {
+    const orphan = run(true, false, {
+      id: "1795000000001-bbbbbbbb",
+      candidateId: "1795000000001-bbbbbbbb",
+      skillText: "better",
+      baseRunId: "1795000000000-cccccccc",
+    });
+    overview = { ...base, set, runs: [orphan] };
+    const wrapper = await mountPanel();
+    expect(wrapper.find("[data-testid=skill-eval-change]").exists()).toBe(false);
+  });
+
   it("sets a measured improvement beside the skill's own result, and adopts it", async () => {
     const improved = run(true, false, { id: "1795000000001-bbbbbbbb", candidateId: "1795000000001-bbbbbbbb", skillText: "better", note: "Shortened it." });
     improved.baseRunId = "1795000000000-aaaaaaaa";
     overview = { ...base, set, runs: [improved, run(false, false)] };
     const wrapper = await mountPanel();
     expect(wrapper.find("[data-testid=skill-eval-compare]").text()).toBe("Pass rate with the skill: current 0% → improvement 100%");
+    expect(wrapper.find("[data-testid=skill-eval-change]").text()).toBe(
+      "The improvement passes more often than the skill it was written from, by more than the runs vary.",
+    );
+    expect(wrapper.find("[data-testid=skill-eval-worse-tasks]").exists()).toBe(false);
     expect(wrapper.find("[data-testid=skill-eval-candidate-text]").text()).toBe("better");
     await wrapper.find("[data-testid=skill-eval-adopt]").trigger("click");
     await flushPromises();
