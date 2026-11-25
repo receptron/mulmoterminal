@@ -91,10 +91,26 @@ const readTextOrEmpty = (file: string): string => {
   }
 };
 
+// Listed only where it really is inside the tree: a link can lead out of it — by way of `..`, up to
+// the system temp folder — and listing that walked every other program's files (#3504). A path that
+// leads out is still a candidate to query; only its children are not gathered. `.native`: the JS
+// realpath cancels a target's `<link>/..` on paper, so it answered "inside" for the very link that
+// the OS followed out.
+const isInsideTree = (realTop: string, folder: string): boolean => {
+  try {
+    const real = realpathSync.native(folder);
+    return real === realTop || real.startsWith(realTop + path.sep);
+  } catch {
+    return false;
+  }
+};
+
 function probeTree(random: SeededRandom, top: string): string[] {
   const { root, outside, entries } = buildTree(random, top);
   const named = [root, ...entries.filter((entry) => entry.startsWith(root + path.sep))];
-  const candidates = [...named, ...named.flatMap(spelledChildren).flatMap((child) => [child, ...spelledChildren(child)])];
+  const realTop = realpathSync.native(top); // the same spelling the check compares against, Windows short names included
+  const childrenInTree = (folder: string): string[] => (isInsideTree(realTop, folder) ? spelledChildren(folder) : []);
+  const candidates = [...named, ...named.flatMap(childrenInTree).flatMap((child) => [child, ...childrenInTree(child)])];
   const problems = Array.from({ length: QUERIES_PER_TREE }, (_, query) => {
     const picked = random.pick(candidates);
     const target = random.fraction() < 0.5 ? path.join(picked, `new${query}`) : picked;
