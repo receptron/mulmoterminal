@@ -21,7 +21,12 @@ export const skillsViewEn = {
       detailNoDate: "Used in {count} Claude conversations.",
       detailNone: "No Claude conversation on record used this skill.",
     },
+    attention: "Needs attention",
+    attentionHint:
+      "Only the skills an evaluation found not helping, the ones with test tasks whose current SKILL.md has not been measured, and the ones conversations use that have no test tasks yet.",
+    attentionEmpty: "No skill needs attention.",
     eval: {
+      mark: { helps: "helps", hurts: "makes worse", "no-evidence": "no difference", pending: "no verdict", unmeasured: "not measured" },
       title: "Does it help?",
       intro: "Find out whether results are better with this skill: small test tasks are solved with and without it, and compared. Start by drafting the tasks.",
       draft: "Draft test tasks",

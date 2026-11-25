@@ -21,7 +21,12 @@ export const skillsViewJa = {
       detailNoDate: "Claude の会話 {count} 件で使われました。",
       detailNone: "Claude の会話の記録には、このスキルが使われたものがありません。",
     },
+    attention: "手をつけるもの",
+    attentionHint:
+      "評価で効いていなかったスキル、課題はあるのに今の SKILL.md をまだ測っていないスキル、会話で使われているのに課題がまだないスキルだけを出します。",
+    attentionEmpty: "手をつけるスキルはありません。",
     eval: {
+      mark: { helps: "効いている", hurts: "逆効果", "no-evidence": "差なし", pending: "判定待ち", unmeasured: "未測定" },
       title: "効いているかを測る",
       intro: "このスキルがあると結果が良くなるのかを、小さな課題をスキルありとなしで解かせて比べます。まず課題を作ります。",
       draft: "評価の課題を作る",

@@ -21,7 +21,11 @@ export const skillsViewZhCN = {
       detailNoDate: "在 {count} 个 Claude 对话中使用过。",
       detailNone: "Claude 的对话记录中没有使用过此技能。",
     },
+    attention: "需要处理",
+    attentionHint: "只显示评估中没有效果的技能、有任务但现在的 SKILL.md 还没测量的技能，以及在对话中使用却还没有任务的技能。",
+    attentionEmpty: "没有需要处理的技能。",
     eval: {
+      mark: { helps: "有效", hurts: "反效果", "no-evidence": "无差异", pending: "待判定", unmeasured: "未测量" },
       title: "测一测是否有效",
       intro: "让小任务分别在有技能和没有技能时完成，比较结果是否变好。先创建任务。",
       draft: "创建评估任务",

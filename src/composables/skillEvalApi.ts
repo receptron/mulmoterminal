@@ -2,6 +2,8 @@
 // starting and stopping a run, and starting the cell that drafts the test tasks with the user.
 import type { SkillSource } from "../../common/skillCatalog";
 import { skillEvalOverviewSchema, type SkillEvalOverview, type SkillEvalRunMode } from "../../common/skillEval";
+import { z } from "zod";
+import { markKey, skillEvalMarkEntrySchema, type SkillEvalMark } from "../../common/skillEvalMark";
 import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
 
@@ -77,5 +79,19 @@ export async function adoptSkillEvalCandidate(source: SkillSource, slug: string,
     return { kind: "failed", error: typeof answer.error === "string" ? answer.error : "" };
   } catch {
     return { kind: "failed", error: "" };
+  }
+}
+
+const marksAnswerSchema = z.object({ marks: z.array(skillEvalMarkEntrySchema) });
+
+/** Each evaluated skill's mark, by `markKey` (#3467); null when they could not be read, so the list shows none. */
+export async function loadSkillEvalMarks(): Promise<ReadonlyMap<string, SkillEvalMark> | null> {
+  try {
+    const res = await fetchWithTimeout("/api/skill-evals/marks", {}, SLOW_COMMAND_TIMEOUT_MS);
+    if (!res.ok) return null;
+    const parsed = marksAnswerSchema.safeParse(await jsonBody(res));
+    return parsed.success ? new Map(parsed.data.marks.map((entry) => [markKey(entry.id, entry.projectDir), entry.mark])) : null;
+  } catch {
+    return null;
   }
 }

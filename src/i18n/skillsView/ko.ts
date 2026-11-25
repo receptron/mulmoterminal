@@ -21,7 +21,11 @@ export const skillsViewKo = {
       detailNoDate: "Claude 대화 {count}건에서 사용되었습니다.",
       detailNone: "Claude 대화 기록에는 이 스킬을 사용한 것이 없습니다.",
     },
+    attention: "손볼 것",
+    attentionHint: "평가에서 효과가 없던 스킬, 과제는 있는데 지금의 SKILL.md를 아직 측정하지 않은 스킬, 대화에서 쓰이는데 과제가 아직 없는 스킬만 보여 줍니다.",
+    attentionEmpty: "손볼 스킬이 없습니다.",
     eval: {
+      mark: { helps: "효과 있음", hurts: "역효과", "no-evidence": "차이 없음", pending: "판정 대기", unmeasured: "미측정" },
       title: "효과가 있는지 측정",
       intro: "작은 과제를 스킬이 있을 때와 없을 때 풀게 해서 결과가 좋아지는지 비교합니다. 먼저 과제를 만듭니다.",
       draft: "평가 과제 만들기",
