@@ -5,6 +5,7 @@ import path from "node:path";
 import { boundedLines } from "./bounded-lines.js";
 import { LIBRARY_FILE_TEXT_MAX, type LibraryFileText } from "../../../common/libraryFiles.js";
 import { createFileHistoryFold, isBackupFileName, type FileHistoryEntry } from "./file-history.js";
+import { isSameIdentity } from "../../files/fileIdentity.js";
 
 /** Only lines that ARE a file-history record are parsed — they begin so — and a turn that merely
  *  mentions one is not. A record is a few kilobytes even for many files; past the limit a line is a
@@ -63,11 +64,10 @@ export async function readBoundedText(file: string): Promise<LibraryFileText> {
     // tracked. And the opened file must be the one looked at, or a swap in between gets through.
     // Linked DIRECTORIES above it are followed on purpose — macOS's /tmp is one, a project folder
     // often is, and the agent edited the file through that same path.
-    const seen = await fs.lstat(file);
+    const seen = await fs.lstat(file, { bigint: true });
     if (!seen.isFile()) return { text: null, reason: "unreadable" };
     handle = await fs.open(file, "r");
-    const opened = await handle.stat();
-    if (opened.dev !== seen.dev || opened.ino !== seen.ino) return { text: null, reason: "unreadable" };
+    if (!isSameIdentity(seen, await handle.stat({ bigint: true }))) return { text: null, reason: "unreadable" };
     const buffer = Buffer.alloc(LIBRARY_FILE_TEXT_MAX + 1);
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
     if (bytesRead > LIBRARY_FILE_TEXT_MAX) return { text: null, reason: "too-large" };

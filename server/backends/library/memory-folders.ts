@@ -12,6 +12,7 @@ import {
   isProjectSlug,
 } from "../../../common/libraryMemory.js";
 import { directoriesByFolder } from "./project-folders.js";
+import { isSameIdentity } from "../../files/fileIdentity.js";
 
 /** Folders read at once: a machine has thousands of project folders, most with no memory at all. */
 const FOLDERS_AT_ONCE = 64;
@@ -36,9 +37,9 @@ export const isSpeltAsOnDisk = async (folder: string, name: string): Promise<boo
  *  case-sensitive one (Linux). */
 export async function isTheIndex(folder: string, name: string): Promise<boolean> {
   if (name.toLowerCase() !== MEMORY_INDEX_FILE.toLowerCase()) return false;
-  const statOf = (file: string) => fs.lstat(path.join(folder, file)).catch(() => null);
+  const statOf = (file: string) => fs.lstat(path.join(folder, file), { bigint: true }).catch(() => null);
   const [file, index] = await Promise.all([statOf(name), statOf(MEMORY_INDEX_FILE)]);
-  return file !== null && index !== null && file.dev === index.dev && file.ino === index.ino;
+  return file !== null && index !== null && isSameIdentity(file, index);
 }
 
 /** What the list reads of each memory: its frontmatter, which opens the file — read in steps until its
@@ -47,19 +48,18 @@ export async function isTheIndex(folder: string, name: string): Promise<boolean>
 export const MEMORY_HEAD_STEP_BYTES = 8 * 1024;
 export const MEMORY_HEAD_MAX_BYTES = 64 * 1024;
 
-/** Whether two looks at a path saw one file: the same device and inode. */
-export const isSameFile = (a: { dev: number; ino: number }, b: { dev: number; ino: number }): boolean => a.dev === b.dev && a.ino === b.ino;
-
 /** A regular file opened for reading, or null: not a link, and the handle is the very file that was
  *  checked — a link swapped in between the check and the open is refused. Every read in this file
  *  goes through here. */
 export async function openRegularFile(file: string): Promise<{ handle: fs.FileHandle; mtimeMs: number } | null> {
-  const seen = await fs.lstat(file).catch(() => null);
+  const seen = await fs.lstat(file, { bigint: true }).catch(() => null);
   if (seen === null || !seen.isFile()) return null;
   const handle = await fs.open(file, "r").catch(() => null);
   if (handle === null) return null;
-  const opened = await handle.stat().catch(() => null);
-  if (opened !== null && isSameFile(seen, opened)) return { handle, mtimeMs: seen.mtimeMs };
+  const opened = await handle.stat({ bigint: true }).catch(() => null);
+  // The time as a number from the handle: the bigint stats carry it only in whole milliseconds.
+  const timed = opened !== null && isSameIdentity(seen, opened) ? await handle.stat().catch(() => null) : null;
+  if (timed !== null) return { handle, mtimeMs: timed.mtimeMs };
   await handle.close();
   return null;
 }

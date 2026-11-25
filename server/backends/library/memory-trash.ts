@@ -14,7 +14,8 @@ import path from "node:path";
 import { MEMORY_INDEX_FILE } from "../../../common/libraryMemory.js";
 import { trashEntry, type TrashLayout } from "../../files/tree-ops.js";
 import { readBoundedText } from "./file-history-read.js";
-import { isSameFile, memoryFileNames } from "./memory-folders.js";
+import { memoryFileNames } from "./memory-folders.js";
+import { isSameIdentity, type FileIdentity } from "../../files/fileIdentity.js";
 import { withEntryBack, withoutEntry, type RemovedIndexLine } from "./memory-index-lines.js";
 import { isFaithfulText, memoryVersion, replaceKeepingMode, serialize, type Replace } from "./memory-write.js";
 import { linkPlan, type LinkRewrite } from "./memory-merge-links.js";
@@ -45,7 +46,7 @@ interface Undo extends Moved {
   /** The index as it was, and the version this delete left it at: unchanged since, it is put back whole. */
   index: { before: string; written: string; removed: RemovedIndexLine[] } | null;
   /** The Trash entry this delete made: the Trash may be emptied and the name taken by another file. */
-  entry: { dev: number; ino: number };
+  entry: FileIdentity;
   /** A merge's other memory, which took this one's text: put back as it was when nothing has changed it since. */
   merged: { into: string; before: string; written: string } | null;
   /** The other memories a merge pointed this one's links away from: each put back when unchanged since. */
@@ -122,7 +123,7 @@ async function trashChecked({ file, index, expected, layout, now, steps }: Trash
   const kept = await takeOutOfIndex(steps.replace, index, moved);
   forget(now.getTime());
   const id = randomUUID();
-  const { dev, ino } = await lstat(moved.trashed);
+  const { dev, ino } = await lstat(moved.trashed, { bigint: true });
   undos.set(id, { ...moved, index: kept, entry: { dev, ino }, merged: null, links: [], fileBack: false, at_ms: now.getTime() });
   return { kind: "trashed", undo: id };
 }
@@ -179,8 +180,9 @@ async function putBack(moved: Moved): Promise<MemoryRestoreResult> {
 
 /** Removes `file` only while it is still the same file as `kept`: one the agent put there since stays. */
 async function unlinkIfSame(file: string, kept: string): Promise<void> {
-  const [named, original] = await Promise.all([lstat(file).catch(() => null), lstat(kept).catch(() => null)]);
-  if (named !== null && original !== null && named.dev === original.dev && named.ino === original.ino) await rm(file, { force: true });
+  const statOf = (at: string) => lstat(at, { bigint: true }).catch(() => null);
+  const [named, original] = await Promise.all([statOf(file), statOf(kept)]);
+  if (named !== null && original !== null && isSameIdentity(named, original)) await rm(file, { force: true });
 }
 
 const exists = async (file: string): Promise<boolean> => {
@@ -236,8 +238,8 @@ async function restoreChecked(id: string, undo: Undo, replace: Replace): Promise
 
 async function fileBack(id: string, undo: Undo, replace: Replace): Promise<MemoryRestoreResult> {
   const index = path.join(path.dirname(undo.file), MEMORY_INDEX_FILE);
-  const entry = await lstat(undo.trashed).catch(() => null);
-  const outcome = entry !== null && isSameFile(entry, undo.entry) ? await linkBack(undo) : "gone";
+  const entry = await lstat(undo.trashed, { bigint: true }).catch(() => null);
+  const outcome = entry !== null && isSameIdentity(entry, undo.entry) ? await linkBack(undo) : "gone";
   if (outcome === "gone") undos.delete(id);
   if (outcome !== "restored") return outcome;
   try {

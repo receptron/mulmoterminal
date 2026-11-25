@@ -13,7 +13,6 @@ import { memoryVersion } from "../../../server/backends/library/memory-write";
 import { encodeProjectDirName } from "../../../server/session/project-dir";
 import {
   inBatches,
-  isSameFile,
   listMemoryProjects,
   openRegularFile,
   MEMORY_FOLDERS_REUSE_MS,
@@ -200,12 +199,6 @@ describe("opening a memory file", () => {
     expect(await openRegularFile(path.join(folder, "via-link.md"))).toBeNull();
     expect(await openRegularFile(folder)).toBeNull();
     expect(await openRegularFile(path.join(folder, "missing.md"))).toBeNull();
-  });
-
-  it("takes the file opened as the one checked only when device and inode both agree", () => {
-    expect(isSameFile({ dev: 1, ino: 2 }, { dev: 1, ino: 2 })).toBe(true);
-    expect(isSameFile({ dev: 1, ino: 2 }, { dev: 1, ino: 3 })).toBe(false); // swapped in between
-    expect(isSameFile({ dev: 1, ino: 2 }, { dev: 9, ino: 2 })).toBe(false);
   });
 
   it.skipIf(process.platform === "win32")("leaves out an index that is a link", async () => {
