@@ -56,7 +56,7 @@ export const skillsViewEn = {
       improve: {
         start: "Improve and measure",
         confirm:
-          "An AI writes an improved SKILL.md from the last result, then it is measured on the same tasks in {attempts} runs, spending at most {max} (usually far less). Your SKILL.md is not changed. Start?",
+          "An AI writes an improved SKILL.md from the last result, then it is measured on the same tasks with the skill in {attempts} runs (the runs without it are reused from the last result), spending at most {max} (usually far less). Your SKILL.md is not changed. Start?",
         writing: "Writing an improvement…",
         running: "Measuring the improvement… {done} / {total}",
         title: "Improvement",
@@ -71,6 +71,7 @@ export const skillsViewEn = {
         adoptFailed: "Could not adopt it. {error}",
         readOnly: "This skill cannot be changed here. Read the improvement and edit the skill where it lives.",
         tag: "improvement",
+        reused: "The runs without the skill are the ones from the measurement this improvement was written from: they were not run again.",
       },
       ladder: {
         start: "Find the cheapest model",
