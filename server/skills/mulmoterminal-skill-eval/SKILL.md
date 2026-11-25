@@ -31,6 +31,9 @@ Draft **3 to 5 "use" tasks** and **exactly 1 "avoid" task**.
 
 - **use** — a request the skill should make better. Real, small, finishable in a few minutes by an
   agent working alone in an empty folder. Vary them: an easy one, a typical one, an awkward one.
+  Each should be one that an agent without the skill is likely to get wrong, because the result depends
+  on something the skill says: a task anyone passes either way cannot show what the skill does, and the
+  Skills screen will name it as one.
 - **avoid** — a request that looks a little like the skill's area but where using the skill would be
   wrong. It catches a skill that fires on everything.
 

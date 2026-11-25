@@ -13,6 +13,10 @@ const VERDICT_TONE: Record<SkillEvalSummary["verdict"], string> = { helps: "text
 const percent = (rate: number | null): string => (rate === null ? "—" : `${String(Math.round(rate * 100))}%`);
 const usd = (value: number | null): string => (value === null ? "—" : `$${value.toFixed(3)}`);
 
+const eitherWayTitles = computed(() => {
+  const ids = new Set(props.summary.passesEitherWay);
+  return props.run.cases.filter((evalCase) => ids.has(evalCase.id)).map((evalCase) => evalCase.title);
+});
 const reused = computed(() => props.run.attempts.some((attempt) => attempt.reusedFrom !== ""));
 const perCase = computed(() =>
   props.run.cases.map((evalCase) => {
@@ -22,6 +26,7 @@ const perCase = computed(() =>
     const passed = (arm: "with" | "without") => of(arm).filter(counts).length;
     return {
       evalCase,
+      eitherWay: props.summary.passesEitherWay.includes(evalCase.id),
       withText: `${String(passed("with"))}/${String(of("with").length)}`,
       withoutText: evalCase.kind === "use" ? `${String(passed("without"))}/${String(of("without").length)}` : "",
     };
@@ -61,6 +66,9 @@ const perCase = computed(() =>
       <li v-if="summary.passesWithoutInvoking > 0">{{ t("skillsView.eval.passedUnread", { count: summary.passesWithoutInvoking }) }}</li>
       <li v-if="summary.avoid.attempts > 0">{{ t("skillsView.eval.avoid", { invoked: summary.avoid.invoked, attempts: summary.avoid.attempts }) }}</li>
       <li v-if="summary.fewCases">{{ t("skillsView.eval.fewCases") }}</li>
+      <li v-if="eitherWayTitles.length > 0" data-testid="skill-eval-either-way">
+        {{ t("skillsView.eval.passesEitherWay", { tasks: eitherWayTitles.join(", ") }) }}
+      </li>
       <li v-if="skillTextChanged">{{ t("skillsView.eval.skillChanged") }}</li>
       <li v-if="reused" data-testid="skill-eval-reused">{{ t("skillsView.eval.improve.reused") }}</li>
       <li v-if="run.interruptedBy" data-testid="skill-eval-interrupted-by" class="text-err-text">
@@ -80,7 +88,8 @@ const perCase = computed(() =>
         <tbody>
           <tr v-for="row in perCase" :key="row.evalCase.id" data-testid="skill-eval-case">
             <td class="py-0.5 pr-2">
-              {{ row.evalCase.title }}<span v-if="row.evalCase.kind === 'avoid'" class="ml-1 text-dim">{{ t("skillsView.eval.avoidTag") }}</span>
+              {{ row.evalCase.title }}<span v-if="row.evalCase.kind === 'avoid'" class="ml-1 text-dim">{{ t("skillsView.eval.avoidTag") }}</span
+              ><span v-if="row.eitherWay" class="ml-1 text-dim">{{ t("skillsView.eval.eitherWayTag") }}</span>
             </td>
             <td class="py-0.5 pr-2">{{ row.withText }}</td>
             <td class="py-0.5">{{ row.withoutText }}</td>

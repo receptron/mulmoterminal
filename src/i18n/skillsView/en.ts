@@ -53,11 +53,14 @@ export const skillsViewEn = {
       passedUnread: "{count} pass(es) that never read the skill are not counted.",
       avoid: "Times the skill was read on the task where it should not be: {invoked} / {attempts}",
       fewCases: 'With this few tasks a small difference cannot be seen. "No evidence" does not mean it has no effect.',
+      passesEitherWay:
+        "Passed every time with the skill and without it: {tasks}. A task like this cannot show what the skill does; change it so that only the skill's own instructions make it pass, or replace it.",
       skillChanged: "The SKILL.md differs from the one measured last time.",
       spent: "This evaluation cost {cost}, grading included.",
       interruptedBy: "It stopped partway because something failed: {reason}",
       perCase: "Passes per task",
       avoidTag: "(should not use)",
+      eitherWayTag: "(passes either way)",
       history: {
         rates: "with the skill {with}, without {without}",
         otherText: "measured another SKILL.md",

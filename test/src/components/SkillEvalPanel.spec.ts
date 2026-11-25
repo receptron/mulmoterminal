@@ -136,6 +136,17 @@ describe("SkillEvalPanel", () => {
     expect(wrapper.find("[data-testid=skill-eval-without-rate]").text()).toBe("0%");
   });
 
+  it("names a task that passed with the skill and without it alike, and marks it among the tasks", async () => {
+    overview = { ...base, set, runs: [run(true, true)] };
+    const wrapper = await mountPanel();
+    expect(wrapper.find("[data-testid=skill-eval-either-way]").text()).toContain(`Passed every time with the skill and without it: ${evalCase.title}.`);
+    expect(wrapper.find("[data-testid=skill-eval-case]").text()).toContain("(passes either way)");
+    overview = { ...base, set, runs: [run(true, false)] };
+    const other = await mountPanel();
+    expect(other.find("[data-testid=skill-eval-either-way]").exists()).toBe(false);
+    expect(other.find("[data-testid=skill-eval-case]").text()).not.toContain("(passes either way)");
+  });
+
   it("says when the tasks file could not be read, and offers to fix it", async () => {
     overview = { ...base, set: null, estimate: null, setError: "cases: too small", runs: [] };
     const wrapper = await mountPanel();

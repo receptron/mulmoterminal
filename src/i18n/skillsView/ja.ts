@@ -53,11 +53,14 @@ export const skillsViewJa = {
       passedUnread: "スキルを読まずに合格したもの {count} 件は数えていません。",
       avoid: "使うべきでない課題で、スキルが読まれた回数: {invoked} / {attempts}",
       fewCases: "課題が少ないので、小さな差は見えません。差がないと出ても、効いていないとは限りません。",
+      passesEitherWay:
+        "スキルがあってもなくても毎回通った課題: {tasks}。こういう課題ではスキルの効き目が測れません。スキルの指示があるときだけ通るように直すか、別の課題に替えてください。",
       skillChanged: "前の結果とは SKILL.md の中身が違います。",
       spent: "この評価にかかった費用: {cost}（採点を含む）",
       interruptedBy: "途中で失敗して止まりました: {reason}",
       perCase: "課題ごとの合格数",
       avoidTag: "（使うべきでない）",
+      eitherWayTag: "（どちらでも通る）",
       history: {
         rates: "スキルあり {with}・なし {without}",
         otherText: "今とは別の SKILL.md",

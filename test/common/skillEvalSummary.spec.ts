@@ -149,4 +149,26 @@ describe("the set's plan", () => {
     expect(skillEvalSetSchema.safeParse({ version: 1, skill: "s", repeats: 9, cases: [useCase("a")] }).success).toBe(false);
     expect(skillEvalSetSchema.safeParse({ version: 1, skill: "s", cases: [] }).success).toBe(false);
   });
+
+  it("names the use tasks every attempt passed in both arms, and no others", () => {
+    const cases = [useCase("both"), useCase("withOnly"), useCase("unread"), useCase("once"), useCase("never"), avoidCase];
+    const attempts = [
+      ...[0, 1, 2].flatMap((round) => [attempt("both", "with", round, true), attempt("both", "without", round, true)]),
+      ...[0, 1, 2].flatMap((round) => [attempt("withOnly", "with", round, true), attempt("withOnly", "without", round, round !== 1)]),
+      // Passed with the skill only because it did the task without reading it: the skill was not tested.
+      ...[0, 1, 2].flatMap((round) => [attempt("unread", "with", round, true, { skillInvoked: round !== 0 }), attempt("unread", "without", round, true)]),
+      // Measured with the skill but not without it (an interrupted run): nothing to say yet.
+      attempt("once", "with", 0, true),
+      ...[0, 1, 2].map((round) => attempt("avoid", "with", round, true, { skillInvoked: false })),
+    ];
+    expect(summarizeSkillEval(cases, attempts, 3).passesEitherWay).toEqual(["both"]);
+    expect(summarizeSkillEval(cases, [], 3).passesEitherWay).toEqual([]);
+    // Stopped after two of three rounds: it has not passed every time yet.
+    const stopped = [0, 1].flatMap((round) => [attempt("both", "with", round, true), attempt("both", "without", round, true)]);
+    expect(summarizeSkillEval([useCase("both")], stopped, 3).passesEitherWay).toEqual([]);
+    expect(summarizeSkillEval([useCase("both")], stopped, 2).passesEitherWay).toEqual(["both"]);
+    // An improvement's no-skill attempts are its baseline's: still that task without the skill.
+    const improved = stopped.map((a) => (a.arm === "without" ? { ...a, reusedFrom: "1795000000000-aaaaaaaa" } : a));
+    expect(summarizeSkillEval([useCase("both")], improved, 2).passesEitherWay).toEqual(["both"]);
+  });
 });
