@@ -17,6 +17,7 @@ const input = (overrides: Partial<Parameters<typeof devUiRedirectLocation>[0]> =
 describe("dev UI redirect", () => {
   it("redirects browser routes to Vite when enabled", () => {
     expect(devUiRedirectLocation(input())).toBe("http://localhost:6856/github/board?tab=open");
+    expect(devUiRedirectLocation(input({ hostname: "::1" }))).toBe("http://[::1]:6856/github/board?tab=open");
   });
 
   it("keeps production and backend requests on the backend", () => {

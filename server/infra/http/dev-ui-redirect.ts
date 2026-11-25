@@ -11,11 +11,15 @@ export interface DevUiRedirectInput {
   clientPort: number;
 }
 
+function urlHostname(hostname: string): string {
+  return hostname.includes(":") && !hostname.startsWith("[") ? `[${hostname}]` : hostname;
+}
+
 /** Return the Vite URL for a browser navigation that must leave the backend. */
 export function devUiRedirectLocation(input: DevUiRedirectInput): string | null {
   const isApiPath = input.pathname === "/api" || input.pathname.startsWith("/api/");
   if (!input.enabled || input.method !== "GET" || !input.acceptsHtml || isApiPath) return null;
-  return `${input.protocol}://${input.hostname}:${input.clientPort}${input.originalUrl}`;
+  return `${input.protocol}://${urlHostname(input.hostname)}:${input.clientPort}${input.originalUrl}`;
 }
 
 export function mountDevUiRedirect(app: Pick<Express, "use">, clientPort: number): void {
