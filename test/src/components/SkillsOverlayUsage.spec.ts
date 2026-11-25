@@ -30,6 +30,8 @@ vi.mock("../../../src/composables/useSkillCatalog", () => ({
   loadSkillDoc: () => Promise.resolve(null),
   loadSkillUsage: () => new Promise<UsageAnswer>((resolve) => pending.push(resolve)),
 }));
+// The marks come from their own read (#3467); none here, so this spec never reaches a server.
+vi.mock("../../../src/composables/skillEvalApi", () => ({ loadSkillEvalMarks: () => Promise.resolve(null) }));
 const SkillsOverlay = (await import("../../../src/components/SkillsOverlay.vue")).default;
 
 const i18n = createI18n({ legacy: false, locale: "en", messages: { en: skillsViewEn } });

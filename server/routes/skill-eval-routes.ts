@@ -24,6 +24,7 @@ import {
 } from "../../common/skillEval.js";
 import { isEditableSkill } from "../backends/skills/skillEdit.js";
 import { adoptCandidate } from "../backends/skillEval/evalAdopt.js";
+import { readEvalMarks } from "../backends/skillEval/evalMarks.js";
 import type { SpawnIssueSession } from "../session/spawn/issue-session-spawn.js";
 import { commandRunner, type AttemptDeps } from "../backends/skillEval/evalAttempt.js";
 import { runClaude } from "../backends/skillEval/runClaude.js";
@@ -193,6 +194,9 @@ export function mountSkillEvalRoutes(app: Express, deps: SkillEvalRouteDeps = {}
     spawnSession: deps.spawnSession ?? null,
   };
   app.get("/api/skill-evals", (req, res) => overview(ctx, req.query, res));
+  app.get("/api/skill-evals/marks", async (_req, res) => {
+    res.json({ marks: await readEvalMarks(ctx.root, { cwds: await ctx.cwds() }) });
+  });
   app.get("/api/skill-evals/runs/:id", (req, res) => oneRun(ctx, req.query, req.params.id, res));
   app.post("/api/skill-evals/runs", (req, res) => startRun(ctx, requestBody(req.body), res, "measure"));
   app.post("/api/skill-evals/improve", (req, res) => startRun(ctx, requestBody(req.body), res, "improve"));

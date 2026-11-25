@@ -14,6 +14,8 @@ import SkillEvalPanel from "./SkillEvalPanel.vue";
 import { useSkillsView } from "../composables/useSkillsView";
 import { useEscapeToClose } from "../composables/useEscapeToClose";
 import { loadSkillCatalog, loadSkillDoc, loadSkillUsage } from "../composables/useSkillCatalog";
+import { loadSkillEvalMarks } from "../composables/skillEvalApi";
+import { markKey, wantsAttention, type SkillEvalMark } from "../../common/skillEvalMark";
 import type { SkillUsage } from "../../common/skillUsage";
 import { filterSkillCatalog, type CatalogSkill, type SkillCatalog, type SkillSource } from "../../common/skillCatalog";
 import { stripFrontmatter } from "../wikiMarkdown";
@@ -25,6 +27,10 @@ useEscapeToClose(isOpen, close);
 const catalog = shallowRef<SkillCatalog | null>(null);
 /** null until read, and when the Library's index could not say: then no count is shown at all. */
 const usage = shallowRef<ReadonlyMap<string, SkillUsage> | null>(null);
+/** Each evaluated skill's mark (#3467); null until read, and when they could not be: then none is shown. */
+const marks = shallowRef<ReadonlyMap<string, SkillEvalMark> | null>(null);
+/** Only the skills that call for something: evaluated and not helping, or used and never evaluated. */
+const attentionOnly = ref(false);
 const loadFailed = ref(false);
 const query = ref("");
 const chosenSourceKey = ref<string | null>(null);
@@ -44,7 +50,23 @@ const localSlugs = computed(
 );
 
 const sourceKey = (source: SkillSource): string => `${source.scope}:${source.plugin}:${source.dir}`;
-const shownSources = computed(() => (catalog.value ? filterSkillCatalog(catalog.value, query.value).sources : []));
+const markOf = (source: SkillSource, skill: CatalogSkill): SkillEvalMark | null =>
+  marks.value?.get(markKey(skill.id, source.scope === "project" ? source.dir : null)) ?? null;
+const keepsForAttention = (source: SkillSource, skill: CatalogSkill): boolean => wantsAttention(markOf(source, skill), usageOf(skill) !== null);
+const shownSources = computed(() => {
+  const found = catalog.value ? filterSkillCatalog(catalog.value, query.value).sources : [];
+  if (!attentionOnly.value) return found;
+  return found
+    .map((source) => ({ ...source, skills: source.skills.filter((skill) => keepsForAttention(source, skill)) }))
+    .filter((source) => source.skills.length > 0);
+});
+const MARK_TONE: Record<SkillEvalMark, string> = {
+  helps: "text-ok",
+  hurts: "text-err-text",
+  "no-evidence": "text-warn",
+  pending: "text-dim",
+  unmeasured: "text-dim",
+};
 // The chosen place while the search still matches something in it, else the first one that does —
 // so typing a query never leaves the middle column showing a place with nothing in it.
 const currentSource = computed(() => shownSources.value.find((source) => sourceKey(source) === chosenSourceKey.value) ?? shownSources.value[0] ?? null);
@@ -70,6 +92,13 @@ function usageDetail(skill: CatalogSkill): string {
 // Apart from the catalog, so a slow index never holds the list back. Each opening counts as a new
 // read: an answer for an earlier one that arrives late must not replace a newer one.
 let usageRead = 0;
+let marksRead = 0;
+async function refreshMarks(): Promise<void> {
+  const read = ++marksRead;
+  const answer = await loadSkillEvalMarks();
+  if (read === marksRead) marks.value = answer;
+}
+
 async function refreshUsage(): Promise<void> {
   const read = ++usageRead;
   const answer = await loadSkillUsage();
@@ -79,8 +108,10 @@ async function refreshUsage(): Promise<void> {
 async function refresh(): Promise<void> {
   catalog.value = null;
   usage.value = null;
+  marks.value = null;
   loadFailed.value = false;
   void refreshUsage();
+  void refreshMarks();
   const read = await loadSkillCatalog();
   catalog.value = read;
   loadFailed.value = read === null;
@@ -122,6 +153,7 @@ function onSaved(text: string, version: string): void {
 }
 
 async function reload(): Promise<void> {
+  void refreshMarks();
   const current = picked.value;
   if (current !== null) await pick(current.source, current.skill);
 }
@@ -154,13 +186,27 @@ async function reload(): Promise<void> {
         :aria-label="t('skillsView.search')"
         class="w-[320px] max-w-[50vw] rounded-[4px] border border-border bg-base px-2 py-1 font-sans text-[12px] text-fg"
       />
+      <button
+        v-if="mode === 'local' && marks"
+        type="button"
+        data-testid="skills-attention"
+        class="cursor-pointer rounded-[4px] border border-border px-2 py-1 font-sans text-[12px] hover:bg-hover hover:text-fg"
+        :class="attentionOnly ? 'bg-hover text-fg' : 'bg-transparent text-secondary'"
+        :aria-pressed="attentionOnly"
+        :data-tip="t('skillsView.attentionHint')"
+        @click="attentionOnly = !attentionOnly"
+      >
+        {{ t("skillsView.attention") }}
+      </button>
     </template>
 
     <SkillsShPane v-if="mode === 'remote'" :local-slugs="localSlugs" />
     <p v-else-if="loadFailed" class="m-0 p-4 font-sans text-[13px] text-err-text">{{ t("skillsView.loadFailed") }}</p>
     <p v-else-if="!catalog" class="m-0 p-4 font-sans text-[13px] text-dim">{{ t("skillsView.loading") }}</p>
     <p v-else-if="!catalog.sources.length" class="m-0 p-4 font-sans text-[13px] text-dim">{{ t("skillsView.empty") }}</p>
-    <p v-else-if="!shownSources.length" class="m-0 p-4 font-sans text-[13px] text-dim">{{ t("skillsView.noMatch") }}</p>
+    <p v-else-if="!shownSources.length" data-testid="skills-no-match" class="m-0 p-4 font-sans text-[13px] text-dim">
+      {{ attentionOnly ? t("skillsView.attentionEmpty") : t("skillsView.noMatch") }}
+    </p>
 
     <div v-else class="flex min-h-0 flex-1">
       <nav class="w-[260px] flex-none overflow-y-auto border-r border-border bg-panel p-1" :aria-label="t('skillsView.sources')">
@@ -195,9 +241,20 @@ async function reload(): Promise<void> {
             <span v-if="skill.overridesUser" data-testid="skills-overrides" class="flex-none font-sans text-[10px] text-warn">{{
               t("skillsView.overrides")
             }}</span>
-            <span v-if="usage" data-testid="skills-usage" class="ml-auto flex-none font-sans text-[10px] text-dim">{{
-              usageOf(skill) ? t("skillsView.usage.count", { count: usageOf(skill)?.conversations }) : t("skillsView.usage.none")
-            }}</span>
+            <span
+              v-if="markOf(currentSource, skill)"
+              data-testid="skills-eval-mark"
+              class="ml-auto flex-none font-sans text-[10px]"
+              :class="MARK_TONE[markOf(currentSource, skill) ?? 'pending']"
+              >{{ t(`skillsView.eval.mark.${markOf(currentSource, skill)}`) }}</span
+            >
+            <span
+              v-if="usage"
+              data-testid="skills-usage"
+              class="flex-none font-sans text-[10px] text-dim"
+              :class="{ 'ml-auto': !markOf(currentSource, skill) }"
+              >{{ usageOf(skill) ? t("skillsView.usage.count", { count: usageOf(skill)?.conversations }) : t("skillsView.usage.none") }}</span
+            >
           </span>
           <span class="line-clamp-2 font-sans text-[11px] leading-snug text-secondary">{{ skill.description }}</span>
         </button>
