@@ -5,6 +5,7 @@ export const tipsZhCN: Messages["tips"] = {
   cell: {
     remoteHost: "在 {host} 上运行。此终端的文件、git、面板和工具暂时无法在这里使用。",
     remoteHostGone: "{host} 已不在 config.json 的 remoteHosts 中，因此此终端无法连接。请关闭它，或重新添加该主机后刷新。",
+    remoteTunnelDown: "无法连接 {host}。ssh 隧道（ssh -L）和 {host} 上的 MulmoTerminal 是否仍在运行？恢复后会自动重新连接。",
     running: "运行中…",
     finished: "已完成",
     exited: "已退出",

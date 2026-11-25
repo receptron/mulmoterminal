@@ -5,6 +5,7 @@ export const tipsKo: Messages["tips"] = {
   cell: {
     remoteHost: "{host}에서 실행 중입니다. 이 터미널의 파일, git, 패널, 도구는 아직 여기서 사용할 수 없습니다.",
     remoteHostGone: "{host}이(가) config.json의 remoteHosts에서 사라져 이 터미널은 연결할 수 없습니다. 닫거나, 호스트를 다시 추가한 뒤 새로 고치세요.",
+    remoteTunnelDown: "{host}에 연결할 수 없습니다. ssh 터널(ssh -L)과 {host}의 MulmoTerminal이 실행 중인가요? 다시 연결되면 자동으로 이어집니다.",
     running: "실행 중…",
     finished: "완료",
     exited: "종료됨",

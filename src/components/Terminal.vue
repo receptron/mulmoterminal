@@ -192,6 +192,9 @@ function exitCopyMode() {
 const localCwd = computed(() => onThisMachine(props.remoteHost, serverCwd.value));
 const localSession = computed(() => onThisMachine(props.remoteHost, props.sessionId));
 const isRemote = computed(() => isRemoteHost(props.remoteHost));
+// A remote cell's socket runs through a tunnel the user opened themselves, so "disconnected" alone
+// sends them looking at MulmoTerminal when the usual cause is that `ssh -L` has ended.
+const tunnelHint = computed(() => (isRemote.value && status.value === "disconnected" ? t("tips.cell.remoteTunnelDown", { host: props.remoteHost }) : null));
 const dirConfigCwd = computed(() => (isRemote.value ? null : (serverCwd.value ?? props.dirCwd ?? null)));
 const { config: dirConfig } = useDirConfig(dirConfigCwd);
 
@@ -692,6 +695,7 @@ onUnmounted(() => {
            to stay for the other values: "connecting" is why a terminal is blank, and the error
            state is why it stopped taking input. -->
       <span v-if="status !== 'connected'" data-testid="term-conn-status" class="rounded-[4px] px-2 py-0.5 text-[12px]" :class="statusClass">{{ status }}</span>
+      <span v-if="tunnelHint" data-testid="term-tunnel-hint" class="min-w-0 truncate text-[12px] text-secondary" :data-tip="tunnelHint">{{ tunnelHint }}</span>
       <RunMenu v-if="runMenu && !isRemote" :cwd="serverCwd" @run="(c) => emit('run', c)" />
       <SkillMenu v-if="runMenu && !isRemote" :cwd="serverCwd" @skill="onSkill" />
       <MulmoMenu v-if="runMenu && !isRemote" :cwd="serverCwd" @deck="onDeck" />

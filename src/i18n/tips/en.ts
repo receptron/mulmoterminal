@@ -5,6 +5,8 @@ export const tipsEn = {
   cell: {
     remoteHost: "Runs on {host}. Files, git, panes and tools for this terminal are not available here yet.",
     remoteHostGone: "{host} is no longer in remoteHosts in config.json, so this terminal cannot connect. Close it, or add the host back and reload.",
+    remoteTunnelDown:
+      "Cannot reach {host}. Is its ssh tunnel (ssh -L) still running, and MulmoTerminal on {host}? This terminal reconnects by itself once it is back.",
     running: "Running…",
     finished: "Finished",
     exited: "Exited",
