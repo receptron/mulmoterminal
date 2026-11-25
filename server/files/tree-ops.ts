@@ -14,6 +14,7 @@ import path from "node:path";
 import { containedPath, namesAWindowsDevice, realContainedWithin } from "./pathContainment.js";
 import { isSamePath } from "../infra/fs/path-within.js";
 import { createFileVerified, type Recheck, type VerifiedOutcome } from "./verifiedWrite.js";
+import { isSameIdentity, type FileIdentity } from "./fileIdentity.js";
 import { makeFolderVerified } from "./verifiedMkdir.js";
 
 /** The longest name a new entry may have: what the common filesystems allow, in bytes. */
@@ -69,16 +70,14 @@ export function createEntry(abs: string, kind: EntryKind, recheck: Recheck): Ver
 // that same entry. A move that landed outside is reported, not undone — putting it back by name would
 // be another check-then-act. A swap made before the entry is identified and undone before the check is
 // asked again still passes.
-type EntryIdentity = { dev: bigint; ino: bigint };
-
-const identityOf = (abs: string): EntryIdentity | null => {
+const identityOf = (abs: string): FileIdentity | null => {
   const stats = fs.lstatSync(abs, { bigint: true, throwIfNoEntry: false });
   return stats ? { dev: stats.dev, ino: stats.ino } : null;
 };
 
-const holds = (abs: string | null, entry: EntryIdentity | null): boolean => {
+const holds = (abs: string | null, entry: FileIdentity | null): boolean => {
   const now = abs === null ? null : identityOf(abs);
-  return entry !== null && now !== null && now.dev === entry.dev && now.ino === entry.ino;
+  return entry !== null && now !== null && isSameIdentity(now, entry);
 };
 
 /** Rename in place. A name that differs only in case is the same entry on a case-insensitive disk,
@@ -90,7 +89,8 @@ const holds = (abs: string | null, entry: EntryIdentity | null): boolean => {
  *  ACL, another user's file in a sticky folder) it leaves the file under BOTH names with no way back —
  *  worse than the race it closes, so it is not done (#2694). */
 export function renameEntry(from: string, to: string, recheckTo: Recheck): "renamed" | "exists" | "escaped" {
-  const sameEntry = from.toLowerCase() === to.toLowerCase() && entryExists(to) && fs.lstatSync(from).ino === fs.lstatSync(to).ino;
+  const sameEntry =
+    from.toLowerCase() === to.toLowerCase() && entryExists(to) && isSameIdentity(fs.lstatSync(from, { bigint: true }), fs.lstatSync(to, { bigint: true }));
   if (entryExists(to) && !sameEntry) return "exists";
   const moving = identityOf(from);
   fs.renameSync(from, to);
@@ -189,7 +189,7 @@ export function trashEntry(abs: string, layout: NonNullable<TrashLayout>, now: D
 
 /** Move `abs` to `target`, with the identity it had just before; when the move fails, the reserved
  *  info file is released, and a move across volumes is "other-volume". */
-function moveUnlessReleased(abs: string, target: string, info: string | null): EntryIdentity | null | "other-volume" {
+function moveUnlessReleased(abs: string, target: string, info: string | null): FileIdentity | null | "other-volume" {
   try {
     const moving = identityOf(abs);
     fs.renameSync(abs, target);

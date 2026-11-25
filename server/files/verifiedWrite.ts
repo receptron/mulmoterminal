@@ -15,6 +15,7 @@
 // - a hard link (or a bind mount) is the same file by device and inode, so writing to one inside the
 //   project changes it wherever else it appears. That is what a hard link is, not a path escaping.
 import fs from "node:fs";
+import { isSameIdentity } from "./fileIdentity.js";
 
 /** The check, asked again: the contained real path, or null when the path now escapes. */
 export type Recheck = () => string | null;
@@ -68,13 +69,11 @@ export const isSameFile = (fd: number, contained: string | null): boolean => {
   }
 };
 
-/** Whether the file `opened` describes is the one at `contained`, the path the check answered.
- *  bigint: a Windows file id is 64 bits, and a number loses the low ones. */
+/** Whether the file `opened` describes is the one at `contained`, the path the check answered. */
 export function isOpenedFileAt(opened: fs.BigIntStats, contained: string | null): boolean {
   if (contained === null) return false;
   try {
-    const named = fs.statSync(contained, { bigint: true });
-    return opened.dev === named.dev && opened.ino === named.ino;
+    return isSameIdentity(opened, fs.statSync(contained, { bigint: true }));
   } catch {
     return false;
   }
