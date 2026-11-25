@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ClaudeRunRequest, ClaudeRunResult } from "../../../../server/backends/skillEval/runClaude";
 import { judgeApiError, judgeGrade, type AttemptDeps } from "../../../../server/backends/skillEval/evalAttempt";
-import { attemptOrder, startEvalRun, stopEvalRun } from "../../../../server/backends/skillEval/evalRunner";
+import { EVAL_CONCURRENCY, attemptOrder, startEvalRun, stopEvalRun } from "../../../../server/backends/skillEval/evalRunner";
 import { listRuns, readEvalSet, readRun, skillEvalFolder, textHash } from "../../../../server/backends/skillEval/evalStore";
 import { isBaselineFor, skillEvalSetSchema, type SkillEvalSet } from "../../../../common/skillEval";
 import { mountSkillEvalRoutes } from "../../../../server/routes/skill-eval-routes";
@@ -199,12 +199,13 @@ describe("a skill evaluation run", () => {
   const unreachedResult = { type: "result", subtype: "success", is_error: true, result: UNREACHED, terminal_reason: "api_error", total_cost_usd: 0 };
 
   /** `deps`, except that the agent's (or the grader's) every run comes back without reaching the model. */
-  function unreachable(who: "agent" | "judge"): AttemptDeps {
+  function unreachable(who: "agent" | "judge", calls: string[]): AttemptDeps {
     const base = deps([], scratch());
     return {
       ...base,
       runClaude: async (request) => {
         const isJudge = request.args.includes("--json-schema");
+        calls.push(isJudge ? "judge" : "agent");
         if (isJudge !== (who === "judge")) return base.runClaude(request);
         return { stdout: isJudge ? JSON.stringify(unreachedResult) : stream([unreachedResult]), exitCode: 0, failure: null };
       },
@@ -214,12 +215,16 @@ describe("a skill evaluation run", () => {
   it("stops, and is no baseline, when the agent or the grader could not reach the model", async () => {
     for (const who of ["agent", "judge"] as const) {
       const { evalDir, skillDir } = setUp(SET);
-      const started = await start(evalDir, skillDir, unreachable(who));
+      const calls: string[] = [];
+      const started = await start(evalDir, skillDir, unreachable(who, calls));
       await started?.done;
       const run = await readRun(evalDir, started?.id ?? "");
       if (run === null) throw new Error("no run");
       expect(run).toMatchObject({ status: "interrupted", interruptedBy: UNREACHED });
       expect(isBaselineFor(run, run.setHash, run.skillHash)).toBe(false);
+      // Only the attempts already in flight ran: no more were started after the first error.
+      expect(calls.filter((call) => call === who).length).toBeLessThanOrEqual(EVAL_CONCURRENCY);
+      expect(run.attempts.length).toBeLessThan(run.plannedAttempts);
     }
   });
 
