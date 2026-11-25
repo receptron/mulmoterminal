@@ -170,6 +170,8 @@ import { reviewWorkspaces } from "./review-workspaces.js";
 import { git } from "../git/worktrees.js";
 import { mulmoterminalHome } from "../infra/fs/mulmoterminal-home.js";
 import { existsSync, lstatSync, realpathSync } from "node:fs";
+import { mountDevUiRedirect } from "../infra/http/dev-ui-redirect.js";
+import { clientPort } from "../../common/client-port.js";
 
 export interface AppRouteDeps extends SessionActivityDeps {
   /** Which agents could be started, as checked once at server start (#2229). */
@@ -239,6 +241,18 @@ const ASK_NONCE_CHARS = 8;
 // how a repository wants reviews done (#3407).
 /** The clone work on `repo` starts in, as the issue start picks it. */
 const cloneOfRepo = async (repo: string): Promise<string | null> => defaultCloneOf(await repoDirsFromPresets(getCwdPresets(), getRepoDirs()), repo);
+
+function mountDevUiRedirectIfNeeded(app: Express): void {
+  if (process.env.CLIENT_PORT !== undefined) mountDevUiRedirect(app, clientPort(process.env));
+}
+
+function mountMcpAndDevUi(app: Express, deps: AppRouteDeps): void {
+  mountMcpRoutes(app, {
+    publish: (c, d) => deps.publish(c, d),
+    guiCallHistory: (sessionId) => guiCallRecorderFor(sessionId, sessionCallReporting(deps, sessionId), deps.toolStores),
+  });
+  mountDevUiRedirectIfNeeded(app);
+}
 
 /** A repository's declared review settings, or why there are none. */
 async function reviewSettingsOf(repo: string): Promise<ReviewSettings | string> {
@@ -331,7 +345,6 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
   // FIRST, before any route, parser or static file (request-gates.ts).
   mountRequestGates(app, deps);
   const clientDir = deps.clientDir;
-
   // Ahead of express.json, carrying its own raw parser: a dropped file is bytes under its own
   // content type, and a dropped .json would otherwise be parsed as a document rather than saved.
   mountDropRoutes(app);
@@ -490,14 +503,8 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
 
   // The agent-facing MCP surface (routes/mcp-routes.ts): the in-process GUI MCP server over
   // Streamable HTTP, and the worker-only landing point the hidden translation worker reports to.
-  mountMcpRoutes(app, {
-    publish: (c, d) => deps.publish(c, d),
-    // codex and agy have no hooks, so the broker is the only place their tool calls can reach
-    // the tools pane's history. Claude's do NOT come through here — it would double every entry
-    // its own PreToolUse/PostToolUse already writes.
-    guiCallHistory: (sessionId) => guiCallRecorderFor(sessionId, sessionCallReporting(deps, sessionId), deps.toolStores),
-  });
-
+  // The broker is the history source for agents without hooks; Claude's hook history must not be doubled.
+  mountMcpAndDevUi(app, deps);
   // Serve Vite build output
   app.use(express.static(path.join(clientDir, "../dist")));
 

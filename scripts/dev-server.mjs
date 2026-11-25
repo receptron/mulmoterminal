@@ -21,6 +21,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveWatchDirs, shouldSchedule, isReloadableChange, restartPlan, isListeningMessage } from "./dev-server-config.js";
 import { CHILD_EXIT_GRACE_MS, installParentShutdown, stopChildWithin } from "../bin/child-shutdown.js";
+import { clientPort } from "../common/client-port.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Which dirs a source change reloads on (server/ + the common/ and bin/ the backend imports),
@@ -70,7 +71,11 @@ function bringUp() {
   // "ipc" alongside the inherited streams: the child keeps writing straight to this terminal, and
   // gets a channel to report readiness on. A backend started any other way has no parent channel,
   // so its `process.send?.()` is a no-op.
-  child = spawn(process.execPath, NODE_ARGS, { cwd: ROOT, stdio: ["inherit", "inherit", "inherit", "ipc"] });
+  child = spawn(process.execPath, NODE_ARGS, {
+    cwd: ROOT,
+    env: { ...process.env, CLIENT_PORT: String(clientPort(process.env)) },
+    stdio: ["inherit", "inherit", "inherit", "ipc"],
+  });
 
   child.on("message", (msg) => {
     if (isListeningMessage(msg)) reachedListen = true;
