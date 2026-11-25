@@ -84,6 +84,7 @@ function relaunch() {
     :thumbnail="thumbnail"
     :row-menu="rowMenu"
     :slot-key="`cell-${uid}`"
+    :panes-hidden="!!remoteHost"
     v-on="shellEvents"
     @path-problem="(message) => void termRef?.showHint(message, 'folder_open')"
   >

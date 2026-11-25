@@ -4,7 +4,8 @@ import TerminalGrid from "./TerminalGrid.vue";
 import AppSettingsModal from "./AppSettingsModal.vue";
 import LaunchPanel from "./LaunchPanel.vue";
 import { loadGridState, saveGridState } from "../composables/gridLayoutMirror";
-import { cellForAgent, cellForPanelResume, cellForPanelStart, type PanelResume, type PanelStart } from "./launchCell";
+import { cellForAgent, cellForPanelResume, cellForPanelStart, cellForRemoteStart, type PanelResume, type PanelStart } from "./launchCell";
+import type { RemoteStart } from "./remoteLaunch";
 import AppToolbar from "./AppToolbar.vue";
 import GuideLinks from "./GuideLinks.vue";
 import { startCollectionChat } from "../composables/useChatLauncher";
@@ -601,7 +602,8 @@ function toggleLaunchPanel(origin: number | null) {
 // The four things the form can ask for, each turned into a cell. The form itself is host-agnostic
 // (it emits intents and knows nothing about cells); placing one is this component's job, because
 // only it can page to the new cell — see placeCell.
-const placeFromPanel = (cell: Omit<Cell, "uid">) => {
+// Null is a remote start whose directory the remote could not use; it places nothing either.
+const placeFromPanel = (cell: Omit<Cell, "uid"> | null) => {
   // The empty launch cell `ensureEntry` keeps on a fresh grid renders the form and NOTHING else —
   // no header, so no close button. Launching from the panel puts a real cell beside it rather than
   // filling it, which would strand that tile for good. Dropped once the grid has something else.
@@ -613,7 +615,7 @@ const placeFromPanel = (cell: Omit<Cell, "uid">) => {
   // that `isOccupied` counts against the cap and that never opens a terminal. Reachable before
   // `/api/config` answers, when `defaultCwd` is still null (codex [P1], #1890). Refused here rather
   // than in each caller: this is the one place every panel launch passes through.
-  if (cell.autoStart && !cell.cwd) return;
+  if (!cell || (cell.autoStart && !cell.cwd)) return;
   const empty = state.value.cells.find((c) => !isOccupied(c));
   // Nothing placed: the grid filled up while the form was open. Leave the panel exactly as the user
   // left it rather than closing over work that produced no terminal.
@@ -628,6 +630,7 @@ const onPanelStart = (start: PanelStart) => placeFromPanel(cellForPanelStart(sta
 const onPanelResume = (resume: PanelResume) => placeFromPanel(cellForPanelResume(resume));
 const onPanelRun = (command: RunCommand) => placeFromPanel({ session: null, cwd: null, command });
 const onPanelLaunch = (pick: LaunchPick) => placeFromPanel({ session: null, cwd: pick.cwd, launcher: pick.launcher });
+const onPanelRemoteStart = (start: RemoteStart) => placeFromPanel(cellForRemoteStart(start));
 useCaptureKeydown(onShortcutKey);
 
 // Launch a Settings skill in a new auto-running session and show it as a GRID CELL. The button was
@@ -938,6 +941,7 @@ onBeforeUnmount(detachSpawnedChat);
       @resume="onPanelResume"
       @run="onPanelRun"
       @launch="onPanelLaunch"
+      @start-remote="onPanelRemoteStart"
       @remove-preset="removePreset"
       @retry-config="loadConfig"
       @close="closeLaunchPanel"

@@ -1,3 +1,4 @@
+import { remoteLaunchZhCN } from "../remoteLaunch/zh-CN";
 import type { Messages } from "../messages";
 
 export const tipsZhCN: Messages["tips"] = {
@@ -89,6 +90,7 @@ export const tipsZhCN: Messages["tips"] = {
     },
   },
   launch: {
+    remote: remoteLaunchZhCN,
     cancel: "取消新终端",
     chipRunning: "{path} — 此处已有会话在运行",
     chipWorkspace: "{path} — 工作区：此处可以使用所有 GUI 工具",

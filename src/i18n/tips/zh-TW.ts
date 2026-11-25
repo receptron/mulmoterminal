@@ -1,3 +1,4 @@
+import { remoteLaunchZhTW } from "../remoteLaunch/zh-TW";
 import type { Messages } from "../messages";
 
 export const tipsZhTW: Messages["tips"] = {
@@ -89,6 +90,7 @@ export const tipsZhTW: Messages["tips"] = {
     },
   },
   launch: {
+    remote: remoteLaunchZhTW,
     cancel: "取消新終端機",
     chipRunning: "{path} — 此處已有工作階段在執行",
     chipWorkspace: "{path} — 工作區：此處可以使用所有 GUI 工具",

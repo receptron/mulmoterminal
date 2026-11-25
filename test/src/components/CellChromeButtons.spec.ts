@@ -259,3 +259,16 @@ describe("the park button", () => {
     expect(w.findAll("button").map((b) => b.attributes("aria-label"))).toEqual(["Close terminal"]);
   });
 });
+
+// A remote cell (#3506): every pane reads this machine's copy of the session, so neither menu is offered.
+describe("CellChromeButtons on a remote cell", () => {
+  it("drops the history and tools menus and keeps the cell controls", () => {
+    const local = mount(CellChromeButtons, { props: { expanded: false } });
+    expect(local.find('[data-testid="cell-history-btn"]').exists()).toBe(true);
+    const remote = mount(CellChromeButtons, { props: { expanded: false, panesHidden: true, canPark: true } });
+    expect(remote.find('[data-testid="cell-history-btn"]').exists()).toBe(false);
+    expect(remote.find('[data-testid="cell-tools-btn"]').exists()).toBe(false);
+    expect(remote.find(PARK).exists()).toBe(true);
+    expect(remote.find('[aria-label="Close terminal"]').exists()).toBe(true);
+  });
+});

@@ -1,3 +1,4 @@
+import { remoteLaunchJa } from "../remoteLaunch/ja";
 import type { Messages } from "../messages";
 
 export const tipsJa: Messages["tips"] = {
@@ -91,6 +92,7 @@ export const tipsJa: Messages["tips"] = {
     },
   },
   launch: {
+    remote: remoteLaunchJa,
     cancel: "新しいターミナルを取り消す",
     chipRunning: "{path} — ここではすでにセッションが動いています",
     chipWorkspace: "{path} — ワークスペース：ここではすべての GUI ツールが使えます",

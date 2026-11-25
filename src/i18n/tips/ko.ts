@@ -1,3 +1,4 @@
+import { remoteLaunchKo } from "../remoteLaunch/ko";
 import type { Messages } from "../messages";
 
 export const tipsKo: Messages["tips"] = {
@@ -90,6 +91,7 @@ export const tipsKo: Messages["tips"] = {
     },
   },
   launch: {
+    remote: remoteLaunchKo,
     cancel: "새 터미널 취소",
     chipRunning: "{path} — 여기서 이미 세션이 실행 중입니다",
     chipWorkspace: "{path} — 작업 공간: 여기서는 모든 GUI 도구를 쓸 수 있습니다",

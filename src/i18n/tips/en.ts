@@ -1,3 +1,4 @@
+import { remoteLaunchEn } from "../remoteLaunch/en";
 // Hover tips and aria-labels, one section per surface. Kept in its own file per locale so the
 // bundles do not grow past the line limit; each bundle takes it as its `tips` section.
 export const tipsEn = {
@@ -89,6 +90,7 @@ export const tipsEn = {
     },
   },
   launch: {
+    remote: remoteLaunchEn,
     cancel: "Cancel new terminal",
     chipRunning: "{path} — a session is already running here",
     chipWorkspace: "{path} — the workspace: every GUI tool is available here",

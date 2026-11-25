@@ -1784,6 +1784,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
               v-bind="chromeProps"
               :can-park="true"
               :parked="parked"
+              :panes-hidden="isRemote"
               :timeline-available="!!localSession && agent === 'claude'"
               :library-available="!!localSession && agent === 'claude'"
               :restart-available="launched && !!localSession"

@@ -64,6 +64,8 @@ const props = defineProps<{
   // Whether another terminal is there to talk to. Only TerminalCell passes it, and it binds
   // `open-talk` itself; it refreshes the answer on `tools-opening`.
   talkAvailable?: boolean;
+  // A remote cell (#3506): every pane reads this machine's copy of the session, which it has none of.
+  panesHidden?: boolean;
 }>();
 const emit = defineEmits<{
   (
@@ -122,9 +124,16 @@ const parkTitle = computed(() => (props.parked ? t("tips.cell.wake") : t("tips.c
 
 <template>
   <template v-if="!closeOnly">
-    <CellPaneMenu v-if="hasChoice(history)" icon="history" :label="t('cellMenu.history')" testid="cell-history-btn" :entries="history" @select="onPick" />
     <CellPaneMenu
-      v-if="hasChoice(tools)"
+      v-if="!panesHidden && hasChoice(history)"
+      icon="history"
+      :label="t('cellMenu.history')"
+      testid="cell-history-btn"
+      :entries="history"
+      @select="onPick"
+    />
+    <CellPaneMenu
+      v-if="!panesHidden && hasChoice(tools)"
       icon="build"
       :label="t('cellMenu.tools')"
       testid="cell-tools-btn"
