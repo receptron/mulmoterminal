@@ -36,13 +36,14 @@ vi.mock("../../../../server/agents/copilot/copilot-hooks-file.js", async (import
 }));
 vi.mock("../../../../server/session/session-reads.js", () => ({ sessionExistsOnDisk: () => false }));
 
-const { hasAllGuiTools, markAllToolsSession, whenAllToolsPersisted, ptys } = await import("../../../../server/session/registry.js");
+const { hasAllGuiTools, markAllToolsSession, ptys } = await import("../../../../server/session/registry.js");
 const { createClaudeSpawner } = await import("../../../../server/session/spawn/agents/spawn-claude.js");
+const { whenSessionStatePersisted } = await import("../../../../server/session/reaping/persist-drain.js");
 const { createCodexSpawner } = await import("../../../../server/session/spawn/agents/spawn-codex.js");
 const { createCopilotSpawner } = await import("../../../../server/session/spawn/agents/spawn-copilot.js");
 
 afterAll(async () => {
-  await whenAllToolsPersisted();
+  await whenSessionStatePersisted();
   if (REAL_HOME === undefined) delete process.env.HOME;
   else process.env.HOME = REAL_HOME;
   rmSync(HOME, { recursive: true, force: true });
