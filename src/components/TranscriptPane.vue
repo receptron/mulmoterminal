@@ -270,18 +270,18 @@ watch([() => props.sessionId, () => props.cwd], () => void reload(), { immediate
 /** What to say when there are no turns. Each status is its own sentence — "nothing here" and "this
  *  agent's conversation has no reader yet" send a reader to two different places. */
 const emptyMessage = computed((): string => {
-  if (failed.value) return "Couldn't read this session's conversation.";
-  if (!props.sessionId) return "This cell hasn't started a session yet.";
-  if (loading.value) return "Loading…";
+  if (failed.value) return t("transcriptPane.empty.failed");
+  if (!props.sessionId) return t("transcriptPane.empty.notStarted");
+  if (loading.value) return t("transcriptPane.empty.loading");
   switch (status.value) {
     case "cleared":
-      return "This conversation was ended with /clear. The next prompt starts a new one.";
+      return t("transcriptPane.empty.cleared");
     case "too-large":
-      return "This transcript is too large to find a turn in.";
+      return t("transcriptPane.empty.tooLarge");
     case "not-supported":
-      return "This agent keeps its conversation somewhere this pane can't read yet.";
+      return t("transcriptPane.empty.notSupported");
     default:
-      return "Nothing written to this session's transcript yet.";
+      return t("transcriptPane.empty.none");
   }
 });
 
@@ -297,27 +297,33 @@ const AGENT_NAMES: Record<string, string> = {
   muse: "Muse",
   antigravity: "Antigravity",
 };
-const agentName = computed((): string => AGENT_NAMES[props.agent ?? ""] ?? "Agent");
+const agentName = computed((): string => AGENT_NAMES[props.agent ?? ""] ?? t("transcriptPane.speakers.agent"));
 /** What the top of the pane says once there is nothing more to fetch. Reaching the beginning and
  *  being refused are not the same sentence: a transcript whose older pages exceed the host's ceiling
  *  answers `too-large`, and telling that reader they have reached the start is simply false. */
 const headMessage = computed((): string => {
-  if (olderFailed.value) return "Couldn't read the turns before this one.";
+  if (olderFailed.value) return t("transcriptPane.head.failed");
   switch (walkEndedBy.value) {
     case "too-large":
-      return "The turns before this are too large to read.";
+      return t("transcriptPane.head.tooLarge");
     case "cleared":
-      return "The conversation before this was ended with /clear.";
+      return t("transcriptPane.head.cleared");
     case null:
-      return "The start of this conversation.";
+      return t("transcriptPane.head.start");
     default:
-      return "Nothing older could be read.";
+      return t("transcriptPane.head.none");
   }
 });
 
 const speaker = (kind: TranscriptRowKind): string => {
   if (kind === "assistant") return agentName.value;
-  return { user: "You", tool: "Tools", unknown: "Unreadable block" }[kind] ?? "";
+  return (
+    {
+      user: t("transcriptPane.speakers.you"),
+      tool: t("transcriptPane.speakers.tools"),
+      unknown: t("transcriptPane.speakers.unreadable"),
+    }[kind] ?? ""
+  );
 };
 
 /** The frame a speaker's run is drawn in. Three looks, because three things are being distinguished:
@@ -346,8 +352,8 @@ const label = toolBlockLabel;
   <section class="flex h-full flex-col bg-deep" :class="embedded ? 'min-w-0 flex-1' : 'w-[340px] shrink-0 border-l border-border'">
     <div v-if="!embedded" class="flex items-center justify-between bg-panel px-4 py-2 font-sans text-[14px] text-fg">
       <div class="flex items-baseline gap-2">
-        <span class="font-semibold">Conversation</span>
-        <span v-if="loadingOlder" class="text-[11px] text-dim">loading older…</span>
+        <span class="font-semibold">{{ t("transcriptPane.title") }}</span>
+        <span v-if="loadingOlder" class="text-[11px] text-dim">{{ t("transcriptPane.loadingOlder") }}</span>
       </div>
       <!-- Reload, expand, close — expand and close in the order every other pane uses, since the
            three share one slot and the same control has to sit in the same place. -->
@@ -391,7 +397,7 @@ const label = toolBlockLabel;
       <template v-else>
         <!-- Says which end is missing, and why it is not simply "scroll up": at the head of what can
              be read there is nothing more to fetch. -->
-        <p v-if="older !== null" class="px-4 py-2 text-center text-[11px] text-dim">Scroll up for older turns.</p>
+        <p v-if="older !== null" class="px-4 py-2 text-center text-[11px] text-dim">{{ t("transcriptPane.scrollOlder") }}</p>
         <p v-else data-testid="transcript-head" class="px-4 py-2 text-center text-[11px] text-dim">{{ headMessage }}</p>
         <ol class="m-0 list-none p-0">
           <li v-for="(turn, index) in turns" :key="index" data-testid="transcript-turn" class="px-3 py-2">
@@ -451,7 +457,7 @@ const label = toolBlockLabel;
                   <p v-else data-testid="transcript-text" class="m-0 whitespace-pre-wrap break-words text-[12px] italic leading-[1.5] text-dim">
                     {{ row.text }}
                   </p>
-                  <p v-if="row.clipped" :key="`clip-${rowIndex}`" class="m-0 text-[11px] text-dim">…cut here</p>
+                  <p v-if="row.clipped" :key="`clip-${rowIndex}`" class="m-0 text-[11px] text-dim">{{ t("transcriptPane.cutHere") }}</p>
                 </template>
               </template>
             </div>
