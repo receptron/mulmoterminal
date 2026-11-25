@@ -172,6 +172,8 @@ export const skillEvalOverviewSchema = z.object({
   estimate: z
     .object({ attempts: z.number(), maxCostUsd: z.number(), maxImproveCostUsd: z.number(), ladderAttempts: z.number(), maxLadderCostUsd: z.number() })
     .nullable(),
+  /** The hash of the skill's SKILL.md as it is now, to tell which runs measured this text; null when it could not be read. */
+  skillHash: z.string().nullable(),
   /** Whether an improvement may be written over this skill's SKILL.md: not a plugin's or a bundled one. */
   editable: z.boolean(),
   /** The run the next improvement would be written from: the newest that `isBaselineFor` accepts, among all runs. */

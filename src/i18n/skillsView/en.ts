@@ -53,6 +53,10 @@ export const skillsViewEn = {
       interruptedBy: "It stopped partway because something failed: {reason}",
       perCase: "Passes per task",
       avoidTag: "(should not use)",
+      history: {
+        rates: "with the skill {with}, without {without}",
+        otherText: "measured another SKILL.md",
+      },
       improve: {
         start: "Improve and measure",
         confirm:

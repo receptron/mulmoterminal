@@ -53,6 +53,10 @@ export const skillsViewZhCN = {
       interruptedBy: "中途出错而停止：{reason}",
       perCase: "各任务的通过数",
       avoidTag: "（不应使用）",
+      history: {
+        rates: "有技能 {with}・无技能 {without}",
+        otherText: "与现在不同的 SKILL.md",
+      },
       improve: {
         start: "生成改进方案并测量",
         confirm:
