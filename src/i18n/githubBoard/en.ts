@@ -1,4 +1,6 @@
 // The experimental GitHub board (#3172), out of the locale file, which is at its line cap.
+import { transcriptPaneEn } from "../transcriptPane/en";
+
 export const githubBoardEn = {
   githubBoard: {
     title: "GitHub board",
@@ -63,4 +65,5 @@ export const githubBoardEn = {
     },
     rule: "Review counts each pushed commit that got a review. Verdict counts the cross-review verdicts posted as comments (CODEX VERDICT or REVIEW VERDICT lines). Ready to merge means the LGTMs the repository declares in its review setting are on the newest push and CI passed. Ready means CI passed and the newest push was reviewed.",
   },
+  ...transcriptPaneEn,
 };

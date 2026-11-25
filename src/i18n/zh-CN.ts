@@ -27,6 +27,7 @@ import { skillsViewZhCN } from "./skillsView/zh-CN";
 import { libraryViewZhCN } from "./libraryView/zh-CN";
 import { processesViewZhCN } from "./processesView/zh-CN";
 import { githubBoardZhCN } from "./githubBoard/zh-CN";
+import { transcriptPaneZhCN } from "./transcriptPane/zh-CN";
 
 // 简体中文。`Messages` 就是 en.ts 的形状，少一个键就会编译失败 —— 不会出现运行时悄悄回退到
 // 英文、而谁都没发现的状态。
@@ -637,6 +638,7 @@ export const zhCN: Messages = {
   ...libraryViewZhCN,
   ...processesViewZhCN,
   ...githubBoardZhCN,
+  ...transcriptPaneZhCN,
   tips: tipsZhCN,
   blueprints: blueprintsZhCN,
 };

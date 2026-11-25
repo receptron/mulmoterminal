@@ -27,6 +27,7 @@ import { skillsViewJa } from "./skillsView/ja";
 import { libraryViewJa } from "./libraryView/ja";
 import { processesViewJa } from "./processesView/ja";
 import { githubBoardJa } from "./githubBoard/ja";
+import { transcriptPaneJa } from "./transcriptPane/ja";
 
 // 日本語。`Messages` は en.ts の形そのものなので、キーを一つ落とすと型エラーになる — 実行時に
 // 英語へフォールバックして気づかない、という状態にはならない。
@@ -655,6 +656,7 @@ export const ja: Messages = {
   ...libraryViewJa,
   ...processesViewJa,
   ...githubBoardJa,
+  ...transcriptPaneJa,
   tips: tipsJa,
   blueprints: blueprintsJa,
 };

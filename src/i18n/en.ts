@@ -608,8 +608,6 @@ export const en = {
       restartNote: "Restart MulmoTerminal once that is done.",
     },
   },
-
-  // The hint shown while a two-key shortcut waits for its second key (#2265).
   commandPalette: commandPaletteEn,
   // The path menu's file items. Its repository section stays in the forge's own words.
   prefixKeys: {
