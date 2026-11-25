@@ -651,6 +651,8 @@ MulmoTerminal の「**拡張**」の柱がここ。稼働中ターミナルの�
 
 ### このリポジトリの PR のレビューのしかた（`review`） {#dir-review}
 
+準備から片付けまでの通しの使い方: [issue をエージェントに渡して merge まで](issue-to-merge.html)
+
 レビューを進めるセッションが、このリポジトリの PR をどう扱うかを決めます。このキーを書くまでは、自動でレビューは回りません。レビューを進めるセッションは、リポジトリを `owner/repo` で渡して `reviewSettings` という道具でこれを読みます。
 
 ```json
@@ -677,6 +679,8 @@ MulmoTerminal の「**拡張**」の柱がここ。稼働中ターミナルの�
 （既定 ON）に従います。→ [返信の最後のまとめを切る](#append-system-prompt)
 
 ## 同時に進める issue の数（`maxIssueSessions`） {#max-issue-sessions}
+
+通しの使い方: [issue をいくつも渡す](issue-to-merge.html#several-issues)
 
 セッションは `startIssueSession` の道具で、issue を自分の実装役に渡せます。実装役は issue の worktree と
 セルを一つずつ持ち、[レビューの往復](#dir-review)を経て merge まで進めます。
