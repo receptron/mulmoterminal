@@ -110,11 +110,14 @@ async function startAuthoring(ctx: Context, body: Record<string, unknown>, res: 
   }
 }
 
-/** The run the next improvement of `skill` would be written from, if it has one. */
-async function baselineOf(skill: ResolvedSkill, setHash: string): Promise<SkillEvalRun | null> {
+const currentSkillHash = async (skill: ResolvedSkill): Promise<string | null> => {
   const skillText = await readFile(skill.file, "utf8").catch(() => null);
-  if (skillText === null) return null;
-  const skillHash = textHash(skillText);
+  return skillText === null ? null : textHash(skillText);
+};
+
+/** The run the next improvement of `skill` would be written from, if it has one. */
+async function baselineOf(skill: ResolvedSkill, setHash: string, skillHash: string | null): Promise<SkillEvalRun | null> {
+  if (skillHash === null) return null;
   return newestRunWhere(skill.evalDir, (run) => isBaselineFor(run, setHash, skillHash));
 }
 
@@ -128,11 +131,12 @@ async function overview(ctx: Context, query: Record<string, unknown>, res: Respo
   if (skill === null) return fail(res, 404, SKILL_NOT_FOUND);
   const read = await readEvalSet(skill.evalDir, skill.id);
   const set = read.kind === "ok" ? read.set : null;
+  const skillHash = await currentSkillHash(skill);
   res.json({
     ...{ skill: skill.id, dir: skill.evalDir, set, setHash: read.kind === "ok" ? read.hash : null, setError: read.kind === "invalid" ? read.error : null },
     estimate: set === null ? null : estimateOf(set),
     editable: isEditableSkill(skill.source, skill.slug),
-    baseline: read.kind === "ok" ? await baselineOf(skill, read.hash) : null,
+    ...{ skillHash, baseline: read.kind === "ok" ? await baselineOf(skill, read.hash, skillHash) : null },
     ...{ runs: (await listRuns(skill.evalDir)).map(runView), activeRunId: activeRunId(skill.evalDir) },
   });
 }
@@ -153,7 +157,7 @@ async function startRun(ctx: Context, body: Record<string, unknown>, res: Respon
   if (read.kind === "absent") return fail(res, 404, "no evaluation is set up for this skill");
   if (read.kind === "invalid") return fail(res, 400, read.error);
   if (mode === "ladder" && ladderAttempts(read.set) === 0) return fail(res, 400, "there is no task the skill should help with");
-  const improveFrom = improve ? await baselineOf(skill, read.hash) : null;
+  const improveFrom = improve ? await baselineOf(skill, read.hash, await currentSkillHash(skill)) : null;
   if (improve && improveFrom === null) return fail(res, 400, "measure the skill as it is now, with these tasks, first");
   const skillText = await readFile(skill.file, "utf8");
   const skillDir = path.dirname(skill.file);

@@ -53,6 +53,10 @@ export const skillsViewZhTW = {
       interruptedBy: "中途出錯而停止：{reason}",
       perCase: "各任務的通過數",
       avoidTag: "（不應使用）",
+      history: {
+        rates: "有技能 {with}・無技能 {without}",
+        otherText: "與現在不同的 SKILL.md",
+      },
       next: {
         measure: "現在的 SKILL.md 還沒有用這些任務測量過。請先測量。",
         improve: "沒有證據表明技能有效。下一步，讓 AI 寫出改進方案並測量。",

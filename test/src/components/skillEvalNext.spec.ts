@@ -35,7 +35,7 @@ const search = (extra: Partial<SkillEvalRun> = {}): SkillEvalRun => run("3-ladde
 
 function overview(baseline: SkillEvalRun | null, runs: SkillEvalRun[], extra: Partial<SkillEvalOverview> = {}): SkillEvalOverview {
   return {
-    ...{ skill: "weekly", dir: "/d", set, setHash: "s", setError: null, editable: true, baseline, runs, activeRunId: null },
+    ...{ skill: "weekly", dir: "/d", set, setHash: "s", skillHash: "h", setError: null, editable: true, baseline, runs, activeRunId: null },
     estimate: { attempts: 4, maxCostUsd: 2, improveAttempts: 2, maxImproveCostUsd: 3, ladderAttempts: 4, maxLadderCostUsd: 2 },
     ...extra,
   };

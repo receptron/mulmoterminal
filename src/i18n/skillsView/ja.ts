@@ -53,6 +53,10 @@ export const skillsViewJa = {
       interruptedBy: "途中で失敗して止まりました: {reason}",
       perCase: "課題ごとの合格数",
       avoidTag: "（使うべきでない）",
+      history: {
+        rates: "スキルあり {with}・なし {without}",
+        otherText: "今とは別の SKILL.md",
+      },
       next: {
         measure: "今の SKILL.md は、まだこの課題で測っていません。まず測ってください。",
         improve: "スキルが効いている証拠がありません。次は、AI に改善案を書かせて測ります。",

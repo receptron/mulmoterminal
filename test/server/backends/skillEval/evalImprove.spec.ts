@@ -10,7 +10,7 @@ import path from "node:path";
 import type { ClaudeRunRequest, ClaudeRunResult } from "../../../../server/backends/skillEval/runClaude";
 import type { AttemptDeps } from "../../../../server/backends/skillEval/evalAttempt";
 import { candidateDir, improvePrompt, improveReport } from "../../../../server/backends/skillEval/evalImprove";
-import { skillEvalFolder } from "../../../../server/backends/skillEval/evalStore";
+import { skillEvalFolder, textHash } from "../../../../server/backends/skillEval/evalStore";
 import { isBaselineFor, type SkillEvalAttempt, type SkillEvalRun } from "../../../../common/skillEval";
 import { mountSkillEvalRoutes } from "../../../../server/routes/skill-eval-routes";
 import { jsonPost, routeCall } from "../../../helpers/routeCall";
@@ -267,6 +267,8 @@ describe("improving a skill", () => {
   it("says whether the skill may be written over", async () => {
     const env = setUp();
     const overview = await env.call(`/api/skill-evals?slug=weekly&dir=${encodeURIComponent(env.fields.dir)}`);
+    // The SKILL.md as it is now, by the hash every run records of the text it measured.
+    expect(overview.body).toMatchObject({ skillHash: textHash(ORIGINAL) });
     expect(overview.body).toMatchObject({ editable: true, estimate: { improveAttempts: 1, maxImproveCostUsd: 1 + 0.5 } });
   });
 });

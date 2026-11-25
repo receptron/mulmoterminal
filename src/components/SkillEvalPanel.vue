@@ -7,18 +7,18 @@ import { computed, onUnmounted, ref, shallowRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import type { CatalogSkill, SkillSource } from "../../common/skillCatalog";
 import { freshAttempts, type SkillEvalOverview, type SkillEvalRun, type SkillEvalRunMode } from "../../common/skillEval";
-import { summarizeLadder } from "../../common/skillEvalLadder";
 import { summarizeSkillEval, type SkillEvalSummary } from "../../common/skillEvalSummary";
 import { loadSkillEval, startSkillEvalAuthoring, startSkillEvalRun, stopSkillEvalRun } from "../composables/skillEvalApi";
 import { placeSpawnedChat } from "../composables/useSpawnedChat";
 import SkillEvalResult from "./SkillEvalResult.vue";
 import SkillEvalCandidate from "./SkillEvalCandidate.vue";
 import SkillEvalLadder from "./SkillEvalLadder.vue";
+import SkillEvalHistory from "./SkillEvalHistory.vue";
 import { skillEvalNext, type SkillEvalNext, type SkillEvalStep } from "./skillEvalNext";
 
 const props = defineProps<{ source: SkillSource; skill: CatalogSkill }>();
 const emit = defineEmits<{ adopted: [] }>();
-const { t, locale } = useI18n();
+const { t } = useI18n();
 
 // While a run is going, how often its record is read again.
 const POLL_MS = 3000;
@@ -61,13 +61,6 @@ const progressKey = (run: SkillEvalRun): string => {
   if (run.ladder.length > 0) return "skillsView.eval.ladder.running";
   return run.candidateId ? "skillsView.eval.improve.running" : "skillsView.eval.running";
 };
-/** One line for an earlier run: a search names the model it found, a measurement its verdict. */
-function earlierVerdict(run: SkillEvalRun): string {
-  if (run.ladder.length === 0) return t(`skillsView.eval.verdict.${summarizeSkillEval(run.cases, run.attempts, run.repeats).verdict}`);
-  const { enough, finished } = summarizeLadder(run.ladder, run.attempts, run.status === "done");
-  if (!finished) return t("skillsView.eval.ladder.unfinishedShort");
-  return enough === null ? t("skillsView.eval.ladder.noneShort") : t("skillsView.eval.ladder.enoughShort", { model: enough });
-}
 const nextStep = computed<SkillEvalNext>(() => (overview.value ? skillEvalNext(overview.value) : { step: null, reason: null }));
 // The step to take next stands out; the others stay, quieter, for whoever knows what they want.
 const STEP_BUTTON = "cursor-pointer rounded px-2 py-1 text-[12px] disabled:cursor-default disabled:opacity-60";
@@ -76,7 +69,6 @@ const stepButton = (step: SkillEvalStep): string =>
     ? `${STEP_BUTTON} border border-accent bg-accent text-white`
     : `${STEP_BUTTON} border border-border bg-transparent text-fg hover:bg-hover`;
 const usd = (value: number): string => `$${value.toFixed(2)}`;
-const when = (at_ms: number): string => new Date(at_ms).toLocaleString(locale.value, { dateStyle: "short", timeStyle: "short" });
 
 function stopPolling(): void {
   if (poll !== null) clearInterval(poll);
@@ -260,16 +252,7 @@ async function draft(): Promise<void> {
       />
       <SkillEvalLadder v-if="latest && latest.ladder.length > 0" :run="latest" />
       <SkillEvalResult v-else-if="latest && latestSummary && !improving" :run="latest" :summary="latestSummary" :skill-text-changed="skillTextChanged" />
-      <details v-if="earlier.length" class="mt-2">
-        <summary class="cursor-pointer text-secondary">{{ t("skillsView.eval.earlier", { count: earlier.length }) }}</summary>
-        <ul class="m-0 mt-1 list-none p-0">
-          <li v-for="run in earlier" :key="run.id" data-testid="skill-eval-earlier" class="py-0.5 text-secondary">
-            {{ when(run.startedAt) }} · {{ earlierVerdict(run) }} · {{ t(`skillsView.eval.status.${run.status}`)
-            }}<template v-if="run.candidateId"> · {{ t("skillsView.eval.improve.tag") }}</template
-            ><template v-if="run.ladder.length > 0"> · {{ t("skillsView.eval.ladder.tag") }}</template>
-          </li>
-        </ul>
-      </details>
+      <SkillEvalHistory v-if="earlier.length" :runs="earlier" :current-skill-hash="overview.skillHash" />
       <p class="m-0 mt-2 break-all font-mono text-[10px] text-dim">{{ overview.dir }}</p>
     </template>
   </section>

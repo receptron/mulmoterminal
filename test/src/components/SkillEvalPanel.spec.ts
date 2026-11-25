@@ -74,7 +74,7 @@ function run(passWith: boolean, passWithout: boolean, extra: Partial<SkillEvalRu
 }
 
 const base = {
-  ...{ skill: "weekly", dir: "/h/.mulmoterminal/skill-evals/weekly", setHash: "s", setError: null, editable: true, baseline: null },
+  ...{ skill: "weekly", dir: "/h/.mulmoterminal/skill-evals/weekly", setHash: "s", skillHash: "h", setError: null, editable: true, baseline: null },
   ...{ estimate: { attempts: 2, maxCostUsd: 1, improveAttempts: 1, maxImproveCostUsd: 2, ladderAttempts: 2, maxLadderCostUsd: 1.5 }, activeRunId: null },
 };
 const mountPanel = async () => {
@@ -365,6 +365,28 @@ describe("SkillEvalPanel", () => {
       expect((await mountPanel()).find("[data-testid=skill-eval-earlier]").text()).toContain("enough: haiku · done · model search");
     });
   });
+  it("lists earlier runs with their pass rates, says which measured other text, and opens each to its result", async () => {
+    const older = run(false, false, { id: "1795000000000-oooooooo", skillHash: "old text" });
+    overview = { ...base, set, runs: [run(true, false, { id: "1795000000002-cccccccc" }), run(true, false), older] };
+    const wrapper = await mountPanel();
+    const rows = wrapper.findAll("[data-testid=skill-eval-earlier]");
+    expect(rows.map((row) => row.find("summary").text())).toEqual([
+      expect.stringContaining("with the skill 100%, without 0% · It helps · done"),
+      expect.stringContaining("with the skill 0%, without 0% · No evidence of a difference · done"),
+    ]);
+    expect(rows.map((row) => row.find("[data-testid=skill-eval-earlier-other-text]").exists())).toEqual([false, true]);
+    // Each opens to the result as it was shown then.
+    expect(rows[1]?.find("[data-testid=skill-eval-result] [data-testid=skill-eval-with-rate]").text()).toBe("0%");
+  });
+
+  it("does not call an improvement's own text another SKILL.md, nor judge a run against a text it could not read", async () => {
+    const improved = run(true, false, { id: "1795000000001-bbbbbbbb", candidateId: "1795000000001-bbbbbbbb", skillHash: "c" });
+    overview = { ...base, set, runs: [run(true, false, { id: "1795000000002-cccccccc" }), improved] };
+    expect((await mountPanel()).find("[data-testid=skill-eval-earlier-other-text]").exists()).toBe(false);
+    overview = { ...base, set, skillHash: null, runs: [run(true, false, { id: "1795000000002-cccccccc" }), run(true, false, { skillHash: "x" })] };
+    expect((await mountPanel()).find("[data-testid=skill-eval-earlier-other-text]").exists()).toBe(false);
+  });
+
   it("points at the one step to take next, and makes its button stand out", async () => {
     overview = { ...base, set, runs: [] };
     const fresh = await mountPanel();

@@ -53,6 +53,10 @@ export const skillsViewKo = {
       interruptedBy: "도중에 실패해 멈췄습니다: {reason}",
       perCase: "과제별 합격 수",
       avoidTag: "(쓰면 안 됨)",
+      history: {
+        rates: "스킬 있음 {with}・없음 {without}",
+        otherText: "지금과 다른 SKILL.md",
+      },
       next: {
         measure: "지금의 SKILL.md는 아직 이 과제로 측정하지 않았습니다. 먼저 측정하세요.",
         improve: "스킬이 효과가 있다는 증거가 없습니다. 다음은 AI에게 개선안을 쓰게 하고 측정합니다.",

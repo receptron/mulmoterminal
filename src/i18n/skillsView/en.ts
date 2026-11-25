@@ -53,6 +53,10 @@ export const skillsViewEn = {
       interruptedBy: "It stopped partway because something failed: {reason}",
       perCase: "Passes per task",
       avoidTag: "(should not use)",
+      history: {
+        rates: "with the skill {with}, without {without}",
+        otherText: "measured another SKILL.md",
+      },
       next: {
         measure: "This SKILL.md has not been measured on these tasks yet. Measure it first.",
         improve: "There is no evidence the skill helps. Next, have an AI write an improvement and measure it.",
