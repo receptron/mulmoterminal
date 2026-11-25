@@ -11,6 +11,7 @@ let overview: SkillEvalOverview | null = null;
 const loads: Promise<SkillEvalOverview | null>[] = [];
 const calls: string[] = [];
 const placed: unknown[] = [];
+const authorLanguages: (string | undefined)[] = [];
 let authoring: Promise<string | null> = Promise.resolve("chat-1");
 let starting: Promise<{ kind: "started"; id: string }> = Promise.resolve({ kind: "started", id: "r" });
 vi.mock("../../../src/composables/skillEvalApi", () => ({
@@ -21,7 +22,7 @@ vi.mock("../../../src/composables/skillEvalApi", () => ({
     Promise.resolve({ kind: "adopted", backup: "/b/1.md" })
   ),
   stopSkillEvalRun: () => (calls.push("stop"), Promise.resolve(true)),
-  startSkillEvalAuthoring: () => (calls.push("author"), authoring),
+  startSkillEvalAuthoring: (_source: unknown, _slug: string, language?: string) => (calls.push("author"), authorLanguages.push(language), authoring),
 }));
 vi.mock("../../../src/composables/useSpawnedChat", () => ({ placeSpawnedChat: (request: unknown) => placed.push(request) }));
 const { createDiffView } = vi.hoisted(() => ({
@@ -87,6 +88,7 @@ beforeEach(() => {
   createDiffView.mockClear();
   calls.length = 0;
   placed.length = 0;
+  authorLanguages.length = 0;
   loads.length = 0;
   authoring = Promise.resolve("chat-1");
   starting = Promise.resolve({ kind: "started", id: "r" });
@@ -100,6 +102,8 @@ describe("SkillEvalPanel", () => {
     await wrapper.find("[data-testid=skill-eval-draft]").trigger("click");
     await flushPromises();
     expect(calls).toEqual(["author"]);
+    // The cell talks in the screen's language from its first message.
+    expect(authorLanguages).toEqual(["en"]);
     expect(placed).toEqual([{ id: "chat-1", agent: "claude", draft: false }]);
   });
 

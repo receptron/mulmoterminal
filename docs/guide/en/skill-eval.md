@@ -43,7 +43,8 @@ select it. Under its name you see how many Claude conversations used it, and a b
 ## 2. Draft the test tasks {#draft}
 
 Press **Draft test tasks**. A Claude cell opens (in plan mode) running the bundled
-`mulmoterminal-skill-eval` skill. It reads the `SKILL.md` and proposes:
+`mulmoterminal-skill-eval` skill, talking in the language your screen is in. It reads the `SKILL.md`
+and proposes:
 
 - **3 to 5 tasks where the skill should help** — what a person would actually ask, each with a pass/fail
   check: either a command (for example "the file exists and has a `## まとめ` heading") or a few yes/no

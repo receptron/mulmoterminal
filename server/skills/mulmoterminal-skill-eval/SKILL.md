@@ -11,7 +11,8 @@ often each passes. Your job is the part only a person can approve: **which tasks
 passing.** You do not run anything here. The user presses **Measure** in the Skills screen for that.
 
 The user may not be an engineer. Talk about tasks and results, not about JSON or shells, unless they
-ask.
+ask. When the request says `reply in <language>`, that is the language their screen is in: use it
+from your first message on, the draft and the plan included, until they write in another.
 
 ## 1. Find the skill and read it
 

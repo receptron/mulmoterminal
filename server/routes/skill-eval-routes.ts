@@ -26,6 +26,7 @@ import {
 import { isEditableSkill } from "../backends/skills/skillEdit.js";
 import type { LibraryCaller } from "../backends/library/library-service.js";
 import { sharedCaller } from "./library-routes.js";
+import { isPersonLanguage, PERSON_LANGUAGES, type PersonLanguage } from "../../common/blueprint/personLanguage.js";
 import { adoptCandidate } from "../backends/skillEval/evalAdopt.js";
 import { readEvalMarks } from "../backends/skillEval/evalMarks.js";
 import type { SpawnIssueSession } from "../session/spawn/issue-session-spawn.js";
@@ -98,12 +99,20 @@ interface Context {
 // approves, and Claude Code holds that rather than the skill's own wording.
 const AUTHOR_PERMISSION_MODE = "plan";
 
-/** The first turn of the drafting cell: the skill's name, where its SKILL.md is, the folder to save in, and the
- *  transcripts of conversations that ran it, whose requests the tasks can be drafted from (#3470). */
-export function authorTurn(skill: ResolvedSkill, conversations: readonly string[]): string {
-  const turn = `/${SKILL_EVAL_AUTHOR_SKILL} skill ${JSON.stringify(skill.id)}, SKILL.md at ${JSON.stringify(skill.file)}, save in ${JSON.stringify(skill.evalDir)}`;
-  return conversations.length === 0 ? turn : `${turn}, past conversations ${JSON.stringify(conversations)}`;
+/** The first turn of the drafting cell: the skill's name, where its SKILL.md is, the folder to save in, the
+ *  transcripts of conversations that ran it (#3470), and the language the user reads, from the screen (#3515). */
+export function authorTurn(skill: ResolvedSkill, conversations: readonly string[], language: PersonLanguage | null = null): string {
+  const parts = [
+    `/${SKILL_EVAL_AUTHOR_SKILL} skill ${JSON.stringify(skill.id)}, SKILL.md at ${JSON.stringify(skill.file)}, save in ${JSON.stringify(skill.evalDir)}`,
+  ];
+  if (conversations.length > 0) parts.push(`past conversations ${JSON.stringify(conversations)}`);
+  if (language !== null) parts.push(`reply in ${PERSON_LANGUAGES[language]}`);
+  return parts.join(", ");
 }
+
+/** The screen's language as the request gave it; none for a value this server does not know. */
+const languageOf = (body: Record<string, unknown>): PersonLanguage | null =>
+  typeof body.language === "string" && isPersonLanguage(body.language) ? body.language : null;
 
 /** The conversations that ran the skill, newest first; none when the Library cannot say, which only loses the hint. */
 async function conversationsOf(ctx: Context, skill: ResolvedSkill): Promise<string[]> {
@@ -119,7 +128,7 @@ async function startAuthoring(ctx: Context, body: Record<string, unknown>, res: 
   // A folder's skill is drafted in that folder; the user's and a plugin's anywhere, so the home.
   const cwd = skill.source.scope === "project" ? skill.source.dir : homedir();
   try {
-    const turn = authorTurn(skill, await conversationsOf(ctx, skill));
+    const turn = authorTurn(skill, await conversationsOf(ctx, skill), languageOf(body));
     const spawned = await ctx.spawnSession("claude", cwd, turn, true, null, { claudePermissionMode: AUTHOR_PERMISSION_MODE });
     res.json({ chatId: spawned.sessionId, agent: spawned.agent });
   } catch (err) {

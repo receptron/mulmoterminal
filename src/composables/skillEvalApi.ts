@@ -57,9 +57,10 @@ export async function stopSkillEvalRun(runId: string): Promise<boolean> {
 }
 
 /** The id of the Claude cell that drafts the test tasks, or null when it could not be started. */
-export async function startSkillEvalAuthoring(source: SkillSource, slug: string): Promise<string | null> {
+/** Opens the cell that drafts the tasks, talking in `language`, the screen's locale. */
+export async function startSkillEvalAuthoring(source: SkillSource, slug: string, language: string): Promise<string | null> {
   try {
-    const res = await fetchWithTimeout("/api/skill-evals/author", post(skillFields(source, slug)), SLOW_COMMAND_TIMEOUT_MS);
+    const res = await fetchWithTimeout("/api/skill-evals/author", post({ ...skillFields(source, slug), language }), SLOW_COMMAND_TIMEOUT_MS);
     const answer = await jsonBody(res);
     return res.ok && typeof answer.chatId === "string" ? answer.chatId : null;
   } catch {
