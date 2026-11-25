@@ -64,7 +64,9 @@ export const skillsViewKo = {
         compare: "스킬 있음의 합격률: 지금의 스킬 {before} → 개선안 {after}",
         overfit:
           "개선안은 같은 과제를 보고 만들고 같은 과제로 측정했습니다. 과제에 맞췄을 뿐일 수도 있으니, 채택한 뒤 새 과제를 더해 다시 측정하면 확실합니다.",
-        show: "개선안의 SKILL.md 보기",
+        show: "개선안 SKILL.md 전체 보기",
+        diff: "바탕이 된 SKILL.md에서 바뀐 점:",
+        folded: "바뀌지 않은 {count}줄",
         adopt: "채택",
         adopted: "채택했습니다. 이전 SKILL.md는 {backup}에 남아 있습니다.",
         changed: "측정한 뒤 SKILL.md가 바뀌어 있어 덮어쓰지 않았습니다.",

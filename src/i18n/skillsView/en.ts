@@ -64,7 +64,9 @@ export const skillsViewEn = {
         compare: "Pass rate with the skill: current {before} → improvement {after}",
         overfit:
           "The improvement was written from these tasks and measured on them, so it may only fit them. After adopting it, add new tasks and measure again to be sure.",
-        show: "Show the improved SKILL.md",
+        show: "Show the whole improved SKILL.md",
+        diff: "What it changes in the SKILL.md it was written from:",
+        folded: "{count} unchanged lines",
         adopt: "Adopt",
         adopted: "Adopted. The previous SKILL.md is kept at {backup}.",
         changed: "The SKILL.md changed after it was measured, so it was not overwritten.",
