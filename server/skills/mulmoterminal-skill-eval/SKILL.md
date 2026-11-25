@@ -128,7 +128,8 @@ Write `cases.json` in the folder the request gave:
   example `["Bash(python3 *)"]`). At most 20 tasks.
 - A task's starting files go in `files/<id>/` in that folder — they are copied
   into the empty folder before the task runs. Write them yourself; keep them small and made up, never
-  copied from the user's real files.
+  copied from the user's real files. They are part of the tasks: changing one, like changing `cases.json`, means the
+  earlier results no longer count as measurements of these tasks, so tell the user they will need **Measure** again.
 
 Then tell the user it is saved, and that **Measure** on the skill in the Skills screen runs it. Say
 that with only a handful of tasks, a small difference will read as "no evidence of a difference" —
