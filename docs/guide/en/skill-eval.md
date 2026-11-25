@@ -110,7 +110,7 @@ without it are reused from the measurement it was written from, since they never
 Your `SKILL.md` is not touched.
 
 The result sets the improvement's pass rate beside that of the skill it was written from, and says
-whether the difference is more than chance would easily make: **better** or **worse** only when the gap is wider than the skill's own rounds disagree in either
+whether the difference meets the rule below: **better** or **worse** only when the gap is wider than the skill's own rounds disagree in either
 run, and at least one task's worth; otherwise **no evidence**. It is a rule of thumb, not a statistical
 test, and chance can still pass it; but two noisy numbers often differ by chance,
 and taking the higher one reads chance as progress. Tasks the improvement passed less often are named.
