@@ -8,6 +8,53 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@13.8.0 — 2026-11-25
+
+> **Setup guide:** [13.8.0 — The issue-to-merge guide, and skill evaluation you can follow](https://receptron.github.io/mulmoterminal/guide/en/v13.8.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.8.0.html))
+
+### A guide page for issue to merge (#3487)
+
+For #3475.
+
+- New guide page `issue-to-merge` (en / ja): the roles, setup (`review`, a workspace cell, `gh`, `maxIssueSessions`, the clone being a launcher directory), handing over one issue or several, the lines each session receives, when the user is needed, codex's grants, cleanup and troubleshooting, with screenshots of a real run. Linked from the index, the feature reference and the two config sections.
+
+### Skill evaluation you can follow (#3476, #3477, #3478, #3479, #3480, #3481, #3482, #3484)
+
+For #3465, #3466, #3467, #3468, #3469, #3470 and #3472.
+
+- **Draft test tasks** hands the drafting cell the transcripts of the newest conversations that used the skill (`skillConversations` in the Library index; for a folder's skill, only conversations in that folder), and `mulmoterminal-skill-eval` drafts tasks from the user's real requests, stripped of names, paths and anything private, and says which came from them. With no Library answer, drafting is unchanged.
+
+- The Skills list marks each evaluated skill with the verdict on its current text and tasks (**helps**, **makes worse**, **no difference**, **no verdict**, **not measured**), and **Needs attention** narrows it to the ones not helping, not measured, or used without tasks. Marks come from `GET /api/skill-evals/marks`, which reads the evaluation folders rather than the catalog.
+- The evaluation panel picks one next step (draft, measure, improve, adopt, find the cheapest model, or nothing) from the overview, highlights its button and says why.
+- An improvement is shown as a diff against the SKILL.md it was written from, in the CodeMirror merge view the blueprint screen uses; the whole text stays one click away.
+- Earlier results show pass rates with and without the skill and open to their full result; a row that measured another SKILL.md is marked. `GET /api/skill-evals` returns `skillHash`.
+- An improvement run measures with the skill only and reuses the measurement's runs without it, marked `reusedFrom`; what a run spent counts only its own attempts.
+- The improvement writer may change only SKILL.md, and the improvement is measured as the skill's snapshot with that one file replaced, so **Adopt** installs what was measured. An adopted improvement's measurement is the baseline for the next one.
+
+### Codex grants survive a cold resume (#3471, #3474)
+
+For #3464 and #3473.
+
+- The sandbox grants a server-started codex gets (network, the worktree's git metadata, `approval_policy="never"`) are recorded per session id in `~/.mulmoterminal/codex-session-grants.jsonl` and applied again on every later spawn of that id, so a resumed implementer can still reach GitHub and commit. A conversation resumed under its rollout id inherits nothing.
+
+### Conversation pane in the app's language (#3483)
+
+For #3342.
+
+- The Conversation pane's title, speaker labels, status, paging and clipped-output notices are translated in all five locales.
+
+### Library marks lock on Windows (#3490)
+
+For #3488.
+
+- Releasing or taking over the lock on the Library's marks (pins and names) retries moving it aside while Windows answers `EPERM` / `EBUSY` / `EACCES`, instead of treating that as already gone and leaving the lock until it went stale.
+
+### Tests (#3486)
+
+For #3485.
+
+- Spawn specs wait for every session-state write queue before removing their temp `HOME`, which made them fail now and then with `ENOTEMPTY`.
+
 ## mulmoterminal@13.7.0 — 2026-11-25
 
 > **Setup guide:** [13.7.0 — Hand an issue to an agent, and measure your skills](https://receptron.github.io/mulmoterminal/guide/en/v13.7.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.7.0.html))

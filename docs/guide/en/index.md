@@ -8,9 +8,9 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **13.7.0 is out.** An agent can hand an issue to another agent and have a third review the PR
-> until the repository's merge condition is met, the Skills viewer measures whether a skill helps,
-> and a full disk no longer empties your grid. [Setup guide](v13.7.0.html)
+> **13.8.0 is out.** A one-page guide to handing issues to agents and getting them merged, and the
+> Skills viewer marks which skills need attention and points at the next step.
+> [Setup guide](v13.8.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 
