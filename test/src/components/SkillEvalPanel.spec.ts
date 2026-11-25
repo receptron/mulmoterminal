@@ -50,7 +50,7 @@ const set = {
 function run(passWith: boolean, passWithout: boolean, extra: Partial<SkillEvalRun> = {}): SkillEvalRun {
   const attempt = (arm: "with" | "without", pass: boolean) => ({
     ...{ caseId: "a", arm, round: 0, pass, skillInvoked: arm === "with", costUsd: 0.02, gradingCostUsd: 0, durationMs: 1 },
-    ...{ finalText: "", checkOutput: "", denied: [], error: null, model: "haiku" },
+    ...{ finalText: "", checkOutput: "", denied: [], error: null, model: "haiku", reusedFrom: "" },
   });
   return {
     ...{ id: "1795000000000-aaaaaaaa", skill: "weekly", status: "done", startedAt: 1, finishedAt: 2, model: "haiku", repeats: 1 },
@@ -75,7 +75,7 @@ function run(passWith: boolean, passWithout: boolean, extra: Partial<SkillEvalRu
 
 const base = {
   ...{ skill: "weekly", dir: "/h/.mulmoterminal/skill-evals/weekly", setHash: "s", setError: null, editable: true, baseline: null },
-  ...{ estimate: { attempts: 2, maxCostUsd: 1, maxImproveCostUsd: 2, ladderAttempts: 2, maxLadderCostUsd: 1.5 }, activeRunId: null },
+  ...{ estimate: { attempts: 2, maxCostUsd: 1, improveAttempts: 1, maxImproveCostUsd: 2, ladderAttempts: 2, maxLadderCostUsd: 1.5 }, activeRunId: null },
 };
 const mountPanel = async () => {
   const wrapper = mount(SkillEvalPanel, { props: { source, skill }, global: { plugins: [i18n] } });
@@ -215,6 +215,7 @@ describe("SkillEvalPanel", () => {
     const wrapper = await mountPanel();
     await wrapper.find("[data-testid=skill-eval-improve]").trigger("click");
     expect(wrapper.find("[data-testid=skill-eval-confirm]").text()).toContain("$2.00");
+    expect(wrapper.find("[data-testid=skill-eval-confirm]").text()).toContain("in 1 runs");
     await wrapper.find("[data-testid=skill-eval-go]").trigger("click");
     await flushPromises();
     expect(calls).toEqual(["improve"]);
@@ -272,6 +273,28 @@ describe("SkillEvalPanel", () => {
     expect(createDiffView).not.toHaveBeenCalled();
     expect(wrapper.find("[data-testid=skill-eval-candidate-text]").text()).toBe("better");
   });
+  it("says the runs without the skill were copied, and leaves their cost out of what the run spent", async () => {
+    const improved = run(true, false, { id: "1795000000001-bbbbbbbb", candidateId: "1795000000001-bbbbbbbb", skillText: "better", improveCostUsd: 0.3 });
+    improved.attempts = improved.attempts.map((attempt) => (attempt.arm === "without" ? { ...attempt, reusedFrom: "1795000000000-aaaaaaaa" } : attempt));
+    improved.baseRunId = "1795000000000-aaaaaaaa";
+    overview = { ...base, set, runs: [improved, run(false, false)] };
+    const wrapper = await mountPanel();
+    expect(wrapper.find("[data-testid=skill-eval-reused]").exists()).toBe(true);
+    // The writer and the one attempt with the skill; the copied attempt without it cost this run nothing.
+    expect(wrapper.find("[data-testid=skill-eval-result]").text()).toContain("This evaluation cost $0.32");
+    overview = { ...base, set, runs: [run(true, false)] };
+    expect((await mountPanel()).find("[data-testid=skill-eval-reused]").exists()).toBe(false);
+  });
+
+  it("counts only the attempts a running improvement makes itself", async () => {
+    const measuring = run(true, false, { id: "1795000000001-bbbbbbbb", status: "running", candidateId: "1795000000001-bbbbbbbb", skillText: "better" });
+    measuring.attempts = measuring.attempts.filter((attempt) => attempt.arm === "without").map((attempt) => ({ ...attempt, reusedFrom: "x" }));
+    measuring.plannedAttempts = 1;
+    overview = { ...base, set, runs: [measuring, run(false, false)], activeRunId: measuring.id };
+    const wrapper = await mountPanel();
+    expect(wrapper.find("[data-testid=skill-eval-progress]").text()).toContain("0 / 1");
+    wrapper.unmount();
+  });
 
   it("does not set beside the skill an improvement measured on tasks that have since changed", async () => {
     const improved = run(true, false, { id: "1795000000001-bbbbbbbb", candidateId: "1795000000001-bbbbbbbb", skillText: "better", setHash: "old tasks" });
@@ -289,7 +312,7 @@ describe("SkillEvalPanel", () => {
   describe("searching for the cheapest model", () => {
     const tried = (model: string, pass: boolean, round: number) => ({
       ...{ caseId: "a", arm: "with" as const, round, pass, skillInvoked: true, costUsd: 0.1, gradingCostUsd: 0, durationMs: 1 },
-      ...{ finalText: "", checkOutput: "", denied: [], error: null, model },
+      ...{ finalText: "", checkOutput: "", denied: [], error: null, model, reusedFrom: "" },
     });
     const search = (attempts: ReturnType<typeof tried>[], extra: Partial<SkillEvalRun> = {}) =>
       run(false, false, { id: "1795000000002-cccccccc", ladder: ["haiku", "sonnet", "opus"], attempts, plannedAttempts: 6, ...extra });
@@ -342,6 +365,21 @@ describe("SkillEvalPanel", () => {
       expect((await mountPanel()).find("[data-testid=skill-eval-earlier]").text()).toContain("enough: haiku · done · model search");
     });
   });
+  it("points at the one step to take next, and makes its button stand out", async () => {
+    overview = { ...base, set, runs: [] };
+    const fresh = await mountPanel();
+    expect(fresh.find("[data-testid=skill-eval-next]").text()).toContain("has not been measured on these tasks yet");
+    expect(fresh.find("[data-testid=skill-eval-measure]").classes()).toContain("bg-accent");
+    expect(fresh.find("[data-testid=skill-eval-ladder]").classes()).not.toContain("bg-accent");
+    overview = { ...base, set, runs: [run(false, false)], baseline: run(false, false) };
+    const measured = await mountPanel();
+    expect(measured.find("[data-testid=skill-eval-improve]").classes()).toContain("bg-accent");
+    expect(measured.find("[data-testid=skill-eval-measure]").classes()).not.toContain("bg-accent");
+    // While the price is being confirmed, the confirmation is the one thing to read.
+    await measured.find("[data-testid=skill-eval-improve]").trigger("click");
+    expect(measured.find("[data-testid=skill-eval-next]").exists()).toBe(false);
+  });
+
   it("says why a run stopped partway when something failed", async () => {
     overview = { ...base, set, runs: [run(true, false, { status: "interrupted", interruptedBy: "EPERM: operation not permitted" })] };
     expect((await mountPanel()).find("[data-testid=skill-eval-interrupted-by]").text()).toContain("EPERM: operation not permitted");

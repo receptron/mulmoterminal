@@ -53,10 +53,18 @@ export const skillsViewZhCN = {
       interruptedBy: "中途出错而停止：{reason}",
       perCase: "各任务的通过数",
       avoidTag: "（不应使用）",
+      next: {
+        measure: "现在的 SKILL.md 还没有用这些任务测量过。请先测量。",
+        improve: "没有证据表明技能有效。下一步，让 AI 写出改进方案并测量。",
+        improveAgain: "上一个改进方案并没有比现在的技能通过更多。请再写一个，或修改任务。",
+        adopt: "改进方案通过得更多。请在下方确认内容，没问题就采用。",
+        ladder: "技能有效。下一步，可以查找更便宜的模型是否足够。",
+        done: "技能有效，查找更便宜模型的工作也已完成（结果在下方）。修改技能或任务后，请再测量一次。",
+      },
       improve: {
         start: "生成改进方案并测量",
         confirm:
-          "AI 将根据上次结果写出 SKILL.md 的改进方案，并用同样的任务测量 {attempts} 次。费用上限为 {max}（实际通常远低于此）。不会修改现在的 SKILL.md。开始吗？",
+          "AI 将根据上次结果写出 SKILL.md 的改进方案，并用同样的任务在有技能时测量 {attempts} 次（无技能时沿用上次结果）。费用上限为 {max}（实际通常远低于此）。不会修改现在的 SKILL.md。开始吗？",
         writing: "正在编写改进方案…",
         running: "正在测量改进方案… {done} / {total}",
         title: "改进方案",
@@ -72,6 +80,7 @@ export const skillsViewZhCN = {
         adoptFailed: "无法采用。{error}",
         readOnly: "此技能无法在这里修改。请查看内容后在原位置修改。",
         tag: "改进方案",
+        reused: "无技能时的结果来自编写改进方案所依据的那次测量，没有重新测量。",
       },
       ladder: {
         start: "寻找最便宜的模型",
