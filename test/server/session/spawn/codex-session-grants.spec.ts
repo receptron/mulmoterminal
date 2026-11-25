@@ -64,6 +64,7 @@ describe("codexSessionGrants", () => {
     home = await mkdtemp(path.join(os.tmpdir(), "mt-codex-grants-"));
   });
   afterEach(async () => {
+    await persisted();
     vi.doUnmock("../../../../server/config/env.js");
     await rm(home, { recursive: true, force: true });
   });
