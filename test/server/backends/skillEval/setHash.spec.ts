@@ -96,4 +96,21 @@ describe("reading a set's hash off its folder", () => {
     expect(read).toMatchObject({ kind: "invalid" });
     expect(read.kind === "invalid" ? read.error : "").toContain("could not be read");
   });
+
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)("refuses a set with a folder of starting files it cannot list", async () => {
+    const dir = evalDir();
+    const locked = path.join(dir, "files", "plain");
+    mkdirSync(locked, { recursive: true });
+    writeFileSync(path.join(locked, "notes.md"), "x");
+    chmodSync(locked, 0o000);
+    const read = await readEvalSet(dir, "weekly");
+    chmodSync(locked, 0o700);
+    expect(read).toMatchObject({ kind: "invalid" });
+  });
+
+  it("refuses a set whose files entry is not a folder, rather than taking it for none", async () => {
+    const dir = evalDir();
+    writeFileSync(path.join(dir, "files"), "not a folder");
+    expect(await readEvalSet(dir, "weekly")).toMatchObject({ kind: "invalid" });
+  });
 });

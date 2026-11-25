@@ -4,12 +4,19 @@
 // Code changes.
 import { createHash } from "node:crypto";
 import { createReadStream, type Dirent } from "node:fs";
-import { mkdir, readdir, readFile, readlink } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, readlink } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
 import { skillEvalDirName, skillEvalRunSchema, skillEvalSetSchema, type SkillEvalRun, type SkillEvalSet } from "../../../common/skillEval.js";
 import { writeFileAtomic } from "../../files/atomic-write.js";
 import { setHash, type StartingFile } from "./setHash.js";
+import { isRecord } from "../../../common/isRecord.js";
+
+const pathExists = (target: string): Promise<boolean> =>
+  access(target).then(
+    () => true,
+    () => false,
+  );
 
 export const SKILL_EVAL_SET_FILE = "cases.json";
 /** The newest runs listed for a skill; older ones stay on disk. */
@@ -64,7 +71,7 @@ async function startingFile(dir: string, entry: Dirent, relative: string): Promi
 }
 
 async function startingFilesUnder(dir: string, prefix: string): Promise<StartingFile[]> {
-  const entries = await readdir(dir, { withFileTypes: true }).catch((): Dirent[] => []);
+  const entries = await readdir(dir, { withFileTypes: true });
   const found = await Promise.all(entries.map((entry) => startingFile(dir, entry, prefix === "" ? entry.name : `${prefix}/${entry.name}`)));
   return found.flat();
 }
@@ -78,12 +85,25 @@ function parseSet(text: string, skillName: string, files: readonly StartingFile[
   return { kind: "ok", set: parsed.data, hash: setHash(text, files) };
 }
 
+const isMissing = (err: unknown): boolean => isRecord(err) && err.code === "ENOENT";
+
+/** Every starting file of the set. Only a set with no `files/` folder at all has none: a folder that could not be
+ *  read is not an empty one, and counting it as empty would take another set's runs for this one's. */
+async function startingFiles(evalDir: string): Promise<StartingFile[]> {
+  try {
+    return await startingFilesUnder(startingFilesDir(evalDir), "");
+  } catch (err) {
+    if (isMissing(err) && !(await pathExists(startingFilesDir(evalDir)))) return [];
+    throw err;
+  }
+}
+
 /** The set and its hash, which covers the files its tasks start from as well as `cases.json` (#3491). */
 export async function readEvalSet(evalDir: string, skillName: string): Promise<EvalSetRead> {
   const text = await readText(path.join(evalDir, SKILL_EVAL_SET_FILE));
   if (text === null) return { kind: "absent" };
   try {
-    return parseSet(text, skillName, await startingFilesUnder(startingFilesDir(evalDir), ""));
+    return parseSet(text, skillName, await startingFiles(evalDir));
   } catch (err) {
     // A set whose starting files cannot be read cannot be told apart from another set, so it is not offered as this one.
     return { kind: "invalid", error: `the files in ${startingFilesDir(evalDir)} could not be read: ${err instanceof Error ? err.message : String(err)}` };
