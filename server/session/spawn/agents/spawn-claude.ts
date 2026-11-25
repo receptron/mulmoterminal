@@ -92,6 +92,9 @@ export interface SpawnClaudeOptions {
   /** `--permission-mode` for this session instead of the server's. Remembered for the id, so every
    *  later spawn of it, a resume included, runs in it again (session-permission-mode.ts). */
   permissionMode?: string | undefined;
+  /** More `--allowedTools` entries for this spawn only, such as a write rule for one folder (#3507).
+   *  Not remembered for the id: a resume runs with the usual list. */
+  extraAllowedTools?: readonly string[];
 }
 
 // The `work in <clone>` line for a session's PRs, or null when the footer is switched off or the
@@ -331,7 +334,7 @@ export function createClaudeSpawner(deps: SpawnDeps) {
       permissionMode,
       attachGuiMcp: fullGuiMcp || directoryGroupsJson !== null,
       mcpConfig,
-      allowedTools: claudeAllowedTools(deps, fullGuiMcp, restrictedTo),
+      allowedTools: [claudeAllowedTools(deps, fullGuiMcp, restrictedTo), ...(options.extraAllowedTools ?? [])].filter(Boolean).join(","),
       addDirs,
       appendedPrompt: sessionAppendedPrompt(sessionId, cwd, dir.appendSystemPrompt),
     });

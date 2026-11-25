@@ -343,6 +343,18 @@ describe("spawnClaudePty limited to some GUI tool groups (#3033)", () => {
     expect(releaseAllToolsSession).not.toHaveBeenCalled();
     expect(argAfter("--allowedTools")).toBe("mcp__mt");
   });
+
+  // The skill-evaluation drafting cell's save folder (#3507): added to the list, alone when the list is
+  // otherwise empty, and for that spawn only.
+  it("adds a spawn's extra pre-approvals after its own, and carries none into a resume", () => {
+    const id = freshId();
+    spawn({ attachGuiMcp: true, extraAllowedTools: ["Write(//evals/weekly/**)", "Edit(//evals/weekly/**)"] }, id);
+    expect(argAfter("--allowedTools")).toBe("mcp__mt,Write(//evals/weekly/**),Edit(//evals/weekly/**)");
+    spawn({ guiGroups: ["data"], extraAllowedTools: ["Write(//evals/weekly/**)"] }, freshId());
+    expect(argAfter("--allowedTools")).toBe("Write(//evals/weekly/**)");
+    resume({ attachGuiMcp: true }, id);
+    expect(argAfter("--allowedTools")).toBe("mcp__mt");
+  });
 });
 
 // A spawn can start in its own --permission-mode (#3334: a Library promotion starts in plan mode,

@@ -43,6 +43,13 @@ describe("issueSpawnOptions", () => {
 
   // #3413: an implementer a session started runs the review loop, whose tools only the all-tools url has.
   it("attaches the GUI MCP when every tool is asked for", () => {
-    expect(issueSpawnOptions("/wt/1253", SEED, true, undefined, true)).toEqual({ cwd: "/wt/1253", attachGuiMcp: true, initialPrompt: SEED });
+    expect(issueSpawnOptions("/wt/1253", SEED, true, { allTools: true })).toEqual({ cwd: "/wt/1253", attachGuiMcp: true, initialPrompt: SEED });
+    expect(issueSpawnOptions("/wt/1253", SEED, true, { allowedTools: ["Write(//e/**)"] })).toEqual({
+      cwd: "/wt/1253",
+      attachGuiMcp: false,
+      initialPrompt: SEED,
+      extraAllowedTools: ["Write(//e/**)"],
+    });
+    expect(issueSpawnOptions("/wt/1253", SEED, true, { allowedTools: [] })).not.toHaveProperty("extraAllowedTools");
   });
 });

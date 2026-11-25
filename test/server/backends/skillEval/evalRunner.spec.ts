@@ -16,6 +16,7 @@ import { mountSkillEvalRoutes } from "../../../../server/routes/skill-eval-route
 import type { LibraryCaller } from "../../../../server/backends/library/library-service";
 import { jsonPost, routeCall } from "../../../helpers/routeCall";
 import { finishedSkillEvalRun } from "../../../helpers/finishedSkillEvalRun";
+import { evalDirWriteRules } from "../../../../server/backends/skillEval/evalWriteRules.js";
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
@@ -314,7 +315,8 @@ describe("/api/skill-evals", () => {
         `/mulmoterminal-skill-eval skill "weekly", SKILL.md at ${JSON.stringify(file)}, save in ${JSON.stringify(evalDir)}`,
         true,
         null,
-        { claudePermissionMode: "plan" },
+        // The save folder is allowed ahead of time, so accepting the plan with auto mode cannot refuse the save (#3507).
+        { claudePermissionMode: "plan", claudeAllowedTools: evalDirWriteRules(evalDir) },
       ],
     ]);
     expect((await app(root, projectDir, [])("/api/skill-evals/author", jsonPost({ slug: "weekly", dir: projectDir }))).status).toBe(503);

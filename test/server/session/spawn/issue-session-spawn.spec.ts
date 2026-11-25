@@ -89,6 +89,16 @@ describe("createIssueSessionSpawner", () => {
     expect(calls[1].args).toEqual(["s-1", null, null, CWD, false, { mcpGroups: GROUPS, initialPrompt: SEED }]);
   });
 
+  // #3507: the skill-evaluation drafting cell pre-approves writing its save folder; only Claude reads it.
+  it("hands Claude the extra pre-approvals asked for, and leaves the others as they are", async () => {
+    const { spawn, calls } = setup();
+    const rules = ["Write(//evals/weekly/**)"];
+    await spawn("claude", CWD, SEED, true, null, { claudeAllowedTools: rules });
+    await spawn("codex", CWD, SEED, true, null, { claudeAllowedTools: rules });
+    expect(calls[0].args).toEqual(["s-1", null, null, { cwd: CWD, attachGuiMcp: false, extraAllowedTools: rules, initialPrompt: SEED }]);
+    expect(calls[1].args).toEqual(["s-1", null, null, CWD, false, { mcpGroups: GROUPS, initialPrompt: SEED }]);
+  });
+
   // attachGuiMcp:false is what makes these a project cell rather than a GUI-started chat.
   it.each(["codex", "copilot"] as const)("gives %s the directory's groups and not the full toolset", async (agent) => {
     const { spawn, calls, groupsFor } = setup();

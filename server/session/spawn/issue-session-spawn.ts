@@ -39,6 +39,9 @@ export interface IssueSessionSpawnDeps {
  *  server's; the other agents have no such mode to start in, and start as they always do. */
 export interface IssueSessionOptions {
   claudePermissionMode?: string;
+  /** More `--allowedTools` entries for a Claude session (permission rules such as `Write(//dir/**)`).
+   *  The other agents ignore it. */
+  claudeAllowedTools?: readonly string[];
   /** Hand claude, codex or copilot the whole GUI MCP instead of the directory's groups (#3413). The
    *  other agents read theirs from a file every session in the directory shares, and ignore it. */
   allTools?: boolean;
@@ -68,6 +71,7 @@ interface SpawnRequest {
   seed: string;
   run: boolean;
   claudePermissionMode: string | undefined;
+  claudeAllowedTools: readonly string[];
   allTools: boolean;
   networkAccess: boolean;
   neverAsk: boolean;
@@ -117,8 +121,13 @@ const directoryGroupsSpawn =
 // A Record over the agents, so hosting a new one is a type error here rather than an issue start
 // that silently spawns Claude under its name.
 const AGENT_SPAWN: Record<TerminalAgent, AgentSpawn> = {
-  claude: async ({ sessionId, cwd, seed, run, claudePermissionMode, allTools }, deps) => {
-    deps.spawnClaudePty(sessionId, null, null, issueSpawnOptions(cwd, seed, run, claudePermissionMode, allTools));
+  claude: async ({ sessionId, cwd, seed, run, claudePermissionMode, claudeAllowedTools, allTools }, deps) => {
+    deps.spawnClaudePty(
+      sessionId,
+      null,
+      null,
+      issueSpawnOptions(cwd, seed, run, { permissionMode: claudePermissionMode, allTools, allowedTools: claudeAllowedTools }),
+    );
   },
   codex: async ({ sessionId, cwd, seed, allTools, networkAccess, neverAsk, writableRoots }, deps) => {
     deps.spawnCodexPty(sessionId, null, null, cwd, allTools, {
@@ -158,6 +167,7 @@ export function createIssueSessionSpawner(deps: IssueSessionSpawnDeps): SpawnIss
         seed,
         run,
         claudePermissionMode: options.claudePermissionMode,
+        claudeAllowedTools: options.claudeAllowedTools ?? [],
         allTools: options.allTools === true,
         networkAccess: options.networkAccess === true,
         neverAsk: options.neverAsk === true,
