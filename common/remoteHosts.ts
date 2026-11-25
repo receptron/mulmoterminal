@@ -71,3 +71,37 @@ export function remotePathOf(pathname: string): { id: string; rest: string } | n
 
 /** The inverse of remotePathOf: `path` (starting with `/`) as reached through host `id`. */
 export const remotePath = (id: string, path: string): string => `${REMOTE_PATH_PREFIX}${id}${path}`;
+
+/** GET /api/remote-hosts/<id>/dirs: where the launch form may start a terminal on that host. */
+export const remoteHostDirsRoute = (id: string): string => `/api/remote-hosts/${id}/dirs`;
+
+export interface RemoteDirPreset {
+  label: string;
+  path: string;
+}
+
+/** The remote's default workspace and its saved directories, and nothing else from its config. */
+export interface RemoteHostDirs {
+  cwd: string | null;
+  presets: RemoteDirPreset[];
+}
+
+export const REMOTE_DIR_PRESETS_MAX = 200;
+
+const isAbsolutePosixPath = (value: unknown): value is string => typeof value === "string" && value.startsWith("/");
+
+const isRemoteDirPreset = (value: unknown): value is RemoteDirPreset => isRecord(value) && typeof value.label === "string" && isAbsolutePosixPath(value.path);
+
+// Read from the remote's GET /api/config on the server, and again from the gateway's answer in the
+// browser. Fields are copied, not passed through, so nothing else in that config leaves the server.
+export function parseRemoteHostDirs(cwd: unknown, presets: unknown): RemoteHostDirs {
+  const listed = isUnknownArray(presets) ? presets.filter(isRemoteDirPreset).slice(0, REMOTE_DIR_PRESETS_MAX) : [];
+  return {
+    cwd: isAbsolutePosixPath(cwd) ? cwd : null,
+    presets: listed.map(({ label, path }) => ({ label, path })),
+  };
+}
+
+/** The gateway's own answer, read back in the browser. */
+export const parseRemoteHostDirsResponse = (body: unknown): RemoteHostDirs =>
+  isRecord(body) ? parseRemoteHostDirs(body.cwd, body.presets) : { cwd: null, presets: [] };

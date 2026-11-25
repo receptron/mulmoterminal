@@ -7,5 +7,8 @@ export const remoteLaunchZhTW = {
   dirPlaceholder: "/home/you/project",
   dirNeedsAbsolute: "請輸入 {label} 上以 / 開頭的絕對路徑。",
   start: "在 {label} 上啟動",
-  localOnly: "已儲存的目錄、啟動器、自訂代理與帳戶都屬於本機的設定，因此不在此處顯示。",
+  localOnly: "上面的目錄屬於 {label}。本機已儲存的目錄、啟動器、自訂代理與帳戶不在此處顯示。",
+  workspace: "工作區",
+  dirsFailed: "無法讀取 {label} 上已儲存的目錄: {error}",
+  chipFill: "使用 {path}",
 };

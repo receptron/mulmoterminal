@@ -1,5 +1,5 @@
 // GET /api/remote-hosts (#3506): the configured remote hosts, each probed, plus the entries that
-// were not loaded and why.
+// were not loaded and why. GET /api/remote-hosts/<id>/dirs: that host's saved directories.
 //
 // `remoteHosts` is read from config.json here rather than being an AppConfig key. That keeps it out
 // of POST /api/config, so no page can add a host to forward to, and out of the sanitize-and-save
@@ -8,7 +8,7 @@
 import type { Express } from "express";
 import { existsSync } from "node:fs";
 import { isRecord } from "../../../common/isRecord.js";
-import type { RemoteHostSummary, RemoteHostsResponse } from "../../../common/remoteHosts.js";
+import { parseRemoteHostDirs, type RemoteHostSummary, type RemoteHostsResponse } from "../../../common/remoteHosts.js";
 import { readJsonFile } from "../../infra/fs/read-text-file.js";
 import { parseRemoteHosts, type RemoteHost, type RemoteHostsConfig } from "./remoteHostsConfig.js";
 import { remoteHostState } from "./remoteHostState.js";
@@ -32,16 +32,34 @@ const fetchJson: FetchJson = async (url, signal) => {
   return res.ok ? res.json() : null;
 };
 
-async function probe(host: RemoteHost, localVersion: string, fetchImpl: FetchJson): Promise<RemoteHostSummary> {
+async function fetchWithin(fetchImpl: FetchJson, url: string): Promise<unknown> {
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), PROBE_TIMEOUT_MS);
   try {
-    const body = await fetchImpl(`${host.origin}/api/update-status`, abort.signal);
+    return await fetchImpl(url, abort.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function probe(host: RemoteHost, localVersion: string, fetchImpl: FetchJson): Promise<RemoteHostSummary> {
+  try {
+    const body = await fetchWithin(fetchImpl, `${host.origin}/api/update-status`);
     return { id: host.id, label: host.label, ...remoteHostState(localVersion, body) };
   } catch {
     return { id: host.id, label: host.label, state: "unreachable", version: null };
-  } finally {
-    clearTimeout(timer);
+  }
+}
+
+// The remote's whole config is read, and only its directories are answered: the browser never sees
+// the rest, and never talks to the remote's /api itself.
+async function readRemoteDirs(host: RemoteHost, fetchImpl: FetchJson): Promise<unknown> {
+  const url = `${host.origin}/api/config`;
+  try {
+    const body = await fetchWithin(fetchImpl, url);
+    return isRecord(body) ? parseRemoteHostDirs(body.cwd, body.cwdPresets) : { error: `${host.label} answered ${url} without a config` };
+  } catch (err) {
+    return { error: `${host.label} did not answer ${url}: ${String(err)}` };
   }
 }
 
@@ -57,5 +75,15 @@ export function mountRemoteHostsRoutes(app: Express, deps: RemoteHostsRouteDeps)
     const summaries = await Promise.all(hosts.map((host) => probe(host, deps.localVersion(), deps.fetchJson ?? fetchJson)));
     const body: RemoteHostsResponse = { hosts: summaries, rejected };
     res.json(body);
+  });
+
+  app.get("/api/remote-hosts/:id/dirs", async (req, res) => {
+    const host = loadRemoteHosts(deps.configFile).hosts.find((candidate) => candidate.id === req.params.id);
+    if (!host) {
+      res.status(404).json({ error: `no remote host "${req.params.id}" is configured` });
+      return;
+    }
+    const answer = await readRemoteDirs(host, deps.fetchJson ?? fetchJson);
+    res.status(isRecord(answer) && "error" in answer ? 502 : 200).json(answer);
   });
 }

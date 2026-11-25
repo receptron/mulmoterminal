@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isRemoteHostId, parseRemoteHostsResponse, remotePath, remotePathOf } from "../../common/remoteHosts";
+import { isRemoteHostId, parseRemoteHostDirs, parseRemoteHostsResponse, REMOTE_DIR_PRESETS_MAX, remotePath, remotePathOf } from "../../common/remoteHosts";
 
 describe("isRemoteHostId", () => {
   it("accepts lowercase slugs", () => {
@@ -59,5 +59,27 @@ describe("parseRemoteHostsResponse", () => {
     };
     expect(parseRemoteHostsResponse(body)).toEqual({ hosts: [{ id: "b", label: "B", state: "unreachable", version: null }], rejected: [] });
     [null, undefined, "x", [], { hosts: "x" }].forEach((bad) => expect(parseRemoteHostsResponse(bad)).toEqual({ hosts: [], rejected: [] }));
+  });
+});
+
+describe("parseRemoteHostDirs", () => {
+  it("keeps an absolute workspace and the saved directories with absolute paths, copying only label and path", () => {
+    expect(
+      parseRemoteHostDirs("/home/u/ws", [
+        { label: "app", path: "/home/u/app", color: "#f00" },
+        { label: "rel", path: "app" },
+        { label: "tilde", path: "~/app" },
+        { label: 3, path: "/x" },
+        null,
+        "/y",
+      ]),
+    ).toEqual({ cwd: "/home/u/ws", presets: [{ label: "app", path: "/home/u/app" }] });
+  });
+  it("answers nothing for a config that is missing or malformed", () => {
+    [undefined, null, "", "ws", 3, {}].forEach((cwd) => expect(parseRemoteHostDirs(cwd, cwd)).toEqual({ cwd: null, presets: [] }));
+  });
+  it("caps how many directories it keeps", () => {
+    const many = Array.from({ length: REMOTE_DIR_PRESETS_MAX + 5 }, (_, i) => ({ label: `d${i}`, path: `/d${i}` }));
+    expect(parseRemoteHostDirs(null, many).presets).toHaveLength(REMOTE_DIR_PRESETS_MAX);
   });
 });

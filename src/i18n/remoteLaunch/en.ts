@@ -7,5 +7,8 @@ export const remoteLaunchEn = {
   dirPlaceholder: "/home/you/project",
   dirNeedsAbsolute: "An absolute path on {label}, starting with /.",
   start: "Start on {label}",
-  localOnly: "Saved directories, launcher chips, custom agents and accounts belong to this machine, so they are not offered here.",
+  localOnly: "The directories above are {label}'s own. This machine's saved directories, launcher chips, custom agents and accounts are not offered here.",
+  workspace: "Workspace",
+  dirsFailed: "Could not read the saved directories on {label}: {error}",
+  chipFill: "Use {path}",
 };
