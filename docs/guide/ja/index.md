@@ -296,6 +296,7 @@ npx mulmoterminal@latest    # → http://localhost:34567 が開く
 4. [応用編 — シナリオ別の使い方](scenarios.html)
 5. [機能一覧](features.html)（4 本柱で整理）
    - [全機能リスト](feature-list.html)（いまある機能をすべて、入った版つきで一行ずつ）
+   - [スキルは効いているか](skill-eval.html)（スキルありとなしで課題を解かせる、SKILL.md の改善案、足りるいちばん安いモデル）
 6. [どの coding agent を使うか](agents.html)（Claude Code・Codex・Antigravity・Grok・Muse・Copilot・Cursor。何が要るか、どう会話を再開するか）
 7. [git worktree で作業を分ける](worktree.html)（1 つのリポジトリを、ぶつからずに複数のエージェントで）
    - [issue をエージェントに渡して merge まで](issue-to-merge.html)（一つでもいくつでも。実装、別のセッションでのレビュー、merge）
