@@ -14,6 +14,7 @@ import {
   retrospectiveRows,
   retrospectiveSpendInputs,
   skillUsage,
+  skillConversations,
   type ConversationFilter,
 } from "./index-queries.js";
 import type { LibraryIndex } from "./library-index.js";
@@ -52,6 +53,8 @@ export interface LibraryService {
   retrospective(now_ms: number): Promise<LibraryRetrospective>;
   /** How often each skill ran in the conversations the Library lists (#3437). */
   skillUsage(): Promise<SkillUsage[]>;
+  /** The transcripts of the newest conversations that ran a skill, for drafting its test tasks from (#3470). */
+  skillConversations(id: string, cwd: string | null): Promise<string[]>;
 }
 
 /** Where the repeated-instruction check reads from, and its clock. */
@@ -61,6 +64,8 @@ export interface LibraryServiceOptions {
   now?: () => number;
 }
 
+/** The conversations a skill's test tasks are drafted from: a few recent requests, not its whole history. */
+export const SKILL_CONVERSATIONS_MAX = 5;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
 
@@ -107,6 +112,7 @@ export function createLocalLibraryService(index: LibraryIndex, options: LibraryS
         return retrospective(read.rows, splitSpend(read.spend), now_ms);
       }),
     skillUsage: () => answer(() => skillUsage(index.db)),
+    skillConversations: (id, cwd) => answer(() => skillConversations(index.db, id, cwd, SKILL_CONVERSATIONS_MAX)),
     memorySource: (file) =>
       answer(() => {
         const row = memorySource(index.db, file);

@@ -23,6 +23,8 @@ import {
   type SkillEvalSet,
 } from "../../common/skillEval.js";
 import { isEditableSkill } from "../backends/skills/skillEdit.js";
+import type { LibraryCaller } from "../backends/library/library-service.js";
+import { sharedCaller } from "./library-routes.js";
 import { adoptCandidate } from "../backends/skillEval/evalAdopt.js";
 import type { SpawnIssueSession } from "../session/spawn/issue-session-spawn.js";
 import { commandRunner, type AttemptDeps } from "../backends/skillEval/evalAttempt.js";
@@ -41,6 +43,8 @@ export interface SkillEvalRouteDeps {
   cwds?: () => Promise<string[]>;
   /** Starts the Claude cell that drafts a set with the user; without it, that answers 503. */
   spawnSession?: SpawnIssueSession;
+  /** The Library, for the conversations that ran a skill (#3470). Override the worker, for tests. */
+  library?: LibraryCaller;
 }
 
 const skillIdOf = (source: SkillDocSource, slug: string): string => (source.scope === "plugin" ? `${source.plugin}:${slug}` : slug);
@@ -85,15 +89,26 @@ interface Context {
   cwds: () => Promise<string[]>;
   attemptDeps: AttemptDeps;
   spawnSession: SpawnIssueSession | null;
+  library: LibraryCaller;
 }
 
 // Plan mode, as for the Library's promote: the skill shows its draft and writes nothing until the user
 // approves, and Claude Code holds that rather than the skill's own wording.
 const AUTHOR_PERMISSION_MODE = "plan";
 
-/** The first turn of the drafting cell: the skill's name, where its SKILL.md is, and the folder to save in. */
-export const authorTurn = (skill: ResolvedSkill): string =>
-  `/${SKILL_EVAL_AUTHOR_SKILL} skill ${JSON.stringify(skill.id)}, SKILL.md at ${JSON.stringify(skill.file)}, save in ${JSON.stringify(skill.evalDir)}`;
+/** The first turn of the drafting cell: the skill's name, where its SKILL.md is, the folder to save in, and the
+ *  transcripts of conversations that ran it, whose requests the tasks can be drafted from (#3470). */
+export function authorTurn(skill: ResolvedSkill, conversations: readonly string[]): string {
+  const turn = `/${SKILL_EVAL_AUTHOR_SKILL} skill ${JSON.stringify(skill.id)}, SKILL.md at ${JSON.stringify(skill.file)}, save in ${JSON.stringify(skill.evalDir)}`;
+  return conversations.length === 0 ? turn : `${turn}, past conversations ${JSON.stringify(conversations)}`;
+}
+
+/** The conversations that ran the skill, newest first; none when the Library cannot say, which only loses the hint. */
+async function conversationsOf(ctx: Context, skill: ResolvedSkill): Promise<string[]> {
+  const cwd = skill.source.scope === "project" ? skill.source.dir : null;
+  const paths = await ctx.library("skillConversations", [skill.id, cwd]).catch(() => null);
+  return Array.isArray(paths) ? paths.filter((entry): entry is string => typeof entry === "string") : [];
+}
 
 async function startAuthoring(ctx: Context, body: Record<string, unknown>, res: Response): Promise<void> {
   if (ctx.spawnSession === null) return fail(res, 503, "sessions cannot be started here");
@@ -102,7 +117,8 @@ async function startAuthoring(ctx: Context, body: Record<string, unknown>, res: 
   // A folder's skill is drafted in that folder; the user's and a plugin's anywhere, so the home.
   const cwd = skill.source.scope === "project" ? skill.source.dir : homedir();
   try {
-    const spawned = await ctx.spawnSession("claude", cwd, authorTurn(skill), true, null, { claudePermissionMode: AUTHOR_PERMISSION_MODE });
+    const turn = authorTurn(skill, await conversationsOf(ctx, skill));
+    const spawned = await ctx.spawnSession("claude", cwd, turn, true, null, { claudePermissionMode: AUTHOR_PERMISSION_MODE });
     res.json({ chatId: spawned.sessionId, agent: spawned.agent });
   } catch (err) {
     fail(res, 500, err instanceof Error ? err.message : "the session could not be started");
@@ -191,6 +207,7 @@ export function mountSkillEvalRoutes(app: Express, deps: SkillEvalRouteDeps = {}
     cwds: deps.cwds ?? rememberedSessionCwds,
     attemptDeps: { claudeBin: claudeAdapter.bin(), runClaude, runCommand: commandRunner, tmpRoot: tmpdir(), now: Date.now, ...deps.attempt },
     spawnSession: deps.spawnSession ?? null,
+    library: deps.library ?? sharedCaller,
   };
   app.get("/api/skill-evals", (req, res) => overview(ctx, req.query, res));
   app.get("/api/skill-evals/runs/:id", (req, res) => oneRun(ctx, req.query, req.params.id, res));

@@ -13,6 +13,7 @@ import { attemptOrder, startEvalRun, stopEvalRun } from "../../../../server/back
 import { listRuns, readEvalSet, readRun, skillEvalFolder, textHash } from "../../../../server/backends/skillEval/evalStore";
 import { skillEvalSetSchema, type SkillEvalSet } from "../../../../common/skillEval";
 import { mountSkillEvalRoutes } from "../../../../server/routes/skill-eval-routes";
+import type { LibraryCaller } from "../../../../server/backends/library/library-service";
 import { jsonPost, routeCall } from "../../../helpers/routeCall";
 import { finishedSkillEvalRun } from "../../../helpers/finishedSkillEvalRun";
 
@@ -300,6 +301,8 @@ describe("/api/skill-evals", () => {
       root,
       cwds: () => Promise.resolve([projectDir]),
       spawnSession: (...args) => (spawned.push(args), Promise.resolve({ sessionId: "s1", agent: "claude", seedRuns: true })),
+      // None here: the turn then names no past conversation. Never the real Library from a spec.
+      library: () => Promise.resolve([]),
     });
     const answer = await routeCall(server)("/api/skill-evals/author", jsonPost({ slug: "weekly", dir: projectDir }));
     expect(answer.body).toEqual({ chatId: "s1", agent: "claude" });
@@ -315,6 +318,29 @@ describe("/api/skill-evals", () => {
       ],
     ]);
     expect((await app(root, projectDir, [])("/api/skill-evals/author", jsonPost({ slug: "weekly", dir: projectDir }))).status).toBe(503);
+  });
+
+  it("names the conversations that ran the skill in its own folder, and none when the Library cannot say", async () => {
+    const { projectDir, root } = project(null);
+    const turns: string[] = [];
+    const asked: unknown[][] = [];
+    const call = (library: LibraryCaller) => {
+      const server = express();
+      server.use(express.json());
+      mountSkillEvalRoutes(server, {
+        root,
+        cwds: () => Promise.resolve([projectDir]),
+        spawnSession: (_agent, _cwd, turn) => (turns.push(turn), Promise.resolve({ sessionId: "s1", agent: "claude", seedRuns: true })),
+        library,
+      });
+      return routeCall(server)("/api/skill-evals/author", jsonPost({ slug: "weekly", dir: projectDir }));
+    };
+    await call((method, args) => (asked.push([method, ...args]), Promise.resolve(["/t/a.jsonl", 7, "/t/b.jsonl"])));
+    expect(asked).toEqual([["skillConversations", "weekly", projectDir]]);
+    expect(turns[0]).toMatch(/, past conversations \["\/t\/a\.jsonl","\/t\/b\.jsonl"\]$/);
+    expect((await call(() => Promise.reject(new Error("the index is not ready")))).status).toBe(200);
+    expect((await call(() => Promise.resolve(null))).status).toBe(200);
+    expect(turns.slice(1).map((turn) => turn.includes("past conversations"))).toEqual([false, false]);
   });
 
   it("starts a run and serves it", async () => {
