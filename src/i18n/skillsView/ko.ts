@@ -52,11 +52,14 @@ export const skillsViewKo = {
       passedUnread: "스킬을 읽지 않고 합격한 {count}건은 세지 않았습니다.",
       avoid: "쓰면 안 되는 과제에서 스킬이 읽힌 횟수: {invoked} / {attempts}",
       fewCases: "과제가 적어 작은 차이는 보이지 않습니다. 차이가 없다고 나와도 효과가 없다는 뜻은 아닙니다.",
+      passesEitherWay:
+        "스킬이 있든 없든 매번 통과한 과제: {tasks}. 이런 과제로는 스킬의 효과를 잴 수 없습니다. 스킬의 지시가 있을 때만 통과하도록 고치거나 다른 과제로 바꾸세요.",
       skillChanged: "이전 결과와 SKILL.md 내용이 다릅니다.",
       spent: "이 평가에 든 비용: {cost}(채점 포함)",
       interruptedBy: "도중에 실패해 멈췄습니다: {reason}",
       perCase: "과제별 합격 수",
       avoidTag: "(쓰면 안 됨)",
+      eitherWayTag: "(어느 쪽이든 통과)",
       history: {
         rates: "스킬 있음 {with}・없음 {without}",
         otherText: "지금과 다른 SKILL.md",

@@ -93,6 +93,7 @@ A progress line counts the runs; **Stop** ends it early. One evaluation runs at 
 - **Times the skill was read on the task where it should not be.** Above zero, the skill fires too
   eagerly.
 - **Passes per task** opens a row per task, to see which ones fail.
+- **Tasks that passed every time with the skill and without it** are named, and marked *(passes either way)* among the tasks. Such a task counts in both pass rates but cannot show a difference: change it so only the skill's own instructions make it pass, or replace it.
 
 The panel then **points at one next step** and makes its button stand out, with a line saying why:
 measure again after a change, improve when there is no evidence it helps, adopt an improvement that

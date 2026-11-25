@@ -30,6 +30,8 @@ export interface SkillEvalSummary {
   gap: number | null;
   verdict: SkillEvalVerdict;
   fewCases: boolean;
+  /** Use tasks every attempt passed in both arms, the skill read each time: they cannot show what it does. */
+  passesEitherWay: string[];
   avoid: { attempts: number; invoked: number; passes: number; costUsd: number };
   gradingCostUsd: number;
 }
@@ -72,6 +74,17 @@ function verdictOf(gap: number | null, spread: number | null, minimumGap: number
 
 const ofArm = (attempts: readonly SkillEvalAttempt[], arm: SkillEvalArm): SkillEvalAttempt[] => attempts.filter((a) => a.arm === arm);
 
+function passesEitherWay(cases: readonly SkillEvalCase[], useWith: readonly SkillEvalAttempt[], useWithout: readonly SkillEvalAttempt[]): string[] {
+  const allPass = (attempts: readonly SkillEvalAttempt[], counts: (a: SkillEvalAttempt) => boolean): boolean => attempts.length > 0 && attempts.every(counts);
+  return cases
+    .filter((c) => c.kind === "use")
+    .filter((c) => {
+      const ofCase = (attempts: readonly SkillEvalAttempt[]) => attempts.filter((a) => a.caseId === c.id);
+      return allPass(ofCase(useWith), (a) => a.pass && a.skillInvoked) && allPass(ofCase(useWithout), (a) => a.pass);
+    })
+    .map((c) => c.id);
+}
+
 function avoidSummary(avoid: readonly SkillEvalAttempt[]): SkillEvalSummary["avoid"] {
   return {
     ...{ attempts: avoid.length, invoked: avoid.filter((a) => a.skillInvoked).length, passes: avoid.filter((a) => a.pass && !a.skillInvoked).length },
@@ -100,6 +113,7 @@ export function summarizeSkillEval(cases: readonly SkillEvalCase[], attempts: re
     gap,
     verdict: verdictOf(gap, spread, minimumGap),
     fewCases: useCases < SKILL_EVAL_FEW_CASES,
+    passesEitherWay: passesEitherWay(cases, useWith, useWithout),
     avoid: avoidSummary(ofArm(attempts, "with").filter((a) => kindOf.get(a.caseId) === "avoid")),
     gradingCostUsd: sum(attempts.map((a) => a.gradingCostUsd)),
   };

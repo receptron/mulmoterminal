@@ -52,11 +52,13 @@ export const skillsViewZhCN = {
       passedUnread: "未读取技能就通过的 {count} 次不计入。",
       avoid: "在不应使用技能的任务中技能被读取的次数：{invoked} / {attempts}",
       fewCases: "任务较少，看不出小的差异。显示没有差异也不代表没有效果。",
+      passesEitherWay: "有技能和没有技能都每次通过的任务：{tasks}。这样的任务测不出技能的效果。请改成只有按技能的指示才能通过，或换成别的任务。",
       skillChanged: "SKILL.md 的内容与上次测量时不同。",
       spent: "本次评估的费用：{cost}（含评分）",
       interruptedBy: "中途出错而停止：{reason}",
       perCase: "各任务的通过数",
       avoidTag: "（不应使用）",
+      eitherWayTag: "（两边都通过）",
       history: {
         rates: "有技能 {with}・无技能 {without}",
         otherText: "与现在不同的 SKILL.md",
