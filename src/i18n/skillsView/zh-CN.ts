@@ -53,6 +53,14 @@ export const skillsViewZhCN = {
       interruptedBy: "中途出错而停止：{reason}",
       perCase: "各任务的通过数",
       avoidTag: "（不应使用）",
+      next: {
+        measure: "现在的 SKILL.md 还没有用这些任务测量过。请先测量。",
+        improve: "没有证据表明技能有效。下一步，让 AI 写出改进方案并测量。",
+        improveAgain: "上一个改进方案并没有比现在的技能通过更多。请再写一个，或修改任务。",
+        adopt: "改进方案通过得更多。请在下方确认内容，没问题就采用。",
+        ladder: "技能有效。下一步，可以查找更便宜的模型是否足够。",
+        done: "技能有效，足够的模型也已找到。修改技能或任务后，请再测量一次。",
+      },
       improve: {
         start: "生成改进方案并测量",
         confirm:

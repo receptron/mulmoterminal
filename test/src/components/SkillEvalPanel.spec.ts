@@ -315,6 +315,21 @@ describe("SkillEvalPanel", () => {
       expect((await mountPanel()).find("[data-testid=skill-eval-earlier]").text()).toContain("enough: haiku · done · model search");
     });
   });
+  it("points at the one step to take next, and makes its button stand out", async () => {
+    overview = { ...base, set, runs: [] };
+    const fresh = await mountPanel();
+    expect(fresh.find("[data-testid=skill-eval-next]").text()).toContain("has not been measured on these tasks yet");
+    expect(fresh.find("[data-testid=skill-eval-measure]").classes()).toContain("bg-accent");
+    expect(fresh.find("[data-testid=skill-eval-ladder]").classes()).not.toContain("bg-accent");
+    overview = { ...base, set, runs: [run(false, false)], baseline: run(false, false) };
+    const measured = await mountPanel();
+    expect(measured.find("[data-testid=skill-eval-improve]").classes()).toContain("bg-accent");
+    expect(measured.find("[data-testid=skill-eval-measure]").classes()).not.toContain("bg-accent");
+    // While the price is being confirmed, the confirmation is the one thing to read.
+    await measured.find("[data-testid=skill-eval-improve]").trigger("click");
+    expect(measured.find("[data-testid=skill-eval-next]").exists()).toBe(false);
+  });
+
   it("says why a run stopped partway when something failed", async () => {
     overview = { ...base, set, runs: [run(true, false, { status: "interrupted", interruptedBy: "EPERM: operation not permitted" })] };
     expect((await mountPanel()).find("[data-testid=skill-eval-interrupted-by]").text()).toContain("EPERM: operation not permitted");

@@ -53,6 +53,14 @@ export const skillsViewZhTW = {
       interruptedBy: "中途出錯而停止：{reason}",
       perCase: "各任務的通過數",
       avoidTag: "（不應使用）",
+      next: {
+        measure: "現在的 SKILL.md 還沒有用這些任務測量過。請先測量。",
+        improve: "沒有證據表明技能有效。下一步，讓 AI 寫出改進方案並測量。",
+        improveAgain: "上一個改進方案並沒有比現在的技能通過更多。請再寫一個，或修改任務。",
+        adopt: "改進方案通過得更多。請在下方確認內容，沒問題就採用。",
+        ladder: "技能有效。下一步，可以查找更便宜的模型是否足夠。",
+        done: "技能有效，足夠的模型也已找到。修改技能或任務後，請再測量一次。",
+      },
       improve: {
         start: "產生改進方案並測量",
         confirm:
