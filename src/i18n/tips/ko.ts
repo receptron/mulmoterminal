@@ -2,6 +2,7 @@ import type { Messages } from "../messages";
 
 export const tipsKo: Messages["tips"] = {
   cell: {
+    remoteHost: "{host}에서 실행 중입니다. 이 터미널의 파일, git, 패널, 도구는 아직 여기서 사용할 수 없습니다.",
     running: "실행 중…",
     finished: "완료",
     exited: "종료됨",

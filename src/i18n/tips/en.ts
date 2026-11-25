@@ -2,6 +2,7 @@
 // bundles do not grow past the line limit; each bundle takes it as its `tips` section.
 export const tipsEn = {
   cell: {
+    remoteHost: "Runs on {host}. Files, git, panes and tools for this terminal are not available here yet.",
     running: "Running…",
     finished: "Finished",
     exited: "Exited",

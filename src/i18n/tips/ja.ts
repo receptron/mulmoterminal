@@ -2,6 +2,7 @@ import type { Messages } from "../messages";
 
 export const tipsJa: Messages["tips"] = {
   cell: {
+    remoteHost: "{host} で動いています。この端末のファイル、git、ペイン、ツールはまだここでは使えません。",
     running: "実行中…",
     finished: "完了",
     exited: "終了",

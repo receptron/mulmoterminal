@@ -3,6 +3,7 @@
 import { isRecord } from "../../common/isRecord";
 import { asTerminalAgent, isTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
 import { cellForPanelResume } from "../components/launchCell";
+import { isRemoteHost } from "../components/remoteCell";
 import { isShellLauncher, shellCell, type Cell } from "../components/gridTabs";
 import type { SessionMetaView } from "../components/rosterPhase";
 
@@ -22,7 +23,8 @@ export const closedTitle = (meta: Pick<SessionMetaView, "memo" | "customTitle" |
 /** What reopening `cell` needs, or null for a cell there is nothing to reopen of. A command cell is
  *  ephemeral, and a configured launcher is addressed by its position in a list that may have moved. */
 export function closedCellOf(cell: Cell, title: string | null, now: number): ClosedCell | null {
-  if (cell.command) return null;
+  // A remote cell reopened from here would come back as a LOCAL session under the remote's id.
+  if (cell.command || isRemoteHost(cell.remoteHost)) return null;
   const shown = title?.trim() || basename(cell.cwd);
   if (cell.launcher) return isShellLauncher(cell.launcher) ? { kind: "shell", cwd: cell.cwd, title: shown, closedAt: now } : null;
   if (cell.session === null) return null;

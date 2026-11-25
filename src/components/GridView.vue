@@ -84,6 +84,7 @@ import { isRecord } from "../../common/isRecord";
 import { isDrawnResult } from "../utils/drawnResult";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
 import { isFilesPaneAction } from "./filesPaneActions";
+import { isRemoteHost } from "./remoteCell";
 
 // The multi-terminal grid view, shown at /terminals. Leaving the grid is just a
 // route push from the shared toolbar (Chat / Collections / a favorite), so there's
@@ -122,7 +123,9 @@ const noRunningTerminals = computed(() => runningCount(state.value.cells) === 0)
 // limit would cap — so a waiting cell on any page floats forward. The per-cell
 // `statusByUid` (reported up while a cell is mounted) is the fallback for cells with
 // no session id (command cells) and a just-launched cell before its id arrives.
-const cellSessionIds = computed(() => state.value.cells.map((c) => c.session).filter((s): s is string => !!s));
+// The cells this server can be asked about; a remote cell's session and cwd belong to another machine (remoteCell.ts).
+const localCells = computed(() => state.value.cells.filter((c) => !isRemoteHost(c.remoteHost)));
+const cellSessionIds = computed(() => localCells.value.map((c) => c.session).filter((s): s is string => !!s));
 const { activity: gridActivity } = useGridActivity(cellSessionIds);
 const statusByUid = reactive<Record<number, AttentionStatus>>({});
 const onStatus = (uid: number, s: AttentionStatus) => (statusByUid[uid] = s);
@@ -140,7 +143,7 @@ const statusCounts = computed(() => countByStatus(state.value.cells, statusForSo
 const reorderable = computed(() => state.value.sortMode === "manual");
 // "priority" ranks cells by their directory's orderPriority, so like the status above it needs
 // a value for cells on pages that aren't mounted — hence the whole cwd set, not per-cell.
-const cellCwds = computed(() => [...new Set(state.value.cells.map((c) => c.cwd).filter((c): c is string => !!c))]);
+const cellCwds = computed(() => [...new Set(localCells.value.map((c) => c.cwd).filter((c): c is string => !!c))]);
 const { priorities: priorityByCwd } = useDirPriorities(cellCwds);
 // In "auto" mode the whole list is attention-sorted; "priority" orders by each directory's
 // declared rank; "manual" keeps the hand-arranged order.
@@ -193,7 +196,7 @@ async function seedMeta(id: string, cwd: string | null, agent: TerminalAgent) {
 // `asTerminalAgent`, not `c.agent`: the field is absent for claude (the default is stored as the
 // absence of the key) and equally absent on a launcher cell, which is not an agent session at all —
 // both mean claude to this route, which is what they were already getting.
-const refreshAllMeta = () => state.value.cells.forEach((c) => c.session && void seedMeta(c.session, c.cwd, asTerminalAgent(c.agent)));
+const refreshAllMeta = () => localCells.value.forEach((c) => c.session && void seedMeta(c.session, c.cwd, asTerminalAgent(c.agent)));
 // The PR workflow phase per directory (GET /api/pr-phase), shown in the roster beside the
 // agent status. Keyed by cwd, not session — the phase is the branch's, so cells sharing a dir
 // share one fetch. Best-effort and cached server-side, so the roster poll can re-fetch cheaply.
@@ -235,7 +238,7 @@ async function seedChrome(cwd: string) {
   chromeByCwd.set(cwd, { headerColor: config.headerColor, headerTextColor: config.headerTextColor, iconUrl: config.iconUrl });
 }
 const refreshAllChrome = () => {
-  const cwds = new Set(state.value.cells.map((c) => c.cwd).filter((c): c is string => c !== null));
+  const cwds = new Set(localCells.value.map((c) => c.cwd).filter((c): c is string => c !== null));
   cwds.forEach((cwd) => void seedChrome(cwd));
 };
 // A user editing .mulmoterminal.json is announced on the dir-config channel; re-fetch that
@@ -283,7 +286,7 @@ watch(
 );
 
 const refreshAllPhases = () => {
-  const cwds = new Set(state.value.cells.map((c) => c.cwd).filter((c): c is string => c !== null));
+  const cwds = new Set(localCells.value.map((c) => c.cwd).filter((c): c is string => c !== null));
   cwds.forEach((cwd) => void seedPhase(cwd));
 };
 
@@ -388,7 +391,8 @@ const onClose = (uid: number) => {
     conn.terminate(slot);
     // Over HTTP as well, like TerminalCell.teardown: the WS `terminate` only reaches the server
     // while the socket it just closed was still open.
-    if (session) void fetchWithTimeout(`/api/session/${encodeURIComponent(session)}/terminate`, { method: "POST" }).catch(() => {});
+    if (session && !isRemoteHost(closing?.remoteHost))
+      void fetchWithTimeout(`/api/session/${encodeURIComponent(session)}/terminate`, { method: "POST" }).catch(() => {});
   }
   state.value = closeCell(
     state.value,

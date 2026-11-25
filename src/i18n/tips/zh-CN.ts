@@ -2,6 +2,7 @@ import type { Messages } from "../messages";
 
 export const tipsZhCN: Messages["tips"] = {
   cell: {
+    remoteHost: "在 {host} 上运行。此终端的文件、git、面板和工具暂时无法在这里使用。",
     running: "运行中…",
     finished: "已完成",
     exited: "已退出",

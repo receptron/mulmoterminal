@@ -1,3 +1,4 @@
+import { isRemoteHostId } from "../../common/remoteHosts";
 import type { RunCommand } from "./runCommand";
 import type { Translate } from "../i18n/translate";
 import type { LaunchChoice } from "./wsUrl";
@@ -66,6 +67,9 @@ export interface Cell {
   // Kept across a reload so the header can keep saying which login it is; the SERVER is what holds
   // the session to it, so a stale value here can mislabel a cell but never move its conversation.
   account?: string;
+  // The remote host this cell's terminal runs on (#3506), or absent for this machine. Fixed for the
+  // cell's life: what it decides (src/components/remoteCell.ts) must not change under a live session.
+  remoteHost?: string;
   // Set aside by the user: still connected and still holding its history, just sunk out of the
   // way (#992). Stored as the ABSENCE of the key when not parked, for the same reason `agent`
   // is — only an absent key survives the JSON a persisted cell round-trips.
@@ -661,6 +665,7 @@ export function parseGridState(raw: string | null): GridState | null {
         ...(agent === undefined ? {} : { agent }),
         ...(isCustomAgentId(c.customAgent) ? { customAgent: c.customAgent } : {}),
         ...(isAccountId(c.account) ? { account: c.account } : {}),
+        ...(isRemoteHostId(c.remoteHost) ? { remoteHost: c.remoteHost } : {}),
         ...(c.parked === true ? { parked: true as const } : {}),
       };
     });

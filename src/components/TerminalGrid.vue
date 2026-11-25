@@ -27,6 +27,7 @@ import type { Launcher, LaunchPick } from "./launchers";
 import type { CustomAgent } from "../../common/customAgents";
 import type { AgentAccount } from "../../common/agentAccounts";
 import { isCellSelfAction, isPaneAction, paneOfAction, type CellAction } from "../../common/headerActions";
+import { cellActionAllowed, isRemoteHost } from "./remoteCell";
 import { registerGridCellRunner } from "../composables/useGridCellAction";
 import { requestCellAction } from "../composables/useCellAction";
 import { shouldFlipZoom } from "./cellChromeRules";
@@ -298,6 +299,10 @@ const paneOf = (uid: number): RightPane | null => shownPane(panesOf(uid));
 
 const sessionOf = (uid: number): string | null => props.cells.find((cell) => cell.uid === uid)?.session ?? null;
 const cellOf = (uid: number | null): Cell | undefined => (uid === null ? undefined : props.cells.find((cell) => cell.uid === uid));
+// Whether this cell may do `action` here; a remote cell's panes and tools would read this machine (remoteCell.ts).
+const allowedOn = (uid: number | null, action: CellAction): boolean => cellActionAllowed(cellOf(uid)?.remoteHost, action);
+// Every side pane reads this server by the cell's session or cwd, so none opens on a remote cell.
+const panesAllowedOn = (uid: number | null): boolean => !isRemoteHost(cellOf(uid)?.remoteHost);
 
 // The cell the re-root watcher puts the pane on: the enlarged one, or with nothing enlarged the one
 // asked for from a tile.
@@ -495,6 +500,7 @@ function openPaneCellCanvas(): void {
 }
 
 async function openCanvasFor(uid: number, enlarge = true, stillWanted?: () => boolean): Promise<void> {
+  if (!panesAllowedOn(uid)) return;
   const isLatest = startPaneRequest();
   if (filesOpen.value && (await filesPane.value?.flush()) === false) return;
   if (!isLatest() || (stillWanted && !stillWanted())) return;
@@ -548,6 +554,7 @@ async function adoptStoredCard(): Promise<void> {
 // `stillWanted` is asked again after the save, which awaits: a caller that did not come from a click
 // (an agent's showInPane) must not take the zoom back from a cell the user moved to meanwhile.
 async function openPaneFor(uid: number, pane: RightPane, stillWanted: () => boolean = () => true): Promise<void> {
+  if (!panesAllowedOn(uid)) return;
   const isLatest = startPaneRequest();
   const filesUnmounts = filesOpen.value && (paneUid.value !== uid || pane !== "files");
   if (filesUnmounts && (await filesPane.value?.flush()) === false) return;
@@ -568,6 +575,7 @@ async function openPaneFor(uid: number, pane: RightPane, stillWanted: () => bool
 // menu's toggle; on any other cell it is the gesture above, because a toggle there would only record
 // what that cell should show later, and an action that visibly does nothing reads as broken.
 function pressPane(uid: number, pane: RightPane): void {
+  if (!panesAllowedOn(uid)) return;
   if (uid === paneTargetUid.value) void toggleRightPane(pane, uid);
   else if (pane === "canvas" && props.expandedUid !== null) void openCanvasFor(uid);
   else void openPaneFor(uid, pane);
@@ -579,6 +587,7 @@ function pressPane(uid: number, pane: RightPane): void {
 // cell, closing, unread) goes to GridView's `runCellShortcut`, the path the keyboard already takes.
 // False when the cell cannot do it now, so a button can say so.
 function runCellAction(action: CellAction, uid: number): boolean {
+  if (!allowedOn(uid, action)) return false;
   if (isPaneAction(action)) pressPane(uid, paneOfAction(action));
   else if (isCellSelfAction(action)) return requestCellAction(`cell-${uid}`, action);
   else if (action === "zoom-toggle") emit("toggle-expand", uid);
@@ -1115,7 +1124,7 @@ const gridCellEvents = (cell: Cell) => ({
   "toggle-canvas": () => pressPane(cell.uid, "canvas"),
   "open-canvas": () => openCanvasFor(cell.uid),
   "open-files": () => openPaneFor(cell.uid, "files"),
-  "new-here": () => emit("new-here", cell.uid),
+  "new-here": () => allowedOn(cell.uid, "terminal-new-here") && emit("new-here", cell.uid),
   "toggle-tools": () => pressPane(cell.uid, "tools"),
   "toggle-prompts": () => pressPane(cell.uid, "prompts"),
   "toggle-transcript": () => pressPane(cell.uid, "transcript"),
@@ -2143,6 +2152,7 @@ function onRosterDragLeave(event: DragEvent) {
           :launcher="cell.launcher"
           :session="cell.session"
           :cwd="cell.cwd"
+          :remote-host="cell.remoteHost ?? null"
           v-on="gridCellEvents(cell)"
           @session="(id) => emit('session', cell.uid, id)"
         />
@@ -2156,6 +2166,7 @@ function onRosterDragLeave(event: DragEvent) {
           :initial-agent="cell.agent"
           :initial-custom-agent="cell.customAgent"
           :initial-account="cell.account"
+          :remote-host="cell.remoteHost ?? null"
           :initial-launch-choice="cell.launchChoice"
           :auto-start="cell.autoStart === true"
           :presets="presets"

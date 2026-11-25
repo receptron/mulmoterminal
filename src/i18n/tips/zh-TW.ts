@@ -2,6 +2,7 @@ import type { Messages } from "../messages";
 
 export const tipsZhTW: Messages["tips"] = {
   cell: {
+    remoteHost: "在 {host} 上執行。此終端機的檔案、git、面板與工具暫時無法在這裡使用。",
     running: "執行中…",
     finished: "已完成",
     exited: "已結束",

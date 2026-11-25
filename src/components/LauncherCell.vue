@@ -7,6 +7,8 @@ import { isShellLauncher, type CellLauncher } from "./gridTabs";
 import { isThumbnail, type GridCellEmits, type GridCellProps } from "./gridCell";
 import { CELL_BTN, CELL_TERM } from "./cellChromeClasses";
 import { useI18n } from "vue-i18n";
+import HostMark from "./HostMark.vue";
+import { onThisMachine } from "./remoteCell";
 
 const { t } = useI18n();
 
@@ -24,6 +26,8 @@ const props = defineProps<
     launcher: CellLauncher;
     session: string | null;
     cwd: string | null;
+    // The remote host this launcher runs on (#3506), or null for this machine. See remoteCell.ts.
+    remoteHost?: string | null;
     // Manual sort mode: show move buttons to swap this cell with its neighbour.
     reorderable?: boolean;
   }
@@ -43,6 +47,8 @@ const connectKey = ref(0);
 const termRef = ref<InstanceType<typeof TerminalView>>();
 const finished = ref(false);
 
+// The path menu acts on this machine's directory of that name, so a remote launcher offers none.
+const localCwd = computed(() => onThisMachine(props.remoteHost, props.cwd));
 const target = computed(() => (isShellLauncher(props.launcher) ? { shell: true as const } : { index: props.launcher.index }));
 
 // Running counts as "working"; once the process exits it's idle (never "waiting").
@@ -67,7 +73,7 @@ function relaunch() {
     :canvas-available="canvasAvailable"
     :collections-available="collectionsAvailable"
     :home="home"
-    :cwd="cwd"
+    :cwd="localCwd"
     :default-cwd="defaultCwd"
     :finished="finished"
     :idle-title="t('tips.cell.exited')"
@@ -82,6 +88,7 @@ function relaunch() {
     @path-problem="(message) => void termRef?.showHint(message, 'folder_open')"
   >
     <template #actions>
+      <HostMark v-if="remoteHost" :host="remoteHost" />
       <button v-if="finished" class="cell-btn" :class="CELL_BTN" :data-tip="t('tips.cell.relaunch')" :aria-label="t('tips.cell.relaunch')" @click="relaunch">
         <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
       </button>
@@ -95,6 +102,7 @@ function relaunch() {
       :connect-key="connectKey"
       :cwd="cwd"
       :launcher="target"
+      :remote-host="remoteHost ?? null"
       :expanded="expanded"
       :zoomed="zoomed"
       :hide-header="thumbnail"
