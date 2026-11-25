@@ -271,6 +271,7 @@ installing Node.js / Claude Code / git / gh on macOS and Windows, the
 4. [Scenarios — workflows by example](scenarios.html)
 5. [Feature reference](features.html) (grouped by the four pillars)
    - [Feature list](feature-list.html) (every capability today, one line each with the release it arrived in)
+   - [Does a skill help? Measure it](skill-eval.html) (test tasks with and without the skill, an improved SKILL.md, the cheapest model that is enough)
 6. [Which coding agent](agents.html) (Claude Code, Codex, Antigravity, Grok, Muse, Copilot and Cursor: what each needs and how each resumes)
 7. [Isolating work in a git worktree](worktree.html) (several agents on one repository without colliding)
    - [Hand an issue to agents and get it merged](issue-to-merge.html) (one issue or several: implement, review in another session, merge)
