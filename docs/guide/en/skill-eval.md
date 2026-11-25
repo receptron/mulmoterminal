@@ -61,8 +61,8 @@ asked: the first option, auto mode, can refuse to write outside the folder the c
 then nothing is saved ([#3507](https://github.com/receptron/mulmoterminal/issues/3507)). To change a
 task, choose "Tell Claude what to change" instead.
 
-Once saved, the box shows the set: *3 tasks and 1 task(s) where the skill should not be used, each run
-3 times with haiku.*
+Once saved, the box shows the set — in the example, *3 tasks and 1 task(s) where the skill should not be
+used, each run 3 times with haiku*.
 
 ## 3. Measure {#measure}
 
@@ -70,7 +70,9 @@ Press **Measure**. It says how many runs it will make and the most they can spen
 the real cost is usually far below), and starts when you confirm. Each task runs with the skill and
 without it, 3 times each by default, on `haiku` by default; the task where the skill should not be used
 runs only with it. Every run is a fresh temporary folder that loads none of your `CLAUDE.md`, other
-skills, plugins, hooks or MCP servers, so the only difference between the two arms is the skill.
+skills, plugins, hooks or MCP servers. The two arms differ only in the skill: in the runs with it, the
+skill is there and the request names it ("Use the … skill for this task"); in the runs without it,
+neither.
 
 A progress line counts the runs; **Stop** ends it early. One evaluation runs at a time on the machine.
 
@@ -79,12 +81,13 @@ A progress line counts the runs; **Stop** ends it early. One evaluation runs at 
 ![The first measurement of product-article-ja: It helps — with the skill 67%, without 0%, the cost per pass, how often the skill was read, what it cost, and the passes for each task](../images/skill-eval-result-en.png)
 
 - **The verdict.** *It helps* or *It makes things worse* only when the gap between the two pass rates is
-  larger than how much the runs without the skill varied; otherwise *No evidence of a difference*.
+  larger than how much the runs without the skill varied, and at least one task's worth; otherwise
+  *No evidence of a difference*.
   With few tasks a small effect cannot show, so "no evidence" is not "no effect".
-- **Pass rate** with and without the skill, and **cost per pass**: what one passing result cost,
-  failed runs included.
-- **Share of runs that actually read it.** A pass that never read the skill is not counted for it. A
-  low share means Claude does not recognise when to use the skill — usually its `description`.
+- **Pass rate** with and without the skill, and **cost per pass**: what the runs cost per passing result,
+  failed runs included. Grading is not in it; it is in the total, *This evaluation cost …*.
+- **Share of runs that actually read it.** A pass that never read the skill is not counted for it. Since
+  the request names the skill, a low share means Claude skipped it even when told to use it.
 - **Times the skill was read on the task where it should not be.** Above zero, the skill fires too
   eagerly.
 - **Passes per task** opens a row per task, to see which ones fail.
@@ -95,8 +98,9 @@ passed more often, or look for a cheaper model once it helps.
 
 ## 5. Improve and measure {#improve}
 
-**Improve and measure** has an AI (`sonnet` by default) read the last result — which tasks failed and
-why, and whether the skill was read — and write an improved `SKILL.md`. It is told to keep it short,
+**Improve and measure** has an AI (`sonnet` by default) read the latest finished measurement of the
+current `SKILL.md` on the current tasks — which tasks failed and why, and whether the skill was read —
+and write an improved `SKILL.md`. It is told to keep it short,
 fix the general cause rather than fit the tasks, and rewrite the description when the skill went
 unread. The improvement is measured at once on the same tasks, **with the skill only**: the runs
 without it are reused from the measurement it was written from, since they never read the skill.
@@ -138,7 +142,7 @@ the skill, the tasks or the available models change.
 
 ## 8. Come back later {#later}
 
-- **Earlier results** lists every run newest first, with the pass rates with and without the skill (or
+- **Earlier results** lists the newest 20 runs, newest first (older ones stay on disk under `runs/`), with the pass rates with and without the skill (or
   the model a search found) and the verdict, so the rows read as a trend. Each opens to its full result.
   A row that measured another `SKILL.md` than the one there now says so.
 - **In the skill list**, every skill with an evaluation shows its verdict next to its name: **helps**,
@@ -165,7 +169,7 @@ grading call per run; an improvement adds one writing call.
 | The drafting cell says nothing was saved | You approved with auto mode, which refused the write outside the cell's folder ([#3507](https://github.com/receptron/mulmoterminal/issues/3507)). In that cell press `shift+tab` until it says manual mode, ask it to save again, and allow the write. |
 | The drafting cell asks whether to trust your home folder | A skill in `~/.claude/skills` (or a plugin's) is drafted in your home folder, and Claude Code asks before working in a folder it has not seen. Answer as you would for any folder; a project's skill is drafted in that project. |
 | *No evidence of a difference* | The gap was within how much the runs varied, or the tasks are too few. Add tasks that the skill's own instructions decide, then measure again. |
-| A low share of runs read the skill | Claude does not recognise the request as the skill's. Improve and measure rewrites the `description` in that case; or edit it yourself. |
+| A low share of runs read the skill | Claude skipped the skill even though the request named it. Improve and measure takes that into account (it rewrites the `description` when the skill went unread); or edit the skill yourself. |
 | *Another evaluation is running* | One runs at a time on the machine. Wait for it, or stop it from its own panel. |
 | **Adopt** refused: the SKILL.md changed | It was edited after the improvement was measured. Measure again, then improve. |
 | A row says *measured another SKILL.md* | That run measured a different text than the one there now; its numbers are about that text. |
