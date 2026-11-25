@@ -85,7 +85,11 @@ MulmoTerminal shows the price limit before it starts. Ask them to approve, chang
 
 ## 5. Write the file
 
-Write `cases.json` in the folder the request gave:
+Write `cases.json` in the folder the request gave, **with your file-writing tool, never a shell command**
+(it creates the folders it needs). MulmoTerminal allows that tool in that folder ahead of time, so the save
+does not depend on a permission check; a shell command writing there is checked every time and can be
+refused, and one carrying JSON through a heredoc is refused outright. Write the files under `files/` the
+same way.
 
 ```json
 {
