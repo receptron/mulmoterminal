@@ -112,7 +112,7 @@ import RemoteHostGone from "./RemoteHostGone.vue";
 import { useRemoteCellActivity } from "../composables/useRemoteCellActivity";
 import { useRemoteHostStatus } from "../composables/configuredRemoteHosts";
 import { mayConnect } from "./remoteHostStatus";
-import { cellActionAllowed, isRemoteHost, onThisMachine, REMOTE_CELL_DECLINE_EN } from "./remoteCell";
+import { activityKeyOf, cellActionAllowed, isRemoteHost, onThisMachine, REMOTE_CELL_DECLINE_EN } from "./remoteCell";
 
 // How long a handoff failure stays on the cell before it clears itself.
 const ASK_MSG_MS = 4000;
@@ -1292,7 +1292,9 @@ const dotStatusClass = computed(() => (sunk.value ? SUNK_DOT_STATUS : DOT_STATUS
 // rather than a new element: it has to be legible in a filmstrip thumbnail, and the header track
 // is already full.
 const { isMissed, acknowledge: acknowledgeMissed } = useMissedAttention();
-const missedNotify = computed(() => isMissed(sessionId.value));
+// A remote session's mark is kept under its host as well, as the player records it (remoteAttention.ts).
+const attentionId = computed(() => activityKeyOf({ session: sessionId.value, remoteHost: props.remoteHost ?? undefined }));
+const missedNotify = computed(() => isMissed(attentionId.value));
 const dotMissedClass = computed(() => (missedNotify.value ? "ring-2 ring-amber ring-offset-2 ring-offset-[var(--cell-header-bg,var(--bg-panel))]" : ""));
 const statusLabel = computed(() => {
   const label = t(CELL_STATUS_KEY[status.value]);
@@ -1306,7 +1308,7 @@ const statusLabel = computed(() => {
 // be suppressed for the session the user is currently staring at. Either would otherwise leave a
 // ring pointing at the pane already on screen.
 watch(
-  () => [props.expanded, sessionId.value, missedNotify.value] as const,
+  () => [props.expanded, attentionId.value, missedNotify.value] as const,
   ([expanded, id, missed]) => {
     if (expanded && missed) acknowledgeMissed(id);
   },

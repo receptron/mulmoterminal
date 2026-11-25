@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import TerminalCell from "../../../src/components/TerminalCell.vue";
 import { resetConfiguredRemoteHosts } from "../../../src/composables/configuredRemoteHosts";
+import { applyMissedMark } from "../../../src/composables/useMissedAttention";
 
 const bus = vi.hoisted(() => ({ listeners: new Map<string, Set<(data: unknown) => void>>(), reconnects: new Set<() => void>() }));
 vi.mock("../../../src/composables/usePubSub", () => ({
@@ -120,6 +121,23 @@ describe("a remote cell whose host drops", () => {
     publish("remote-sessions", { host: "lx", resync: true });
     await flushPromises();
     expect(lastStatus(w)).toBe("idle");
+  });
+});
+
+// The attention player records a remote session's missed beep under its host too (remoteAttention.ts).
+describe("a remote cell's missed-beep ring", () => {
+  const dotTip = (w: Awaited<ReturnType<typeof mountCell>>) => w.find(".cell-dot").attributes("data-tip");
+  it("reads the mark kept under its host, not one under the bare id", async () => {
+    const w = await mountCell("lx");
+    const plain = dotTip(w);
+    applyMissedMark(SESSION, "mark");
+    await flushPromises();
+    expect(dotTip(w)).toBe(plain);
+    applyMissedMark(`lx/${SESSION}`, "mark");
+    await flushPromises();
+    expect(dotTip(w)).not.toBe(plain);
+    applyMissedMark(SESSION, "clear");
+    applyMissedMark(`lx/${SESSION}`, "clear");
   });
 });
 
