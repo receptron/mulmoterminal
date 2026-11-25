@@ -310,10 +310,11 @@ describe("what the writer is given", () => {
   it("tells the writer not to fit the test tasks, to keep what the failures do not touch, and to fix an unread description", () => {
     const prompt = improvePrompt();
     expect(prompt).toContain("Do NOT mention, quote or special-case the test tasks");
-    expect(prompt).toContain("Keep what you write short");
+    expect(prompt).toContain("Keep what you add short");
     // The tasks test part of what a skill is for: a rule they never exercise is not to be trimmed away.
-    expect(prompt).toContain("Keep every rule, step and check the report does not show failing");
-    expect(prompt).not.toContain("Remove explanation");
+    expect(prompt).toContain("Do not delete, weaken or shorten any existing rule, step or check unless the report shows that exact one caused a failure");
+    // Nothing may tell the writer the opposite.
+    expect(prompt).not.toMatch(/\bremove\b|shorter skill|keep the body short/i);
     expect(prompt).toContain("written in the language the skill is written in");
     expect(prompt).toContain("description");
   });
