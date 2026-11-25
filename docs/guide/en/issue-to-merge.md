@@ -171,7 +171,7 @@ the PR and how it ended.
 worktree), and a reviewer cell per PR under review. They are ordinary cells — enlarge one to watch,
 type into one to answer.
 
-![Three cells: the dispatcher (top left) has started a codex implementer for #3342, the implementer (right) has opened PR #3483 and asked for a review, and the reviewer (bottom) is reading the PR in its own review worktree](../images/issue-to-merge-cells.png)
+![Three cells: the dispatcher (top left) has started a codex implementer for #3499, the implementer (right) has opened PR #3501 and asked for a review, and the reviewer (bottom) is reading the PR in its own review worktree](../images/issue-to-merge-run-cells.png)
 
 **Lines typed into a session.** MulmoTerminal reports by typing a line into the session that asked.
 What a dispatcher receives when a PR is merged looks like this:
@@ -183,14 +183,16 @@ What a dispatcher receives when a PR is merged looks like this:
 branch stays).
 ```
 
-An author receives the same kind of line after each review round — here, round 1 of #3483 passed:
+An author receives the same kind of line after each review round. Here round 1 of #3501 asked for a change, the implementer pushed a fix, and round 2 passed:
 
-![The reviewer (bottom) has posted REVIEW VERDICT: LGTM on PR #3483, and the implementer (right) has received the requestReview line saying round 1 passed on the current head and to merge once CI passes](../images/issue-to-merge-verdict.png)
+![The reviewer (bottom) has rewritten its verdict from CHANGES REQUESTED to REVIEW VERDICT: LGTM for the new head and posted it on the PR, and the implementer (right) has received the round 2 requestReview line saying to merge once every CI check passes](../images/issue-to-merge-run-verdict.png)
 
 **The GitHub board.** On the [GitHub board](github.html), a PR's card counts the verdicts posted on it
 (**Verdict 2: LGTM**, or *for an older push* when the newest push has not been reviewed yet), and is
 marked **Ready to merge** when the repository's required LGTMs are on the newest push, CI passed and the
 PR is not a draft — `requestReview`'s rule, plus the draft check.
+
+![A board card for issue #3499 and its PR #3501, marked Ready to merge beside Verdict 3: LGTM. "Newest push not reviewed yet" refers to GitHub's own review approvals, which this loop does not use](../images/issue-to-merge-board-card.png)
 
 **The PR itself.** Every round's verdict is a comment on the PR, opening with
 `REVIEW VERDICT: LGTM (head <sha>)` or `REVIEW VERDICT: CHANGES REQUESTED (head <sha>)`, followed by the

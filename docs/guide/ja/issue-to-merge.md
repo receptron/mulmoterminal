@@ -167,7 +167,7 @@ issue の URL でもよく、リポジトリがはっきりしていれば番号
 レビュー中の PR ごとにレビュー役のセルが並びます。どれもふつうのセルです。拡大して眺めることも、
 打ち込んで答えることもできます。
 
-![三つのセル。左上のまとめ役が #3342 の実装役を codex で起動し、右の実装役が PR #3483 を開いてレビューを頼み、下のレビュー役が自分のレビュー用ワークツリーで PR を読んでいる](../images/issue-to-merge-cells.png)
+![三つのセル。左上のまとめ役が #3499 の実装役を codex で起動し、右の実装役が PR #3501 を開いてレビューを頼み、下のレビュー役が自分のレビュー用ワークツリーで PR を読んでいる](../images/issue-to-merge-run-cells.png)
 
 **セッションに打ち込まれる行。** MulmoTerminal は、頼んだセッションに一行打ち込んで知らせます。PR が
 merge されたときにまとめ役が受け取る行は、たとえばこうです。
@@ -179,14 +179,16 @@ merge されたときにまとめ役が受け取る行は、たとえばこう�
 branch stays).
 ```
 
-実装役も、レビューの往復ごとに同じ形の行を受け取ります。次は #3483 の 1 回目が通ったところです。
+実装役も、レビューの往復ごとに同じ形の行を受け取ります。次は #3501 で、1 回目に直しを求められ、実装役が直して push し、2 回目で通ったところです。
 
-![下のレビュー役が PR #3483 に REVIEW VERDICT: LGTM を書き込み、右の実装役に「1 回目は最新の head で合格、CI が通ったら merge する」という requestReview の行が届いたところ](../images/issue-to-merge-verdict.png)
+![下のレビュー役が、判定の下書きを CHANGES REQUESTED から新しい head への REVIEW VERDICT: LGTM に書き換えて PR に書き込み、右の実装役に「CI が全部通ったら merge する」という 2 回目の requestReview の行が届いたところ](../images/issue-to-merge-run-verdict.png)
 
 **GitHub ボード。** [GitHub ボード](github.html) では、PR のカードに書き込まれた判定の数が出ます
 （**判定 2 回: LGTM**。最新の push がまだレビューされていなければ *前の push への判定*）。リポジトリが
 求める数の LGTM が最新の push に付き、CI も通り、PR が下書きでなければ、**merge できます** の印が付きます。
 `requestReview` の決まりに、下書きでないことを足したものです。
+
+![issue #3499 と PR #3501 のボードのカード。Verdict 3: LGTM の横に Ready to merge（日本語の画面では「merge できます」）の印が付いている。「Newest push not reviewed yet」は GitHub 自身のレビュー承認のことで、この往復では使わない](../images/issue-to-merge-board-card.png)
 
 **PR そのもの。** 往復ごとの判定は PR へのコメントになり、`REVIEW VERDICT: LGTM (head <sha>)` か
 `REVIEW VERDICT: CHANGES REQUESTED (head <sha>)` で始まって、指摘が続きます。後から人が読む記録は PR です。
