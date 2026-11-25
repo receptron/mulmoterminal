@@ -4,7 +4,7 @@
 // never seen, so the call reads, writes or deletes the wrong thing. Until those features are routed
 // to the remote, they are withheld here.
 import type { CellAction } from "../../common/headerActions";
-import { remotePath } from "../../common/remoteHosts";
+import { remotePath, remoteSessionKey } from "../../common/remoteHosts";
 
 export const isRemoteHost = (host: string | null | undefined): host is string => typeof host === "string" && host.length > 0;
 
@@ -50,3 +50,16 @@ export const cellActionAllowed = (host: string | null | undefined, action: CellA
 export const terminalPathFor = (host: string | null | undefined, path: string): string => (isRemoteHost(host) ? remotePath(host, path) : path);
 
 export const REMOTE_CELL_DECLINE_EN = "This terminal runs on another machine, so that is not available here yet.";
+
+/** A remote cell's session, as the remote's rows name it. */
+export interface RemoteCellSession {
+  host: string;
+  id: string;
+}
+
+export const remoteCellSessions = (cells: readonly { session: string | null; remoteHost?: string | undefined }[]): RemoteCellSession[] =>
+  cells.flatMap((cell) => (isRemoteHost(cell.remoteHost) && cell.session ? [{ host: cell.remoteHost, id: cell.session }] : []));
+
+/** The key a cell's activity is looked up by: its bare id when local, host and id when remote. */
+export const activityKeyOf = (cell: { session: string | null; remoteHost?: string | undefined }): string | null =>
+  cell.session !== null && isRemoteHost(cell.remoteHost) ? remoteSessionKey(cell.remoteHost, cell.session) : cell.session;

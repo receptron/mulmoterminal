@@ -71,7 +71,9 @@ const mountCell = (remoteHost: string | null) =>
     },
   });
 
-const mentionsCell = (url: string): boolean => url.includes(SESSION) || url.includes(CWD) || url.includes(encodeURIComponent(CWD));
+// The gateway's forwarded routes are the one place a remote session's id may go: they answer from the remote.
+const forwardedToHost = (url: string): boolean => url.startsWith("/api/remote-hosts/lx/");
+const mentionsCell = (url: string): boolean => !forwardedToHost(url) && (url.includes(SESSION) || url.includes(CWD) || url.includes(encodeURIComponent(CWD)));
 
 describe("a remote cell", () => {
   it("asks this server nothing about its session or directory, while a local cell does", async () => {

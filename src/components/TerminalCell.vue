@@ -109,6 +109,7 @@ import { connView } from "../composables/useTerminalConnections";
 import type { SessionExit } from "../composables/serverMessage";
 import HostMark from "./HostMark.vue";
 import RemoteHostGone from "./RemoteHostGone.vue";
+import { useRemoteCellActivity } from "../composables/useRemoteCellActivity";
 import { useRemoteHostStatus } from "../composables/configuredRemoteHosts";
 import { mayConnect } from "./remoteHostStatus";
 import { cellActionAllowed, isRemoteHost, onThisMachine, REMOTE_CELL_DECLINE_EN } from "./remoteCell";
@@ -587,9 +588,13 @@ const UNTRACKED_BADGE_AGENTS = new Set(["antigravity", "grok", "muse"]);
 const UNTRACKED_BADGE_POLL_MS = 60_000;
 let badgePoll: ReturnType<typeof setInterval> | null = null;
 
+// A remote cell's rows come from its host, relayed by the server (#3506); this server's own
+// `sessions` channel never names its session.
+if (isRemote && props.remoteHost) useRemoteCellActivity(props.remoteHost, sessionId, applyActivity);
+
 onMounted(() => {
   unsubscribe = subscribe("sessions", (d) => {
-    if (!isActivityMsg(d) || d.id !== sessionId.value) return;
+    if (isRemote || !isActivityMsg(d) || d.id !== sessionId.value) return;
     applyActivity(d);
     refreshBadgesIfModelUnknown();
   });

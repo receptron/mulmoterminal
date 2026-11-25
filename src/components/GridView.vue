@@ -43,10 +43,9 @@ import {
   type GridState,
   type Cell,
   type SortMode,
-  resolveCellStatus,
   MAX_TERMINALS,
 } from "./gridTabs";
-import { activityStatus, type AttentionStatus } from "./attentionStatus";
+import type { AttentionStatus } from "./attentionStatus";
 import { collectionTerminalClaim, publishGridSessions } from "../composables/collectionTerminalClaim";
 import { cellsToDisplay } from "./displayCells";
 import { terminalMove, type GridShortcut } from "../composables/gridShortcut";
@@ -67,7 +66,7 @@ import type { RunCommand } from "./runCommand";
 import { recordClosedCellOf } from "../composables/useRecentlyClosed";
 import { becameCiFailing, EMPTY_SESSION_META, isPrPhase, mergeSessionMeta, type PrPhase, type SessionMetaView } from "./rosterPhase";
 import { notifySound } from "../composables/notifySound";
-import { useGridActivity } from "../composables/useGridActivity";
+import { useGridCellStatus } from "../composables/useGridCellStatus";
 import { registerNewTerminalHandler, type NewTerminalRequest } from "../composables/useNewTerminal";
 import { isGridCellShortcut } from "../../common/headerActions";
 import { registerSpawnedChatHandler, type SpawnedChatRequest } from "../composables/useSpawnedChat";
@@ -118,27 +117,19 @@ watch(
 // pointer to the guide, cleared the moment any terminal starts.
 const noRunningTerminals = computed(() => runningCount(state.value.cells) === 0);
 
-// The "auto" order needs every cell's status, including cells on pages that aren't
-// mounted. useGridActivity tracks each cell session's live attention state by id —
-// including OFF-PAGE, dev-terminal cells that the /api/sessions list drops and its
-// limit would cap — so a waiting cell on any page floats forward. The per-cell
-// `statusByUid` (reported up while a cell is mounted) is the fallback for cells with
-// no session id (command cells) and a just-launched cell before its id arrives.
 // The cells this server can be asked about; a remote cell's session and cwd belong to another machine (remoteCell.ts).
 const localCells = computed(() => state.value.cells.filter((c) => !isRemoteHost(c.remoteHost)));
-const cellSessionIds = computed(() => localCells.value.map((c) => c.session).filter((s): s is string => !!s));
-const { activity: gridActivity } = useGridActivity(cellSessionIds);
 const statusByUid = reactive<Record<number, AttentionStatus>>({});
 const onStatus = (uid: number, s: AttentionStatus) => (statusByUid[uid] = s);
 // Which cell the cursor is in, reported up from the grid. Un-zoomed this is the only notion of
 // "the terminal I am on", so the keyboard shortcuts rotate from it.
 const focusedCellUid = ref<number | null>(null);
-const sessionStatus = computed(() => {
-  const m = new Map<string, AttentionStatus>();
-  for (const [id, a] of gridActivity) m.set(id, activityStatus(a.working, a.waiting, a.event));
-  return m;
-});
-const statusForSort = computed<Record<number, AttentionStatus>>(() => resolveCellStatus(state.value.cells, sessionStatus.value, statusByUid));
+// The "auto" order needs every cell's status, including cells on pages that aren't mounted.
+const statusForSort = useGridCellStatus(
+  computed(() => state.value.cells),
+  localCells,
+  statusByUid,
+);
 // At-a-glance tally across ALL pages, for the toolbar summary.
 const statusCounts = computed(() => countByStatus(state.value.cells, statusForSort.value));
 const reorderable = computed(() => state.value.sortMode === "manual");
