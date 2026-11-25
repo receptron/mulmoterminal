@@ -162,6 +162,8 @@ issue の URL でもよく、リポジトリがはっきりしていれば番号
 レビュー中の PR ごとにレビュー役のセルが並びます。どれもふつうのセルです。拡大して眺めることも、
 打ち込んで答えることもできます。
 
+![三つのセル。左上のまとめ役が #3342 の実装役を codex で起動し、右の実装役が PR #3483 を開いてレビューを頼み、下のレビュー役が自分のレビュー用ワークツリーで PR を読んでいる](../images/issue-to-merge-cells.png)
+
 **セッションに打ち込まれる行。** MulmoTerminal は、頼んだセッションに一行打ち込んで知らせます。PR が
 merge されたときにまとめ役が受け取る行は、たとえばこうです。
 
@@ -171,6 +173,10 @@ merge されたときにまとめ役が受け取る行は、たとえばこう�
 3dac0f08-…. Removed its worktree …/3462-readme-… and local branch issue/3462-readme-… (the remote
 branch stays).
 ```
+
+実装役も、レビューの往復ごとに同じ形の行を受け取ります。次は #3483 の 1 回目が通ったところです。
+
+![下のレビュー役が PR #3483 に REVIEW VERDICT: LGTM を書き込み、右の実装役に「1 回目は最新の head で合格、CI が通ったら merge する」という requestReview の行が届いたところ](../images/issue-to-merge-verdict.png)
 
 **GitHub ボード。** [GitHub ボード](github.html) では、PR のカードに書き込まれた判定の数が出ます
 （**判定 2 回: LGTM**。最新の push がまだレビューされていなければ *前の push への判定*）。リポジトリが

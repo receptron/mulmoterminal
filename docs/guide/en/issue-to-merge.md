@@ -165,6 +165,8 @@ the PR and how it ended.
 worktree), and a reviewer cell per PR under review. They are ordinary cells — enlarge one to watch,
 type into one to answer.
 
+![Three cells: the dispatcher (top left) has started a codex implementer for #3342, the implementer (right) has opened PR #3483 and asked for a review, and the reviewer (bottom) is reading the PR in its own review worktree](../images/issue-to-merge-cells.png)
+
 **Lines typed into a session.** MulmoTerminal reports by typing a line into the session that asked.
 What a dispatcher receives when a PR is merged looks like this:
 
@@ -174,6 +176,10 @@ What a dispatcher receives when a PR is merged looks like this:
 3dac0f08-…. Removed its worktree …/3462-readme-… and local branch issue/3462-readme-… (the remote
 branch stays).
 ```
+
+An author receives the same kind of line after each review round — here, round 1 of #3483 passed:
+
+![The reviewer (bottom) has posted REVIEW VERDICT: LGTM on PR #3483, and the implementer (right) has received the requestReview line saying round 1 passed on the current head and to merge once CI passes](../images/issue-to-merge-verdict.png)
 
 **The GitHub board.** On the [GitHub board](github.html), a PR's card counts the verdicts posted on it
 (**Verdict 2: LGTM**, or *for an older push* when the newest push has not been reviewed yet), and is
