@@ -70,7 +70,11 @@ function bringUp() {
   // "ipc" alongside the inherited streams: the child keeps writing straight to this terminal, and
   // gets a channel to report readiness on. A backend started any other way has no parent channel,
   // so its `process.send?.()` is a no-op.
-  child = spawn(process.execPath, NODE_ARGS, { cwd: ROOT, stdio: ["inherit", "inherit", "inherit", "ipc"] });
+  child = spawn(process.execPath, NODE_ARGS, {
+    cwd: ROOT,
+    env: { ...process.env, CLIENT_PORT: String(Number(process.env.CLIENT_PORT) || 6856) },
+    stdio: ["inherit", "inherit", "inherit", "ipc"],
+  });
 
   child.on("message", (msg) => {
     if (isListeningMessage(msg)) reachedListen = true;

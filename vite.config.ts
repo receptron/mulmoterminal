@@ -3,6 +3,7 @@ import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
 import { HTML_FILE_MOUNT } from "@mulmoclaude/html-plugin";
 import { parsePort } from "./server/config/port-from-argv";
+import { clientPort } from "./common/client-port.js";
 
 // Dev ports. The backend (Express) listens on PORT (default 34567, see
 // server/index.ts); Vite's own dev server uses CLIENT_PORT — a SEPARATE port, since
@@ -11,7 +12,7 @@ import { parsePort } from "./server/config/port-from-argv";
 // otherwise starts Express on the default while pointing this proxy at whatever the string said,
 // which is a dev server that looks broken for a reason nothing prints (Codex review on #2063).
 const BACKEND_PORT = String(parsePort(process.env.PORT) ?? 34567);
-const CLIENT_PORT = Number(process.env.CLIENT_PORT) || 6856;
+const CLIENT_PORT = clientPort(process.env);
 
 export default defineConfig({
   // Tailwind is used ONLY to compile the plugin-utilities sheet

@@ -1201,7 +1201,7 @@ them. They exist as separate projects because each has its own compiler options
 (the client ones DOM + `.vue`, the server ones node, the specs with
 `noUncheckedIndexedAccess` off).
 
-In dev, open the Vite URL; its proxy forwards `/ws`, `/ws/pubsub`, and `/api` to
+In dev, open the Vite URL; if you open the backend URL (`:34567`) by mistake, browser routes redirect to the Vite port (`:6856`). Vite's proxy forwards `/ws`, `/ws/pubsub`, and `/api` to
 `:34567`, plus the two mounts that serve a presentHtml page to the Canvas iframe,
 `/artifacts` and `/htmlfile` — a page path missing from that list is answered by
 Vite's SPA catch-all with `index.html`, which renders as a blank iframe rather
