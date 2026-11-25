@@ -80,10 +80,11 @@ export const skillsViewEn = {
         failed: "No improvement could be written: {error}",
         compare: "Pass rate with the skill: current {before} → improvement {after}",
         change: {
-          better: "The improvement passes more often than the current skill, by more than the runs vary.",
-          "no-evidence": "No evidence the improvement is better: the gap is within how much the runs vary ({spread}). Adopting it may change nothing.",
-          worse: "The improvement passes less often than the current skill, by more than the runs vary.",
-          pending: "Too few runs to compare the improvement with the current skill.",
+          better: "The improvement passes more often than the skill it was written from, by more than the runs vary.",
+          "no-evidence":
+            "No evidence the improvement is better: the gap is within how much the runs vary ({spread}), or smaller than one task's worth. Adopting it may change nothing.",
+          worse: "The improvement passes less often than the skill it was written from, by more than the runs vary.",
+          pending: "Too few runs to compare the improvement with the skill it was written from.",
         },
         worseTasks: "Tasks it passed less often: {tasks}",
         overfit:

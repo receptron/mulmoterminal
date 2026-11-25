@@ -248,7 +248,7 @@ describe("SkillEvalPanel", () => {
     overview = { ...base, set, runs: [worse, run(true, false)] };
     const wrapper = await mountPanel();
     expect(wrapper.find("[data-testid=skill-eval-change]").text()).toBe(
-      "The improvement passes less often than the current skill, by more than the runs vary.",
+      "The improvement passes less often than the skill it was written from, by more than the runs vary.",
     );
     expect(wrapper.find("[data-testid=skill-eval-worse-tasks]").text()).toBe(`Tasks it passed less often: ${evalCase.title}`);
     expect(wrapper.find("[data-testid=skill-eval-adopt]").exists()).toBe(true);
@@ -273,7 +273,7 @@ describe("SkillEvalPanel", () => {
     const wrapper = await mountPanel();
     expect(wrapper.find("[data-testid=skill-eval-compare]").text()).toBe("Pass rate with the skill: current 0% → improvement 100%");
     expect(wrapper.find("[data-testid=skill-eval-change]").text()).toBe(
-      "The improvement passes more often than the current skill, by more than the runs vary.",
+      "The improvement passes more often than the skill it was written from, by more than the runs vary.",
     );
     expect(wrapper.find("[data-testid=skill-eval-worse-tasks]").exists()).toBe(false);
     expect(wrapper.find("[data-testid=skill-eval-candidate-text]").text()).toBe("better");

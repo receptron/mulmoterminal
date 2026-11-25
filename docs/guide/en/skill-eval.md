@@ -109,9 +109,10 @@ the description when the skill went unread. It says what it changed in the langu
 without it are reused from the measurement it was written from, since they never read the skill.
 Your `SKILL.md` is not touched.
 
-The result sets the improvement's pass rate beside the current one and says whether the difference is
-real: **better** or **worse** only when the gap is wider than the skill's own rounds disagree in either
-run, and at least one task's worth; otherwise **no evidence**. Two noisy numbers often differ by chance,
+The result sets the improvement's pass rate beside that of the skill it was written from, and says
+whether the difference is more than chance would easily make: **better** or **worse** only when the gap is wider than the skill's own rounds disagree in either
+run, and at least one task's worth; otherwise **no evidence**. It is a rule of thumb, not a statistical
+test, and chance can still pass it; but two noisy numbers often differ by chance,
 and taking the higher one reads chance as progress. Tasks the improvement passed less often are named.
 **Adopt** stays available whatever it says, but the panel points at it only for a better one.
 It also shows **what it changes**, as a

@@ -104,6 +104,16 @@ describe("compareImprovement", () => {
     );
     baselineWithB.attempts = baselineWithB.attempts.map((a) => (a.caseId === "b" ? { ...a, skillInvoked: false } : a));
     expect(compareImprovement(baselineWithB, asAvoid)).toMatchObject({ gap: -1, worseCaseIds: ["a"] });
+    // Listed in the baseline but never run there (it was stopped): not compared either.
+    const stoppedEarly = { ...measured(["a"], [[false, false]]), cases: [useCase("a"), useCase("b")] };
+    const improvesOnlyTheNew = measured(
+      ["a", "b"],
+      [
+        [false, false],
+        [true, true],
+      ],
+    );
+    expect(compareImprovement(stoppedEarly, improvesOnlyTheNew)).toMatchObject({ change: "no-evidence", gap: 0 });
   });
 
   it("is pending when either run has nothing to compare", () => {

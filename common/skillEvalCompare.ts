@@ -63,7 +63,11 @@ function sharedCases(baseline: MeasuredSkill, improvement: MeasuredSkill, kind?:
 }
 
 export function compareImprovement(baseline: MeasuredSkill, improvement: MeasuredSkill): SkillEvalComparison {
-  const useIds = new Set(sharedCases(baseline, improvement, "use").map((evalCase) => evalCase.id));
+  const measuredIn = (run: MeasuredSkill) => new Set(run.attempts.filter((attempt) => attempt.arm === "with").map((attempt) => attempt.caseId));
+  const [inBaseline, inImprovement] = [measuredIn(baseline), measuredIn(improvement)];
+  // Listed in both is not enough: a task one run never got to has no rate to compare.
+  const shared = sharedCases(baseline, improvement, "use").filter((evalCase) => inBaseline.has(evalCase.id) && inImprovement.has(evalCase.id));
+  const useIds = new Set(shared.map((evalCase) => evalCase.id));
   const before = withSkillOn(baseline, useIds);
   const after = withSkillOn(improvement, useIds);
   const beforeRate = passRate(before, countsFor("use"));
