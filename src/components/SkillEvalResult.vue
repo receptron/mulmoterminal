@@ -3,7 +3,7 @@
 // often the skill was read and stayed out of the avoid task, and each task's passes.
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import type { SkillEvalAttempt, SkillEvalRun } from "../../common/skillEval";
+import { runSpentUsd, type SkillEvalAttempt, type SkillEvalRun } from "../../common/skillEval";
 import type { SkillEvalSummary } from "../../common/skillEvalSummary";
 
 const props = defineProps<{ run: SkillEvalRun; summary: SkillEvalSummary; skillTextChanged: boolean }>();
@@ -13,6 +13,7 @@ const VERDICT_TONE: Record<SkillEvalSummary["verdict"], string> = { helps: "text
 const percent = (rate: number | null): string => (rate === null ? "—" : `${String(Math.round(rate * 100))}%`);
 const usd = (value: number | null): string => (value === null ? "—" : `$${value.toFixed(3)}`);
 
+const reused = computed(() => props.run.attempts.some((attempt) => attempt.reusedFrom !== ""));
 const perCase = computed(() =>
   props.run.cases.map((evalCase) => {
     const of = (arm: "with" | "without") => props.run.attempts.filter((a) => a.caseId === evalCase.id && a.arm === arm);
@@ -61,13 +62,14 @@ const perCase = computed(() =>
       <li v-if="summary.avoid.attempts > 0">{{ t("skillsView.eval.avoid", { invoked: summary.avoid.invoked, attempts: summary.avoid.attempts }) }}</li>
       <li v-if="summary.fewCases">{{ t("skillsView.eval.fewCases") }}</li>
       <li v-if="skillTextChanged">{{ t("skillsView.eval.skillChanged") }}</li>
+      <li v-if="reused" data-testid="skill-eval-reused">{{ t("skillsView.eval.improve.reused") }}</li>
       <li v-if="run.interruptedBy" data-testid="skill-eval-interrupted-by" class="text-err-text">
         {{ t("skillsView.eval.interruptedBy", { reason: run.interruptedBy }) }}
       </li>
       <li>
         {{
           t("skillsView.eval.spent", {
-            cost: usd(summary.with.costUsd + summary.without.costUsd + summary.avoid.costUsd + summary.gradingCostUsd + run.improveCostUsd),
+            cost: usd(runSpentUsd(run)),
           })
         }}
       </li>

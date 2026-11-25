@@ -10,7 +10,7 @@ const LADDER = ["haiku", "sonnet", "opus"];
 function attempt(model: string, pass: boolean, extra: Partial<SkillEvalAttempt> = {}): SkillEvalAttempt {
   return {
     ...{ caseId: "a", arm: "with", round: 0, pass, skillInvoked: true, costUsd: 0.1, gradingCostUsd: 0.01, durationMs: 0 },
-    ...{ finalText: "", checkOutput: "", denied: [], error: null, model },
+    ...{ finalText: "", checkOutput: "", denied: [], error: null, model, reusedFrom: "" },
     ...extra,
   };
 }

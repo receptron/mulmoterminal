@@ -85,6 +85,7 @@ import { accountDirectoryMcpGroups } from "../session/accounts/account-mcp.js";
 import { createKeySerializer } from "../infra/async/serialize-per-key.js";
 import { killPty } from "../session/pty/pty-kill.js";
 import { sessionPermissionModesHydrated } from "../session/spawn/agents/session-permission-mode.js";
+import { codexSessionGrantsHydrated } from "../session/spawn/agents/codex-session-grants.js";
 
 const sessionConnects = createKeySerializer();
 
@@ -711,10 +712,10 @@ export async function handleCodexConnection(deps: WsRouteDeps, ws: WebSocket, re
   // Before resolving, not after: the mapping this reads lives on disk, and a reconnect that
   // arrives while the log is still being read would see an empty map and decline to resume a
   // rollout that is right there — which is the restart case this exists for.
-  await codexRolloutsHydrated;
   // And the GUI tool restriction (#3033), for the claude handler's reason: the spawn reads it, and a
-  // resume that ran ahead of the log would be handed every tool and claim them.
-  await guiGroupRestrictionsHydrated;
+  // resume that ran ahead of the log would be handed every tool and claim them. And the sandbox
+  // grants a server-started codex was spawned with (#3464), or its resume comes back without them.
+  await Promise.all([codexRolloutsHydrated, guiGroupRestrictionsHydrated, codexSessionGrantsHydrated]);
   // Same order and rule as the claude handler: bind where an existing rollout is, and give only a
   // newly minted key the picked account.
   const rolloutOf = (key: string) => codexRollouts.get(key)?.conversationId ?? key;

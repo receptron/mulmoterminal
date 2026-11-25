@@ -8,9 +8,9 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **13.6.0 is out.** Each terminal has a send button that pastes its last exchange into another
-> agent's terminal in the same repository and takes you there — you press Enter.
-> [Setup guide](v13.6.0.html)
+> **13.7.0 is out.** An agent can hand an issue to another agent and have a third review the PR
+> until the repository's merge condition is met, the Skills viewer measures whether a skill helps,
+> and a full disk no longer empties your grid. [Setup guide](v13.7.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 
