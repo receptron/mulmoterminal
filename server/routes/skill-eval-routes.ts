@@ -36,7 +36,7 @@ import { activeRunId, effectiveStatus, startEvalRun, stopEvalRun } from "../back
 import { docSource } from "./skill-source-query.js";
 import { requestBody } from "./requestBody.js";
 import { homedir, tmpdir } from "node:os";
-import { evalDirWriteRules } from "../backends/skillEval/evalWriteRules.js";
+import { authorWriteRules } from "../backends/skillEval/evalWriteRulesOnDisk.js";
 
 export const SKILL_EVALS_ROOT = path.join(MULMOTERMINAL_HOME, "skill-evals");
 
@@ -121,7 +121,7 @@ async function startAuthoring(ctx: Context, body: Record<string, unknown>, res: 
   const cwd = skill.source.scope === "project" ? skill.source.dir : homedir();
   try {
     const turn = authorTurn(skill, await conversationsOf(ctx, skill));
-    const options = { claudePermissionMode: AUTHOR_PERMISSION_MODE, claudeAllowedTools: evalDirWriteRules(skill.evalDir) };
+    const options = { claudePermissionMode: AUTHOR_PERMISSION_MODE, claudeAllowedTools: await authorWriteRules(skill.evalDir, ctx.root) };
     const spawned = await ctx.spawnSession("claude", cwd, turn, true, null, options);
     res.json({ chatId: spawned.sessionId, agent: spawned.agent });
   } catch (err) {
