@@ -11,7 +11,9 @@
 import path from "node:path";
 import express, { type Express } from "express";
 import { mountAllRoutes } from "../infra/tools/plugins-registry.js";
-import { mountConfigRoutes } from "../config/config-routes.js";
+import { APP_CONFIG_FILE, mountConfigRoutes } from "../config/config-routes.js";
+import { getUpdateStatus } from "../config/update-status.js";
+import { mountRemoteHostsRoutes } from "../backends/hostGateway/remoteHostsRoutes.js";
 import { mountFilesBrowseRoutes } from "../files/files-browse.js";
 import { endTmuxSession, mountTmuxRoutes, type TmuxRouteDeps } from "../infra/process/tmux-routes.js";
 import { mountSwitchTokenRoutes } from "../infra/http/switch-token-routes.js";
@@ -484,6 +486,9 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
   // The dated release guides a user has not been shown since their last upgrade, recorded as
   // seen as they are answered (POST /api/whats-new).
   mountWhatsNewRoutes(app);
+
+  // The other MulmoTerminal servers this one forwards to over ssh tunnels (GET /api/remote-hosts).
+  mountRemoteHostsRoutes(app, { configFile: APP_CONFIG_FILE, localVersion: () => getUpdateStatus().version });
 
   // Where this install keeps its docs and source, for the bundled help skill (GET /api/help/sources).
   mountHelpRoutes(app);
