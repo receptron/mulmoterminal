@@ -16,7 +16,7 @@
 //      Wire paths resolve through the ops' realpath containment (resolveStory).
 import path from "node:path";
 import fs from "node:fs/promises";
-import { closeSync, createReadStream, fstatSync, openSync, type Stats } from "node:fs";
+import { closeSync, createReadStream, fstatSync, openSync } from "node:fs";
 import { execFile } from "node:child_process";
 import type { Express, Request, Response } from "express";
 import {
@@ -32,6 +32,7 @@ import type { MulmoScriptExecuteContext, SaveMulmoScriptArgs } from "@mulmoclaud
 import { artifactsFileOps } from "./artifacts.js";
 import { mulmoScriptByPath } from "../files/openPath.js";
 import { createFileOps } from "../files/fileOps.js";
+import { fileStamp } from "../../files/fileStamp.js";
 import { storiesRootId } from "../files/storiesRoot.js";
 import { uniqueRootPaths } from "../files/storiesRootSet.js";
 import { canonicalPath } from "../../infra/fs/canonical-path.js";
@@ -297,12 +298,9 @@ function saveArgsFrom(body: Record<string, unknown>): SaveMulmoScriptArgs {
 // path, so nothing can be swapped in between the check and the read.
 const mintedAbsoluteMedia = new Map<string, string>();
 
-/** device + inode + size + mtime. Enough to say "the same file, unchanged": a replacement gets a
- *  new inode, and an in-place rewrite changes size or mtime. Read from a `Stats` so the caller
- *  chooses whether it came from a path (minting) or a descriptor (serving). */
-function fileIdentity(stats: Stats): string {
-  return `${stats.dev}:${stats.ino}:${stats.size}:${stats.mtimeMs}`;
-}
+/** Enough to say "the same file, unchanged": a replacement gets a new file id, and an in-place
+ *  rewrite changes size or mtime. Taken from a descriptor, so what is checked is what is read. */
+const descriptorStamp = (fd: number): string => fileStamp(fstatSync(fd, { bigint: true }));
 
 /** The `moviePath` / `pdfPath` values in a dispatch answer, however deep the shape nests them.
  *
@@ -331,7 +329,7 @@ function rememberMintedMedia(result: unknown): void {
     let fd: number | undefined;
     try {
       fd = openSync(real, "r");
-      mintedAbsoluteMedia.set(real, fileIdentity(fstatSync(fd)));
+      mintedAbsoluteMedia.set(real, descriptorStamp(fd));
     } catch {
       // Answered but unreadable — nothing to grant, and the View's fetch will 404 on its own.
     } finally {
@@ -352,7 +350,7 @@ function openMintedMedia(absolutePath: string): number | null {
   let fd: number | undefined;
   try {
     fd = openSync(absolutePath, "r");
-    if (fileIdentity(fstatSync(fd)) === recorded) return fd;
+    if (descriptorStamp(fd) === recorded) return fd;
   } catch {
     // Gone or unreadable — falls through to the refusal below.
   }

@@ -28,6 +28,7 @@ import { chmodSync, lstatSync, readFileSync, realpathSync, renameSync, rmSync, s
 import path from "node:path";
 import { isRecord } from "../../../common/isRecord.js";
 import { claudeConfigProjectKey } from "./config-project-key.js";
+import { fileStamp } from "../../files/fileStamp.js";
 
 const TRUST_KEY = "hasTrustDialogAccepted";
 // Claude Code writes its config two-space indented; matching it keeps the rewrite a one-line diff.
@@ -115,8 +116,7 @@ export function folderTrustMarker(ensure: (configFile: string, dir: string) => T
 // its size and mtime, which every save moves. Null for a file that cannot be stat'd: never remembered.
 const fileVersion = (file: string): string | null => {
   try {
-    const stat = statSync(file);
-    return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}`;
+    return fileStamp(statSync(file, { bigint: true }));
   } catch {
     return null;
   }
