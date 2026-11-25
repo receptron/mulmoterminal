@@ -6,7 +6,8 @@
 // The rules given to the writer are the ones the evaluation papers measured: short bodies beat long ones,
 // fixed paths and templates override the task, an unread skill usually has a description that does not
 // summarise its body, and a skill rewritten without a test can do worse than none — which is why the
-// result is measured before anyone may adopt it.
+// result is measured before anyone may adopt it. Short applies to what is rewritten: the test tasks cover only part
+// of what a skill is for, so a rule they never exercise is kept rather than trimmed to make them pass.
 import { cp, lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { SKILL_EVAL_IMPROVE_BUDGET_USD, type SkillEvalAttempt, type SkillEvalCase, type SkillEvalRun, type SkillEvalSet } from "../../../common/skillEval.js";
@@ -53,12 +54,13 @@ export function improvePrompt(): string {
     "",
     "Rules:",
     "- Fix the general cause of each failure. Do NOT mention, quote or special-case the test tasks: the skill must help on requests like them, not on these exact ones.",
-    "- Keep the body short: the steps and how to tell the work is done. Remove explanation the task does not need. A shorter skill that passes is better than a longer one.",
+    "- Change only what the failures point to. Keep every rule, step and check the report does not show failing: the test tasks cover only part of what the skill is for, so a rule they never exercise is not a rule nobody needs.",
+    "- Keep what you write short. Do not add explanation the task does not need, and do not grow the skill to cover the test tasks.",
     "- No hard-coded file paths, names or fill-in templates that would override what the user asks for.",
     "- Where the skill was NOT read, rewrite the frontmatter `description` as a two or three sentence summary of what the body does and when to use it.",
     `- Edit only ./${SKILL_FOLDER}/SKILL.md, and keep its frontmatter \`name\` unchanged. Any other file in the folder is there to read: a change to it is not kept.`,
     "",
-    "When you are done, reply with one short paragraph saying what you changed and why.",
+    "When you are done, reply with one short paragraph saying what you changed and why, written in the language the skill is written in.",
   ].join("\n");
 }
 

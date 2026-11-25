@@ -100,9 +100,10 @@ passed more often, or look for a cheaper model once it helps.
 
 **Improve and measure** has an AI (`sonnet` by default) read the latest finished measurement of the
 current `SKILL.md` on the current tasks — which tasks failed and why, and whether the skill was read —
-and write an improved `SKILL.md`. It is told to keep it short,
-fix the general cause rather than fit the tasks, and rewrite the description when the skill went
-unread. The improvement is measured at once on the same tasks, **with the skill only**: the runs
+and write an improved `SKILL.md`. It is told to change only what the
+failures point to and keep every other rule, step and check (the tasks test only part of what a skill is
+for), to keep what it writes short, to fix the general cause rather than fit the tasks, and to rewrite
+the description when the skill went unread. It says what it changed in the language the skill is written in. The improvement is measured at once on the same tasks, **with the skill only**: the runs
 without it are reused from the measurement it was written from, since they never read the skill.
 Your `SKILL.md` is not touched.
 

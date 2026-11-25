@@ -307,10 +307,14 @@ describe("what the writer is given", () => {
     expect(report).toContain("without skill, round 1: pass");
   });
 
-  it("tells the writer not to fit the test tasks, to stay short and to fix an unread description", () => {
+  it("tells the writer not to fit the test tasks, to keep what the failures do not touch, and to fix an unread description", () => {
     const prompt = improvePrompt();
     expect(prompt).toContain("Do NOT mention, quote or special-case the test tasks");
-    expect(prompt).toContain("Keep the body short");
+    expect(prompt).toContain("Keep what you write short");
+    // The tasks test part of what a skill is for: a rule they never exercise is not to be trimmed away.
+    expect(prompt).toContain("Keep every rule, step and check the report does not show failing");
+    expect(prompt).not.toContain("Remove explanation");
+    expect(prompt).toContain("written in the language the skill is written in");
     expect(prompt).toContain("description");
   });
 
