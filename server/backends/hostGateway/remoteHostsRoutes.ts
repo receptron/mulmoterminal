@@ -1,5 +1,6 @@
 // GET /api/remote-hosts (#3506): the configured remote hosts, each probed, plus the entries that
 // were not loaded and why. GET /api/remote-hosts/<id>/dirs: that host's saved directories.
+// GET /api/remote-hosts/ids: the configured ids alone, unprobed.
 //
 // `remoteHosts` is read from config.json here rather than being an AppConfig key. That keeps it out
 // of POST /api/config, so no page can add a host to forward to, and out of the sanitize-and-save
@@ -8,7 +9,7 @@
 import type { Express } from "express";
 import { existsSync } from "node:fs";
 import { isRecord } from "../../../common/isRecord.js";
-import { parseRemoteHostDirs, type RemoteHostSummary, type RemoteHostsResponse } from "../../../common/remoteHosts.js";
+import { parseRemoteHostDirs, REMOTE_HOST_IDS_ROUTE, type RemoteHostSummary, type RemoteHostsResponse } from "../../../common/remoteHosts.js";
 import { readJsonFile } from "../../infra/fs/read-text-file.js";
 import { parseRemoteHosts, type RemoteHost, type RemoteHostsConfig } from "./remoteHostsConfig.js";
 import { remoteHostState } from "./remoteHostState.js";
@@ -75,6 +76,10 @@ export function mountRemoteHostsRoutes(app: Express, deps: RemoteHostsRouteDeps)
     const summaries = await Promise.all(hosts.map((host) => probe(host, deps.localVersion(), deps.fetchJson ?? fetchJson)));
     const body: RemoteHostsResponse = { hosts: summaries, rejected };
     res.json(body);
+  });
+
+  app.get(REMOTE_HOST_IDS_ROUTE, (_req, res) => {
+    res.json({ ids: loadRemoteHosts(deps.configFile).hosts.map((host) => host.id) });
   });
 
   app.get("/api/remote-hosts/:id/dirs", async (req, res) => {

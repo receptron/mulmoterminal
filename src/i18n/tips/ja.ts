@@ -4,6 +4,7 @@ import type { Messages } from "../messages";
 export const tipsJa: Messages["tips"] = {
   cell: {
     remoteHost: "{host} で動いています。この端末のファイル、git、ペイン、ツールはまだここでは使えません。",
+    remoteHostGone: "{host} は config.json の remoteHosts から消えたので、この端末は接続できません。閉じるか、ホストを戻して再読み込みしてください。",
     running: "実行中…",
     finished: "完了",
     exited: "終了",

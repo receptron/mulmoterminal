@@ -108,6 +108,9 @@ import { canStartTalk } from "./cellTalkStart";
 import { connView } from "../composables/useTerminalConnections";
 import type { SessionExit } from "../composables/serverMessage";
 import HostMark from "./HostMark.vue";
+import RemoteHostGone from "./RemoteHostGone.vue";
+import { useRemoteHostStatus } from "../composables/configuredRemoteHosts";
+import { mayConnect } from "./remoteHostStatus";
 import { cellActionAllowed, isRemoteHost, onThisMachine, REMOTE_CELL_DECLINE_EN } from "./remoteCell";
 
 // How long a handoff failure stays on the cell before it clears itself.
@@ -241,6 +244,7 @@ const connectKey = ref(0);
 const cwd = ref<string | null>(props.initialCwd ?? props.defaultCwd);
 // What this server may be asked about: the same values for a local cell, nothing for a remote one.
 const isRemote = isRemoteHost(props.remoteHost);
+const hostStatus = useRemoteHostStatus(props.remoteHost);
 const localCwd = computed(() => onThisMachine(props.remoteHost, cwd.value));
 const localSession = computed(() => onThisMachine(props.remoteHost, sessionId.value));
 // Per-directory overrides (<cwd>/.mulmoterminal.json): pins this cell's terminal
@@ -1913,7 +1917,9 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           </span>
         </div>
         <TimelineOverlay :session-id="sessionId" :cwd="cwd" :open="timelineOpen" @close="timelineOpen = false" />
+        <RemoteHostGone v-if="remoteHost && hostStatus === 'gone'" :host="remoteHost" />
         <TerminalView
+          v-else-if="mayConnect(hostStatus)"
           ref="termRef"
           class="cell-term"
           :class="CELL_TERM"

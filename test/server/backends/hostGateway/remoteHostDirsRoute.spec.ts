@@ -71,3 +71,39 @@ describe("GET /api/remote-hosts/:id/dirs", () => {
     expect((await request(hang)("/api/remote-hosts/lx/dirs")).status).toBe(502);
   }, 10_000);
 });
+
+describe("GET /api/remote-hosts/ids", () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), "remote-ids-"));
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+  const never: FetchJson = async () => {
+    throw new Error("the id list probes no host");
+  };
+  const idsFrom = async (configFile: string) => {
+    const app = express();
+    mountRemoteHostsRoutes(app, { configFile, localVersion: () => "7.1.0", fetchJson: never });
+    return (await appRequest(app)("/api/remote-hosts/ids")).json();
+  };
+
+  it("lists the loaded hosts without probing them, leaving out refused entries", async () => {
+    const configFile = path.join(dir, "config.json");
+    await writeFile(
+      configFile,
+      JSON.stringify({
+        remoteHosts: [
+          { id: "lx", url: "http://127.0.0.1:1" },
+          { id: "Bad id", url: "http://127.0.0.1:2" },
+          { id: "b", url: "http://127.0.0.1:3" },
+        ],
+      }),
+    );
+    expect(await idsFrom(configFile)).toEqual({ ids: ["lx", "b"] });
+  });
+  it("lists none with no config file", async () => {
+    expect(await idsFrom(path.join(dir, "missing.json"))).toEqual({ ids: [] });
+  });
+});

@@ -56,9 +56,17 @@ export const forgetClosed = (list: readonly ClosedCell[], entry: ClosedCell): Cl
   return list.filter((other) => closedCellId(other) !== id);
 };
 
-/** The entries worth offering: a conversation the grid has open again is not closed any more. */
-export const reopenableClosed = (list: readonly ClosedCell[], openSessionIds: readonly string[]): ClosedCell[] =>
-  list.filter((entry) => entry.kind === "shell" || !openSessionIds.includes(entry.session));
+/** The entries worth offering: a conversation the grid has open again is not closed any more, and
+ *  one on a host since removed from the config would reopen as a cell that cannot connect. The entry
+ *  is hidden, not forgotten, so adding the host back brings it back. */
+export const reopenableClosed = (
+  list: readonly ClosedCell[],
+  openSessionIds: readonly string[],
+  hostGone: (host: string) => boolean = () => false,
+): ClosedCell[] =>
+  list.filter(
+    (entry) => (entry.kind === "shell" || !openSessionIds.includes(entry.session)) && (entry.remoteHost === undefined || !hostGone(entry.remoteHost)),
+  );
 
 export const cellForClosed = (entry: ClosedCell): Omit<Cell, "uid"> => ({
   ...(entry.kind === "session" ? cellForPanelResume({ id: entry.session, cwd: entry.cwd, agent: entry.agent, account: entry.account }) : shellCell(entry.cwd)),

@@ -4,6 +4,7 @@ import { remoteLaunchEn } from "../remoteLaunch/en";
 export const tipsEn = {
   cell: {
     remoteHost: "Runs on {host}. Files, git, panes and tools for this terminal are not available here yet.",
+    remoteHostGone: "{host} is no longer in remoteHosts in config.json, so this terminal cannot connect. Close it, or add the host back and reload.",
     running: "Running…",
     finished: "Finished",
     exited: "Exited",

@@ -4,6 +4,7 @@ import type { Messages } from "../messages";
 export const tipsZhTW: Messages["tips"] = {
   cell: {
     remoteHost: "在 {host} 上執行。此終端機的檔案、git、面板與工具暫時無法在這裡使用。",
+    remoteHostGone: "{host} 已不在 config.json 的 remoteHosts 中，因此此終端無法連線。請關閉它，或重新加入該主機後重新整理。",
     running: "執行中…",
     finished: "已完成",
     exited: "已結束",

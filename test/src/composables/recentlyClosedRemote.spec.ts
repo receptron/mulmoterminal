@@ -56,3 +56,22 @@ describe("a remote cell in recently closed", () => {
     expect(entry && reopenableClosed([entry], [SESSION])).toEqual([]);
   });
 });
+
+describe("a closed cell on a host removed from the config", () => {
+  const remote = closedCellOf(agentCell, "t", 1);
+  const local = closedCellOf(shellCellOn(), null, 2);
+  const entries = [remote, local].filter((entry) => entry !== null);
+
+  it("is not offered, while this machine's entries are", () => {
+    expect(reopenableClosed(entries, [], (host) => host === "lx")).toEqual([local]);
+    expect(reopenableClosed(entries, [], () => false)).toEqual(entries);
+  });
+  it("asks about the host only for an entry that has one", () => {
+    const asked: string[] = [];
+    reopenableClosed(entries, [], (host) => {
+      asked.push(host);
+      return false;
+    });
+    expect(asked).toEqual(["lx"]);
+  });
+});

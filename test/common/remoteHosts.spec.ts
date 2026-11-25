@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { isRemoteHostId, parseRemoteHostDirs, parseRemoteHostsResponse, REMOTE_DIR_PRESETS_MAX, remotePath, remotePathOf } from "../../common/remoteHosts";
+import {
+  isRemoteHostId,
+  parseRemoteHostDirs,
+  parseRemoteHostIds,
+  parseRemoteHostsResponse,
+  REMOTE_DIR_PRESETS_MAX,
+  remotePath,
+  remotePathOf,
+} from "../../common/remoteHosts";
 
 describe("isRemoteHostId", () => {
   it("accepts lowercase slugs", () => {
@@ -81,5 +89,12 @@ describe("parseRemoteHostDirs", () => {
   it("caps how many directories it keeps", () => {
     const many = Array.from({ length: REMOTE_DIR_PRESETS_MAX + 5 }, (_, i) => ({ label: `d${i}`, path: `/d${i}` }));
     expect(parseRemoteHostDirs(null, many).presets).toHaveLength(REMOTE_DIR_PRESETS_MAX);
+  });
+});
+
+describe("parseRemoteHostIds", () => {
+  it("keeps the valid ids and drops everything else", () => {
+    expect(parseRemoteHostIds({ ids: ["lx", "Bad", 3, null, "b-2"] })).toEqual(["lx", "b-2"]);
+    [undefined, null, [], { ids: "lx" }, "lx"].forEach((body) => expect(parseRemoteHostIds(body)).toEqual([]));
   });
 });

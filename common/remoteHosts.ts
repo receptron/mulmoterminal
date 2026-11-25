@@ -105,3 +105,8 @@ export function parseRemoteHostDirs(cwd: unknown, presets: unknown): RemoteHostD
 /** The gateway's own answer, read back in the browser. */
 export const parseRemoteHostDirsResponse = (body: unknown): RemoteHostDirs =>
   isRecord(body) ? parseRemoteHostDirs(body.cwd, body.presets) : { cwd: null, presets: [] };
+
+/** GET: the configured host ids alone, read from config.json with no probe, so asking costs nothing. */
+export const REMOTE_HOST_IDS_ROUTE = "/api/remote-hosts/ids";
+
+export const parseRemoteHostIds = (body: unknown): string[] => (isRecord(body) && isUnknownArray(body.ids) ? body.ids.filter(isRemoteHostId) : []);
