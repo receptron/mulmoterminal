@@ -698,6 +698,8 @@ included.
 
 ### How this repository's PRs are reviewed (`review`) {#dir-review}
 
+The walkthrough, from setup to cleanup: [Hand an issue to agents and get it merged](issue-to-merge.html).
+
 Declares how a session that drives a review should treat this repository's pull requests. Nothing
 reviews automatically until the key is set; a session that drives a review reads it with the
 `reviewSettings` tool, given the repository as `owner/repo`.
@@ -752,6 +754,8 @@ Whether this project's sessions are asked to end a reply with a summary. Omit it
 global setting, which is on. → [Turning off the closing summary](#append-system-prompt)
 
 ## How many issues run at once (`maxIssueSessions`) {#max-issue-sessions}
+
+The walkthrough: [Hand over several issues](issue-to-merge.html#several-issues).
 
 A session can hand issues to implementers of its own with the `startIssueSession` tool: each one
 gets the issue's worktree and a cell, and takes the issue to merge through the
