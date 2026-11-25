@@ -18,7 +18,7 @@ import { skillEvalNext, type SkillEvalNext, type SkillEvalStep } from "./skillEv
 
 const props = defineProps<{ source: SkillSource; skill: CatalogSkill }>();
 const emit = defineEmits<{ adopted: [] }>();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 // While a run is going, how often its record is read again.
 const POLL_MS = 3000;
@@ -143,7 +143,7 @@ async function onAdopted(): Promise<void> {
 async function draft(): Promise<void> {
   if (drafting.value) return;
   drafting.value = true;
-  const chatId = await startSkillEvalAuthoring(props.source, props.skill.slug).finally(() => (drafting.value = false));
+  const chatId = await startSkillEvalAuthoring(props.source, props.skill.slug, locale.value).finally(() => (drafting.value = false));
   if (chatId === null) {
     notice.value = t("skillsView.eval.draftFailed");
     return;

@@ -322,6 +322,27 @@ describe("/api/skill-evals", () => {
     expect((await app(root, projectDir, [])("/api/skill-evals/author", jsonPost({ slug: "weekly", dir: projectDir }))).status).toBe(503);
   });
 
+  it("asks the drafting cell to talk in the screen's language, and in none it does not know", async () => {
+    const { projectDir, root } = project(null);
+    const turns: string[] = [];
+    const server = express();
+    server.use(express.json());
+    mountSkillEvalRoutes(server, {
+      root,
+      cwds: () => Promise.resolve([projectDir]),
+      spawnSession: (_agent, _cwd, turn) => (turns.push(turn), Promise.resolve({ sessionId: "s1", agent: "claude", seedRuns: true })),
+      library: () => Promise.resolve(["/t/a.jsonl"]),
+    });
+    const author = (language: unknown) => routeCall(server)("/api/skill-evals/author", jsonPost({ slug: "weekly", dir: projectDir, language }));
+    await author("ja");
+    await author("zh-TW");
+    await author("xx");
+    await author(7);
+    expect(turns[0]).toMatch(/, past conversations \["\/t\/a\.jsonl"\], reply in Japanese$/);
+    expect(turns[1]).toMatch(/, reply in Traditional Chinese$/);
+    expect(turns.slice(2).map((turn) => turn.includes("reply in"))).toEqual([false, false]);
+  });
+
   it("names the conversations that ran the skill in its own folder, and none when the Library cannot say", async () => {
     const { projectDir, root } = project(null);
     const turns: string[] = [];
