@@ -10,6 +10,8 @@ export interface StreamOutcome {
   denied: string[];
   /** Set when the run ended without a successful result: an error, the budget, or no result line at all. */
   error: string | null;
+  /** Set when the run never reached the model — an expired login, a rate limit: it says nothing about the task. */
+  apiError: string | null;
 }
 
 function parsed(line: string): Record<string, unknown> | null {
@@ -53,18 +55,25 @@ function resultError(result: Record<string, unknown>): string | null {
   return result.subtype === "success" ? null : `the run ended with ${String(result.subtype)}`;
 }
 
+/** A result line's message when claude could not reach the model, else null. */
+export function apiErrorOf(result: Record<string, unknown>): string | null {
+  if (result.terminal_reason !== "api_error") return null;
+  return typeof result.result === "string" && result.result !== "" ? result.result : "claude could not reach the model";
+}
+
 export function streamOutcome(lines: readonly string[], skillSlug: string): StreamOutcome {
   const records = lines.map(parsed).filter((record): record is Record<string, unknown> => record !== null);
   // Asking for the skill is not reading it: the call counts once its result came back without an error.
   const succeeded = new Set(records.flatMap(succeededIds));
   const skillInvoked = records.flatMap((record) => skillCallIds(record, skillSlug)).some((id) => succeeded.has(id));
   const result = records.findLast((record) => record.type === "result");
-  if (result === undefined) return { skillInvoked, finalText: "", costUsd: 0, denied: [], error: "the run gave no result" };
+  if (result === undefined) return { skillInvoked, finalText: "", costUsd: 0, denied: [], error: "the run gave no result", apiError: null };
   return {
     skillInvoked,
     finalText: typeof result.result === "string" ? result.result : "",
     costUsd: typeof result.total_cost_usd === "number" ? result.total_cost_usd : 0,
     denied: deniedTools(result.permission_denials),
     error: resultError(result),
+    apiError: apiErrorOf(result),
   };
 }

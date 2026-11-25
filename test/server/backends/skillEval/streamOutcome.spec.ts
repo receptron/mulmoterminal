@@ -20,6 +20,7 @@ describe("streamOutcome", () => {
       costUsd: 0.02,
       denied: [],
       error: null,
+      apiError: null,
     });
   });
 
@@ -47,5 +48,21 @@ describe("streamOutcome", () => {
     expect(streamOutcome([result({ subtype: "error_max_budget_usd" })], "w").error).toBe("the run ended with error_max_budget_usd");
     expect(streamOutcome([result({ is_error: true, result: "boom" })], "w").error).toBe("boom");
     expect(streamOutcome([skillCall("w"), toolResult("t"), "{not json", ""], "w")).toMatchObject({ skillInvoked: true, error: "the run gave no result" });
+    expect(streamOutcome([result({ subtype: "error_max_budget_usd" })], "w").apiError).toBeNull();
+  });
+
+  // The result line claude printed with an expired login.
+  const unreached = {
+    is_error: true,
+    result: "Failed to authenticate: OAuth session expired and could not be refreshed",
+    terminal_reason: "api_error",
+    total_cost_usd: 0,
+  };
+
+  it("tells a run that never reached the model from one that failed the task", () => {
+    expect(streamOutcome([result(unreached)], "w")).toMatchObject({ error: unreached.result, apiError: unreached.result });
+    expect(streamOutcome([result({ ...unreached, result: "" })], "w").apiError).toBe("claude could not reach the model");
+    expect(streamOutcome([result({ is_error: true, result: "boom", terminal_reason: "completed" })], "w").apiError).toBeNull();
+    expect(streamOutcome([result({ is_error: true, result: "boom", terminal_reason: 1 })], "w").apiError).toBeNull();
   });
 });
