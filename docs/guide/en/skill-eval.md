@@ -96,7 +96,7 @@ A progress line counts the runs; **Stop** ends it early. One evaluation runs at 
 
 The panel then **points at one next step** and makes its button stand out, with a line saying why:
 measure again after a change, improve when there is no evidence it helps, adopt an improvement that
-passed more often, or look for a cheaper model once it helps.
+passed more often by more than the runs vary, or look for a cheaper model once it helps.
 
 ## 5. Improve and measure {#improve}
 
@@ -109,7 +109,12 @@ the description when the skill went unread. It says what it changed in the langu
 without it are reused from the measurement it was written from, since they never read the skill.
 Your `SKILL.md` is not touched.
 
-The result sets the improvement's pass rate beside the current one and shows **what it changes**, as a
+The result sets the improvement's pass rate beside the current one and says whether the difference is
+real: **better** or **worse** only when the gap is wider than the skill's own rounds disagree in either
+run, and at least one task's worth; otherwise **no evidence**. Two noisy numbers often differ by chance,
+and taking the higher one reads chance as progress. Tasks the improvement passed less often are named.
+**Adopt** stays available whatever it says, but the panel points at it only for a better one.
+It also shows **what it changes**, as a
 diff against the `SKILL.md` it was written from, with unchanged stretches folded.
 **Show the whole improved SKILL.md** shows all of it.
 

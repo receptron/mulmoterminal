@@ -65,8 +65,8 @@ export const skillsViewEn = {
       next: {
         measure: "This SKILL.md has not been measured on these tasks yet. Measure it first.",
         improve: "There is no evidence the skill helps. Next, have an AI write an improvement and measure it.",
-        improveAgain: "The last improvement did not pass more often than the skill. Try another, or change the tasks.",
-        adopt: "The improvement passed more often. Read it below, and adopt it if it looks right.",
+        improveAgain: "The last improvement did not pass more often than the skill by more than the runs vary. Try another, or change the tasks.",
+        adopt: "The improvement passed more often, by more than the runs vary. Read it below, and adopt it if it looks right.",
         ladder: "The skill helps. Next, find out whether a cheaper model is enough for it.",
         done: "The skill helps, and the search for the cheapest model is done; its result is below. Measure again after you change the skill or the tasks.",
       },
@@ -79,6 +79,13 @@ export const skillsViewEn = {
         title: "Improvement",
         failed: "No improvement could be written: {error}",
         compare: "Pass rate with the skill: current {before} → improvement {after}",
+        change: {
+          better: "The improvement passes more often than the current skill, by more than the runs vary.",
+          "no-evidence": "No evidence the improvement is better: the gap is within how much the runs vary ({spread}). Adopting it may change nothing.",
+          worse: "The improvement passes less often than the current skill, by more than the runs vary.",
+          pending: "Too few runs to compare the improvement with the current skill.",
+        },
+        worseTasks: "Tasks it passed less often: {tasks}",
         overfit:
           "The improvement was written from these tasks and measured on them, so it may only fit them. After adopting it, add new tasks and measure again to be sure.",
         show: "Show the whole improved SKILL.md",

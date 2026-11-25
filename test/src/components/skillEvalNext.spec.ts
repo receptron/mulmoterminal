@@ -62,10 +62,17 @@ describe("the next step", () => {
     expect(skillEvalNext(overview(hurts, [hurts]))).toEqual({ step: "improve", reason: "improve" });
   });
 
-  it("is adopting an improvement on screen that passed more than the skill, whatever the skill's verdict", () => {
+  it("is adopting an improvement on screen that passed more than the skill by more than chance, whatever its verdict", () => {
     const better = improvement([true, true]);
-    expect(skillEvalNext(overview(noEvidence, [better, noEvidence]))).toEqual({ step: "adopt", reason: "adopt" });
-    expect(skillEvalNext(overview(run("1-base", [true, false], [false, false]), [better]))).toMatchObject({ step: "adopt" });
+    const steady = run("1-base", [false, false], [false, false]);
+    expect(skillEvalNext(overview(steady, [better, steady]))).toEqual({ step: "adopt", reason: "adopt" });
+    const hurts = run("1-base", [false, false], [true, true]);
+    expect(skillEvalNext(overview(hurts, [better]))).toMatchObject({ step: "adopt" });
+  });
+
+  it("is improving again after an improvement that passed more only by as much as the skill's own rounds move", () => {
+    // The baseline's rounds passed 0 and 1: an improvement passing both is within that.
+    expect(skillEvalNext(overview(noEvidence, [improvement([true, true]), noEvidence]))).toEqual({ step: "improve", reason: "improveAgain" });
   });
 
   it("is improving again, saying why, after an improvement that did not pass more", () => {
