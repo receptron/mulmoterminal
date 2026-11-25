@@ -182,16 +182,10 @@ export const skillEvalOverviewSchema = z.object({
 });
 export type SkillEvalOverview = z.infer<typeof skillEvalOverviewSchema>;
 
-/** Whether an improvement may be written from `run` (#3448): a finished measurement of the skill itself, as
- *  its text is now, on the current set — its report would otherwise describe some other skill or tasks. */
+/** Whether an improvement may be written from `run` (#3448): a finished measurement of the skill as its text is now,
+ *  on the current set — its report would otherwise describe some other skill or tasks. A measured improvement
+ *  counts once it is adopted (#3472): it measured exactly the SKILL.md that adopting wrote. */
 export function isBaselineFor(run: SkillEvalRun, setHash: string, skillHash: string): boolean {
   // A search for the cheapest model measured no run without the skill, so its report has half the story.
-  return (
-    run.candidateId === null &&
-    run.ladder.length === 0 &&
-    run.status === "done" &&
-    run.attempts.length > 0 &&
-    run.setHash === setHash &&
-    run.skillHash === skillHash
-  );
+  return run.ladder.length === 0 && run.status === "done" && run.attempts.length > 0 && run.setHash === setHash && run.skillHash === skillHash;
 }
