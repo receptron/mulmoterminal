@@ -18,12 +18,12 @@
 //     both see the old file and one write is lost. Serialized on the RESOLVED path, because two
 //     spellings of one root are one file.
 import { chmod, readFile, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
-import type { Stats } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { APP_MANIFEST_FILE } from "@mulmoclaude/core/collection/server";
 import { isRecord } from "../../../common/isRecord.js";
 import { serializeBy } from "./serialize.js";
+import { fileStamp } from "../../files/fileStamp.js";
 
 export type ManifestFailure = { ok: false; problems: string[] };
 
@@ -68,7 +68,7 @@ async function updateOnce(root: string, mutate: ManifestMutation): Promise<Manif
   let raw: string;
   // Stamped from the RESOLVED file, beside the read, so the comparison before the rename is about
   // the same inode `replaceManifest` is going to replace rather than about a symlink.
-  let read: FileStamp | null;
+  let read: string | null;
   try {
     raw = await readFile(manifestPath, "utf-8");
     read = await stampAt(manifestPath);
@@ -109,29 +109,20 @@ async function updateOnce(root: string, mutate: ManifestMutation): Promise<Manif
  *  This NARROWS the window; it does not close it. POSIX has no compare-and-rename, so what remains
  *  is the gap between the last `stat` and the `rename` — microseconds, against the seconds an
  *  awaited network call leaves open. Said plainly rather than described as a lock, because the
- *  next person to need a guarantee here needs to know which one they are getting. */
-interface FileStamp {
-  ino: number;
-  size: number;
-  mtimeMs: number;
-}
-
-const stampOf = (info: Stats): FileStamp => ({ ino: info.ino, size: info.size, mtimeMs: info.mtimeMs });
-
-/** The stamp of the file a path RESOLVES to, or null when it cannot be taken — a stamp that could
+ *  next person to need a guarantee here needs to know which one they are getting.
+ *
+ *  The stamp is of the file a path RESOLVES to, or null when it cannot be taken — a stamp that could
  *  not be read is not a mismatch, and must not turn every write into a refusal. */
-async function stampAt(manifestPath: string): Promise<FileStamp | null> {
+async function stampAt(manifestPath: string): Promise<string | null> {
   try {
-    return stampOf(await stat(await realpath(manifestPath)));
+    return fileStamp(await stat(await realpath(manifestPath), { bigint: true }));
   } catch {
     return null;
   }
 }
 
-const sameFile = (left: FileStamp, right: FileStamp): boolean => left.ino === right.ino && left.size === right.size && left.mtimeMs === right.mtimeMs;
-
 /** Replace the file, or say why not. Returns null when it landed. */
-async function replaceManifest(manifestPath: string, manifest: Record<string, unknown>, read: FileStamp | null): Promise<ManifestFailure | null> {
+async function replaceManifest(manifestPath: string, manifest: Record<string, unknown>, read: string | null): Promise<ManifestFailure | null> {
   // Two spaces and a trailing newline: this file is committed and edited by hand, so it is
   // written the way the author would have.
   const body = `${JSON.stringify(manifest, null, 2)}\n`;
@@ -148,8 +139,8 @@ async function replaceManifest(manifestPath: string, manifest: Record<string, un
     await writeFile(scratch, body, "utf-8");
     // ONE stat, used for both questions, and taken as late as possible: the mode to carry over,
     // and whether this is still the file the mutation was decided against.
-    const now = await stat(target);
-    if (read !== null && !sameFile(read, stampOf(now))) {
+    const now = await stat(target, { bigint: true });
+    if (read !== null && read !== fileStamp(now)) {
       await unlink(scratch).catch(() => {});
       return {
         ok: false,
@@ -162,7 +153,7 @@ async function replaceManifest(manifestPath: string, manifest: Record<string, un
     }
     // The replacement is a NEW file, so it carries this process's umask rather than the mode the
     // author gave `app.json`. Carrying the declaration through unchanged has to include that.
-    await chmod(scratch, now.mode);
+    await chmod(scratch, Number(now.mode));
     await rename(scratch, target);
     return null;
   } catch (err) {
