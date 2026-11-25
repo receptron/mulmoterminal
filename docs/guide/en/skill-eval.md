@@ -47,7 +47,8 @@ Press **Draft test tasks**. A Claude cell opens (in plan mode) running the bundl
 
 - **3 to 5 tasks where the skill should help** — what a person would actually ask, each with a pass/fail
   check: either a command (for example "the file exists and has a `## まとめ` heading") or a few yes/no
-  questions that another Claude answers about the result;
+  questions that another Claude answers about the result, by what each means rather than its exact words,
+  so a result made without the skill is not failed for describing the same thing in other terms;
 - **one task where the skill should not be used**, to catch a skill that fires when it should not;
 - small made-up starting files when a task needs them.
 
