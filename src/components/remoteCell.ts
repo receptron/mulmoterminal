@@ -4,7 +4,7 @@
 // never seen, so the call reads, writes or deletes the wrong thing. Until those features are routed
 // to the remote, they are withheld here.
 import type { CellAction } from "../../common/headerActions";
-import { remotePath, remoteSessionKey } from "../../common/remoteHosts";
+import { remoteHostSessionRoute, remotePath, remoteSessionKey } from "../../common/remoteHosts";
 
 export const isRemoteHost = (host: string | null | undefined): host is string => typeof host === "string" && host.length > 0;
 
@@ -63,3 +63,12 @@ export const remoteCellSessions = (cells: readonly { session: string | null; rem
 /** The key a cell's activity is looked up by: its bare id when local, host and id when remote. */
 export const activityKeyOf = (cell: { session: string | null; remoteHost?: string | undefined }): string | null =>
   cell.session !== null && isRemoteHost(cell.remoteHost) ? remoteSessionKey(cell.remoteHost, cell.session) : cell.session;
+
+/** Where a cell's session detail is read: this server's route, or the gateway's for a remote cell,
+ *  which asks the remote and answers the fields a cell may show (remoteSessionDetailOf). */
+export function sessionDetailPath(sessionId: string, agent: string, cwd: string | null, host: string | null | undefined): string {
+  const params = new URLSearchParams({ agent });
+  if (cwd) params.set("cwd", cwd);
+  const route = isRemoteHost(host) ? remoteHostSessionRoute(host, sessionId) : `/api/session/${sessionId}`;
+  return `${route}?${params}`;
+}

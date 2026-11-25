@@ -112,7 +112,7 @@ import RemoteHostGone from "./RemoteHostGone.vue";
 import { useRemoteCellActivity } from "../composables/useRemoteCellActivity";
 import { useRemoteHostStatus } from "../composables/configuredRemoteHosts";
 import { mayConnect } from "./remoteHostStatus";
-import { activityKeyOf, cellActionAllowed, isRemoteHost, onThisMachine, REMOTE_CELL_DECLINE_EN } from "./remoteCell";
+import { activityKeyOf, cellActionAllowed, isRemoteHost, onThisMachine, REMOTE_CELL_DECLINE_EN, sessionDetailPath } from "./remoteCell";
 
 // How long a handoff failure stays on the cell before it clears itself.
 const ASK_MSG_MS = 4000;
@@ -456,13 +456,11 @@ function activityPushOf(d: Record<string, unknown>): ActivityPush {
 }
 
 async function fetchSessionDetail(id: string): Promise<Record<string, unknown> | null> {
-  if (isRemote) return null;
   try {
     // The agent goes along because the two header badges are read from ITS log, not Claude's
     // (#1465) — and grok's is partitioned by directory, so the cwd is part of that lookup too.
-    const params = new URLSearchParams({ agent: agent.value });
-    if (cwd.value) params.set("cwd", cwd.value);
-    const res = await fetchWithTimeout(`/api/session/${id}?${params}`);
+    // A remote cell asks the gateway, which reads the remote's own detail (#3506).
+    const res = await fetchWithTimeout(sessionDetailPath(id, agent.value, cwd.value, props.remoteHost));
     if (!res.ok) return null;
     const data = await jsonBody(res);
     return id === sessionId.value ? data : null;

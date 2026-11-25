@@ -184,3 +184,25 @@ export function remoteActivityOf(body: unknown, ids: readonly string[]): RemoteA
     }),
   );
 }
+
+/** GET on the Mac: one remote session's detail, as the remote's /api/session/:id answers it, cut down. */
+export const remoteHostSessionRoute = (host: string, sessionId: string): string => `/api/remote-hosts/${host}/session/${sessionId}`;
+
+// What a remote cell reads off its session's detail: the activity, the titles and prompt the roster
+// shows, the memo, and the token and context badges. Left out on purpose: `peerName` (what other
+// sessions ON THE REMOTE call this one) and `collection` (a store on the remote's disk).
+const DETAIL_TEXT_FIELDS = ["event", "lastPrompt", "lastResponse", "aiTitle", "customTitle", "agentTitle", "agentTitleKind", "memo", "workPhase"] as const;
+const DETAIL_FLAG_FIELDS = ["working", "waiting"] as const;
+const DETAIL_OBJECT_FIELDS = ["usage", "context"] as const;
+
+/** The allowed fields of a remote's session detail, each only when it has the type the cell reads. */
+export function remoteSessionDetailOf(body: unknown): Record<string, unknown> {
+  if (!isRecord(body)) return {};
+  const detail: Record<string, unknown> = {};
+  const keep = (fields: readonly string[], allowed: (value: unknown) => boolean) =>
+    fields.filter((field) => allowed(body[field])).forEach((field) => (detail[field] = body[field]));
+  keep(DETAIL_TEXT_FIELDS, isNullableText);
+  keep(DETAIL_FLAG_FIELDS, (value) => typeof value === "boolean");
+  keep(DETAIL_OBJECT_FIELDS, isRecord);
+  return detail;
+}
