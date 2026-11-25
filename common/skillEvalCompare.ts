@@ -46,7 +46,7 @@ function widerSpread(a: number | null, b: number | null): number | null {
 }
 
 function worseCaseIds(baseline: MeasuredSkill, improvement: MeasuredSkill): string[] {
-  return improvement.cases
+  return sharedCases(baseline, improvement)
     .filter((evalCase) => {
       const ids = new Set([evalCase.id]);
       const before = passRate(withSkillOn(baseline, ids), countsFor(evalCase.kind));
@@ -56,8 +56,14 @@ function worseCaseIds(baseline: MeasuredSkill, improvement: MeasuredSkill): stri
     .map((evalCase) => evalCase.id);
 }
 
+/** The tasks of `kind` both runs have with that kind: a task one of them lacks has nothing to be compared with. */
+function sharedCases(baseline: MeasuredSkill, improvement: MeasuredSkill, kind?: SkillEvalCase["kind"]): SkillEvalCase[] {
+  const baselineKind = new Map(baseline.cases.map((evalCase) => [evalCase.id, evalCase.kind]));
+  return improvement.cases.filter((evalCase) => baselineKind.get(evalCase.id) === evalCase.kind && (kind === undefined || evalCase.kind === kind));
+}
+
 export function compareImprovement(baseline: MeasuredSkill, improvement: MeasuredSkill): SkillEvalComparison {
-  const useIds = new Set(improvement.cases.filter((evalCase) => evalCase.kind === "use").map((evalCase) => evalCase.id));
+  const useIds = new Set(sharedCases(baseline, improvement, "use").map((evalCase) => evalCase.id));
   const before = withSkillOn(baseline, useIds);
   const after = withSkillOn(improvement, useIds);
   const beforeRate = passRate(before, countsFor("use"));

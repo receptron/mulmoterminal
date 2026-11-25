@@ -79,18 +79,31 @@ describe("compareImprovement", () => {
     expect(comparison.worseCaseIds).toEqual(["a", "avoid"]);
   });
 
-  it("ignores the runs without the skill, and tasks only one run measured", () => {
-    const baseline = measured(["a"], [[false, false]]);
+  it("ignores the runs without the skill, and tasks only one run has", () => {
+    const without: SkillEvalAttempt = { ...attempt("a", 0, true), arm: "without" };
+    const baseline = measured(["a"], [[true, true]]);
+    baseline.attempts = [...baseline.attempts, without];
+    // Two tasks the baseline never had, both passing: they must not lift the rate of the one the two share.
     const improvement = measured(
+      ["a", "b", "c"],
+      [
+        [false, false],
+        [true, true],
+        [true, true],
+      ],
+    );
+    expect(compareImprovement(baseline, improvement)).toMatchObject({ change: "worse", gap: -1, worseCaseIds: ["a"] });
+    // A task that changed kind is not the same task.
+    const asAvoid = { ...improvement, cases: [useCase("a"), { ...avoidCase, id: "b" }, useCase("c")] };
+    const baselineWithB = measured(
       ["a", "b"],
       [
         [true, true],
         [true, true],
       ],
     );
-    const without: SkillEvalAttempt = { ...attempt("a", 0, true), arm: "without" };
-    baseline.attempts = [...baseline.attempts, without];
-    expect(compareImprovement(baseline, improvement)).toMatchObject({ change: "better", worseCaseIds: [] });
+    baselineWithB.attempts = baselineWithB.attempts.map((a) => (a.caseId === "b" ? { ...a, skillInvoked: false } : a));
+    expect(compareImprovement(baselineWithB, asAvoid)).toMatchObject({ gap: -1, worseCaseIds: ["a"] });
   });
 
   it("is pending when either run has nothing to compare", () => {
