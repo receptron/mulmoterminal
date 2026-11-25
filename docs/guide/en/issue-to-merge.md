@@ -45,6 +45,7 @@ issue ──▶ implementer: questions → implement → PR
                                           ▼
                                 implementer merges → MulmoTerminal closes the
                                 reviewer, the implementer and its worktree
+                                (kept if it holds uncommitted or unpushed work)
 ```
 
 **MulmoTerminal, not the agents, keeps the score.** It sends each round to the reviewer, reads the
@@ -152,7 +153,7 @@ That session becomes the **dispatcher**:
 
 | The line says | The dispatcher |
 |---|---|
-| its PR was **merged** | Starts the next queued issue. MulmoTerminal has already closed that implementer, its reviewer and its worktree. |
+| its PR was **merged** | Starts the next queued issue. MulmoTerminal has already closed that implementer and its reviewer, and removed its worktree unless it held uncommitted or unpushed work. |
 | its PR was **closed** without merging | Tells you, and anything kept (a worktree with unpushed work). Starts the next one, but does not retry that issue unless you ask. |
 | its **session ended** | Tells you, closes it with `closeIssueSession`, starts the next one. |
 | it is **waiting for the user** | Tells you which issue and which cell. It never answers for you. |
@@ -188,8 +189,8 @@ An author receives the same kind of line after each review round — here, round
 
 **The GitHub board.** On the [GitHub board](github.html), a PR's card counts the verdicts posted on it
 (**Verdict 2: LGTM**, or *for an older push* when the newest push has not been reviewed yet), and is
-marked **Ready to merge** when the repository's required LGTMs are on the newest push and CI passed —
-the same rule `requestReview` applies.
+marked **Ready to merge** when the repository's required LGTMs are on the newest push, CI passed and the
+PR is not a draft — `requestReview`'s rule, plus the draft check.
 
 **The PR itself.** Every round's verdict is a comment on the PR, opening with
 `REVIEW VERDICT: LGTM (head <sha>)` or `REVIEW VERDICT: CHANGES REQUESTED (head <sha>)`, followed by the
