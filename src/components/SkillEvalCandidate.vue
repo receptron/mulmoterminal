@@ -24,7 +24,7 @@ const props = defineProps<{
   baseText: string | null;
 }>();
 const emit = defineEmits<{ adopted: [] }>();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const adopting = ref(false);
 const adoptNotice = ref<string | null>(null);
@@ -41,7 +41,8 @@ const clearDiff = (): void => {
   diffView = null;
 };
 watch(
-  [diffHost, dark, () => props.baseText, () => props.run.skillText],
+  // The language too: the folded-lines label is fixed when the view is built.
+  [diffHost, dark, () => props.baseText, () => props.run.skillText, locale],
   ([host, isDark, baseText, skillText]) => {
     clearDiff();
     if (!host || baseText === null) return;
