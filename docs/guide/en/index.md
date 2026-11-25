@@ -8,9 +8,8 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **13.8.0 is out.** A one-page guide to handing issues to agents and getting them merged, and the
-> Skills viewer marks which skills need attention and points at the next step.
-> [Setup guide](v13.8.0.html)
+> **13.8.1 is out.** Skill evaluation you can rely on — drafted tasks always save, checks are graded by
+> meaning, improvements keep untested rules — and a step-by-step guide to it. [Setup guide](v13.8.1.html)
 
 ## What is MulmoTerminal? {#what-is}
 

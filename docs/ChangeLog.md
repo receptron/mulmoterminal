@@ -8,6 +8,42 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@13.8.1 — 2026-11-26
+
+> **Setup guide:** [13.8.1 — Skill evaluation you can rely on, and its guide](https://receptron.github.io/mulmoterminal/guide/en/v13.8.1.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.8.1.html))
+
+### Skill evaluation fixes (#3512, #3516, #3510, #3517, #3495, #3526)
+
+For #3507, #3514, #3509, #3515, #3491 and #3525.
+
+- A run whose agent or grader ends with `terminal_reason: "api_error"` (claude cannot reach the model, e.g. an expired login) stops the evaluation: it ends `interrupted` with claude's message as the reason and is not a baseline, instead of finishing `done` with every attempt failed.
+
+- The drafting cell is spawned with `--allowedTools` `Write` / `Edit` rules for its own evaluation folder, so accepting its plan with auto mode can no longer have Claude Code's classifier refuse the save. A rule is made only for a folder directly under the evaluations root, with no glob character, comma or parenthesis in its path, that is not a link elsewhere; a root behind a link is named both as written and as resolved. The bundled `mulmoterminal-skill-eval` skill saves with its file tool, not a shell command.
+- Rubric items are graded by what they mean, so a result saying the same thing in other words passes; drafting is told the same.
+- The improvement writer keeps rules its tasks do not exercise and writes its note in the skill's language.
+- The drafting cell's first turn carries the screen's locale (`reply in <language>`), checked against the blueprint language table.
+- A set's hash covers each task's starting files under `files/`, so editing one makes earlier measurements stop counting for the current tasks (baseline, list mark, next step, adopt, reused runs).
+
+### Library promote cells (#3521)
+
+For #3519.
+
+- The bundled `mulmoterminal-library` skill ends its plan by asking for **Yes, manually approve edits** and stops, naming what was and was not written, when a write is refused. Allow rules do not apply under `~/.claude`, so #3512's approach cannot cover these writes.
+
+### Windows file identity (#3497, #3500)
+
+For #3496 and #3498.
+
+- File-identity checks use bigint stats (`dev:ino:size:mtimeNs`), since a number `ino` loses the low bits of a Windows 64-bit id: memory Trash restore, a minted MulmoScript movie/PDF, a shared app's `app.json` before its rename, and the own-folder trust cache key.
+
+### Development and docs (#3501, #3508, #3502, #3494, #3505, #3492)
+
+For #3499, #3503, #3493, #3504 and #3489.
+
+- Under `yarn dev`, the backend redirects browser page requests to the Vite port instead of serving a stale `dist/`.
+- New guide page `skill-eval` (en / ja); the issue-to-merge page's screenshots are retaken from the current UI with a board card.
+- Test fixes: the MulmoScript watch spec stages and renames the plugin's own write; the containment property spec lists only inside its own tree; the own-cwd route spec clears an inherited `CLAUDE_CWD`.
+
 ## mulmoterminal@13.8.0 — 2026-11-25
 
 > **Setup guide:** [13.8.0 — The issue-to-merge guide, and skill evaluation you can follow](https://receptron.github.io/mulmoterminal/guide/en/v13.8.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.8.0.html))
