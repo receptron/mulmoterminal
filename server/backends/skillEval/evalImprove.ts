@@ -114,7 +114,7 @@ export async function writeCandidate(
     const args = improveArgs(set.improveModel, SKILL_EVAL_IMPROVE_BUDGET_USD);
     const ran = await deps.runClaude({ bin: deps.claudeBin, args, prompt: improvePrompt(), cwd: work, timeoutMs: ATTEMPT_TIMEOUT_MS });
     const outcome = streamOutcome(ran.stdout.split("\n"), "");
-    const error = ran.failure ?? outcome.error;
+    const error = ran.failure ?? outcome.apiError ?? outcome.error;
     if (error !== null) return { kind: "failed", error, costUsd: outcome.costUsd };
     return await keepCandidate(work, baseSkillDir, dir, before, outcome.finalText, outcome.costUsd);
   } finally {

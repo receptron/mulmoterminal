@@ -147,6 +147,13 @@ describe("improving a skill", () => {
     const broken = setUp(() => ({ stdout: "", exitCode: null, failure: "claude ran longer than 600000 ms" }));
     await measure(broken, "/api/skill-evals/runs");
     expect(await measure(broken, "/api/skill-evals/improve")).toMatchObject({ status: "interrupted", note: "claude ran longer than 600000 ms" });
+    // Even one that left an edit behind: a writer that could not reach the model wrote nothing to measure.
+    const unreached = setUp((cwd) => {
+      writeFileSync(path.join(cwd, "skill", "SKILL.md"), IMPROVED);
+      return { stdout: stream([{ ...result("Failed to authenticate", 0), terminal_reason: "api_error" }]), exitCode: 0, failure: null };
+    });
+    await measure(unreached, "/api/skill-evals/runs");
+    expect(await measure(unreached, "/api/skill-evals/improve")).toMatchObject({ status: "interrupted", note: "Failed to authenticate", attempts: [] });
   });
 
   it("adopts a measured improvement over the skill, keeping the text it replaced", async () => {

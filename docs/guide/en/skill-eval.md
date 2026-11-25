@@ -175,6 +175,7 @@ grading call per run; an improvement adds one writing call.
 | *No evidence of a difference* | The gap was within how much the runs varied, or the tasks are too few. Add tasks that the skill's own instructions decide, then measure again. |
 | A low share of runs read the skill | Claude skipped the skill even though the request named it. Improve and measure takes that into account (it rewrites the `description` when the skill went unread); or edit the skill yourself. |
 | *Another evaluation is running* | One runs at a time on the machine. Wait for it, or stop it from its own panel. |
+| *It stopped partway because something failed: Failed to authenticate…* | `claude` could not reach the model: its login expired, or a usage limit was hit. Nothing about the skill was measured, so the run is not used as a baseline. Run `claude` in a terminal and `/login` (or wait for the limit), then measure again. |
 | **Adopt** refused: the SKILL.md changed | It was edited after the improvement was measured. Measure again, then improve. |
 | A row says *measured another SKILL.md* | That run measured a different text than the one there now; its numbers are about that text. |
 

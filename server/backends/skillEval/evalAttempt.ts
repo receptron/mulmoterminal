@@ -8,7 +8,7 @@ import { SKILL_EVAL_JUDGE_BUDGET_USD } from "../../../common/skillEval.js";
 import { isRecord } from "../../../common/isRecord.js";
 import { runCheck, type CheckResult } from "../../blueprint/checkRunner.js";
 import { agentArgs, agentPrompt, judgeArgs, judgePrompt } from "./evalArgs.js";
-import { streamOutcome, type StreamOutcome } from "./streamOutcome.js";
+import { apiErrorOf, streamOutcome, type StreamOutcome } from "./streamOutcome.js";
 import type { RunClaude } from "./runClaude.js";
 
 /** An agent run that has not finished by then is killed and counted as a failure. */
@@ -77,6 +77,16 @@ interface Grade {
   costUsd: number;
 }
 
+/** The grader's message when it could not reach the model, else null. */
+export function judgeApiError(stdout: string): string | null {
+  try {
+    const value: unknown = JSON.parse(stdout);
+    return isRecord(value) ? apiErrorOf(value) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The grader's `{ pass, reasons }`, or a failed grade when it answered anything else. */
 export function judgeGrade(stdout: string): Grade {
   try {
@@ -105,6 +115,8 @@ async function grade(plan: AttemptPlan, work: string, finalText: string, deps: A
     cwd: work,
     timeoutMs: ATTEMPT_TIMEOUT_MS,
   });
+  const apiError = judgeApiError(ran.stdout);
+  if (apiError !== null) throw new Error(apiError);
   return ran.failure === null ? judgeGrade(ran.stdout) : { pass: false, output: ran.failure, costUsd: 0 };
 }
 
@@ -113,6 +125,8 @@ export async function runAttempt(plan: AttemptPlan, deps: AttemptDeps): Promise<
   const work = await prepareDir(plan, deps.tmpRoot);
   try {
     const outcome = await runAgent(plan, work, deps);
+    // Not a failed attempt: nothing was measured, and every attempt after it would hit the same wall, so the run stops.
+    if (outcome.apiError !== null) throw new Error(outcome.apiError);
     // The grader must judge the work, not read the skill being measured and grade by it.
     await rm(path.join(work, ".claude", "skills"), { recursive: true, force: true });
     // A run that ended in an error is a failure whatever is on disk: it did not finish the task.
