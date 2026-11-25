@@ -59,7 +59,7 @@ export const skillsViewEn = {
         improveAgain: "The last improvement did not pass more often than the skill. Try another, or change the tasks.",
         adopt: "The improvement passed more often. Read it below, and adopt it if it looks right.",
         ladder: "The skill helps. Next, find out whether a cheaper model is enough for it.",
-        done: "The skill helps, and the cheapest model that is enough is known. Measure again after you change the skill or the tasks.",
+        done: "The skill helps, and the search for the cheapest model is done; its result is below. Measure again after you change the skill or the tasks.",
       },
       improve: {
         start: "Improve and measure",
