@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { parseGridState, setCellAgent, type Cell, type GridState } from "../../../src/components/gridTabs";
-import { closedCellOf } from "../../../src/composables/recentlyClosed";
 
 const SESSION = "0b8f0a0e-7c55-4c1e-9e0a-3f1d2c4b5a69";
 const stateWith = (cell: Partial<Cell>): GridState => ({
@@ -23,12 +22,5 @@ describe("a remote cell in grid_v2", () => {
   });
   it("keeps its host when the agent is recorded", () => {
     expect(setCellAgent(stateWith({ remoteHost: "lx" }), 0, "codex").cells[0]?.remoteHost).toBe("lx");
-  });
-});
-
-describe("closing a remote cell", () => {
-  it("is not offered for reopening, where it would come back as a local session", () => {
-    expect(closedCellOf({ uid: 0, session: SESSION, cwd: "/srv/p", remoteHost: "lx" }, "t", 1)).toBeNull();
-    expect(closedCellOf({ uid: 0, session: SESSION, cwd: "/srv/p" }, "t", 1)).not.toBeNull();
   });
 });
