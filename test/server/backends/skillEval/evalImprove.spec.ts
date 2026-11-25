@@ -121,6 +121,19 @@ describe("improving a skill", () => {
     expect(readdirSync(env.tmpRoot)).toEqual([]);
   });
 
+  it("runs only the attempts with the skill, and takes the ones without it from the measurement", async () => {
+    const env = setUp();
+    const baseline = await measure(env, "/api/skill-evals/runs");
+    const asked = env.prompts.length;
+    const improved = await measure(env, "/api/skill-evals/improve");
+    // The writer, then the one attempt with the skill: nothing without it is run again.
+    expect(env.prompts.length - asked).toBe(2);
+    expect(improved?.plannedAttempts).toBe(1);
+    const without = baseline?.attempts.filter((a) => a.arm === "without") ?? [];
+    expect(improved?.attempts.filter((a) => a.arm === "without")).toEqual(without.map((a) => ({ ...a, reusedFrom: baseline?.id })));
+    expect(improved?.attempts.filter((a) => a.arm === "with").map((a) => a.reusedFrom)).toEqual([""]);
+  });
+
   it("ends the run with the reason when the writer changed nothing or failed", async () => {
     const unchanged = setUp(() => ({ stdout: stream([result("Nothing to do.", 0.2)]), exitCode: 0, failure: null }));
     await measure(unchanged, "/api/skill-evals/runs");
@@ -128,6 +141,7 @@ describe("improving a skill", () => {
       status: "interrupted",
       note: "the improvement changed nothing",
       improveCostUsd: 0.2,
+      // Nothing was written to set the runs without the skill beside, so none are copied in.
       attempts: [],
     });
     const broken = setUp(() => ({ stdout: "", exitCode: null, failure: "claude ran longer than 600000 ms" }));
@@ -211,14 +225,14 @@ describe("improving a skill", () => {
   it("says whether the skill may be written over", async () => {
     const env = setUp();
     const overview = await env.call(`/api/skill-evals?slug=weekly&dir=${encodeURIComponent(env.fields.dir)}`);
-    expect(overview.body).toMatchObject({ editable: true, estimate: { maxImproveCostUsd: 1 + 2 * 0.5 } });
+    expect(overview.body).toMatchObject({ editable: true, estimate: { improveAttempts: 1, maxImproveCostUsd: 1 + 0.5 } });
   });
 });
 
 describe("what the writer is given", () => {
   const attempt = (arm: "with" | "without", pass: boolean, extra: Partial<SkillEvalAttempt> = {}): SkillEvalAttempt => ({
     ...{ caseId: "plain", arm, round: 0, pass, skillInvoked: arm === "with", costUsd: 0, gradingCostUsd: 0, durationMs: 0 },
-    ...{ finalText: "", checkOutput: "", denied: [], error: null, model: "haiku" },
+    ...{ finalText: "", checkOutput: "", denied: [], error: null, model: "haiku", reusedFrom: "" },
     ...extra,
   });
   const run = (attempts: SkillEvalAttempt[], extra: Partial<SkillEvalRun> = {}): SkillEvalRun => ({
