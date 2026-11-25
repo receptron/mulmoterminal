@@ -48,7 +48,8 @@ and proposes:
 
 - **3 to 5 tasks where the skill should help** — what a person would actually ask, each with a pass/fail
   check: either a command (for example "the file exists and has a `## まとめ` heading") or a few yes/no
-  questions that another Claude answers about the result;
+  questions that another Claude answers about the result, by what each means rather than its exact words,
+  so a result made without the skill is not failed for describing the same thing in other terms;
 - **one task where the skill should not be used**, to catch a skill that fires when it should not;
 - small made-up starting files when a task needs them.
 
@@ -57,10 +58,10 @@ names, paths and anything private taken out, and says which tasks came from them
 
 ![The drafting cell showing its plan — here for another skill, a riddle game: what the skill does, five tasks with their pass checks, and the number of runs](../images/skill-eval-draft.png)
 
-Read the plan, then approve it. **Choose "2. Yes, manually approve edits"** and allow the write when
-asked: the first option, auto mode, can refuse to write outside the folder the cell runs in, and
-then nothing is saved ([#3507](https://github.com/receptron/mulmoterminal/issues/3507)). To change a
-task, choose "Tell Claude what to change" instead.
+Read the plan, then approve it with either "Yes" option. The cell may write the task files without
+asking, but only in the evaluation's own folder — MulmoTerminal allows that one folder when it opens the
+cell ([#3507](https://github.com/receptron/mulmoterminal/issues/3507)). To change a task, choose
+"Tell Claude what to change" instead.
 
 Once saved, the box shows the set — in the example, *3 tasks and 1 task(s) where the skill should not be
 used, each run 3 times with haiku*.
@@ -169,7 +170,7 @@ grading call per run; an improvement adds one writing call.
 
 | What you see | Why, and what to do |
 |---|---|
-| The drafting cell says nothing was saved | You approved with auto mode, which refused the write outside the cell's folder ([#3507](https://github.com/receptron/mulmoterminal/issues/3507)). In that cell press `shift+tab` until it says manual mode, ask it to save again, and allow the write. |
+| The drafting cell says nothing was saved | Its write was refused. Before the fix for [#3507](https://github.com/receptron/mulmoterminal/issues/3507), accepting the plan with auto mode could do this. In that cell press `shift+tab` until it says manual mode, ask it to save again, and allow the write. |
 | The drafting cell asks whether to trust your home folder | A skill in `~/.claude/skills` (or a plugin's) is drafted in your home folder, and Claude Code asks before working in a folder it has not seen. Answer as you would for any folder; a project's skill is drafted in that project. |
 | *No evidence of a difference* | The gap was within how much the runs varied, or the tasks are too few. Add tasks that the skill's own instructions decide, then measure again. |
 | A low share of runs read the skill | Claude skipped the skill even though the request named it. Improve and measure takes that into account (it rewrites the `description` when the skill went unread); or edit the skill yourself. |
