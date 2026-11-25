@@ -82,6 +82,12 @@ chosen change, with its path and diff and the backup you will take, in your plan
 user approving it is the yes. **Do not write anything before the user says yes.** If plan mode is
 not on (the session was started some other way), ask for the yes explicitly instead.
 
+End the plan with one line telling the user to approve it with **"Yes, manually approve edits"**, not
+the auto-mode option Claude Code puts first. Most of these writes land outside this directory — the
+memory folder, `~/.claude/skills/`, the global `CLAUDE.md`, the backups — and in auto mode each one is
+judged on its own and can be refused; a rule allowing them ahead of time does not apply under
+`~/.claude`.
+
 ## 4. Write, so it can be undone
 
 - **Every file that already exists**, inside a git repository or not: copy it first to
@@ -93,6 +99,10 @@ not on (the session was started some other way), ask for the yes explicitly inst
 - A memory: write its file and its `MEMORY.md` line together, so the two never disagree.
 - An issue: `gh issue create` only after approval, then give its URL. (An issue cannot be uncreated;
   say how to close it.)
+
+If a write is refused, stop: say which file was not written (and which already were), and ask the user
+to press `shift+tab` until the footer says manual mode, then tell you to go on, so the next write asks
+them. Do not reach the same file another way.
 
 Afterwards, say in a few lines what you wrote, where, and **how to undo it**: the `cp` from the
 backup for each changed file, and the path of each new one to delete.
