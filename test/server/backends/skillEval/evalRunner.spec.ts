@@ -199,7 +199,7 @@ describe("a skill evaluation run", () => {
   const unreachedResult = { type: "result", subtype: "success", is_error: true, result: UNREACHED, terminal_reason: "api_error", total_cost_usd: 0 };
 
   /** `deps`, except that the agent's (or the grader's) every run comes back without reaching the model. */
-  function unreachable(who: "agent" | "judge", calls: string[]): AttemptDeps {
+  function unreachable(who: "agent" | "judge", calls: string[], failure: string | null = null): AttemptDeps {
     const base = deps([], scratch());
     return {
       ...base,
@@ -207,16 +207,18 @@ describe("a skill evaluation run", () => {
         const isJudge = request.args.includes("--json-schema");
         calls.push(isJudge ? "judge" : "agent");
         if (isJudge !== (who === "judge")) return base.runClaude(request);
-        return { stdout: isJudge ? JSON.stringify(unreachedResult) : stream([unreachedResult]), exitCode: 0, failure: null };
+        return { stdout: isJudge ? JSON.stringify(unreachedResult) : stream([unreachedResult]), exitCode: 0, failure };
       },
     };
   }
 
   it("stops, and is no baseline, when the agent or the grader could not reach the model", async () => {
-    for (const who of ["agent", "judge"] as const) {
+    // Also when the run was then killed for its time: the error it printed says why it ended.
+    const cases = ["agent", "judge"].flatMap((who) => [null, "claude ran longer than 600000 ms"].map((failure) => ({ who, failure })));
+    for (const { who, failure } of cases) {
       const { evalDir, skillDir } = setUp(SET);
       const calls: string[] = [];
-      const started = await start(evalDir, skillDir, unreachable(who, calls));
+      const started = await start(evalDir, skillDir, unreachable(who === "agent" ? "agent" : "judge", calls, failure));
       await started?.done;
       const run = await readRun(evalDir, started?.id ?? "");
       if (run === null) throw new Error("no run");

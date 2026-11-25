@@ -115,10 +115,9 @@ async function grade(plan: AttemptPlan, work: string, finalText: string, deps: A
     cwd: work,
     timeoutMs: ATTEMPT_TIMEOUT_MS,
   });
-  if (ran.failure !== null) return { pass: false, output: ran.failure, costUsd: 0 };
   const apiError = judgeApiError(ran.stdout);
   if (apiError !== null) throw new Error(apiError);
-  return judgeGrade(ran.stdout);
+  return ran.failure === null ? judgeGrade(ran.stdout) : { pass: false, output: ran.failure, costUsd: 0 };
 }
 
 export async function runAttempt(plan: AttemptPlan, deps: AttemptDeps): Promise<SkillEvalAttempt> {
