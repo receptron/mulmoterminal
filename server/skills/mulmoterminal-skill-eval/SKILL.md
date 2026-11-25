@@ -68,6 +68,9 @@ Each task gets one check, and the result is pass or fail — never a score.
 - **rubric** — when it takes reading: tone, whether a summary is faithful, whether the three headings
   make sense. Write 2 to 5 short items, each one a yes/no question about the RESULT that a careful
   reader could answer from the files. Another AI checks every item against the files; all must hold.
+  Write each item so a good result passes however it is worded: ask for what it says or does, never for
+  the skill's own terms (a tier name, a process step, a label the skill introduces). A result made
+  without the skill uses other words, and an item that wants the skill's words fails it unfairly.
 
 Prefer a command where one is honest. A rubric item like "is good" is not a check.
 

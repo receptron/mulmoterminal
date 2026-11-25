@@ -49,6 +49,8 @@ export function judgePrompt(evalCase: SkillEvalCase, items: readonly string[], f
   return [
     "You are grading whether an AI agent completed a task. The files it produced are in the current directory.",
     "Pass only if EVERY item below holds. Check the files themselves: the agent's last message may claim work it did not do.",
+    // Items are often in the skill's own terms: a run without it that says the same in other words must still pass.
+    "Judge each item by what it means, not by its wording: it holds when the files say or do the same thing in any words, even without the item's own terms.",
     "",
     "Task given to the agent:",
     evalCase.prompt,
