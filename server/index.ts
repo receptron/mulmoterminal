@@ -38,6 +38,7 @@ import { createTranslationWorker } from "./session/scheduled/translation-worker.
 import { createTitleManager } from "./session/list/session-title.js";
 import { resolveSessionTitle } from "./config/header/header-title.js";
 import { mountTerminalWebSockets } from "./routes/ws-routes.js";
+import { configuredRemoteUpgrade } from "./backends/hostGateway/configuredRemoteUpgrade.js";
 import { createConnectionHandlers } from "./session/pty/pty-connection.js";
 import { createTmuxSizeSync } from "./session/pty/tmux-size-sync.js";
 import { createIssueSessionSpawner } from "./session/spawn/issue-session-spawn.js";
@@ -525,6 +526,13 @@ mountTerminalWebSockets({
   mcpConfigJson: (sessionId, host) => mcpConfigJson({ sessionId, host, port: PORT, userMcpServers: getUserMcpServers() }),
   guiMcpTools: GUI_MCP_TOOLS,
 });
+// Cells on another MulmoTerminal (#3506). Its own listener: ws-routes leaves `/remote/…` alone, as it does /ws/pubsub.
+const remoteUpgrade = configuredRemoteUpgrade(isAllowedOrigin);
+listeners.forEach((listener) =>
+  listener.on("upgrade", (req, socket, head) => {
+    remoteUpgrade(req, socket, head);
+  }),
+);
 
 // A bind failure (most often the port already in use) must not surface as an unhandled
 // 'error' event / stack trace — exit with a clear message and the code the launcher reads
