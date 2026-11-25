@@ -4,7 +4,16 @@
 import { randomBytes } from "node:crypto";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
-import { ladderAttempts, plannedAttempts, type SkillEvalArm, type SkillEvalCase, type SkillEvalRun, type SkillEvalSet } from "../../../common/skillEval.js";
+import {
+  improveAttempts,
+  ladderAttempts,
+  plannedAttempts,
+  type SkillEvalArm,
+  type SkillEvalAttempt,
+  type SkillEvalCase,
+  type SkillEvalRun,
+  type SkillEvalSet,
+} from "../../../common/skillEval.js";
 import { runAttempt, type AttemptDeps, type AttemptPlan } from "./evalAttempt.js";
 import { caseFilesDir, textHash, writeRun } from "./evalStore.js";
 import { candidateDir, writeCandidate } from "./evalImprove.js";
@@ -58,6 +67,18 @@ export function ladderOrder(set: SkillEvalSet): PlannedAttempt[] {
   );
 }
 
+/** An improvement is measured with the skill only: a run without the skill never reads the text it changed (#3465). */
+export const improveOrder = (set: SkillEvalSet): PlannedAttempt[] => attemptOrder(set).filter(({ arm }) => arm === "with");
+
+/** The measurement's runs without the skill, as an improvement's own: same tasks, same model, so the same runs. */
+export const reusedAttempts = (from: SkillEvalRun): SkillEvalAttempt[] =>
+  from.attempts.filter((attempt) => attempt.arm === "without").map((attempt) => ({ ...attempt, reusedFrom: attempt.reusedFrom || from.id }));
+
+function plannedCount(start: EvalStart): number {
+  if (start.ladder) return ladderAttempts(start.set);
+  return start.improveFrom != null ? improveAttempts(start.set) : plannedAttempts(start.set);
+}
+
 const newRunId = (now_ms: number): string => `${String(now_ms).padStart(13, "0")}-${randomBytes(4).toString("hex")}`;
 
 function initialRun(start: EvalStart, id: string, now_ms: number): SkillEvalRun {
@@ -67,7 +88,7 @@ function initialRun(start: EvalStart, id: string, now_ms: number): SkillEvalRun 
     // An improvement's text is not known until it has been written.
     ...{ skillText: improving ? "" : start.skillText, skillHash: improving ? "" : start.skillHash, setHash: start.setHash, cases: start.set.cases },
     ...{
-      plannedAttempts: start.ladder ? ladderAttempts(start.set) : plannedAttempts(start.set),
+      plannedAttempts: plannedCount(start),
       attempts: [],
       candidateId: improving ? id : null,
       note: "",
@@ -89,6 +110,8 @@ async function measuredSkill(run: SkillEvalRun, start: EvalStart, skillCopy: str
   }
   const { candidate } = written;
   Object.assign(run, { improveCostUsd: candidate.costUsd, note: candidate.note, skillText: candidate.skillText, skillHash: textHash(candidate.skillText) });
+  // Only once there is an improvement to set them beside: a run that wrote none measured nothing.
+  run.attempts.push(...reusedAttempts(start.improveFrom));
   await save();
   return candidate.dir;
 }
@@ -183,7 +206,8 @@ async function climbLadder(start: EvalStart, skillDir: string, measuring: Measur
 
 async function measureSkill(start: EvalStart, skillDir: string, measuring: Measuring): Promise<boolean> {
   if (start.ladder) return climbLadder(start, skillDir, measuring);
-  return measurePlans(plansOf(start, skillDir, attemptOrder(start.set), start.set.model), measuring);
+  const order = start.improveFrom != null ? improveOrder(start.set) : attemptOrder(start.set);
+  return measurePlans(plansOf(start, skillDir, order, start.set.model), measuring);
 }
 
 async function execute(run: SkillEvalRun, self: ActiveRun, start: EvalStart, skillCopy: string, deps: AttemptDeps): Promise<void> {

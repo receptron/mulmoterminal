@@ -57,10 +57,18 @@ export const skillsViewKo = {
         rates: "스킬 있음 {with}・없음 {without}",
         otherText: "지금과 다른 SKILL.md",
       },
+      next: {
+        measure: "지금의 SKILL.md는 아직 이 과제로 측정하지 않았습니다. 먼저 측정하세요.",
+        improve: "스킬이 효과가 있다는 증거가 없습니다. 다음은 AI에게 개선안을 쓰게 하고 측정합니다.",
+        improveAgain: "이전 개선안은 지금의 스킬보다 더 많이 통과하지 못했습니다. 다시 만들거나 과제를 고치세요.",
+        adopt: "개선안이 더 많이 통과했습니다. 아래에서 내용을 확인하고 괜찮으면 채택하세요.",
+        ladder: "스킬이 효과가 있습니다. 다음은 더 저렴한 모델로 충분한지 찾을 수 있습니다.",
+        done: "스킬이 효과가 있고, 저렴한 모델 찾기도 끝났습니다(결과는 아래에 있습니다). 스킬이나 과제를 바꾸면 다시 측정하세요.",
+      },
       improve: {
         start: "개선안을 만들어 측정",
         confirm:
-          "AI가 마지막 결과를 바탕으로 SKILL.md 개선안을 쓰고, 같은 과제로 {attempts}회 측정합니다. 비용 상한은 {max}입니다(실제로는 보통 훨씬 적습니다). 지금의 SKILL.md는 바꾸지 않습니다. 시작할까요?",
+          "AI가 마지막 결과를 바탕으로 SKILL.md 개선안을 쓰고, 같은 과제를 스킬 있음으로 {attempts}회 측정합니다(스킬 없음은 마지막 결과를 씁니다). 비용 상한은 {max}입니다(실제로는 보통 훨씬 적습니다). 지금의 SKILL.md는 바꾸지 않습니다. 시작할까요?",
         writing: "개선안을 쓰는 중…",
         running: "개선안을 측정하는 중… {done} / {total}",
         title: "개선안",
@@ -68,13 +76,16 @@ export const skillsViewKo = {
         compare: "스킬 있음의 합격률: 지금의 스킬 {before} → 개선안 {after}",
         overfit:
           "개선안은 같은 과제를 보고 만들고 같은 과제로 측정했습니다. 과제에 맞췄을 뿐일 수도 있으니, 채택한 뒤 새 과제를 더해 다시 측정하면 확실합니다.",
-        show: "개선안의 SKILL.md 보기",
+        show: "개선안 SKILL.md 전체 보기",
+        diff: "바탕이 된 SKILL.md에서 바뀐 점:",
+        folded: "바뀌지 않은 {count}줄",
         adopt: "채택",
         adopted: "채택했습니다. 이전 SKILL.md는 {backup}에 남아 있습니다.",
         changed: "측정한 뒤 SKILL.md가 바뀌어 있어 덮어쓰지 않았습니다.",
         adoptFailed: "채택할 수 없었습니다. {error}",
         readOnly: "이 스킬은 여기서 바꿀 수 없습니다. 내용을 보고 원래 위치에서 고쳐 주세요.",
         tag: "개선안",
+        reused: "스킬 없음의 결과는 개선안의 바탕이 된 측정의 것입니다. 다시 측정하지 않았습니다.",
       },
       ladder: {
         start: "가장 저렴한 모델 찾기",
