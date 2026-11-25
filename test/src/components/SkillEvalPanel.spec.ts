@@ -376,7 +376,11 @@ describe("SkillEvalPanel", () => {
     ]);
     expect(rows.map((row) => row.find("[data-testid=skill-eval-earlier-other-text]").exists())).toEqual([false, true]);
     // Each opens to the result as it was shown then.
-    expect(rows[1]?.find("[data-testid=skill-eval-result] [data-testid=skill-eval-with-rate]").text()).toBe("0%");
+    const row = rows[1]?.find("details");
+    expect(row?.element.hasAttribute("open")).toBe(false);
+    await row?.find("summary").trigger("click");
+    expect(row?.element.hasAttribute("open")).toBe(true);
+    expect(row?.find("[data-testid=skill-eval-result] [data-testid=skill-eval-with-rate]").text()).toBe("0%");
   });
 
   it("does not call an improvement's own text another SKILL.md, nor judge a run against a text it could not read", async () => {
