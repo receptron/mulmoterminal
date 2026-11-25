@@ -142,7 +142,8 @@ the skill, the tasks or the available models change.
 
 ## 8. Come back later {#later}
 
-- **Earlier results** lists the newest 20 runs, newest first (older ones stay on disk under `runs/`), with the pass rates with and without the skill (or
+- **Earlier results** lists the runs before the latest one, newest first — up to 19, so that together with
+  the result shown above them they are the newest 20 (older ones stay on disk under `runs/`) — with the pass rates with and without the skill (or
   the model a search found) and the verdict, so the rows read as a trend. Each opens to its full result.
   A row that measured another `SKILL.md` than the one there now says so.
 - **In the skill list**, every skill with an evaluation shows its verdict next to its name: **helps**,
