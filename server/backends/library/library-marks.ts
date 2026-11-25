@@ -133,17 +133,34 @@ async function staleOwnerOf(lock: string): Promise<string | null> {
   return owner !== null && (await isOld(lock)) ? owner : null;
 }
 
+/** What Windows answers, for a moment, to a rename of a directory while another process has a file in
+ *  it open — which every waiting holder does between its attempts, reading the lock's owner. Not "gone
+ *  or replaced": treating it so abandons a release, and the lock then stands until it counts as stale. */
+const LOCK_BUSY = new Set(["EPERM", "EBUSY", "EACCES"]);
+const MARKS_LOCK_MOVE_ATTEMPTS = 40;
+
+const isBusy = (err: unknown): boolean => err instanceof Error && "code" in err && LOCK_BUSY.has(String(err.code));
+
+/** Moves the lock aside, retrying while it is busy. False when it is gone, replaced, or stays busy. */
+async function moveAside(lock: string, aside: string): Promise<boolean> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await fs.rename(lock, aside);
+      return true;
+    } catch (err) {
+      if (!isBusy(err) || attempt >= MARKS_LOCK_MOVE_ATTEMPTS) return false;
+      await new Promise((resolve) => setTimeout(resolve, MARKS_LOCK_RETRY_MS));
+    }
+  }
+}
+
 /** Removes the lock only if `owner` still holds it: moved aside first (atomic), checked, and put back
  *  if it turned out to be someone else's. Used to release one's own lock and to take an abandoned one
  *  out of the way — in both, removing by path could delete a lock another holder has just made. Should
  *  even the put-back lose a race, the holder whose lock moved is refused at its write (`stillHeld`). */
 export async function removeIfOwnedBy(lock: string, owner: string, options: { onlyIfStale?: boolean } = {}): Promise<void> {
   const aside = `${lock}.${randomUUID()}.aside`;
-  try {
-    await fs.rename(lock, aside);
-  } catch {
-    return; // already gone or replaced: the next attempt sees what is there now
-  }
+  if (!(await moveAside(lock, aside))) return; // already gone or replaced: the next attempt sees what is there now
   const moved = await ownerOf(aside);
   // Judged on the copy that was moved: its owner, and — for a takeover — its own age.
   if (moved !== null && moved === owner && (options.onlyIfStale !== true || (await isOld(aside)))) {

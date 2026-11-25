@@ -1,8 +1,8 @@
 // @vitest-environment node
 // Pins and names in the Library (#3329): the pure change, and the file — absent, corrupt, and two
 // changes arriving together.
-import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { promises as fsPromises, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -19,7 +19,10 @@ import { existsSync, mkdirSync, utimesSync } from "node:fs";
 import { emptyLibraryMarks, LIBRARY_NAME_MAX } from "../../../../common/library";
 
 const dirs: string[] = [];
-afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+afterEach(() => {
+  vi.restoreAllMocks();
+  dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true }));
+});
 const scratchFile = (): string => {
   const dir = mkdtempSync(path.join(tmpdir(), "mt-library-marks-"));
   dirs.push(dir);
@@ -162,5 +165,30 @@ describe("the cross-process lock", () => {
     mkdirSync(lock, { recursive: true }); // a lock with no owner file at all
     await removeIfOwnedBy(lock, ""); // an unreadable owner must not equal any token, the empty one included
     expect(existsSync(lock)).toBe(true);
+  });
+  it.each(["EPERM", "EBUSY", "EACCES"])("still releases its lock when the move aside is refused %s for a moment", async (code) => {
+    const file = scratchFile();
+    const lock = `${file}.lock`;
+    mkdirSync(path.dirname(lock), { recursive: true });
+    expect(await tryAcquire(lock, "me")).toBe(true);
+    const rename = fsPromises.rename.bind(fsPromises);
+    const refusals = { left: 2 };
+    vi.spyOn(fsPromises, "rename").mockImplementation(async (from, to) => {
+      if (refusals.left === 0) return rename(from, to);
+      refusals.left -= 1;
+      throw Object.assign(new Error(`${code}: busy`), { code });
+    });
+    await removeIfOwnedBy(lock, "me");
+    expect(existsSync(lock)).toBe(false);
+  });
+
+  it("does not retry a move aside that failed for a reason other than busy", async () => {
+    const file = scratchFile();
+    const lock = `${file}.lock`;
+    mkdirSync(path.dirname(lock), { recursive: true });
+    expect(await tryAcquire(lock, "me")).toBe(true);
+    const rename = vi.spyOn(fsPromises, "rename").mockRejectedValue(Object.assign(new Error("ENOENT: gone"), { code: "ENOENT" }));
+    await removeIfOwnedBy(lock, "me");
+    expect(rename).toHaveBeenCalledTimes(1);
   });
 });
