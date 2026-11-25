@@ -64,7 +64,7 @@ export const skillsViewKo = {
       improve: {
         start: "개선안을 만들어 측정",
         confirm:
-          "AI가 마지막 결과를 바탕으로 SKILL.md 개선안을 쓰고, 같은 과제로 {attempts}회 측정합니다. 비용 상한은 {max}입니다(실제로는 보통 훨씬 적습니다). 지금의 SKILL.md는 바꾸지 않습니다. 시작할까요?",
+          "AI가 마지막 결과를 바탕으로 SKILL.md 개선안을 쓰고, 같은 과제를 스킬 있음으로 {attempts}회 측정합니다(스킬 없음은 마지막 결과를 씁니다). 비용 상한은 {max}입니다(실제로는 보통 훨씬 적습니다). 지금의 SKILL.md는 바꾸지 않습니다. 시작할까요?",
         writing: "개선안을 쓰는 중…",
         running: "개선안을 측정하는 중… {done} / {total}",
         title: "개선안",
@@ -79,6 +79,7 @@ export const skillsViewKo = {
         adoptFailed: "채택할 수 없었습니다. {error}",
         readOnly: "이 스킬은 여기서 바꿀 수 없습니다. 내용을 보고 원래 위치에서 고쳐 주세요.",
         tag: "개선안",
+        reused: "스킬 없음의 결과는 개선안의 바탕이 된 측정의 것입니다. 다시 측정하지 않았습니다.",
       },
       ladder: {
         start: "가장 저렴한 모델 찾기",

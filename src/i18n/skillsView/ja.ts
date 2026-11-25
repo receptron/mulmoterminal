@@ -64,7 +64,7 @@ export const skillsViewJa = {
       improve: {
         start: "改善案を作って測る",
         confirm:
-          "AI が最後の結果をもとに SKILL.md の改善案を書き、同じ課題で {attempts} 回測ります。費用の上限は {max} です（実際はふつうこれよりずっと少なくなります）。今の SKILL.md は変えません。始めますか？",
+          "AI が最後の結果をもとに SKILL.md の改善案を書き、同じ課題をスキルありで {attempts} 回測ります（スキルなしは最後の結果を使います）。費用の上限は {max} です（実際はふつうこれよりずっと少なくなります）。今の SKILL.md は変えません。始めますか？",
         writing: "改善案を書いています…",
         running: "改善案を測っています… {done} / {total}",
         title: "改善案",
@@ -79,6 +79,7 @@ export const skillsViewJa = {
         adoptFailed: "採用できませんでした。{error}",
         readOnly: "このスキルはここでは書き換えられません。中身を見て、元の場所で直してください。",
         tag: "改善案",
+        reused: "スキルなしの結果は、改善案のもとにした測定のものです。測り直していません。",
       },
       ladder: {
         start: "安いモデルを探す",

@@ -120,7 +120,14 @@ export async function runAttempt(plan: AttemptPlan, deps: AttemptDeps): Promise<
     return {
       ...{ caseId: plan.evalCase.id, arm: plan.arm, round: plan.round, pass: graded.pass, skillInvoked: outcome.skillInvoked },
       ...{ costUsd: outcome.costUsd, gradingCostUsd: graded.costUsd, durationMs: deps.now() - startedAt },
-      ...{ finalText: keep(outcome.finalText), checkOutput: keep(graded.output), denied: outcome.denied, error: outcome.error, model: plan.model },
+      ...{
+        finalText: keep(outcome.finalText),
+        checkOutput: keep(graded.output),
+        denied: outcome.denied,
+        error: outcome.error,
+        model: plan.model,
+        reusedFrom: "",
+      },
     };
   } finally {
     await rm(work, { recursive: true, force: true });

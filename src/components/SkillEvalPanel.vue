@@ -6,7 +6,7 @@
 import { computed, onUnmounted, ref, shallowRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import type { CatalogSkill, SkillSource } from "../../common/skillCatalog";
-import { type SkillEvalOverview, type SkillEvalRun, type SkillEvalRunMode } from "../../common/skillEval";
+import { freshAttempts, type SkillEvalOverview, type SkillEvalRun, type SkillEvalRunMode } from "../../common/skillEval";
 import { summarizeLadder } from "../../common/skillEvalLadder";
 import { summarizeSkillEval, type SkillEvalSummary } from "../../common/skillEvalSummary";
 import { loadSkillEval, startSkillEvalAuthoring, startSkillEvalRun, stopSkillEvalRun } from "../composables/skillEvalApi";
@@ -54,7 +54,7 @@ const confirmText = computed(() => {
   const estimate = overview.value?.estimate;
   if (!estimate) return "";
   if (confirming.value === "ladder") return t("skillsView.eval.ladder.confirm", { attempts: estimate.ladderAttempts, max: usd(estimate.maxLadderCostUsd) });
-  if (confirming.value === "improve") return t("skillsView.eval.improve.confirm", { attempts: estimate.attempts, max: usd(estimate.maxImproveCostUsd) });
+  if (confirming.value === "improve") return t("skillsView.eval.improve.confirm", { attempts: estimate.improveAttempts, max: usd(estimate.maxImproveCostUsd) });
   return t("skillsView.eval.confirm", { attempts: estimate.attempts, max: usd(estimate.maxCostUsd) });
 });
 const progressKey = (run: SkillEvalRun): string => {
@@ -189,7 +189,7 @@ async function draft(): Promise<void> {
         </p>
         <div v-if="overview.activeRunId && latest" data-testid="skill-eval-progress" class="mb-2 flex items-center gap-2">
           <span v-if="improving">{{ t("skillsView.eval.improve.writing") }}</span>
-          <span v-else>{{ t(progressKey(latest), { done: latest.attempts.length, total: latest.plannedAttempts }) }}</span>
+          <span v-else>{{ t(progressKey(latest), { done: freshAttempts(latest).length, total: latest.plannedAttempts }) }}</span>
           <button
             type="button"
             data-testid="skill-eval-stop"

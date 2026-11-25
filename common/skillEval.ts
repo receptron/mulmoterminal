@@ -84,6 +84,9 @@ export const skillEvalAttemptSchema = z.object({
   error: z.string().nullable(),
   /** The model the agent ran on. */
   model: z.string().default(""),
+  /** The run this attempt was copied from, when it was not run again (#3465): an improvement takes its
+   *  runs without the skill from the measurement it was written from. Empty for an attempt run here. */
+  reusedFrom: z.string().default(""),
 });
 export type SkillEvalAttempt = z.infer<typeof skillEvalAttemptSchema>;
 
@@ -130,11 +133,21 @@ export function plannedAttempts(set: Pick<SkillEvalSet, "cases" | "repeats">): n
   return set.cases.reduce((sum, c) => sum + (c.kind === "use" ? 2 : 1) * set.repeats, 0);
 }
 
-/** The most a run of this set can spend: every attempt and every rubric grading at its cap. */
-export function maxRunCostUsd(set: Pick<SkillEvalSet, "cases" | "repeats" | "maxBudgetUsdPerAttempt">): number {
-  const graded = set.cases.filter((c) => c.check.type === "rubric").reduce((n, c) => n + (c.kind === "use" ? 2 : 1) * set.repeats, 0);
-  return plannedAttempts(set) * set.maxBudgetUsdPerAttempt + graded * SKILL_EVAL_JUDGE_BUDGET_USD;
+/** How many attempts measuring an improvement runs: every case with the skill. The runs without it are
+ *  the ones its measurement made (#3465). */
+export const improveAttempts = (set: Pick<SkillEvalSet, "cases" | "repeats">): number => set.cases.length * set.repeats;
+
+type RunCostInputs = Pick<SkillEvalSet, "cases" | "repeats" | "maxBudgetUsdPerAttempt">;
+
+/** Every attempt and every rubric grading at its cap, when each case runs `armsOf` times a round. */
+function maxCostUsdOf(set: RunCostInputs, armsOf: (evalCase: SkillEvalCase) => number): number {
+  const runs = (cases: readonly SkillEvalCase[]): number => cases.reduce((n, c) => n + armsOf(c) * set.repeats, 0);
+  const graded = runs(set.cases.filter((c) => c.check.type === "rubric"));
+  return runs(set.cases) * set.maxBudgetUsdPerAttempt + graded * SKILL_EVAL_JUDGE_BUDGET_USD;
 }
+
+/** The most a run of this set can spend: every attempt and every rubric grading at its cap. */
+export const maxRunCostUsd = (set: RunCostInputs): number => maxCostUsdOf(set, (c) => (c.kind === "use" ? 2 : 1));
 
 type LadderCostInputs = Pick<SkillEvalSet, "cases" | "repeats" | "maxBudgetUsdPerAttempt" | "ladder">;
 
@@ -149,9 +162,16 @@ export function maxLadderCostUsd(set: LadderCostInputs): number {
   return ladderAttempts(set) * set.maxBudgetUsdPerAttempt + graded * SKILL_EVAL_JUDGE_BUDGET_USD;
 }
 
-/** The most writing an improvement and measuring it can spend. */
-export const maxImproveCostUsd = (set: Pick<SkillEvalSet, "cases" | "repeats" | "maxBudgetUsdPerAttempt">): number =>
-  SKILL_EVAL_IMPROVE_BUDGET_USD + maxRunCostUsd(set);
+/** The most writing an improvement and measuring it can spend: with the skill only (#3465). */
+export const maxImproveCostUsd = (set: RunCostInputs): number => SKILL_EVAL_IMPROVE_BUDGET_USD + maxCostUsdOf(set, () => 1);
+
+/** The attempts a run made itself, apart from the ones it copied from another run. */
+export const freshAttempts = (run: Pick<SkillEvalRun, "attempts">): SkillEvalAttempt[] => run.attempts.filter((attempt) => attempt.reusedFrom === "");
+
+/** What the run itself spent: its own attempts, their grading, and writing the improvement. */
+export function runSpentUsd(run: Pick<SkillEvalRun, "attempts" | "improveCostUsd">): number {
+  return freshAttempts(run).reduce((total, attempt) => total + attempt.costUsd + attempt.gradingCostUsd, run.improveCostUsd);
+}
 
 /** What a run measures: the skill with and without, an improvement written from its last measurement (#3448),
  *  or the cheapest model that is enough for it (#3453). */
@@ -170,7 +190,10 @@ export const skillEvalOverviewSchema = z.object({
   setHash: z.string().nullable(),
   setError: z.string().nullable(),
   estimate: z
-    .object({ attempts: z.number(), maxCostUsd: z.number(), maxImproveCostUsd: z.number(), ladderAttempts: z.number(), maxLadderCostUsd: z.number() })
+    .object({
+      ...{ attempts: z.number(), maxCostUsd: z.number(), improveAttempts: z.number(), maxImproveCostUsd: z.number() },
+      ...{ ladderAttempts: z.number(), maxLadderCostUsd: z.number() },
+    })
     .nullable(),
   /** Whether an improvement may be written over this skill's SKILL.md: not a plugin's or a bundled one. */
   editable: z.boolean(),
@@ -182,16 +205,10 @@ export const skillEvalOverviewSchema = z.object({
 });
 export type SkillEvalOverview = z.infer<typeof skillEvalOverviewSchema>;
 
-/** Whether an improvement may be written from `run` (#3448): a finished measurement of the skill itself, as
- *  its text is now, on the current set — its report would otherwise describe some other skill or tasks. */
+/** Whether an improvement may be written from `run` (#3448): a finished measurement of the skill as its text is now,
+ *  on the current set — its report would otherwise describe some other skill or tasks. A measured improvement
+ *  counts once it is adopted (#3472): it measured exactly the SKILL.md that adopting wrote. */
 export function isBaselineFor(run: SkillEvalRun, setHash: string, skillHash: string): boolean {
   // A search for the cheapest model measured no run without the skill, so its report has half the story.
-  return (
-    run.candidateId === null &&
-    run.ladder.length === 0 &&
-    run.status === "done" &&
-    run.attempts.length > 0 &&
-    run.setHash === setHash &&
-    run.skillHash === skillHash
-  );
+  return run.ladder.length === 0 && run.status === "done" && run.attempts.length > 0 && run.setHash === setHash && run.skillHash === skillHash;
 }

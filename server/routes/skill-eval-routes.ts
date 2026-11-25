@@ -12,6 +12,7 @@ import { skillDocFile, type SkillDocSource } from "../backends/skills/skillCatal
 import {
   isBaselineFor,
   ladderAttempts,
+  improveAttempts,
   maxImproveCostUsd,
   maxLadderCostUsd,
   maxRunCostUsd,
@@ -118,7 +119,7 @@ async function baselineOf(skill: ResolvedSkill, setHash: string): Promise<SkillE
 }
 
 const estimateOf = (set: SkillEvalSet): NonNullable<SkillEvalOverview["estimate"]> => ({
-  ...{ attempts: plannedAttempts(set), maxCostUsd: maxRunCostUsd(set), maxImproveCostUsd: maxImproveCostUsd(set) },
+  ...{ attempts: plannedAttempts(set), maxCostUsd: maxRunCostUsd(set), improveAttempts: improveAttempts(set), maxImproveCostUsd: maxImproveCostUsd(set) },
   ...{ ladderAttempts: ladderAttempts(set), maxLadderCostUsd: maxLadderCostUsd(set) },
 });
 

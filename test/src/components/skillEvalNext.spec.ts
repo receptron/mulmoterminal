@@ -13,7 +13,7 @@ const set: SkillEvalSet = {
 
 const attempt = (arm: "with" | "without", round: number, pass: boolean, model = "haiku"): SkillEvalAttempt => ({
   ...{ caseId: "a", arm, round, pass, skillInvoked: arm === "with", costUsd: 0.01, gradingCostUsd: 0, durationMs: 1 },
-  ...{ finalText: "", checkOutput: "", denied: [], error: null, model },
+  ...{ finalText: "", checkOutput: "", denied: [], error: null, model, reusedFrom: "" },
 });
 
 /** A finished run whose rounds pass with and without the skill as given. */
@@ -36,7 +36,7 @@ const search = (extra: Partial<SkillEvalRun> = {}): SkillEvalRun => run("3-ladde
 function overview(baseline: SkillEvalRun | null, runs: SkillEvalRun[], extra: Partial<SkillEvalOverview> = {}): SkillEvalOverview {
   return {
     ...{ skill: "weekly", dir: "/d", set, setHash: "s", setError: null, editable: true, baseline, runs, activeRunId: null },
-    estimate: { attempts: 4, maxCostUsd: 2, maxImproveCostUsd: 3, ladderAttempts: 4, maxLadderCostUsd: 2 },
+    estimate: { attempts: 4, maxCostUsd: 2, improveAttempts: 2, maxImproveCostUsd: 3, ladderAttempts: 4, maxLadderCostUsd: 2 },
     ...extra,
   };
 }
@@ -98,7 +98,7 @@ describe("the next step", () => {
   });
 
   it("offers no search when no task is one the skill should help with", () => {
-    const estimate = { attempts: 2, maxCostUsd: 1, maxImproveCostUsd: 2, ladderAttempts: 0, maxLadderCostUsd: 0 };
+    const estimate = { attempts: 2, maxCostUsd: 1, improveAttempts: 1, maxImproveCostUsd: 2, ladderAttempts: 0, maxLadderCostUsd: 0 };
     expect(skillEvalNext(overview(helps, [helps], { estimate }))).toEqual({ step: null, reason: null });
   });
 

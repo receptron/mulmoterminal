@@ -64,7 +64,7 @@ export const skillsViewZhTW = {
       improve: {
         start: "產生改進方案並測量",
         confirm:
-          "AI 將根據上次結果寫出 SKILL.md 的改進方案，並用同樣的任務測量 {attempts} 次。費用上限為 {max}（實際通常遠低於此）。不會修改現在的 SKILL.md。開始嗎？",
+          "AI 將根據上次結果寫出 SKILL.md 的改進方案，並用同樣的任務在有技能時測量 {attempts} 次（無技能時沿用上次結果）。費用上限為 {max}（實際通常遠低於此）。不會修改現在的 SKILL.md。開始嗎？",
         writing: "正在撰寫改進方案…",
         running: "正在測量改進方案… {done} / {total}",
         title: "改進方案",
@@ -78,6 +78,7 @@ export const skillsViewZhTW = {
         adoptFailed: "無法採用。{error}",
         readOnly: "此技能無法在這裡修改。請查看內容後在原位置修改。",
         tag: "改進方案",
+        reused: "無技能時的結果來自撰寫改進方案所依據的那次測量，沒有重新測量。",
       },
       ladder: {
         start: "尋找最便宜的模型",

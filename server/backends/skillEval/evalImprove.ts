@@ -56,7 +56,7 @@ export function improvePrompt(): string {
     "- Keep the body short: the steps and how to tell the work is done. Remove explanation the task does not need. A shorter skill that passes is better than a longer one.",
     "- No hard-coded file paths, names or fill-in templates that would override what the user asks for.",
     "- Where the skill was NOT read, rewrite the frontmatter `description` as a two or three sentence summary of what the body does and when to use it.",
-    "- Keep the frontmatter `name` unchanged. Change other files in the folder only if the report shows they are the cause.",
+    `- Edit only ./${SKILL_FOLDER}/SKILL.md, and keep its frontmatter \`name\` unchanged. Any other file in the folder is there to read: a change to it is not kept.`,
     "",
     "When you are done, reply with one short paragraph saying what you changed and why.",
   ].join("\n");
@@ -76,13 +76,21 @@ async function writeInputs(work: string, baseSkillDir: string, baseline: SkillEv
   await writeFile(path.join(work, REPORT_FILE), improveReport(baseline));
 }
 
-async function keepCandidate(work: string, dir: string, before: string, note: string, costUsd: number): Promise<CandidateResult> {
-  const skillText = await readFile(path.join(work, SKILL_FOLDER, "SKILL.md"), "utf8").catch(() => null);
+/** The improvement as it will be adopted: the skill's own folder with the new SKILL.md, and nothing else the writer
+ *  changed — adopting writes SKILL.md alone, so the measurement must be of exactly that. */
+async function keepCandidate(work: string, baseSkillDir: string, dir: string, before: string, note: string, costUsd: number): Promise<CandidateResult> {
+  const written = path.join(work, SKILL_FOLDER, "SKILL.md");
+  // Read only a file the writer left in place: a link would read whatever it points at into the improvement.
+  const isFile = await lstat(written).then(
+    (stats) => stats.isFile(),
+    () => false,
+  );
+  const skillText = isFile ? await readFile(written, "utf8").catch(() => null) : null;
   if (skillText === null) return { kind: "failed", error: "the improvement left no SKILL.md", costUsd };
   if (skillText === before) return { kind: "failed", error: "the improvement changed nothing", costUsd };
-  // A link the writer made could point anywhere; the candidate keeps regular files only.
   try {
-    await cp(path.join(work, SKILL_FOLDER), dir, { recursive: true, filter: async (source) => !(await lstat(source)).isSymbolicLink() });
+    await cp(baseSkillDir, dir, { recursive: true });
+    await writeFile(path.join(dir, "SKILL.md"), skillText);
   } catch (err) {
     return { kind: "failed", error: `the improvement could not be kept in ${dir}: ${String(err)}`, costUsd };
   }
@@ -106,7 +114,7 @@ export async function writeCandidate(
     const outcome = streamOutcome(ran.stdout.split("\n"), "");
     const error = ran.failure ?? outcome.error;
     if (error !== null) return { kind: "failed", error, costUsd: outcome.costUsd };
-    return await keepCandidate(work, dir, before, outcome.finalText, outcome.costUsd);
+    return await keepCandidate(work, baseSkillDir, dir, before, outcome.finalText, outcome.costUsd);
   } finally {
     await rm(work, { recursive: true, force: true });
   }
