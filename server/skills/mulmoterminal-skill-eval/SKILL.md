@@ -42,6 +42,22 @@ exactly as it would when the user runs it. If the skill grants tools, say so to 
 Do NOT write the task so that it only makes sense with the skill ("follow the weekly-report format").
 Write what a person would actually ask. The skill's job is to make that request turn out better.
 
+### Start from what the user really asked
+
+The request may list **past conversations**: transcripts of the user's own recent conversations that
+ran this skill. When it does, draft the "use" tasks from them before inventing any — a task the user
+really asked tests the skill on its real work.
+
+- Each is a Claude Code transcript, one JSON object per line, and can be long. Search it for this
+  skill's name rather than reading it whole: the skill ran at a `Skill` tool call whose `input.skill`
+  is the name, or where the user typed `/name` (recorded as `<command-name>/name`). The request is the
+  user's message just before, or the arguments typed after `/name`.
+- Keep what was asked and drop everything private: names, paths, project and company details,
+  secrets, anything personal. Shrink it to something an agent can finish alone in an empty folder.
+- Never copy the conversation's files into `files/<id>/`. Write small made-up ones, as always.
+- When you show the draft, say which tasks came from their past requests, so they can check nothing
+  private is left in them.
+
 ## 3. Decide how each task is judged
 
 Each task gets one check, and the result is pass or fail — never a score.

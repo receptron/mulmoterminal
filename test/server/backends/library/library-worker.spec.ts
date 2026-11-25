@@ -120,6 +120,7 @@ describe("dispatchLibraryRequest", () => {
     repeats: () => (calls.push(["repeats"]), Promise.resolve({ candidates: [], total: 0 })),
     repeat: (...args) => (calls.push(["repeat", ...args]), Promise.resolve(null)),
     skillUsage: () => (calls.push(["skillUsage"]), Promise.resolve([])),
+    skillConversations: (...args) => (calls.push(["skillConversations", ...args]), Promise.resolve([])),
     retrospective: (...args) => (
       calls.push(["retrospective", ...args]),
       Promise.resolve({
@@ -150,6 +151,8 @@ describe("dispatchLibraryRequest", () => {
     await dispatchLibraryRequest(service, { id: "14", method: "repeat", args: ["0123456789abcdef"] });
     await dispatchLibraryRequest(service, { id: "15", method: "repeat", args: [{}] });
     await dispatchLibraryRequest(service, { id: "16", method: "skillUsage", args: ["ignored"] });
+    await dispatchLibraryRequest(service, { id: "17", method: "skillConversations", args: ["weekly", "/w/app"] });
+    await dispatchLibraryRequest(service, { id: "18", method: "skillConversations", args: [3, 4] });
     expect(calls).toEqual([
       ["list", { cwd: "/w", includeTemporary: true, includeSidechains: false, includeAutomated: false }, 5, 10],
       ["list", {}, 0, 0],
@@ -167,6 +170,8 @@ describe("dispatchLibraryRequest", () => {
       ["repeat", "0123456789abcdef"],
       ["repeat", ""],
       ["skillUsage"],
+      ["skillConversations", "weekly", "/w/app"],
+      ["skillConversations", "", null],
     ]);
   });
 

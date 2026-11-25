@@ -102,6 +102,25 @@ export function skillUsageQuery(): { sql: string; params: SQLInputValue[] } {
   return { sql, params: where.params };
 }
 
+/** The transcripts of the newest conversations the Library lists that ran skill `id` (#3470), within `cwd` when
+ *  given — a project's skill runs by its bare name, as a user's of that name does, so its folder tells them apart. */
+export function skillConversations(db: DatabaseSync, id: string, cwd: string | null, limit: number): string[] {
+  const query = skillConversationsQuery(id, cwd, limit);
+  return db
+    .prepare(query.sql)
+    .all(...query.params)
+    .flatMap((row) => (typeof row.path === "string" ? [row.path] : []));
+}
+
+/** The statement `skillConversations` runs, apart so its plan can be checked against the partial index. */
+export function skillConversationsQuery(id: string, cwd: string | null, limit: number): { sql: string; params: SQLInputValue[] } {
+  const where = filterClause(cwd === null ? {} : { cwd });
+  const sql = `select c.path from conversations c where c.skills != '[]'
+      and exists (select 1 from json_each(c.skills) j where j.value = ?) and ${where.sql}
+    order by c.ended_at desc nulls last, c.path limit ?`;
+  return { sql, params: [id, ...where.params, limit] };
+}
+
 /** What the retrospective counts for each conversation the Library lists that started at or after
  *  `since_ms`: its directory, agent, start and how many PRs it recorded. */
 export function retrospectiveRows(db: DatabaseSync, since_ms: number): RetrospectiveRow[] {

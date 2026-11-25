@@ -20,6 +20,8 @@ import {
   retrospectiveSpendInputs,
   skillUsage,
   skillUsageQuery,
+  skillConversations,
+  skillConversationsQuery,
 } from "../../../../server/backends/library/index-queries";
 import { retrospective } from "../../../../server/backends/library/retrospective";
 import { splitSpend } from "../../../../server/backends/library/spend-split";
@@ -199,6 +201,31 @@ describe("runIndexPass", () => {
     it("reads only the rows that ran one, through the partial index", () => {
       const { db } = setup();
       const query = skillUsageQuery();
+      const plan = db
+        .prepare(`explain query plan ${query.sql}`)
+        .all(...query.params)
+        .map((row) => String(row.detail));
+      expect(plan.join("\n")).toContain("conversations_with_skills");
+    });
+
+    it("answers the conversations that ran a skill, the newest the Library lists first, up to the limit, within a folder when one is given", async () => {
+      const { db, deps, transcript } = setup();
+      transcript("old", opened(10) + ran("weekly", 10));
+      transcript("new", opened(12) + ran("weekly", 12));
+      transcript("elsewhere", opened(13, "cli", "/w/other") + ran("weekly", 13), "-w-other");
+      transcript("other-skill", opened(14) + ran("weekly-2", 14));
+      transcript("scripted", opened(15, "sdk-cli") + ran("weekly", 15));
+      await runIndexPass(deps);
+      const names = (paths: string[]): string[] => paths.map((file) => path.basename(file, ".jsonl"));
+      expect(names(skillConversations(db, "weekly", null, 5))).toEqual(["elsewhere", "new", "old"]);
+      expect(names(skillConversations(db, "weekly", "/w/app", 5))).toEqual(["new", "old"]);
+      expect(names(skillConversations(db, "weekly", null, 1))).toEqual(["elsewhere"]);
+      expect(skillConversations(db, "nobody", null, 5)).toEqual([]);
+    });
+
+    it("looks the conversations that ran a skill up through the partial index", () => {
+      const { db } = setup();
+      const query = skillConversationsQuery("weekly", null, 5);
       const plan = db
         .prepare(`explain query plan ${query.sql}`)
         .all(...query.params)

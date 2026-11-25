@@ -60,7 +60,8 @@ export function filterOf(query: Record<string, unknown>): ConversationFilter {
 }
 
 let shared: LibraryCaller | null = null;
-const sharedCaller: LibraryCaller = (method, args) => {
+/** The one Library worker every route asks, started on the first call. */
+export const sharedCaller: LibraryCaller = (method, args) => {
   shared ??= createLibraryClient().call;
   return shared(method, args);
 };

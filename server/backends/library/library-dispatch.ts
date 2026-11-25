@@ -18,6 +18,7 @@ const METHODS: readonly LibraryMethod[] = [
   "repeat",
   "retrospective",
   "skillUsage",
+  "skillConversations",
 ];
 
 export const isLibraryRequest = (value: unknown): value is LibraryRequest =>
@@ -28,6 +29,7 @@ const prNumbers = (value: unknown): number[] =>
 
 const count = (value: unknown): number => (typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : 0);
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
+const textOrNull = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
 
 export function filterArg(value: unknown): ConversationFilter {
   if (!isRecord(value)) return {};
@@ -47,11 +49,11 @@ export function dispatchLibraryRequest(service: LibraryService, request: Library
     case "list":
       return service.list(filterArg(first), count(second), count(third));
     case "conversation":
-      return service.conversation(text(first), typeof second === "string" && second !== "" ? second : null);
+      return service.conversation(text(first), textOrNull(second));
     case "search":
       return service.search(text(first), filterArg(second), count(third));
     case "transcript":
-      return service.transcript(text(first), typeof second === "string" && second !== "" ? second : null);
+      return service.transcript(text(first), textOrNull(second));
     case "directories":
       return service.directories();
     case "prCreators":
@@ -66,6 +68,8 @@ export function dispatchLibraryRequest(service: LibraryService, request: Library
       return service.retrospective(typeof first === "number" && Number.isFinite(first) ? first : Date.now());
     case "skillUsage":
       return service.skillUsage();
+    case "skillConversations":
+      return service.skillConversations(text(first), textOrNull(second));
   }
 }
 
