@@ -81,7 +81,12 @@ Every field → [How this repository's PRs are reviewed](config.html#dir-review)
 The tools this uses (`requestReview`, `startIssueSession` and the rest) are given only to a session
 with MulmoTerminal's whole tool set: a cell in the [workspace](glossary.html#workspace) running
 **Claude, Codex or Copilot**. A cell in a project directory does not have them, and the skill will
-say so and stop. The clone itself can be anywhere — the agent finds it.
+say so and stop.
+
+The repository's clone can sit anywhere on disk, but it has to be one of the launcher's saved directories
+(`cwdPresets`): that is where MulmoTerminal looks for the repository, both to read its `review` key and to
+cut an implementer's worktree. With several clones of one repository, `repoDirs` says which one is used
+→ [Every key](config.html#all-keys).
 
 ### 3. `gh` must be signed in
 
@@ -238,13 +243,14 @@ The dispatcher's own cell stays open when it is done; close it like any other.
 
 | What you see | Why, and what to do |
 |---|---|
+| A start is refused: the repository has no clone configured here | Its clone is not among the launcher's saved directories. Add it there (see [above](#setup)). |
 | "I don't have the review tools" | The command ran in a project cell. Run it from a workspace cell. |
 | It stops at the review step asking about settings | The repository has no valid `review` key. Add `"review": {}`, or check Settings → Directory settings for *ignored*. |
 | A start is refused for the limit, and nothing of yours is running | Other sessions on this machine hold the places. Wait, raise `maxIssueSessions`, or ask the dispatcher to try again later. |
 | A start is refused: the issue already has a session | That issue's worktree is already occupied. Finish or close that session first. |
 | The reviewer cell sits on a prompt | Answer it there; the round continues by itself. |
 | The round count reset | Rounds are counted in memory, so a server restart starts the count again. |
-| A codex implementer cannot reach GitHub or commit | It was opened by hand, or started by a server older than 13.8.0. Implementers started by `startIssueSession` on a current server get the grants [above](#codex). |
+| A codex implementer cannot reach GitHub or commit | It was opened by hand, not started by `startIssueSession`. Or its cell was reopened after codex exited, on a server older than 13.8.0, which did not carry the grants over to the resumed session. Those started by `startIssueSession` get the grants [above](#codex). |
 
 ## Tools, for the curious {#tools}
 
