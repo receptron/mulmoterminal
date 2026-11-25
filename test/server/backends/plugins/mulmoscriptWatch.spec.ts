@@ -20,6 +20,14 @@ afterEach(() => {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/** The plugin's own save, made as its file ops make it: staged and renamed into place. An in-place
+ *  write would let a poll catch the file emptied, a stamp no own write ever records. */
+function pluginWrite(file: string, content: string): void {
+  const staged = `${file}.staged`;
+  fs.writeFileSync(staged, content);
+  fs.renameSync(staged, file);
+}
+
 /** A wait the test opens and closes by hand, so a write can be put inside it deterministically. */
 function heldGrace() {
   const pending: Array<() => void> = [];
@@ -106,7 +114,7 @@ describe("watching an open MulmoScript (#3014)", () => {
     const { deck, dirs, published, watch, subscribe } = setup();
     subscribe(pluginFileChannel(MULMOSCRIPT_SCOPE, "stories/deck.json"));
     await sleep(QUIET_MS);
-    fs.writeFileSync(deck, '{"beats":[{"text":"typed in the View"}]}');
+    pluginWrite(deck, '{"beats":[{"text":"typed in the View"}]}');
     watch.recordOwnWrite({ filePath: "stories/deck.json" }, dirs);
     await sleep(QUIET_MS);
     expect(published).toEqual([]);
@@ -120,7 +128,7 @@ describe("watching an open MulmoScript (#3014)", () => {
     const { deck, dirs, published, watch, subscribe } = setup();
     subscribe(pluginFileChannel(MULMOSCRIPT_SCOPE, "stories/deck.json"));
     await sleep(QUIET_MS);
-    fs.writeFileSync(deck, '{"beats":[{"text":"typed, saved by absolute path"}]}');
+    pluginWrite(deck, '{"beats":[{"text":"typed, saved by absolute path"}]}');
     watch.recordOwnWrite({ filePath: deck }, dirs);
     await sleep(QUIET_MS);
     expect(published).toEqual([]);
@@ -135,7 +143,7 @@ describe("watching an open MulmoScript (#3014)", () => {
     await sleep(QUIET_MS);
     fs.writeFileSync(deck, '{"beats":[{"text":"an editor wrote this"}]}');
     await until(grace.entered);
-    fs.writeFileSync(deck, '{"beats":[{"text":"then the View saved, longer than before"}]}');
+    pluginWrite(deck, '{"beats":[{"text":"then the View saved, longer than before"}]}');
     watch.recordOwnWrite({ filePath: "stories/deck.json" }, dirs);
     grace.release();
     await announced(published);
@@ -149,7 +157,7 @@ describe("watching an open MulmoScript (#3014)", () => {
     const { deck, dirs, published, watch, subscribe } = setup(grace.wait);
     subscribe(pluginFileChannel(MULMOSCRIPT_SCOPE, "stories/deck.json"));
     await sleep(QUIET_MS);
-    fs.writeFileSync(deck, '{"beats":[{"text":"saved by the View"}]}');
+    pluginWrite(deck, '{"beats":[{"text":"saved by the View"}]}');
     await until(grace.entered);
     watch.recordOwnWrite({ filePath: "stories/deck.json" }, dirs);
     grace.release();
