@@ -681,7 +681,7 @@ MulmoTerminal の「**拡張**」の柱がここ。稼働中ターミナルの�
 セッションは `startIssueSession` の道具で、issue を自分の実装役に渡せます。実装役は issue の worktree と
 セルを一つずつ持ち、[レビューの往復](#dir-review)を経て merge まで進めます。
 codex の実装役は `gh` と `git` で issue を読み、push し、PR を開くので、codex のレビュー役と同じく通信が許されます。
-commit できるように、worktree を切り出した元のクローンにある git の管理情報（worktree 自身の git ディレクトリと、共通の objects・refs・logs）にも書けます。クローンの `config` とフックには書けません。`extensions.worktreeConfig` を有効にしたクローンでは、git がその git ディレクトリから設定を読むので、どこにも書けません。レビュー役と同じく、承認の確認では止まりません。
+commit できるように、worktree を切り出した元のクローンにある git の管理情報（worktree 自身の git ディレクトリと、共通の objects・refs・logs）にも書けます。クローンの `config` とフックには書けません。`extensions.worktreeConfig` を有効にしたクローンでは、git がその git ディレクトリから設定を読むので、どこにも書けません。レビュー役と同じく、承認の確認では止まりません。codex が終わった後にセルを開き直して会話を再開しても、レビュー役と実装役はこの許可を保ちます。
 `~/.mulmoterminal/config.json` の `maxIssueSessions` は、それを同時にいくつまで走らせるかです。数えるのは
 すべてのリポジトリを合わせた数で、超える起動は、どれかが終わるまで断られます。
 MulmoTerminal は実装役を一つずつ見ていて、PR が merge されたとき、閉じられたとき、セッションが終わったとき、

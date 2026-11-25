@@ -6,18 +6,19 @@
 import { computed, onUnmounted, ref, shallowRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import type { CatalogSkill, SkillSource } from "../../common/skillCatalog";
-import { type SkillEvalOverview, type SkillEvalRun, type SkillEvalRunMode } from "../../common/skillEval";
-import { summarizeLadder } from "../../common/skillEvalLadder";
+import { freshAttempts, type SkillEvalOverview, type SkillEvalRun, type SkillEvalRunMode } from "../../common/skillEval";
 import { summarizeSkillEval, type SkillEvalSummary } from "../../common/skillEvalSummary";
 import { loadSkillEval, startSkillEvalAuthoring, startSkillEvalRun, stopSkillEvalRun } from "../composables/skillEvalApi";
 import { placeSpawnedChat } from "../composables/useSpawnedChat";
 import SkillEvalResult from "./SkillEvalResult.vue";
 import SkillEvalCandidate from "./SkillEvalCandidate.vue";
 import SkillEvalLadder from "./SkillEvalLadder.vue";
+import SkillEvalHistory from "./SkillEvalHistory.vue";
+import { skillEvalNext, type SkillEvalNext, type SkillEvalStep } from "./skillEvalNext";
 
 const props = defineProps<{ source: SkillSource; skill: CatalogSkill }>();
 const emit = defineEmits<{ adopted: [] }>();
-const { t, locale } = useI18n();
+const { t } = useI18n();
 
 // While a run is going, how often its record is read again.
 const POLL_MS = 3000;
@@ -53,22 +54,21 @@ const confirmText = computed(() => {
   const estimate = overview.value?.estimate;
   if (!estimate) return "";
   if (confirming.value === "ladder") return t("skillsView.eval.ladder.confirm", { attempts: estimate.ladderAttempts, max: usd(estimate.maxLadderCostUsd) });
-  if (confirming.value === "improve") return t("skillsView.eval.improve.confirm", { attempts: estimate.attempts, max: usd(estimate.maxImproveCostUsd) });
+  if (confirming.value === "improve") return t("skillsView.eval.improve.confirm", { attempts: estimate.improveAttempts, max: usd(estimate.maxImproveCostUsd) });
   return t("skillsView.eval.confirm", { attempts: estimate.attempts, max: usd(estimate.maxCostUsd) });
 });
 const progressKey = (run: SkillEvalRun): string => {
   if (run.ladder.length > 0) return "skillsView.eval.ladder.running";
   return run.candidateId ? "skillsView.eval.improve.running" : "skillsView.eval.running";
 };
-/** One line for an earlier run: a search names the model it found, a measurement its verdict. */
-function earlierVerdict(run: SkillEvalRun): string {
-  if (run.ladder.length === 0) return t(`skillsView.eval.verdict.${summarizeSkillEval(run.cases, run.attempts, run.repeats).verdict}`);
-  const { enough, finished } = summarizeLadder(run.ladder, run.attempts, run.status === "done");
-  if (!finished) return t("skillsView.eval.ladder.unfinishedShort");
-  return enough === null ? t("skillsView.eval.ladder.noneShort") : t("skillsView.eval.ladder.enoughShort", { model: enough });
-}
+const nextStep = computed<SkillEvalNext>(() => (overview.value ? skillEvalNext(overview.value) : { step: null, reason: null }));
+// The step to take next stands out; the others stay, quieter, for whoever knows what they want.
+const STEP_BUTTON = "cursor-pointer rounded px-2 py-1 text-[12px] disabled:cursor-default disabled:opacity-60";
+const stepButton = (step: SkillEvalStep): string =>
+  nextStep.value.step === step
+    ? `${STEP_BUTTON} border border-accent bg-accent text-white`
+    : `${STEP_BUTTON} border border-border bg-transparent text-fg hover:bg-hover`;
 const usd = (value: number): string => `$${value.toFixed(2)}`;
-const when = (at_ms: number): string => new Date(at_ms).toLocaleString(locale.value, { dateStyle: "short", timeStyle: "short" });
 
 function stopPolling(): void {
   if (poll !== null) clearInterval(poll);
@@ -167,13 +167,7 @@ async function draft(): Promise<void> {
           {{ t("skillsView.eval.setError", { error: overview.setError }) }}
         </p>
         <p v-else class="m-0 mb-2 text-secondary">{{ t("skillsView.eval.intro") }}</p>
-        <button
-          type="button"
-          data-testid="skill-eval-draft"
-          :disabled="drafting"
-          class="cursor-pointer rounded border border-border bg-transparent px-2 py-1 text-[12px] text-fg hover:bg-hover disabled:cursor-default disabled:opacity-60"
-          @click="draft"
-        >
+        <button type="button" data-testid="skill-eval-draft" :disabled="drafting" :class="stepButton('draft')" @click="draft">
           {{ overview.setError ? t("skillsView.eval.fix") : t("skillsView.eval.draft") }}
         </button>
       </template>
@@ -181,9 +175,13 @@ async function draft(): Promise<void> {
         <p class="m-0 mb-2 text-secondary">
           {{ t("skillsView.eval.setSummary", { use: useCount, avoid: avoidCount, repeats: overview.set.repeats, model: overview.set.model }) }}
         </p>
+        <p v-if="nextStep.reason && !confirming" data-testid="skill-eval-next" class="m-0 mb-2 flex items-start gap-1 text-fg">
+          <span class="material-symbols-outlined text-[14px] leading-[18px] text-accent" aria-hidden="true">arrow_forward</span
+          >{{ t(`skillsView.eval.next.${nextStep.reason}`) }}
+        </p>
         <div v-if="overview.activeRunId && latest" data-testid="skill-eval-progress" class="mb-2 flex items-center gap-2">
           <span v-if="improving">{{ t("skillsView.eval.improve.writing") }}</span>
-          <span v-else>{{ t(progressKey(latest), { done: latest.attempts.length, total: latest.plannedAttempts }) }}</span>
+          <span v-else>{{ t(progressKey(latest), { done: freshAttempts(latest).length, total: latest.plannedAttempts }) }}</span>
           <button
             type="button"
             data-testid="skill-eval-stop"
@@ -214,28 +212,17 @@ async function draft(): Promise<void> {
           </div>
         </div>
         <div v-else class="mb-2 flex gap-2">
-          <button
-            type="button"
-            data-testid="skill-eval-measure"
-            class="cursor-pointer rounded border border-border bg-transparent px-2 py-1 text-[12px] text-fg hover:bg-hover"
-            @click="confirming = 'measure'"
-          >
+          <button type="button" data-testid="skill-eval-measure" :class="stepButton('measure')" @click="confirming = 'measure'">
             {{ t("skillsView.eval.measure") }}
           </button>
-          <button
-            v-if="baseline"
-            type="button"
-            data-testid="skill-eval-improve"
-            class="cursor-pointer rounded border border-border bg-transparent px-2 py-1 text-[12px] text-fg hover:bg-hover"
-            @click="confirming = 'improve'"
-          >
+          <button v-if="baseline" type="button" data-testid="skill-eval-improve" :class="stepButton('improve')" @click="confirming = 'improve'">
             {{ t("skillsView.eval.improve.start") }}
           </button>
           <button
             v-if="overview.estimate && overview.estimate.ladderAttempts > 0"
             type="button"
             data-testid="skill-eval-ladder"
-            class="cursor-pointer rounded border border-border bg-transparent px-2 py-1 text-[12px] text-fg hover:bg-hover"
+            :class="stepButton('ladder')"
             @click="confirming = 'ladder'"
           >
             {{ t("skillsView.eval.ladder.start") }}
@@ -260,20 +247,12 @@ async function draft(): Promise<void> {
         :summary="latestSummary"
         :baseline-summary="baselineSummary"
         :editable="overview.editable"
+        :base-text="comparedWith?.skillText ?? null"
         @adopted="onAdopted"
       />
       <SkillEvalLadder v-if="latest && latest.ladder.length > 0" :run="latest" />
       <SkillEvalResult v-else-if="latest && latestSummary && !improving" :run="latest" :summary="latestSummary" :skill-text-changed="skillTextChanged" />
-      <details v-if="earlier.length" class="mt-2">
-        <summary class="cursor-pointer text-secondary">{{ t("skillsView.eval.earlier", { count: earlier.length }) }}</summary>
-        <ul class="m-0 mt-1 list-none p-0">
-          <li v-for="run in earlier" :key="run.id" data-testid="skill-eval-earlier" class="py-0.5 text-secondary">
-            {{ when(run.startedAt) }} · {{ earlierVerdict(run) }} · {{ t(`skillsView.eval.status.${run.status}`)
-            }}<template v-if="run.candidateId"> · {{ t("skillsView.eval.improve.tag") }}</template
-            ><template v-if="run.ladder.length > 0"> · {{ t("skillsView.eval.ladder.tag") }}</template>
-          </li>
-        </ul>
-      </details>
+      <SkillEvalHistory v-if="earlier.length" :runs="earlier" :current-skill-hash="overview.skillHash" />
       <p class="m-0 mt-2 break-all font-mono text-[10px] text-dim">{{ overview.dir }}</p>
     </template>
   </section>

@@ -29,7 +29,7 @@ const setText = (skill: string): string => JSON.stringify({ version: 1, skill, r
 
 const attempt = (arm: "with" | "without", pass: boolean): SkillEvalAttempt => ({
   ...{ caseId: "a", arm, round: 0, pass, skillInvoked: arm === "with", costUsd: 0, gradingCostUsd: 0, durationMs: 0 },
-  ...{ finalText: "", checkOutput: "", denied: [], error: null, model: "haiku" },
+  ...{ finalText: "", checkOutput: "", denied: [], error: null, model: "haiku", reusedFrom: "" },
 });
 
 function measured(skill: string, set: string, skillText: string, withPass: boolean, id = "1795000000000-aaaaaaaa"): SkillEvalRun {

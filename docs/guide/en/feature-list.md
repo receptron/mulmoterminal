@@ -4,7 +4,7 @@ nav_title: Feature list
 layout: default
 parent: English
 nav_order: 6.5
-as_of: 13.6.0
+as_of: 13.7.0
 description: "Every capability MulmoTerminal has today, one line each with the release it arrived in, grouped by area (as of 9.1.0)."
 ---
 
@@ -17,6 +17,9 @@ Every capability MulmoTerminal has as of 9.1.0, one line each, grouped by area. 
 {:toc}
 
 ## Grid and cells
+- The grid layout is also kept on the server, and a grid that opens empty (lost browser storage, a full disk, another address) offers the last layout's terminals back in a bar with Restore and Dismiss (v13.7.0)
+- A launcher directory that was deleted is hidden at once and dropped from config.json a day later; one that may only be unreachable (an unmounted volume, a dangling link) stays saved but hidden until it is back (v13.7.0)
+- An agent that ended without leaving its exit record (a full disk) keeps its cell with a red line saying so, instead of being read as a clean exit (v13.7.0)
 - The roster folds into a narrow rail of status dots from any row's ⋮ menu: hover a dot for the session's name, click to enlarge it, right-click for its menu; the fold is remembered per browser (v12.1.0)
 - Compact roster rows show only the header and the session's name (`cockpitCompact`, Settings → Waiting rows) (v12.1.0)
 - The panes opened beside a terminal stack: closing the one on screen shows the one it covered, a pane opened again moves to the top, and the stack survives a reload (v11.6.0)
@@ -71,6 +74,10 @@ More: [Basics](basics.html)
 
 More: [Agents](agents.html)
 
+- The Skills viewer shows how many Claude conversations used each skill, and when it was last used (v13.7.0)
+- The Skills viewer's Does it help? runs a skill's test tasks with and without it, shows pass rate, cost per pass and a verdict, and keeps earlier results; the bundled mulmoterminal-skill-eval skill drafts the tasks (v13.7.0)
+- Improve and measure writes an improved SKILL.md from the latest measurement and measures it on the same tasks, and Adopt installs it with the old one kept as a backup (v13.7.0)
+- Find the cheapest model runs a skill's tasks on models cheapest first and names the cheapest one that is enough (v13.7.0)
 - The Skills viewer edits one of your own or a project's SKILL.md in place; plugin and bundled skills stay read only (v13.3.0)
 - Bring that turn here, Exchange and Round table carry a Copilot, Antigravity or Grok cell's answer, and a Grok or Antigravity session's conversation shows in the Conversation pane and on the phone (v13.3.0)
 - Antigravity cells light the working dot during a turn and play the finished sound and push when it ends (v10.5.0)
@@ -108,6 +115,7 @@ More: [Agents](agents.html)
 
 More: [Conversations](conversation.html)
 
+- An agent can type into a session it started and wait for that session's reply (sendToSession, waitForSessionReply), and spawnBackgroundChat starts any agent (v13.7.0)
 - The Library's Memory kind marks what can be tidied — a memory missing from MEMORY.md, missing frontmatter, a [[link]] to no memory, a file it names that is gone, or an index that is missing, overfull or lists a gone file — and Show narrows the list to it (v13.3.0)
 - The Library's Memory kind gets a tidy-up button on each project: Claude opens in plan mode in the project's directory and proposes merging duplicate memories, removing ones the code shows no longer hold, fixing what the health check found and moving standing rules to a CLAUDE.md or a skill, backing up every file and writing nothing until you approve (v13.4.0)
 - A memory can be edited in place in the Library, whole text and frontmatter included; a save is refused if the file changed on disk since it was opened (v13.3.0)
@@ -238,10 +246,15 @@ More: [Feature reference](features.html)
 
 More: [Worktrees](worktree.html)
 
+- A repository declares its review in .mulmoterminal.json (reviewer, rounds, required LGTMs, the skill the reviewer follows), and the reviewSettings tool reads it (v13.7.0)
+- requestReview runs one review round: MulmoTerminal starts the declared reviewer on the PR's head in its own worktree, reads its verdict and CI, and tells the author whether the merge condition is met; endReview closes the reviewer (v13.7.0)
+- The bundled mulmoterminal-issue-to-merge skill takes an issue to merge through that review loop, and the bundled mulmoterminal-review skill is what the reviewer follows by default (v13.7.0)
+- startIssueSession hands an issue to an implementer in its own worktree (at most maxIssueSessions at once); the starter is told when its PR merges or closes or it waits on you, and a merged implementer's cell and worktree are closed; mulmoterminal-dispatch-issues hands several named issues out this way (v13.7.0)
+- A board card is marked Ready to merge when its repository's required LGTMs are on the newest push and CI passed (v13.7.0)
 - The GitHub board's Only work with an open terminal switch (on by default) keeps only the cards a terminal is open on, and the board follows terminals opening and closing without waiting for its next read (v13.3.0)
 - The board and the PR and issue lists also show a GitHub repo you have not registered while a terminal is open in a clone of it, tagged not registered (v13.3.0)
 - A terminal on a repo's default branch or on no branch shows on the board in a row above that repo's columns, grouped by branch (v13.3.0)
-- A board card shows the latest Codex cross-review verdict as Codex N: LGTM or changes requested, coloured only when it names the current push (v11.5.0)
+- A board card shows the latest cross-review verdict as Verdict N: LGTM or changes requested, coloured only when it names the current push (v11.5.0)
 - An experimental GitHub board puts each piece of work in a column (To do, Implementing, In review, Ready, Merged), joining the issue, its PR and the terminals on its branch, and keeps itself current (v11.4.0)
 - From a board card: read its issue, checks and reviews, start a To do issue with its text sent at once, and read or answer its terminals (v11.4.0)
 - On macOS the managed worktree root is kept out of Time Machine and marked for Spotlight (v10.7.2)

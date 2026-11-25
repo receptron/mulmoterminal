@@ -18,6 +18,7 @@ import { ptyWouldReattach } from "../../pty/pty-spawn.js";
 import { startAgentPty } from "../../pty/agent-pty-start.js";
 import { spawnWithFullGuiClaim, type FullGuiClaimRequest } from "../spawn-with-full-gui-claim.js";
 import { codexSessionGuiRestriction } from "./session-gui-restriction.js";
+import { codexSessionGrants } from "./codex-session-grants.js";
 import { wireAgentPtyRelay } from "../../pty/pty-relay.js";
 import { attachCodexAutoRun } from "../draft-injection.js";
 import type { PtyEntry } from "../../types.js";
@@ -99,16 +100,17 @@ export function createCodexSpawner(deps: SpawnDeps) {
       mcpGroups?: readonly ToolGroup[];
       /** Limit this session to these GUI tool groups, for this spawn and every later one (#3033). */
       guiGroups?: readonly ToolGroup[] | undefined;
-      /** Let the sandbox reach the network, for this spawn only (a reviewer or an implementer). */
+      /** Let the sandbox reach the network, for this spawn and every later one (a reviewer or an implementer). */
       networkAccess?: boolean;
-      /** Never stop on an approval prompt, for this spawn only (a reviewer or an implementer). */
+      /** Never stop on an approval prompt, for this spawn and every later one (a reviewer or an implementer). */
       neverAsk?: boolean;
-      /** More paths the sandbox may write, for this spawn only (an implementer's worktree git metadata). */
+      /** More paths the sandbox may write, for this spawn and every later one (an implementer's worktree git metadata). */
       writableRoots?: readonly string[];
     } = {},
   ): PtyEntry {
     const { initialPrompt = null, mcpGroups = [], guiGroups, networkAccess = false, neverAsk = false, writableRoots = [] } = options;
     const restrictedTo = codexSessionGuiRestriction(sessionId, guiGroups, resumeRolloutId);
+    const grants = codexSessionGrants(sessionId, { networkAccess, neverAsk, writableRoots });
     // codex reads skills from its mirror (~/.codex/skills), not from the workspace's own
     // `.claude/skills`, and the mirror is otherwise refreshed only at boot — so a skill created
     // mid-run (a new collection) would stay invisible to codex until a restart. No-op outside
@@ -146,7 +148,7 @@ export function createCodexSpawner(deps: SpawnDeps) {
     const { entry, spawnedAtMs, reattached } = spawnWithFullGuiClaim(claim, (allTools) => {
       const guiMcpServers = codexGuiMcpServers({ sessionId, port: PORT, groups: restrictedTo ?? mcpGroups, allTools });
       const permissionHook = wantsCodexPermissionHook(process.platform, initialPrompt !== null);
-      const args = buildCodexArgs({ resume: resumeRolloutId, model: deps.codexModel, guiMcpServers, permissionHook, networkAccess, neverAsk, writableRoots });
+      const args = buildCodexArgs({ resume: resumeRolloutId, model: deps.codexModel, guiMcpServers, permissionHook, ...grants });
       const spawnEnv = {
         binEnvVar: codexAdapter.binEnvVar,
         // The session id is what the permission hook's constant command posts under.
