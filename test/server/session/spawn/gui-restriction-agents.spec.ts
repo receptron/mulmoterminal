@@ -37,13 +37,13 @@ vi.mock("../../../../server/agents/codex/codex-session.js", async (importOrigina
   watchForCodexSession: () => new Promise(() => {}),
 }));
 
-const { hasAllGuiTools, guiGroupRestriction, rememberGuiGroupRestriction, rememberCodexRollout, whenAllToolsPersisted, ptys } =
-  await import("../../../../server/session/registry.js");
+const { hasAllGuiTools, guiGroupRestriction, rememberGuiGroupRestriction, rememberCodexRollout, ptys } = await import("../../../../server/session/registry.js");
+const { whenSessionStatePersisted } = await import("../../../../server/session/reaping/persist-drain.js");
 const { createCodexSpawner } = await import("../../../../server/session/spawn/agents/spawn-codex.js");
 const { createCopilotSpawner } = await import("../../../../server/session/spawn/agents/spawn-copilot.js");
 
 afterAll(async () => {
-  await whenAllToolsPersisted();
+  await whenSessionStatePersisted();
   if (REAL_HOME === undefined) delete process.env.HOME;
   else process.env.HOME = REAL_HOME;
   rmSync(HOME, { recursive: true, force: true });
