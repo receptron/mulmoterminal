@@ -154,7 +154,7 @@ That session becomes the **dispatcher**:
 | The line says | The dispatcher |
 |---|---|
 | its PR was **merged** | Starts the next queued issue. MulmoTerminal has already closed that implementer and its reviewer, and removed its worktree unless it held uncommitted or unpushed work. |
-| its PR was **closed** without merging | Tells you, and anything kept (a worktree with unpushed work). Starts the next one, but does not retry that issue unless you ask. |
+| its PR was **closed** without merging | Tells you, and anything kept (a worktree with uncommitted or unpushed work). Starts the next one, but does not retry that issue unless you ask. |
 | its **session ended** | Tells you, closes it with `closeIssueSession`, starts the next one. |
 | it is **waiting for the user** | Tells you which issue and which cell. It never answers for you. |
 
