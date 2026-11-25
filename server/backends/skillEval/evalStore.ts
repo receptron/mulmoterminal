@@ -72,8 +72,10 @@ async function startingFile(dir: string, entry: Dirent, relative: string): Promi
 
 async function startingFilesUnder(dir: string, prefix: string): Promise<StartingFile[]> {
   const entries = await readdir(dir, { withFileTypes: true });
-  const found = await Promise.all(entries.map((entry) => startingFile(dir, entry, prefix === "" ? entry.name : `${prefix}/${entry.name}`)));
-  return found.flat();
+  const found: StartingFile[] = [];
+  // One at a time: nothing bounds how many files a set holds, and each one read at once holds a descriptor.
+  for (const entry of entries) found.push(...(await startingFile(dir, entry, prefix === "" ? entry.name : `${prefix}/${entry.name}`)));
+  return found;
 }
 
 function parseSet(text: string, skillName: string, files: readonly StartingFile[]): EvalSetRead {
