@@ -24,6 +24,10 @@ vi.mock("../../../src/composables/skillEvalApi", () => ({
   startSkillEvalAuthoring: () => (calls.push("author"), authoring),
 }));
 vi.mock("../../../src/composables/useSpawnedChat", () => ({ placeSpawnedChat: (request: unknown) => placed.push(request) }));
+const { createDiffView } = vi.hoisted(() => ({
+  createDiffView: vi.fn<(parent: HTMLElement, original: string, current: string, options: unknown) => { destroy: () => void }>(() => ({ destroy: vi.fn() })),
+}));
+vi.mock("../../../src/components/cmDiffView", () => ({ createDiffView }));
 const SkillEvalPanel = (await import("../../../src/components/SkillEvalPanel.vue")).default;
 
 const i18n = createI18n({ legacy: false, locale: "en", messages: { en: skillsViewEn } });
@@ -80,6 +84,7 @@ const mountPanel = async () => {
 };
 
 beforeEach(() => {
+  createDiffView.mockClear();
   calls.length = 0;
   placed.length = 0;
   loads.length = 0;
@@ -247,6 +252,27 @@ describe("SkillEvalPanel", () => {
     expect(wrapper.find("[data-testid=skill-eval-adopt-notice]").text()).toContain("/b/1.md");
   });
 
+  it("shows an improvement as its change to the SKILL.md it was written from", async () => {
+    const improved = run(true, false, { id: "1795000000001-bbbbbbbb", candidateId: "1795000000001-bbbbbbbb", skillText: "better" });
+    improved.baseRunId = "1795000000000-aaaaaaaa";
+    overview = { ...base, set, runs: [improved, run(false, false, { skillText: "plain" })] };
+    const wrapper = await mountPanel();
+    expect(wrapper.find("[data-testid=skill-eval-candidate-diff]").exists()).toBe(true);
+    expect(createDiffView.mock.calls.map((call) => [call[1], call[2]])).toEqual([["plain", "better"]]);
+    expect(createDiffView.mock.calls[0]?.[3]).toMatchObject({ phrases: { "$ unchanged lines": "$ unchanged lines" } });
+    // The whole text is still there for whoever wants it.
+    expect(wrapper.find("[data-testid=skill-eval-candidate-text]").text()).toBe("better");
+  });
+
+  it("shows no change when the run it was written from is no longer listed", async () => {
+    const improved = run(true, false, { id: "1795000000001-bbbbbbbb", candidateId: "1795000000001-bbbbbbbb", skillText: "better" });
+    improved.baseRunId = "1795000000000-gonegone";
+    overview = { ...base, set, runs: [improved, run(false, false, { skillText: "plain" })] };
+    const wrapper = await mountPanel();
+    expect(wrapper.find("[data-testid=skill-eval-candidate-diff]").exists()).toBe(false);
+    expect(createDiffView).not.toHaveBeenCalled();
+    expect(wrapper.find("[data-testid=skill-eval-candidate-text]").text()).toBe("better");
+  });
   it("says the runs without the skill were copied, and leaves their cost out of what the run spent", async () => {
     const improved = run(true, false, { id: "1795000000001-bbbbbbbb", candidateId: "1795000000001-bbbbbbbb", skillText: "better", improveCostUsd: 0.3 });
     improved.attempts = improved.attempts.map((attempt) => (attempt.arm === "without" ? { ...attempt, reusedFrom: "1795000000000-aaaaaaaa" } : attempt));

@@ -255,6 +255,7 @@ async function draft(): Promise<void> {
         :summary="latestSummary"
         :baseline-summary="baselineSummary"
         :editable="overview.editable"
+        :base-text="comparedWith?.skillText ?? null"
         @adopted="onAdopted"
       />
       <SkillEvalLadder v-if="latest && latest.ladder.length > 0" :run="latest" />

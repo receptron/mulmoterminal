@@ -72,7 +72,9 @@ export const skillsViewJa = {
         compare: "スキルありの合格率: 今のスキル {before} → 改善案 {after}",
         overfit:
           "改善案は同じ課題を見て作り、同じ課題で測っています。課題に合わせただけの改善かもしれないので、採用したあとは新しい課題を足して測り直すと確かです。",
-        show: "改善案の SKILL.md を見る",
+        show: "改善案の SKILL.md を全部見る",
+        diff: "もとにした SKILL.md からの変更:",
+        folded: "変わっていない {count} 行",
         adopt: "採用する",
         adopted: "採用しました。前の SKILL.md は {backup} に残っています。",
         changed: "測ったあとに SKILL.md が変わっていたので、上書きしませんでした。",
