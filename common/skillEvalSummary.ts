@@ -74,8 +74,16 @@ function verdictOf(gap: number | null, spread: number | null, minimumGap: number
 
 const ofArm = (attempts: readonly SkillEvalAttempt[], arm: SkillEvalArm): SkillEvalAttempt[] => attempts.filter((a) => a.arm === arm);
 
-function passesEitherWay(cases: readonly SkillEvalCase[], useWith: readonly SkillEvalAttempt[], useWithout: readonly SkillEvalAttempt[]): string[] {
-  const allPass = (attempts: readonly SkillEvalAttempt[], counts: (a: SkillEvalAttempt) => boolean): boolean => attempts.length > 0 && attempts.every(counts);
+/** The no-skill attempts of an improvement are its baseline's, copied in: still that task without the skill. */
+function passesEitherWay(
+  cases: readonly SkillEvalCase[],
+  useWith: readonly SkillEvalAttempt[],
+  useWithout: readonly SkillEvalAttempt[],
+  repeats: number,
+): string[] {
+  // Every round, not only the ones that ran: a stopped run has not shown "every time" yet.
+  const allPass = (attempts: readonly SkillEvalAttempt[], counts: (a: SkillEvalAttempt) => boolean): boolean =>
+    attempts.length > 0 && attempts.length >= repeats && attempts.every(counts);
   return cases
     .filter((c) => c.kind === "use")
     .filter((c) => {
@@ -113,7 +121,7 @@ export function summarizeSkillEval(cases: readonly SkillEvalCase[], attempts: re
     gap,
     verdict: verdictOf(gap, spread, minimumGap),
     fewCases: useCases < SKILL_EVAL_FEW_CASES,
-    passesEitherWay: passesEitherWay(cases, useWith, useWithout),
+    passesEitherWay: passesEitherWay(cases, useWith, useWithout, repeats),
     avoid: avoidSummary(ofArm(attempts, "with").filter((a) => kindOf.get(a.caseId) === "avoid")),
     gradingCostUsd: sum(attempts.map((a) => a.gradingCostUsd)),
   };

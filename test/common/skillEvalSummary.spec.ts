@@ -163,5 +163,12 @@ describe("the set's plan", () => {
     ];
     expect(summarizeSkillEval(cases, attempts, 3).passesEitherWay).toEqual(["both"]);
     expect(summarizeSkillEval(cases, [], 3).passesEitherWay).toEqual([]);
+    // Stopped after two of three rounds: it has not passed every time yet.
+    const stopped = [0, 1].flatMap((round) => [attempt("both", "with", round, true), attempt("both", "without", round, true)]);
+    expect(summarizeSkillEval([useCase("both")], stopped, 3).passesEitherWay).toEqual([]);
+    expect(summarizeSkillEval([useCase("both")], stopped, 2).passesEitherWay).toEqual(["both"]);
+    // An improvement's no-skill attempts are its baseline's: still that task without the skill.
+    const improved = stopped.map((a) => (a.arm === "without" ? { ...a, reusedFrom: "1795000000000-aaaaaaaa" } : a));
+    expect(summarizeSkillEval([useCase("both")], improved, 2).passesEitherWay).toEqual(["both"]);
   });
 });
