@@ -18,9 +18,10 @@ and `terminal_reason: "api_error"`.
 - `runAttempt` throws on either. The existing worker failure path then ends the run `interrupted` with
   the message as `interruptedBy`; an interrupted run is not a baseline, and the panel already shows the
   reason.
+- The improvement writer treats `apiError` as a failure too, even when the line is not `is_error`, so an
+  edit it left behind is never measured.
 - A timeout or an exhausted budget stays a failed attempt: those are the task not finishing.
 
 ## Left out
 
 `claude` not installed (spawn failure) ends the same way as before; it was not observed here.
-The improvement writer already ends the run `interrupted` on any error.
