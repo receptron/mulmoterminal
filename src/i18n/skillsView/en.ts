@@ -53,6 +53,14 @@ export const skillsViewEn = {
       interruptedBy: "It stopped partway because something failed: {reason}",
       perCase: "Passes per task",
       avoidTag: "(should not use)",
+      next: {
+        measure: "This SKILL.md has not been measured on these tasks yet. Measure it first.",
+        improve: "There is no evidence the skill helps. Next, have an AI write an improvement and measure it.",
+        improveAgain: "The last improvement did not pass more often than the skill. Try another, or change the tasks.",
+        adopt: "The improvement passed more often. Read it below, and adopt it if it looks right.",
+        ladder: "The skill helps. Next, find out whether a cheaper model is enough for it.",
+        done: "The skill helps, and the search for the cheapest model is done; its result is below. Measure again after you change the skill or the tasks.",
+      },
       improve: {
         start: "Improve and measure",
         confirm:
