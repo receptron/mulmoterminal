@@ -110,3 +110,77 @@ export const parseRemoteHostDirsResponse = (body: unknown): RemoteHostDirs =>
 export const REMOTE_HOST_IDS_ROUTE = "/api/remote-hosts/ids";
 
 export const parseRemoteHostIds = (body: unknown): string[] => (isRecord(body) && isUnknownArray(body.ids) ? body.ids.filter(isRemoteHostId) : []);
+
+/** The Mac's channel for the remote hosts' session rows (#3506 phase 2). Separate from `sessions`
+ *  on purpose: every subscriber of that one keys rows by bare id, and some act on the row's cwd on
+ *  this machine, so a remote row there would be read as a local session. */
+export const REMOTE_SESSIONS_CHANNEL = "remote-sessions";
+
+/** A remote's `sessions` message, copied field by field: only the fields it is known to carry. */
+export interface RemoteSessionRow {
+  id: string;
+  working: boolean;
+  waiting: boolean;
+  event: string | null;
+  cwd?: string | null;
+  failed?: boolean;
+  lastPrompt?: string | null;
+  aiTitle?: string | null;
+  lastResponse?: string | null;
+  memo?: string | null;
+}
+
+/** A row from `host`, or the relay saying that host's rows must be read again (it (re)connected or dropped). */
+export type RemoteSessionRowMessage = { host: string; row: RemoteSessionRow };
+export type RemoteSessionsMessage = RemoteSessionRowMessage | { host: string; resync: true };
+
+/** The one key a client map uses for a remote session: ids are unique per host, not across hosts. */
+export const remoteSessionKey = (host: string, id: string): string => `${host}/${id}`;
+
+const OPTIONAL_TEXT_FIELDS = ["cwd", "lastPrompt", "aiTitle", "lastResponse", "memo"] as const;
+
+const isNullableText = (value: unknown): value is string | null => value === null || typeof value === "string";
+
+function optionalTextOf(body: Record<string, unknown>): Partial<Record<(typeof OPTIONAL_TEXT_FIELDS)[number], string | null>> {
+  const present = OPTIONAL_TEXT_FIELDS.filter((field) => isNullableText(body[field]));
+  return Object.fromEntries(present.map((field) => [field, body[field]]));
+}
+
+/** The row in a `sessions` message, or null when it is not one. `isValidId` is the caller's. */
+export function remoteSessionRowOf(body: unknown, isValidId: (id: string) => boolean): RemoteSessionRow | null {
+  if (!isRecord(body) || typeof body.id !== "string" || !isValidId(body.id)) return null;
+  return {
+    id: body.id,
+    working: body.working === true,
+    waiting: body.waiting === true,
+    event: typeof body.event === "string" ? body.event : null,
+    ...(typeof body.failed === "boolean" ? { failed: body.failed } : {}),
+    ...optionalTextOf(body),
+  };
+}
+
+/** What a browser reads off REMOTE_SESSIONS_CHANNEL, or null for anything else. The server built it,
+ *  so the id is only checked to be a non-empty string here. */
+export function parseRemoteSessionsMessage(data: unknown): RemoteSessionsMessage | null {
+  if (!isRecord(data) || !isRemoteHostId(data.host)) return null;
+  if (data.resync === true) return { host: data.host, resync: true };
+  const row = remoteSessionRowOf(data.row, (id) => id !== "");
+  return row ? { host: data.host, row } : null;
+}
+
+/** GET on the Mac: the current activity of a remote host's sessions, as the remote answers it. */
+export const remoteHostActivityRoute = (id: string): string => `/api/remote-hosts/${id}/activity`;
+
+export type RemoteActivity = Record<string, { working: boolean; waiting: boolean; event: string | null }>;
+
+/** The remote's `/api/activity` answer, cut down to the asked ids and the three fields. */
+export function remoteActivityOf(body: unknown, ids: readonly string[]): RemoteActivity {
+  const answer = isRecord(body) ? body : {};
+  return Object.fromEntries(
+    ids.map((id) => {
+      const entry = answer[id];
+      const row = isRecord(entry) ? entry : {};
+      return [id, { working: row.working === true, waiting: row.waiting === true, event: typeof row.event === "string" ? row.event : null }];
+    }),
+  );
+}
