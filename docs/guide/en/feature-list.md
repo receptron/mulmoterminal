@@ -4,7 +4,7 @@ nav_title: Feature list
 layout: default
 parent: English
 nav_order: 6.5
-as_of: 13.7.0
+as_of: 13.8.0
 description: "Every capability MulmoTerminal has today, one line each with the release it arrived in, grouped by area (as of 9.1.0)."
 ---
 
@@ -74,6 +74,10 @@ More: [Basics](basics.html)
 
 More: [Agents](agents.html)
 
+- The Skills list marks each evaluated skill with its verdict (helps, makes worse, no difference, no verdict, not measured), and Needs attention narrows it to the skills not helping, not measured, or used without test tasks (v13.8.0)
+- Draft test tasks starts from the user's own recent conversations that used the skill, with private details removed (v13.8.0)
+- The Does it help? panel highlights the one next step to take and says why (v13.8.0)
+- A skill improvement is shown as its change to the SKILL.md it was written from, and earlier evaluation results open to their full result with pass rates by run (v13.8.0)
 - The Skills viewer shows how many Claude conversations used each skill, and when it was last used (v13.7.0)
 - The Skills viewer's Does it help? runs a skill's test tasks with and without it, shows pass rate, cost per pass and a verdict, and keeps earlier results; the bundled mulmoterminal-skill-eval skill drafts the tasks (v13.7.0)
 - Improve and measure writes an improved SKILL.md from the latest measurement and measures it on the same tasks, and Adopt installs it with the old one kept as a backup (v13.7.0)
