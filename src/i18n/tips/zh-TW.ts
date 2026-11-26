@@ -3,7 +3,8 @@ import type { Messages } from "../messages";
 
 export const tipsZhTW: Messages["tips"] = {
   cell: {
-    remoteHost: "在 {host} 上執行。此終端機的檔案、git、面板與工具暫時無法在這裡使用。",
+    remoteHost: "在 {host} 上執行。其檔案可在檔案面板中開啟；其他面板與工具暫時無法在這裡使用。",
+    remoteBrowseFiles: "{path}：瀏覽檔案",
     remoteHostGone: "{host} 已不在 config.json 的 remoteHosts 中，因此此終端無法連線。請關閉它，或重新加入該主機後重新整理。",
     remoteTunnelDown: "無法連線至 {host}。ssh 通道（ssh -L）與 {host} 上的 MulmoTerminal 是否仍在執行？恢復後會自動重新連線。",
     running: "執行中…",

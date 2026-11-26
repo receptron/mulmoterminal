@@ -181,6 +181,14 @@ describe("a remote cell", () => {
     expect(remote.findComponent({ name: "CopyCodeBlock" }).exists()).toBe(false);
   });
 
+  it("opens its Files pane from its path, without asking this server", async () => {
+    const remote = mountCell("lx");
+    await flushPromises();
+    await remote.find('[data-testid="cell-dir"]').trigger("click");
+    expect(remote.emitted("open-files")).toHaveLength(1);
+    expect(requested.filter(mentionsCell)).toEqual([]);
+  });
+
   it("looks for send partners without its directory", async () => {
     mountCell(null);
     mountCell("lx");

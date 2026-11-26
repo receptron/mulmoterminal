@@ -26,7 +26,19 @@ export interface RemoteRoute {
   body?: "raw";
   /** The request headers forwarded besides the gateway's own; any other is dropped. */
   headers?: readonly string[];
+  /** slow: the remote may take as long as the browser waits for it (a search, a whole file index). */
+  wait?: "slow";
 }
+
+// The Files pane's routes: rooted at the cell's directory, and a `path` never leaves it.
+const browse = (method: RemoteRouteMethod, route: string, access: "read" | "write", query: readonly string[] = ["cwd", "path"]): RemoteRoute => ({
+  method,
+  path: `/api/files/browse/${route}`,
+  key: "cwd",
+  access,
+  query,
+  within: ["path"],
+});
 
 export const REMOTE_ROUTES = {
   gitStatus: { method: "GET", path: "/api/git-status", key: "cwd", access: "read", query: ["cwd", "fresh"] },
@@ -46,6 +58,22 @@ export const REMOTE_ROUTES = {
     body: "raw",
     headers: ["content-type", DROP_FILENAME_HEADER],
   },
+  filesList: browse("GET", "list", "read"),
+  filesText: browse("GET", "text", "read"),
+  filesVersion: browse("GET", "version", "read"),
+  filesHead: browse("GET", "head", "read"),
+  filesGitStatus: browse("GET", "git-status", "read"),
+  filesLines: browse("GET", "lines", "read", ["cwd", "path", "line"]),
+  filesBackups: browse("GET", "backups", "read"),
+  filesBackup: browse("GET", "backup", "read", ["cwd", "path", "id"]),
+  filesIndex: { ...browse("GET", "index", "read", ["cwd"]), wait: "slow" },
+  filesSearch: { ...browse("GET", "search", "read", ["cwd", "q", "regex", "case"]), wait: "slow" },
+  filesTrashAvailable: { method: "GET", path: "/api/files/browse/trash", key: "none", access: "read", query: [] },
+  filesWrite: browse("PUT", "write", "write"),
+  filesBankBackup: browse("PUT", "backup", "write"),
+  filesCreate: browse("POST", "create", "write"),
+  filesRename: browse("POST", "rename", "write"),
+  filesTrash: browse("POST", "trash", "write"),
 } as const satisfies Record<string, RemoteRoute>;
 
 export type RemoteRouteName = keyof typeof REMOTE_ROUTES;

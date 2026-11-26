@@ -22,6 +22,8 @@ import type { RemoteHost } from "./remoteHostsConfig.js";
 export const FORWARD_TIMEOUT_MS = 15_000;
 // A raw body is a file of up to MAX_DROP_BYTES, which the browser itself allows this long to send.
 export const RAW_FORWARD_TIMEOUT_MS = 300_000;
+// A slow route (a search, a whole index) is one the browser itself waits this long for.
+export const SLOW_FORWARD_TIMEOUT_MS = 60_000;
 export const FORWARD_RESPONSE_MAX_BYTES = 8 * 1024 * 1024;
 const REMOTE_API = /^\/remote\/[^/]+\/api\//;
 
@@ -58,19 +60,28 @@ function requestInit(req: Request, route: RemoteRoute, host: RemoteHost, signal:
   return init;
 }
 
-async function replay(req: Request, host: RemoteHost, forward: { route: RemoteRoute; path: string }, fetchImpl: typeof fetch): Promise<Answer> {
+export function timeoutFor(route: RemoteRoute): number {
+  if (route.body === "raw") return RAW_FORWARD_TIMEOUT_MS;
+  return route.wait === "slow" ? SLOW_FORWARD_TIMEOUT_MS : FORWARD_TIMEOUT_MS;
+}
+
+async function replay(req: Request, res: Response, host: RemoteHost, forward: { route: RemoteRoute; path: string }, fetchImpl: typeof fetch): Promise<Answer> {
   const url = `${host.origin}${forward.path}`;
   const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), forward.route.body === "raw" ? RAW_FORWARD_TIMEOUT_MS : FORWARD_TIMEOUT_MS);
+  const timer = setTimeout(() => abort.abort(), timeoutFor(forward.route));
+  // A browser that walked away (a search superseded by the next keystroke) stops the remote's work too.
+  res.on("close", () => {
+    if (!res.writableEnded) abort.abort();
+  });
   try {
-    const res = await fetchImpl(url, requestInit(req, forward.route, host, abort.signal));
-    if (res.status >= 300 && res.status < 400) return { status: 502, error: `${host.label} redirected ${url}` };
-    if (!(res.headers.get("content-type") ?? "").includes("application/json"))
+    const remoteRes = await fetchImpl(url, requestInit(req, forward.route, host, abort.signal));
+    if (remoteRes.status >= 300 && remoteRes.status < 400) return { status: 502, error: `${host.label} redirected ${url}` };
+    if (!(remoteRes.headers.get("content-type") ?? "").includes("application/json"))
       return { status: 502, error: `${host.label} answered ${url} with something other than JSON` };
-    const json = await readCapped(res);
+    const json = await readCapped(remoteRes);
     return json === null
       ? { status: 502, error: `${host.label} answered ${url} with more than ${FORWARD_RESPONSE_MAX_BYTES} bytes` }
-      : { status: res.status, json };
+      : { status: remoteRes.status, json };
   } catch (err) {
     return { status: 502, error: `${host.label} did not answer ${url}: ${err instanceof Error ? err.message : String(err)}` };
   } finally {
@@ -96,7 +107,8 @@ function decide(req: Request, deps: RemoteForwardDeps): Decided {
 
 async function answer(req: Request, res: Response, decided: Decided, deps: RemoteForwardDeps): Promise<void> {
   if (decided.kind === "send") return send(res, decided.answer);
-  send(res, await replay(req, decided.host, decided, deps.fetchImpl ?? fetch));
+  const replayed = await replay(req, res, decided.host, decided, deps.fetchImpl ?? fetch);
+  if (!res.destroyed) send(res, replayed);
 }
 
 /** The routes with a JSON body or none. Mounted after the JSON parser. */
