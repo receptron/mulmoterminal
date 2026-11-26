@@ -61,6 +61,22 @@ describe("parseRemoteHosts", () => {
     ].forEach((entry) => expect(reasonOf(entry)).toEqual(expect.any(String)));
   });
 
+  // The reasons reach the page; a refused url may carry a password or a token.
+  it("never repeats the refused url in its reason", () => {
+    [
+      "http://user:s3cret@127.0.0.1:1",
+      "http://127.0.0.1:1/?token=s3cret",
+      "http://127.0.0.1:1/s3cret",
+      "https://127.0.0.1:1/#s3cret",
+      plainHttp("10.0.0.1:1/s3cret"),
+      "s3cret not a url",
+    ].forEach((url) => {
+      const reason = reasonOf({ id: "a", url });
+      expect(reason, url).toBeDefined();
+      expect(reason, url).not.toContain("s3cret");
+    });
+  });
+
   it("keeps the first of a duplicate id and reports the second by its index", () => {
     const parsed = parseRemoteHosts([
       { id: "a", url: "http://127.0.0.1:1" },

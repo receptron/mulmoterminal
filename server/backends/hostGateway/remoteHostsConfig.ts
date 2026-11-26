@@ -25,18 +25,19 @@ export interface RemoteHostsConfig {
 
 const unbracketed = (hostname: string): string => (hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname);
 
+// A reason never repeats the url: it may carry a password or a token, and the entry's index names it.
 function originOf(url: unknown): { origin: string } | { reason: string } {
   if (typeof url !== "string") return { reason: "url is not a string" };
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
-    return { reason: `url is not a URL: ${url}` };
+    return { reason: "url is not a URL" };
   }
-  if (parsed.protocol !== "http:") return { reason: `url must be http:// (the local end of an ssh tunnel): ${url}` };
-  if (!isLoopbackAddress(unbracketed(parsed.hostname))) return { reason: `url must be a loopback address such as 127.0.0.1: ${url}` };
-  if (parsed.username || parsed.password) return { reason: `url must not carry credentials: ${url}` };
-  if (parsed.pathname !== "/" || parsed.search || parsed.hash) return { reason: `url must be an origin with no path: ${url}` };
+  if (parsed.protocol !== "http:") return { reason: "url must be http:// (the local end of an ssh tunnel)" };
+  if (!isLoopbackAddress(unbracketed(parsed.hostname))) return { reason: "url must be a loopback address such as 127.0.0.1" };
+  if (parsed.username || parsed.password) return { reason: "url must not carry credentials" };
+  if (parsed.pathname !== "/" || parsed.search || parsed.hash) return { reason: "url must be an origin with no path" };
   return { origin: parsed.origin };
 }
 

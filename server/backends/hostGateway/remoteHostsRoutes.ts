@@ -27,9 +27,12 @@ export function loadRemoteHosts(configFile: string): RemoteHostsConfig {
 
 export type FetchJson = (url: string, signal: AbortSignal) => Promise<unknown>;
 
-const fetchJson: FetchJson = async (url, signal) => {
-  const res = await fetch(url, { signal });
-  return res.ok ? res.json() : null;
+// A redirect would leave the loopback origin the config was checked for, so it is not followed.
+export const fetchJson: FetchJson = async (url, signal) => {
+  const probeRes = await fetch(url, { signal, redirect: "error" });
+  if (probeRes.ok) return probeRes.json();
+  await probeRes.body?.cancel();
+  return null;
 };
 
 async function probe(host: RemoteHost, localVersion: string, fetchImpl: FetchJson): Promise<RemoteHostSummary> {
