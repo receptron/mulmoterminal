@@ -12,6 +12,8 @@ import { isUnknownArray } from "../../common/isUnknownArray";
 import { jsonBody } from "../jsonBody";
 import type { WorktreeEnvValue } from "../../common/worktreeEnv";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
+import { remotePath } from "../../common/remoteHosts";
+import { dirAddressOf } from "./dirAddress";
 
 export interface OpenTarget {
   url?: string;
@@ -134,12 +136,14 @@ export function useHeaderButtons(params: Params) {
       env.value = [];
       return;
     }
-    const query = new URLSearchParams({ cwd, agent: params.agent.value });
+    // `cwd` is a directory key (dirAddress.ts): a remote one asks its host, about its own session.
+    const { host, cwd: dir } = dirAddressOf(cwd);
+    const query = new URLSearchParams({ cwd: dir, agent: params.agent.value });
     if (params.session.value) query.set("session", params.session.value);
     if (params.model?.value) query.set("model", params.model.value);
     const seq = ++requestSeq;
     try {
-      const res = await fetchWithTimeout(`/api/header?${query.toString()}`);
+      const res = await fetchWithTimeout(`${host === null ? "/api/header" : remotePath(host, "/api/header")}?${query.toString()}`);
       if (seq !== requestSeq) return;
       const data = res.ok ? await jsonBody(res) : {};
       if (seq !== requestSeq) return;

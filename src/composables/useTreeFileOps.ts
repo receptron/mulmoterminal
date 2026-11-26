@@ -5,7 +5,7 @@
 // A tab on a renamed entry stays open under the new name; a tab on a trashed one closes. The file in
 // front is saved and put down first when it is the one moving, so no buffer is left pointing at a
 // path that is gone, and it comes back up afterwards — at its new name, or its neighbour.
-import { nextTick, onMounted, ref, type Ref } from "vue";
+import { nextTick, onMounted, ref, watch, type Ref } from "vue";
 import type { FilesRowAction } from "../components/filesRowActions";
 import { browseQuery } from "../components/filesPaneApi";
 import { isUnder, renamedIn, withoutEntry, type TabStrip } from "../components/filesTabs";
@@ -21,6 +21,8 @@ export const isTreeOpAction = (action: FilesRowAction): action is TreeOpAction =
 
 export interface TreeFileOpsDeps {
   cwd: () => string | null;
+  /** The remote host the root is on; absent or null for this machine. */
+  host?: () => string | null;
   tree: Pick<FilesTree, "refresh" | "findNode" | "toggleDir">;
   tabs: Pick<FilesTabs, "strip" | "current" | "restore" | "open">;
   file: Pick<OpenFile, "close" | "fileError">;
@@ -50,8 +52,11 @@ type Ctx = TreeFileOpsDeps & {
   ask: NonNullable<TreeFileOpsDeps["ask"]>;
   confirm: NonNullable<TreeFileOpsDeps["confirm"]>;
   root: string | null;
+  rootHost: string | null;
   moved: () => boolean;
 };
+
+const hostOf = (deps: TreeFileOpsDeps): string | null => deps.host?.() ?? null;
 
 /** Where an operation leaves the keyboard, or null when the pane moved to another folder while the
  *  request was out — nothing of this one is applied to that folder's tree or tabs then. */
@@ -65,7 +70,7 @@ function report(ctx: Ctx, outcome: TreeOpOutcome): void {
 async function create(ctx: Ctx, action: { dirRel: string; rowRel: string }, kind: "file" | "dir"): Promise<Landing> {
   const name = ctx.ask(ctx.t(kind === "file" ? "fileOps.newFile" : "fileOps.newFolder"), "")?.trim();
   if (!name) return action.rowRel;
-  const outcome = await treeOp("create", browseQuery(ctx.root, action.dirRel), { name, kind });
+  const outcome = await treeOp(ctx.rootHost, "create", browseQuery(ctx.root, action.dirRel), { name, kind });
   if (ctx.moved()) return null;
   if (!outcome.ok || !outcome.path) {
     report(ctx, outcome);
@@ -119,7 +124,7 @@ async function moveEntry(ctx: Ctx, pathRel: string, move: EntryMove): Promise<La
   // The save that put the front file down is a round trip: the pane may have moved on meanwhile, and
   // the same relative path in another folder is another entry.
   if (ctx.moved()) return null;
-  const outcome = await treeOp(move.route, browseQuery(ctx.root, pathRel), move.body);
+  const outcome = await treeOp(ctx.rootHost, move.route, browseQuery(ctx.root, pathRel), move.body);
   if (ctx.moved()) return null;
   await ctx.tree.refresh(parentOf(pathRel));
   if (ctx.moved()) return null;
@@ -152,9 +157,18 @@ function landingOf(ctx: Ctx, action: TreeOpAction): Promise<Landing> {
 
 export function useTreeFileOps(deps: TreeFileOpsDeps): TreeFileOps {
   const trash = ref(false);
-  onMounted(async () => {
-    trash.value = await trashAvailable();
-  });
+  // Asked again when the pane moves to another machine's folder: the Trash is that machine's.
+  let trashAsk = 0;
+  async function askTrash(): Promise<void> {
+    const ask = ++trashAsk;
+    const available = await trashAvailable(hostOf(deps));
+    if (ask === trashAsk) trash.value = available;
+  }
+  onMounted(() => void askTrash());
+  watch(
+    () => hostOf(deps),
+    () => void askTrash(),
+  );
   const dialogs = {
     ask: deps.ask ?? ((message: string, value: string) => window.prompt(message, value)),
     confirm: deps.confirm ?? ((message: string) => window.confirm(message)),
@@ -162,7 +176,8 @@ export function useTreeFileOps(deps: TreeFileOpsDeps): TreeFileOps {
 
   async function run(action: TreeOpAction): Promise<void> {
     const root = deps.cwd();
-    const ctx: Ctx = { ...deps, ...dialogs, root, moved: () => deps.cwd() !== root };
+    const rootHost = hostOf(deps);
+    const ctx: Ctx = { ...deps, ...dialogs, root, rootHost, moved: () => deps.cwd() !== root || hostOf(deps) !== rootHost };
     const landing = await landingOf(ctx, action);
     if (landing === null) return;
     deps.changed(action);

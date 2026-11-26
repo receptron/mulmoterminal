@@ -2,7 +2,7 @@
 // buffer through the same change marks HEAD uses, and restored as an edit the reader then saves.
 import { computed, ref, watch, type ComputedRef, type Ref, type ShallowRef } from "vue";
 import type { CmEditor } from "../components/cmEditor";
-import { bankText, browseQuery } from "../components/filesPaneApi";
+import { bankText, browseQuery, browseUrl } from "../components/filesPaneApi";
 import { backupEntriesFrom, type BackupEntry } from "../../common/fileBackups";
 import { isRecord } from "../../common/isRecord";
 import { jsonBody } from "../jsonBody";
@@ -11,6 +11,8 @@ import type { FileHeadText } from "./useFileHeadText";
 
 export interface FileHistoryDeps {
   cwd: () => string | null;
+  /** The remote host the root is on; absent or null for this machine. */
+  host?: () => string | null;
   openPath: Ref<string | null>;
   editor: ShallowRef<CmEditor | null>;
   head: FileHeadText;
@@ -47,9 +49,9 @@ export interface FileHistory {
 export const backupTextFrom = (body: unknown): string | null => (isRecord(body) && typeof body.text === "string" ? body.text : null);
 
 /** The file's backups, newest first, or null when they could not be read. */
-async function fetchBackups(query: string): Promise<BackupEntry[] | null> {
+async function fetchBackups(host: string | null, query: string): Promise<BackupEntry[] | null> {
   try {
-    const res = await fetchWithTimeout(`/api/files/browse/backups?${query}`);
+    const res = await fetchWithTimeout(browseUrl(host, "backups", query));
     return res.ok ? backupEntriesFrom(await jsonBody(res)) : null;
   } catch {
     return null;
@@ -57,9 +59,9 @@ async function fetchBackups(query: string): Promise<BackupEntry[] | null> {
 }
 
 /** One backup's text, or null when it could not be read. */
-async function fetchBackupText(query: string, id: string): Promise<string | null> {
+async function fetchBackupText(host: string | null, query: string, id: string): Promise<string | null> {
   try {
-    const res = await fetchWithTimeout(`/api/files/browse/backup?${query}&id=${encodeURIComponent(id)}`);
+    const res = await fetchWithTimeout(`${browseUrl(host, "backup", query)}&id=${encodeURIComponent(id)}`);
     return res.ok ? backupTextFrom(await jsonBody(res)) : null;
   } catch {
     return null;
@@ -80,7 +82,7 @@ async function replaceBuffer(deps: FileHistoryDeps, pathRel: string, query: stri
   if (!editor || !stillHere()) return false;
   const current = editor.getDoc();
   if (sameText(current, text)) return true;
-  if (deps.dirty.value && !(await bankText(query, current))) return false;
+  if (deps.dirty.value && !(await bankText(deps.host?.() ?? null, query, current))) return false;
   // Keys typed during the bank are not in the bank: stop rather than replace them.
   if (!stillHere() || editor.getDoc() !== current) return false;
   editor.replaceDoc(text);
@@ -123,7 +125,7 @@ export function useFileHistory(deps: FileHistoryDeps): FileHistory {
     failed.value = false;
     const pathRel = deps.openPath.value;
     if (!open.value || !pathRel) return;
-    const listed = await fetchBackups(query(pathRel));
+    const listed = await fetchBackups(deps.host?.() ?? null, query(pathRel));
     if (deps.openPath.value !== pathRel) return;
     entries.value = listed ?? [];
     failed.value = listed === null;
@@ -135,7 +137,7 @@ export function useFileHistory(deps: FileHistoryDeps): FileHistory {
     if (comparing.value?.entry.id === entry.id) return comparing.value.text;
     const pathRel = deps.openPath.value;
     if (!pathRel) return null;
-    const text = await fetchBackupText(query(pathRel), entry.id);
+    const text = await fetchBackupText(deps.host?.() ?? null, query(pathRel), entry.id);
     if (deps.openPath.value !== pathRel) return null;
     failed.value = text === null;
     return text;

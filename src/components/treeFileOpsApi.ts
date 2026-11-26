@@ -2,13 +2,15 @@
 // has, or the server's own words for why not.
 import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
+import { browseUrl } from "./filesPaneApi";
+import { pathOnHost } from "./remoteCell";
 
 export type TreeOpRoute = "create" | "rename" | "trash";
 export type TreeOpOutcome = { ok: true; path: string | null } | { ok: false; message: string };
 
-export async function treeOp(route: TreeOpRoute, query: string, body: Record<string, unknown>): Promise<TreeOpOutcome> {
+export async function treeOp(host: string | null, route: TreeOpRoute, query: string, body: Record<string, unknown>): Promise<TreeOpOutcome> {
   try {
-    const res = await fetchWithTimeout(`/api/files/browse/${route}?${query}`, {
+    const res = await fetchWithTimeout(browseUrl(host, route, query), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -21,10 +23,11 @@ export async function treeOp(route: TreeOpRoute, query: string, body: Record<str
   }
 }
 
-/** Whether this machine has a Trash the server knows. Where it does not, the tree offers no delete. */
-export async function trashAvailable(): Promise<boolean> {
+/** Whether the pane's machine (`host`, or this one) has a Trash its server knows. Where it does not,
+ *  the tree offers no delete. */
+export async function trashAvailable(host: string | null): Promise<boolean> {
   try {
-    const data = await jsonBody(await fetchWithTimeout("/api/files/browse/trash"));
+    const data = await jsonBody(await fetchWithTimeout(pathOnHost(host, "/api/files/browse/trash")));
     return data.available === true;
   } catch {
     return false;

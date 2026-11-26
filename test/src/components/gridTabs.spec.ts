@@ -692,6 +692,20 @@ describe("runCommand (script command cells)", () => {
   it("counts a command cell as running (toward the cap)", () => {
     expect(runningCount([cell(0, U(0)), cmdCell(1), cell(2)])).toBe(2);
   });
+  // #3506: the launch form that offered the script is this machine's, so it runs here.
+  it("runs on this machine even in a cell that was on a remote host", () => {
+    const s = runCommand(make([{ ...cell(0), remoteHost: "lx" }]), 0, CMD);
+    expect(s.cells[0].command).toEqual(CMD);
+    expect("remoteHost" in s.cells[0]).toBe(false);
+  });
+  it("runs a running cell's script on that cell's host, and here for a local one", () => {
+    const remote = runScriptInNewCell(make([{ ...cell(0, U(0)), remoteHost: "lx" }]), 0, CMD);
+    expect(remote.cells[1]).toMatchObject({ command: CMD, remoteHost: "lx" });
+    const local = runScriptInNewCell(make([cell(0, U(0))]), 0, CMD);
+    expect("remoteHost" in (local.cells[1] ?? {})).toBe(false);
+    const noOrigin = runScriptInNewCell(make([{ ...cell(0, U(0)), remoteHost: "lx" }]), -1, CMD);
+    expect("remoteHost" in (noOrigin.cells[1] ?? {})).toBe(false);
+  });
   it("switchPage keeps a trailing command cell (only abandons an empty launcher)", () => {
     const after = switchPage(make([...running(9), cmdCell(9)], { page: 1 }), 0);
     expect(after.cells).toHaveLength(10);

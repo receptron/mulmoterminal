@@ -8,7 +8,7 @@
 import { ref, type Ref } from "vue";
 import { isFileGitState, type FileGitState } from "../../common/fileGitStatus";
 import { isRecord } from "../../common/isRecord";
-import { browseQuery } from "../components/filesPaneApi";
+import { browseQuery, browseUrl } from "../components/filesPaneApi";
 import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import { EXTERNAL_CHECK_MS } from "./externalFileChanges";
@@ -28,7 +28,7 @@ export function gitFilesFrom(body: unknown): Record<string, FileGitState> {
   return Object.fromEntries(Object.entries(body.files).filter((entry): entry is [string, FileGitState] => isFileGitState(entry[1])));
 }
 
-export function useFilesGitStatus(cwd: () => string | null): FilesGitStatus {
+export function useFilesGitStatus(cwd: () => string | null, host: () => string | null = () => null): FilesGitStatus {
   const files = ref<Record<string, FileGitState>>({});
   // Which read is current: a slow answer for the root being left must not land on the new one.
   let readId = 0;
@@ -36,7 +36,7 @@ export function useFilesGitStatus(cwd: () => string | null): FilesGitStatus {
   async function refresh(): Promise<void> {
     const id = ++readId;
     try {
-      const res = await fetchWithTimeout(`/api/files/browse/git-status?${browseQuery(cwd(), "")}`);
+      const res = await fetchWithTimeout(browseUrl(host(), "git-status", browseQuery(cwd(), "")));
       const body = res.ok ? await jsonBody(res) : null;
       if (id === readId) files.value = gitFilesFrom(body);
     } catch {
