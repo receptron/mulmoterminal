@@ -63,8 +63,29 @@ describe("conversationMove", () => {
     });
   });
 
+  // ← moves the same conversation to a forked process under a new id (#3538).
+  describe("fork", () => {
+    it("follows the forked id", () => {
+      expect(conversationMove(input({ source: "fork" }))).toBe("follow");
+    });
+
+    // A second ← forks again from the successor.
+    it("follows again when it forks on from the recorded successor", () => {
+      expect(conversationMove(input({ source: "fork", claudeId: PICKED, marked: true, recordedSuccessor: SUCCESSOR }))).toBe("follow");
+    });
+
+    it.each([
+      ["no usable id", input({ source: "fork", claudeId: null })],
+      ["an empty id", input({ source: "fork", claudeId: "" })],
+      ["our own id", input({ source: "fork", claudeId: OWN })],
+      ["the recorded successor", input({ source: "fork", claudeId: SUCCESSOR, marked: true, recordedSuccessor: SUCCESSOR })],
+    ])("does nothing for %s", (_label, given) => {
+      expect(conversationMove(given)).toBe("none");
+    });
+  });
+
   // `/compact` keeps both the id and the file; anything else is not a move we know of.
-  it.each([["compact"], ["startup"], [undefined], [null], [""], ["CLEAR"], ["Resume"], [42], [{ source: "clear" }], [["clear"]]])(
+  it.each([["compact"], ["startup"], ["Fork"], [undefined], [null], [""], ["CLEAR"], ["Resume"], [42], [{ source: "clear" }], [["clear"]]])(
     "does nothing on source %j",
     (source) => {
       expect(conversationMove(input({ source }))).toBe("none");

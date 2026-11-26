@@ -29,6 +29,7 @@ import { claudeSessionIds, lastHookEvent, lastPrompts, lastResponses, ptys } fro
 import {
   clearedClaudeIdOf,
   clearedTranscripts,
+  followForkedTranscript,
   forgetClearedTranscript,
   markTranscriptCleared,
   transcriptIdOf,
@@ -240,6 +241,8 @@ async function applyConversationMove(deps: HookDeps, sessionId: string, body: Re
     marked: clearedTranscripts.has(sessionId),
   });
   if (move === "mark") return clearHeaderPrompt(deps, sessionId, claudeId, cwd);
+  // The same conversation under another id: the header and title still describe it (#3538).
+  if (move === "follow" && claudeId) return followForkedTranscript(sessionId, cwd, claudeId);
   if (move === "unmark") return returnToOwnConversation(deps, sessionId, cwd);
 }
 
