@@ -489,8 +489,8 @@ function buildTerminal(swallowedMouseModes: Set<number>, font: TerminalFont): Te
 
 // The wiring that needs the connection itself, so it is re-applied to every terminal a slot owns.
 function wireTerminalToConn(term: Terminal, c: Conn): void {
-  // A path a remote terminal prints names a file on that machine; opening it here would show this one's.
-  if (!isRemoteHost(c.target.remoteHost)) registerFilePathLinks(term, { cwd: () => c.knownCwd, session: () => c.knownSessionId });
+  // A path a remote terminal prints names a file on that machine, which only its Files pane reads.
+  registerFilePathLinks(term, { cwd: () => c.knownCwd, session: () => c.knownSessionId, host: isRemoteHost(c.target.remoteHost) ? c.target.remoteHost : null });
   wireTerminalInput(term, c);
   if (c.theme) term.options.theme = c.theme;
 }

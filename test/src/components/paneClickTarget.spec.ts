@@ -20,10 +20,15 @@ describe("paneCanShowClick", () => {
     expect(paneCanShowClick(state({ paneCwd: null }), CWD)).toBe(true);
   });
 
-  // #3506. The same path on a remote host is another directory.
-  it("declines while the pane is rooted for a remote host", () => {
+  // #3506. The same path on another machine is another directory: a click is taken only by a pane
+  // rooted on the machine the clicked terminal runs on.
+  it("takes a click only from the machine the pane is rooted on", () => {
     expect(paneCanShowClick(state({ paneHost: "lx" }), CWD)).toBe(false);
     expect(paneCanShowClick(state({ paneHost: null }), CWD)).toBe(true);
+    expect(paneCanShowClick(state({ paneHost: "lx" }), CWD, "lx")).toBe(true);
+    expect(paneCanShowClick(state({ paneHost: "lx" }), CWD, "other")).toBe(false);
+    expect(paneCanShowClick(state({ paneHost: null }), CWD, "lx")).toBe(false);
+    expect(paneCanShowClick(state(), CWD, "lx")).toBe(false);
   });
 
   // Nothing enlarged and no pane beside the tiles: a click must not open one there (#3027).
@@ -59,6 +64,14 @@ describe("paneToOpenBeside", () => {
 
   it("names the clicked cell on the tiled grid", () => {
     expect(paneToOpenBeside(state(), from, CWD)).toBe(7);
+  });
+
+  // #3506. A cell answers only for paths read on its own machine.
+  it("names the clicked cell only when it runs on the machine the path was printed on", () => {
+    expect(paneToOpenBeside(state(), { ...from, remoteHost: "lx" }, CWD, "lx")).toBe(7);
+    expect(paneToOpenBeside(state(), { ...from, remoteHost: "lx" }, CWD)).toBeNull();
+    expect(paneToOpenBeside(state(), from, CWD, "lx")).toBeNull();
+    expect(paneToOpenBeside(state(), { ...from, remoteHost: "lx" }, CWD, "other")).toBeNull();
   });
 
   // Beside an enlarged cell the pane is the click's first stop already (paneCanShowClick), and a

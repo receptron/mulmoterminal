@@ -1266,9 +1266,16 @@ watch(
 // The pane's SECOND entrance (#910): a file path clicked in terminal output, offered here
 // before it falls back to a new tab or the full-screen view. Whether this grid can show it is
 // `paneCanShowClick`; all that is left here is doing it.
-function openClickedPath(cwd: string, pathRel: string, location: FileLocation | undefined, newTab: boolean, session: string | null): boolean {
+function openClickedPath(
+  cwd: string,
+  pathRel: string,
+  location: FileLocation | undefined,
+  newTab: boolean,
+  session: string | null,
+  host: string | null,
+): boolean {
   // On the tiled grid the click opens the pane beside its own cell (#3238), as that cell's menu would.
-  const beside = paneToOpenBeside({ zoomed: zoomed.value, fileLinkOpensPane: isFileLinkOpensPaneEnabled() }, cellBySession(session), cwd);
+  const beside = paneToOpenBeside({ zoomed: zoomed.value, fileLinkOpensPane: isFileLinkOpensPaneEnabled() }, cellBySession(session), cwd, host);
   if (beside !== null) {
     void showClickedPathBeside(beside, pathRel, location, newTab);
     return true;
@@ -1279,7 +1286,7 @@ function openClickedPath(cwd: string, pathRel: string, location: FileLocation | 
     paneCwd: paneCwd.value,
     paneHost: paneHost.value,
   };
-  if (!paneCanShowClick(state, cwd)) return false;
+  if (!paneCanShowClick(state, cwd, host)) return false;
   void showClickedPath(pathRel, location, newTab);
   return true;
 }
