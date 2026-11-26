@@ -3,13 +3,15 @@
 // or two until the new one arrived — and read again when asked.
 import { ref, watch, type Ref, type ShallowRef } from "vue";
 import type { CmEditor } from "../components/cmEditor";
-import { browseQuery } from "../components/filesPaneApi";
+import { browseQuery, browseUrl } from "../components/filesPaneApi";
 import { isRecord } from "../../common/isRecord";
 import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 
 export interface FileHeadTextDeps {
   cwd: () => string | null;
+  /** The remote host the root is on; absent or null for this machine. */
+  host?: () => string | null;
   openPath: Ref<string | null>;
   /** Set for a file that is not text; it has nothing to mark. */
   unpreviewable: Ref<string | null>;
@@ -58,7 +60,7 @@ export function useFileHeadText(deps: FileHeadTextDeps): FileHeadText {
     const pathRel = deps.openPath.value;
     if (!pathRel || deps.unpreviewable.value) return apply(null);
     try {
-      const res = await fetchWithTimeout(`/api/files/browse/head?${browseQuery(deps.cwd(), pathRel)}`);
+      const res = await fetchWithTimeout(browseUrl(deps.host?.() ?? null, "head", browseQuery(deps.cwd(), pathRel)));
       const text = res.ok ? headTextFrom(await jsonBody(res)) : null;
       if (id === readId && deps.openPath.value === pathRel) apply(text);
     } catch {

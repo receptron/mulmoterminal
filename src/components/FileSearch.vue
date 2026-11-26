@@ -27,6 +27,7 @@ import { isUnknownArray } from "../../common/isUnknownArray";
 import { isRecord } from "../../common/isRecord";
 import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
+import { browseUrl } from "./filesPaneApi";
 import { useI18n } from "vue-i18n";
 import type { FilesPanelSeed } from "../composables/filesPanelSeed";
 
@@ -38,6 +39,8 @@ const DEBOUNCE_MS = 180;
 
 const props = defineProps<{
   cwd: string | null;
+  /** The remote host the root is on; absent or null for this machine. */
+  host?: string | null;
   /** The file open in the editor and its CURRENT text, when it has unsaved edits. Null when nothing
    *  is dirty — then the disk answer is complete on its own. */
   buffer: { path: string; text: string } | null;
@@ -92,7 +95,7 @@ const selected = computed((): SelectedResult | null => {
   return row ? { path: row.match.path, line: row.match.line } : null;
 });
 
-const context = useSearchContext({ cwd: toRef(props, "cwd"), buffer: toRef(props, "buffer"), selected });
+const context = useSearchContext({ cwd: toRef(props, "cwd"), host: () => props.host ?? null, buffer: toRef(props, "buffer"), selected });
 
 /** The lines around the selected match, split so the row can keep drawing the matched line itself.
  *  Null until the read lands, which is why the block appears a moment after the selection moves. */
@@ -132,7 +135,7 @@ async function runSearch(): Promise<void> {
     if (caseSensitive.value) params.set("case", "1");
     // NOT the default deadline: the route shells out to `git grep`, whose own cap on the server is
     // 10s. With the default the browser would give up first on a large repository, every time.
-    const res = await fetchWithTimeout(`/api/files/browse/search?${params.toString()}`, { signal: abort.signal }, SLOW_COMMAND_TIMEOUT_MS);
+    const res = await fetchWithTimeout(browseUrl(props.host ?? null, "search", params.toString()), { signal: abort.signal }, SLOW_COMMAND_TIMEOUT_MS);
     const data = await jsonBody(res);
     if (seed !== latest) return;
     if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : `HTTP ${res.status}`);

@@ -4,6 +4,7 @@
 // never seen, so the call reads, writes or deletes the wrong thing. Until those features are routed
 // to the remote, they are withheld here.
 import type { CellAction } from "../../common/headerActions";
+import type { RightPane } from "./gridCell";
 import { remoteHostSessionRoute, remotePath, remoteSessionKey } from "../../common/remoteHosts";
 
 export const isRemoteHost = (host: string | null | undefined): host is string => typeof host === "string" && host.length > 0;
@@ -24,19 +25,19 @@ const ON_REMOTE_CELL: Record<CellAction, boolean> = {
   "terminal-voice": true,
   "terminal-new-here": false,
   "terminal-new-adjacent": false,
-  "terminal-restart": false,
+  "terminal-restart": true,
   "terminal-timeline": false,
   "terminal-talk": false,
   "terminal-copy-code": false,
   "terminal-insert-path": false,
   "terminal-reveal": false,
   "terminal-diff": false,
-  "terminal-note": false,
+  "terminal-note": true,
   "terminal-send-turn": false,
   "terminal-send-since": false,
   "terminal-bring-turn": false,
   "terminal-bring-since": false,
-  "pane-files": false,
+  "pane-files": true,
   "pane-prompts": false,
   "pane-transcript": false,
   "pane-tools": false,
@@ -46,10 +47,24 @@ const ON_REMOTE_CELL: Record<CellAction, boolean> = {
 
 export const cellActionAllowed = (host: string | null | undefined, action: CellAction): boolean => !isRemoteHost(host) || ON_REMOTE_CELL[action];
 
-/** A terminal endpoint path as this browser reaches it: through the gateway for a remote cell. */
-export const terminalPathFor = (host: string | null | undefined, path: string): string => (isRemoteHost(host) ? remotePath(host, path) : path);
+// The panes a remote cell opens: its files, read and written on its host. Every other pane reads
+// this machine's copy of a session or its tools.
+const REMOTE_CELL_PANES: readonly RightPane[] = ["files"];
+
+export const paneAllowed = (host: string | null | undefined, pane: RightPane): boolean => !isRemoteHost(host) || REMOTE_CELL_PANES.includes(pane);
+
+/** cellActionAllowed for the cell `uid` names; no cell (nothing focused) acts on this machine's defaults. */
+export const actionAllowedOn = (cells: readonly { uid: number; remoteHost?: string | undefined }[], uid: number | null, action: CellAction): boolean =>
+  cellActionAllowed(uid === null ? undefined : cells.find((cell) => cell.uid === uid)?.remoteHost, action);
+
+/** An endpoint path as this browser reaches it: through the gateway for a remote cell. */
+export const pathOnHost = (host: string | null | undefined, path: string): string => (isRemoteHost(host) ? remotePath(host, path) : path);
 
 export const REMOTE_CELL_DECLINE_EN = "This terminal runs on another machine, so that is not available here yet.";
+
+/** A write to one session: this server's route, or the gateway's for a remote cell. */
+export const sessionWritePath = (host: string | null | undefined, sessionId: string, action: "memo" | "terminate" | "drop"): string =>
+  pathOnHost(host, `/api/session/${encodeURIComponent(sessionId)}/${action}`);
 
 /** A remote cell's session, as the remote's rows name it. */
 export interface RemoteCellSession {
