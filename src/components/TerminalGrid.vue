@@ -2149,7 +2149,13 @@ function onRosterDragLeave(event: DragEvent) {
         :to="paneTargetFor(cell) ?? zoomMain"
         :disabled="placementOf(cell) === 'tile'"
       >
-        <CommandCell v-if="cell.command" v-bind="gridCellProps(cell)" :command="cell.command" v-on="gridCellEvents(cell)" />
+        <CommandCell
+          v-if="cell.command"
+          v-bind="gridCellProps(cell)"
+          :command="cell.command"
+          :remote-host="cell.remoteHost ?? null"
+          v-on="gridCellEvents(cell)"
+        />
         <LauncherCell
           v-else-if="cell.launcher"
           :uid="cell.uid"

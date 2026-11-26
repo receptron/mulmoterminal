@@ -26,6 +26,9 @@ export const REMOTE_ROUTES = {
   gitStatus: { method: "GET", path: "/api/git-status", key: "cwd", access: "read", query: ["cwd", "fresh"] },
   dirConfig: { method: "GET", path: "/api/dir-config", key: "cwd", access: "read", query: ["cwd"] },
   prPhase: { method: "GET", path: "/api/pr-phase", key: "cwd", access: "read", query: ["cwd"] },
+  header: { method: "GET", path: "/api/header", key: "cwd", access: "read", query: ["cwd", "agent", "session", "model"] },
+  scripts: { method: "GET", path: "/api/scripts", key: "cwd", access: "read", query: ["cwd"] },
+  skills: { method: "GET", path: "/api/skills", key: "cwd", access: "read", query: ["cwd"] },
 } as const satisfies Record<string, RemoteRoute>;
 
 export type RemoteRouteName = keyof typeof REMOTE_ROUTES;
