@@ -25,6 +25,7 @@ import {
 import { runCompletionHook } from "../session/activity/completion-hooks.js";
 import { messageOf } from "../errors.js";
 import { headerHookEffect } from "../session/activity/header-hook.js";
+import { speaksForConversation } from "../session/activity/conversation-hook.js";
 import { claudeSessionIds, lastHookEvent, lastPrompts, lastResponses, ptys } from "../session/registry.js";
 import {
   clearedClaudeIdOf,
@@ -178,8 +179,9 @@ async function trackPromptForHeader(sessionId: string, prompt: string, cwd: stri
 
 /** Remember the id claude reports for ITSELF, when the body names a usable one. It is what lets
  *  the prompts pane keep reading a session whose id claude has re-minted — see registry.ts. */
-function rememberClaudeSessionId(sessionId: string, bodyValue: unknown): void {
-  const claudeId = claudeOwnSessionId(bodyValue, (id) => SESSION_ID_RE.test(id));
+function rememberClaudeSessionId(sessionId: string, event: string, body: Record<string, unknown>): void {
+  if (!speaksForConversation(event, body.source)) return;
+  const claudeId = claudeOwnSessionId(body.session_id, (id) => SESSION_ID_RE.test(id));
   if (claudeId) claudeSessionIds.set(sessionId, claudeId);
 }
 
@@ -363,10 +365,10 @@ async function handleHookRequest(deps: HookDeps, req: Request, res: Response) {
     await applyHeaderHooks(deps, sessionId, event, body, cwd);
     // AFTER the header hooks, so a `/clear` empties the chain first and the id this very hook
     // carries — claude's new one — is the first of the new conversation rather than the last of
-    // the ended one. Off EVERY hook, not just a prompt: the chain lives in memory, so the sooner
-    // after a restart it is re-learned the shorter the window in which a reissued id reads as
-    // ours (#1749).
-    rememberClaudeSessionId(sessionId, body.session_id);
+    // the ended one. Off every hook that speaks for the conversation, not just a prompt: the chain
+    // lives in memory, so the sooner after a restart it is re-learned the shorter the window in which
+    // a reissued id reads as ours (#1749).
+    rememberClaudeSessionId(sessionId, event, body);
     // Before the activity publish below, so the row it mirrors to the phone already carries this
     // hook's phase (a turn's first Edit must read as "editing" in the same push, not the next one).
     // Live sessions only: a tracked turn is reclaimed by reap, which itself does nothing without a
