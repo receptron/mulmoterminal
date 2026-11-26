@@ -85,6 +85,28 @@ describe("the hook route remembers claude's own session id", () => {
     expect(claudeSessionIds.get(OURS)).toBe(REISSUED);
   });
 
+  // Claude Code's pre-warmed background spare inherits the cell's --settings and posts this under an
+  // id of its own; on ← it arrived just before the fork (#3544).
+  it("keeps the id it has when a background spare starts up", async () => {
+    await postHook({ hook_event_name: "Stop", session_id: REISSUED });
+    await postHook({ hook_event_name: "SessionStart", source: "startup", session_id: THIRD });
+    expect(claudeSessionIds.get(OURS)).toBe(REISSUED);
+    await postHook({ hook_event_name: "SessionStart", source: "fork", session_id: THIRD });
+    expect(claudeSessionIds.get(OURS)).toBe(THIRD);
+  });
+
+  // Every process ends with one, in no fixed order, and the ended one is not where the cell goes on.
+  it("keeps the id it has when a process ends", async () => {
+    await postHook({ hook_event_name: "Stop", session_id: REISSUED });
+    await postHook({ hook_event_name: "SessionEnd", reason: "other", session_id: THIRD });
+    expect(claudeSessionIds.get(OURS)).toBe(REISSUED);
+  });
+
+  it("records no id from a SessionEnd that arrives after the mapping was dropped", async () => {
+    await postHook({ hook_event_name: "SessionEnd", reason: "other", session_id: REISSUED });
+    expect(claudeSessionIds.has(OURS)).toBe(false);
+  });
+
   it("records nothing for a body that names no usable id", async () => {
     await postHook({ hook_event_name: "Stop" });
     expect(claudeSessionIds.has(OURS)).toBe(false);
