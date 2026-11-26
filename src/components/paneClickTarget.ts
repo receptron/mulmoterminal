@@ -5,6 +5,8 @@
 // Saying no costs the user nothing: the click keeps the route it had before (a new tab, or
 // the full-screen Files view), so these can be strict.
 
+import { dirPathKey } from "../../common/dirPathKey";
+
 export interface PaneClickState {
   /** Is there room for the pane on screen? Always beside an enlarged cell; on the tiled grid only
    *  while a pane is already up beside the tiles (#3027) — a click must not open one there. */
@@ -15,16 +17,26 @@ export interface PaneClickState {
    *  trails `paneCellCwd` when a re-root could not be saved out of, and a path relative to
    *  that cell would then resolve against the directory the pane stayed on. */
   paneCwd: string | null;
+  /** The remote host of the cell the pane is rooted for (#3506), absent or null for this machine.
+   *  It follows that cell whether or not the Files pane is the one open. */
+  paneHost?: string | null;
 }
 
 /** Can a click from the session running in `cwd` be shown in the pane right now? */
 export function paneCanShowClick(state: PaneClickState, cwd: string): boolean {
   if (!state.roomForPane) return false;
+  // A clicked path is this machine's, and the same path on a remote host is another directory.
+  if (state.paneHost) return false;
   // Every cell stays mounted while one is enlarged (the filmstrip), and every tile is on screen
   // beside a tiled pane, so a click can come from a cell the pane is not about.
   if (state.paneCellCwd !== cwd) return false;
   return state.paneCwd === null || state.paneCwd === cwd;
 }
+
+/** Whether the pane is rooted at this machine's `cwd`, which is where an agent's file is shown (#3022):
+ *  the same path on a remote host is another directory (#3506). */
+export const paneRootedHere = (pane: { host: string | null; cwd: string | null }, cwd: string): boolean =>
+  pane.host === null && dirPathKey(pane.cwd ?? "") === dirPathKey(cwd);
 
 export interface TiledClickState {
   /** Beside an enlarged cell the pane is the click's first stop already; this rule is the tiled grid's. */
