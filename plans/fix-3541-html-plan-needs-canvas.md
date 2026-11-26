@@ -9,7 +9,7 @@ never reached the pane, and the user's Send from that browser never reached the 
 ## Change
 
 `server/skills/mulmoterminal-html-plan/SKILL.md` gets a step 0: check for `presentHtml` first; without
-it, stop and tell the user to switch on Canvas for the folder and restart the cell. It also names the
+it, stop and tell the user to switch on Canvas for the folder and use the cell menu's "Restart the agent" (reopening the cell reattaches to the agent that lacks the tool). It also names the
 workarounds (calling `/api/mcp/…`, writing a file, opening a browser) as not to be tried, since none of
 them delivers the Send back.
 
