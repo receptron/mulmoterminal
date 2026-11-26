@@ -14,7 +14,7 @@ import { readString } from "../../../common/readString.js";
 import type { PromptEntry, PromptWindow } from "../../../common/promptHistory.js";
 import { codexUserTurn, isDoubleWrite, type CodexUserTurn } from "../../agents/codex/codex-user-turn.js";
 import { turnOpeningPrompt } from "./transcript.js";
-import { emptyTurnBoundary } from "./turn-boundary.js";
+import { emptyTurnBoundary, type TurnBoundaryState } from "./turn-boundary.js";
 
 /** Enough to recognise a prompt again, which is what this is for. Deliberately far above
  *  LAST_PROMPT_CAP (200): that one keeps a header to one line, this one is read back. */
@@ -209,8 +209,11 @@ export function codexPrompts(records: Record<string, unknown>[], limit: number =
  *  silently empty. Worse than the real thing by construction (it is missing the interruptions and
  *  carries injected text that `userPromptText` does not recognise), which is why it is the
  *  fallback and not the source. */
-export function transcriptPrompts(records: Record<string, unknown>[], limit: number = PROMPT_HISTORY_MAX): PromptEntry[] {
-  const boundary = emptyTurnBoundary();
+export function transcriptPrompts(
+  records: Record<string, unknown>[],
+  limit: number = PROMPT_HISTORY_MAX,
+  boundary: TurnBoundaryState = emptyTurnBoundary(),
+): PromptEntry[] {
   return collect(
     records,
     (record) => {

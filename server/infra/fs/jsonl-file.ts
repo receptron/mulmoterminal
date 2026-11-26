@@ -216,8 +216,19 @@ function asBuffer(chunk: unknown): Buffer {
  *  Bounded: it reads `tailBytes`, so a 585 MB transcript costs the same as a 1 KB one. Malformed
  *  lines are skipped, which also covers the partial line a mid-file read can leave behind. */
 export function readTailRecords(file: string, tailBytes?: number): Record<string, unknown>[] {
+  return recordsOf(readTail(file, tailBytes).lines);
+}
+
+/** The same records, and whether they begin at the file's first byte — a reader whose answer
+ *  depends on what came before the window has to know when it did not see it. */
+export function readTailWindow(file: string, tailBytes?: number): { records: Record<string, unknown>[]; fromFileStart: boolean } {
+  const { lines, fromFileStart } = readTail(file, tailBytes);
+  return { records: recordsOf(lines), fromFileStart };
+}
+
+function recordsOf(lines: string[]): Record<string, unknown>[] {
   const out: Record<string, unknown>[] = [];
-  for (const line of readTailLines(file, tailBytes)) {
+  for (const line of lines) {
     if (!line.trim()) continue;
     try {
       const parsed: unknown = JSON.parse(line);
@@ -234,19 +245,23 @@ export function readTailRecords(file: string, tailBytes?: number): Record<string
  *  reads `tailBytes`, not the file. Returns [] for anything it cannot read, since every caller
  *  wants "no recent turn" rather than an exception. */
 export function readTailLines(file: string, tailBytes: number = DEFAULT_TAIL_BYTES): string[] {
+  return readTail(file, tailBytes).lines;
+}
+
+function readTail(file: string, tailBytes: number = DEFAULT_TAIL_BYTES): { lines: string[]; fromFileStart: boolean } {
   let fd: number | null = null;
   try {
     const size = statSync(file).size;
     const start = Math.max(0, size - tailBytes);
     const length = size - start;
-    if (length <= 0) return [];
+    if (length <= 0) return { lines: [], fromFileStart: true };
     const buffer = Buffer.alloc(length);
     fd = openSync(file, "r");
     readSync(fd, buffer, 0, length, start);
     const lines = buffer.toString("utf8").split("\n");
-    return start > 0 ? lines.slice(1) : lines;
+    return { lines: start > 0 ? lines.slice(1) : lines, fromFileStart: start === 0 };
   } catch {
-    return [];
+    return { lines: [], fromFileStart: true };
   } finally {
     if (fd !== null) closeSync(fd);
   }

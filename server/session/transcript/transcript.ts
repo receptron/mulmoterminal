@@ -5,7 +5,7 @@
 import { isRecord } from "../../../common/isRecord.js";
 import { readString } from "../../../common/readString.js";
 import type { SessionContextInfo } from "../../../common/sessionContext.js";
-import { continuesTurn, emptyTurnBoundary, opensTurn, type TurnBoundaryState } from "./turn-boundary.js";
+import { continuesTurn, emptyTurnBoundary, opensTurn, startsCommandTurn, type TurnBoundaryState } from "./turn-boundary.js";
 
 // Text the HARNESS put in the user channel, rather than something a person typed:
 // slash-command wrappers, bash input, and the notification a finished background task
@@ -25,17 +25,22 @@ const INJECTED_PROMPT_RE = /^\s*<(local-command|command-|bash-|task-notification
 
 export const isInjectedPrompt = (text: string): boolean => INJECTED_PROMPT_RE.test(text);
 
-// A real user prompt from a JSONL "user" line's content, or null if it's injected.
+// The text of a JSONL "user" line's content, injected or not, or null when there is none.
 // Content may be a plain string or an array of blocks (guard against null elements).
-export function userPromptText(content: unknown): string | null {
+function userText(content: unknown): string | null {
   // `x: unknown` is load-bearing: Array.isArray narrows `unknown` to `any[]`, and an `any`
   // element puts every read below back outside the type checker's reach.
   const text = Array.isArray(content) ? content.map((x: unknown) => (isRecord(x) ? readString(x.text) : readString(x))).join(" ") : content;
-  if (typeof text === "string" && text.trim() && !isInjectedPrompt(text)) {
-    return text.trim();
-  }
-  return null;
+  return typeof text === "string" && text.trim() ? text.trim() : null;
 }
+
+// A real user prompt from a JSONL "user" line's content, or null if it's injected.
+export function userPromptText(content: unknown): string | null {
+  const text = userText(content);
+  return text !== null && !isInjectedPrompt(text) ? text : null;
+}
+
+const SLASH_COMMAND_RE = /^<command-/;
 
 /** The prompt a user record OPENS a turn with, or null: no prompt text, or text written into the
  *  turn already open (a skill's body, an image note). Advances `state`, so take it once per record
@@ -46,6 +51,7 @@ export function turnOpeningPrompt(state: TurnBoundaryState, o: Record<string, un
   const text = userPromptText(content);
   if (text === null) {
     if (holdsToolResult(content)) continuesTurn(state, o);
+    else if (SLASH_COMMAND_RE.test(userText(content) ?? "")) startsCommandTurn(state);
     return null;
   }
   return opensTurn(state, o) ? text : null;
@@ -98,9 +104,8 @@ export function foldPromptTrail(into: PromptTrail, o: Record<string, unknown>, o
   }
 }
 
-const promptTrailOf = (records: Record<string, unknown>[]): PromptTrail => {
+const promptTrailOf = (records: Record<string, unknown>[], boundary: TurnBoundaryState = emptyTurnBoundary()): PromptTrail => {
   const trail = emptyPromptTrail();
-  const boundary = emptyTurnBoundary();
   for (const o of records) foldPromptTrail(trail, o, turnOpeningPrompt(boundary, o));
   return trail;
 };
@@ -184,8 +189,10 @@ export function conversationTurnOf(boundary: TurnBoundaryState, o: Record<string
 
 // Ordered user/assistant turns as plain text, skipping slash/local-command wrappers and
 // tool-only assistant turns. Feeds the header-title summarizer.
-export const conversationTurnsFromParsed = (records: Record<string, unknown>[]): ConversationTurn[] => {
-  const turnOf = createConversationTurnScan();
+/** `boundary` defaults to a read from the file's start; a window that begins mid-file passes
+ *  `windowTurnBoundary()`. */
+export const conversationTurnsFromParsed = (records: Record<string, unknown>[], boundary: TurnBoundaryState = emptyTurnBoundary()): ConversationTurn[] => {
+  const turnOf = createConversationTurnScan(boundary);
   return records.flatMap((o) => turnOf(o) ?? []);
 };
 
@@ -316,8 +323,8 @@ export function preferredHeaderPrompt(current: string | null, incoming: string):
 // SUBSTANTIAL prompt, so a resumed session's header shows the task instead of a
 // one-word follow-up. Falls back to the latest prompt (then the record) if every
 // prompt is trivial.
-export function latestMeaningfulUserPromptFromParsed(records: Record<string, unknown>[]): string | null {
-  return meaningfulPromptOf(promptTrailOf(records));
+export function latestMeaningfulUserPromptFromParsed(records: Record<string, unknown>[], boundary?: TurnBoundaryState): string | null {
+  return meaningfulPromptOf(promptTrailOf(records, boundary));
 }
 
 /** The rule itself: the last substantial prompt, else the last prompt at all, else the record a

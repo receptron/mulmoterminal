@@ -61,6 +61,7 @@ notes and harness nudges. The summary differs only where those were dropped.
 
 - A window that begins exactly at a skill body, or with only assistant records before a harness
   nudge, has nothing in it naming the open turn, so the body still opens a turn there, as before.
+  Fixed afterwards by #3553 (`plans/fix-3553-window-head-meta.md`), from `promptSource`.
   Rejected: treating a meta record seen before any other as non-opening (it would drop the first
   prompt of a session a peer message started) and seeding from the bytes before the window (a
   second read path for a rare case whose outcome is the old behaviour).

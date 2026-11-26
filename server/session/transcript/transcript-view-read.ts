@@ -16,7 +16,7 @@ import { hasErrnoCode, messageOf } from "../../errors.js";
 import { forEachJsonlRecordIn } from "../../infra/fs/jsonl-file.js";
 import { transcriptIdOf } from "./cleared-transcripts.js";
 import { emptyTranscriptScan, foldTranscriptView, trackTurnStarts, transcriptViewOf, type TranscriptScan } from "./transcript-view.js";
-import { emptyTurnBoundary } from "./turn-boundary.js";
+import { emptyTurnBoundary, windowTurnBoundary } from "./turn-boundary.js";
 import type { TranscriptPage, TranscriptView } from "../../../common/transcriptView.js";
 import { createCodexFold } from "./transcript-view-codex.js";
 import { createCursorFold } from "./transcript-view-cursor.js";
@@ -137,7 +137,7 @@ async function readWindow(
   // Per WINDOW, not per file: a widened re-read folds the same bytes from the start, and a fold
   // carrying state from the abandoned pass (codex's double-write guard does) would judge the first
   // record of the new pass against the last record of the old one.
-  const turns = trackTurnStarts(scan, source.createFold(scan));
+  const turns = trackTurnStarts(scan, source.createFold(scan, { fromFileStart: from === 0 }));
   const atLineStart = await startsAtLine(handle, from);
   // `to: end` — the window ENDS at the size that was stat'd (or at the cursor, for an older page).
   // Without it the fold reads until EOF, and this file is being appended to WHILE it is read: a live
@@ -224,7 +224,7 @@ export interface FileTranscriptSource {
   locate: (cwd: string, id: string) => Promise<string | null>;
   /** A fold for one scan. A factory rather than a function because a fold may need state across
    *  records (codex's double-write guard). */
-  createFold: (scan: TranscriptScan) => (record: Record<string, unknown>) => void;
+  createFold: (scan: TranscriptScan, window: { fromFileStart: boolean }) => (record: Record<string, unknown>) => void;
 }
 
 /** One page of a query source's turns.
@@ -266,8 +266,8 @@ const claudeSource: FileTranscriptSource = {
     // what still holds if someone later loosens it.
     return Promise.resolve(isInside(dir, file) ? file : null);
   },
-  createFold: (scan) => {
-    const boundary = emptyTurnBoundary();
+  createFold: (scan, window) => {
+    const boundary = window.fromFileStart ? emptyTurnBoundary() : windowTurnBoundary();
     return (record) => foldTranscriptView(scan, record, boundary);
   },
 };

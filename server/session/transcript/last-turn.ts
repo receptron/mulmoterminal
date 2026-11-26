@@ -5,6 +5,7 @@
 // simply isn't on disk (#254).
 
 import { conversationTurnsFromParsed, parseJsonl } from "./transcript.js";
+import type { TurnBoundaryState } from "./turn-boundary.js";
 import { codexEventPayload as eventPayload } from "../../agents/codex/codex-events.js";
 import { codexUserPrompt } from "../../agents/codex/codex-user-turn.js";
 
@@ -26,10 +27,10 @@ export const EMPTY_TURN: LastTurn = { prompt: null, reply: null };
 // seat's whole contribution to a round table — the real answer, which disagreed with the others,
 // arrived 40 seconds later and was never passed on (#1487). 78% of the assistant prose records in a
 // sample of real transcripts were mid-turn, so this is the ordinary case, not an edge one.
-export function lastTurnFromClaudeParsed(records: Record<string, unknown>[]): LastTurn {
+export function lastTurnFromClaudeParsed(records: Record<string, unknown>[], boundary?: TurnBoundaryState): LastTurn {
   let open: LastTurn | null = null;
   let lastComplete: LastTurn | null = null;
-  for (const turn of conversationTurnsFromParsed(records)) {
+  for (const turn of conversationTurnsFromParsed(records, boundary)) {
     if (turn.role === "user") {
       open = { prompt: turn.text, reply: null };
       continue;
@@ -52,9 +53,9 @@ export const lastTurnFromClaudeJsonl = (raw: string): LastTurn => lastTurnFromCl
 // of 13,200 boundaries with the whole turn on disk, and at 1,629 of them for a read that landed one
 // record early — an older reply every time rather than nothing, so there is no shape of that mistake
 // the caller could have detected for itself.
-export function currentTurnReplyFromClaudeParsed(records: Record<string, unknown>[]): string | null {
+export function currentTurnReplyFromClaudeParsed(records: Record<string, unknown>[], boundary?: TurnBoundaryState): string | null {
   let reply: string | null = null;
-  for (const turn of conversationTurnsFromParsed(records)) {
+  for (const turn of conversationTurnsFromParsed(records, boundary)) {
     // A new prompt spends whatever answered the previous one: this turn has not replied yet.
     if (turn.role === "user") reply = null;
     else if (turn.endsTurn) reply = turn.text;
