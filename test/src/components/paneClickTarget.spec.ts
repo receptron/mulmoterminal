@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { paneCanShowClick, paneToOpenBeside, type PaneClickState, type TiledClickState } from "../../../src/components/paneClickTarget";
+import { paneCanShowClick, paneRootedHere, paneToOpenBeside, type PaneClickState, type TiledClickState } from "../../../src/components/paneClickTarget";
 
 // #910. The grid's half of "can this clicked path open in the pane" — the half that is about
 // the grid's own state rather than the path. A wrong `false` just leaves the click on its old
@@ -18,6 +18,12 @@ describe("paneCanShowClick", () => {
   // the user opened it by hand first — which is the whole point of this entrance.
   it("takes the first click, before the pane has ever opened", () => {
     expect(paneCanShowClick(state({ paneCwd: null }), CWD)).toBe(true);
+  });
+
+  // #3506. The same path on a remote host is another directory.
+  it("declines while the pane is rooted for a remote host", () => {
+    expect(paneCanShowClick(state({ paneHost: "lx" }), CWD)).toBe(false);
+    expect(paneCanShowClick(state({ paneHost: null }), CWD)).toBe(true);
   });
 
   // Nothing enlarged and no pane beside the tiles: a click must not open one there (#3027).
@@ -74,5 +80,18 @@ describe("paneToOpenBeside", () => {
   it("is null while the cell's directory is not the one the path was read against", () => {
     expect(paneToOpenBeside(state(), { uid: 7, cwd: "/Users/me/other" }, CWD)).toBeNull();
     expect(paneToOpenBeside(state(), { uid: 7, cwd: null }, CWD)).toBeNull();
+  });
+});
+
+describe("paneRootedHere", () => {
+  it("is this machine's directory, however it is spelled", () => {
+    expect(paneRootedHere({ host: null, cwd: "/srv/p" }, "/srv/p")).toBe(true);
+    expect(paneRootedHere({ host: null, cwd: "/srv/p/" }, "/srv/p")).toBe(true);
+    expect(paneRootedHere({ host: null, cwd: "/srv/q" }, "/srv/p")).toBe(false);
+    expect(paneRootedHere({ host: null, cwd: null }, "/srv/p")).toBe(false);
+  });
+  // #3506: the same path on a remote host is another directory.
+  it("is never a directory on a remote host", () => {
+    expect(paneRootedHere({ host: "lx", cwd: "/srv/p" }, "/srv/p")).toBe(false);
   });
 });

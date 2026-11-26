@@ -85,7 +85,7 @@ export const NEVER_FORWARDED: Record<string, readonly string[]> = {
 // decides into the table or into NEVER_FORWARDED, and a route added to the server must go into one
 // of those rather than here.
 // Lower it as the list shrinks; raising it is the visible edit that adding a route here takes.
-export const UNDECIDED_CEILING = 254;
+export const UNDECIDED_CEILING = 237;
 export const UNDECIDED: readonly string[] = [
   "DELETE /api/collections/:slug",
   "DELETE /api/collections/:slug/items/:itemId",
@@ -143,21 +143,10 @@ export const UNDECIDED: readonly string[] = [
   "GET /api/dir-sound",
   "GET /api/dir-suggest",
   "GET /api/feeds",
-  "GET /api/files/browse/backup",
-  "GET /api/files/browse/backups",
   "GET /api/files/browse/code-block",
-  "GET /api/files/browse/git-status",
-  "GET /api/files/browse/head",
-  "GET /api/files/browse/index",
   "GET /api/files/browse/json",
-  "GET /api/files/browse/lines",
-  "GET /api/files/browse/list",
   "GET /api/files/browse/md",
-  "GET /api/files/browse/search",
   "GET /api/files/browse/table",
-  "GET /api/files/browse/text",
-  "GET /api/files/browse/trash",
-  "GET /api/files/browse/version",
   "GET /api/files/granted/:token/:name",
   "GET /api/files/raw",
   "GET /api/github/board",
@@ -267,9 +256,6 @@ export const UNDECIDED: readonly string[] = [
   "POST /api/command/summarize",
   "POST /api/dir-config/entries",
   "POST /api/dir-config/move",
-  "POST /api/files/browse/create",
-  "POST /api/files/browse/rename",
-  "POST /api/files/browse/trash",
   "POST /api/files/grant",
   "POST /api/git-remote",
   "POST /api/github/star",
@@ -312,7 +298,6 @@ export const UNDECIDED: readonly string[] = [
   "POST /api/rate-limits/refresh",
   "POST /api/rooms/:room",
   "POST /api/session/:id/close",
-  "POST /api/session/:id/drop",
   "POST /api/shared-app/preview/intent",
   "POST /api/shared-app/preview/lookup",
   "POST /api/shared-app/preview/submit",
@@ -335,8 +320,6 @@ export const UNDECIDED: readonly string[] = [
   "PUT /api/collections/:slug/items/:itemId",
   "PUT /api/collections/:slug/view-data",
   "PUT /api/dir-config",
-  "PUT /api/files/browse/backup",
-  "PUT /api/files/browse/write",
   "PUT /api/library/marks/:id",
   "PUT /api/library/memory/:slug/:file",
   "PUT /api/shortcuts",

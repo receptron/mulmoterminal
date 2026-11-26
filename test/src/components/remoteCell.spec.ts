@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { CELL_ACTIONS } from "../../../common/headerActions";
-import { actionAllowedOn, cellActionAllowed, isRemoteHost, onThisMachine, terminalPathFor } from "../../../src/components/remoteCell";
+import { actionAllowedOn, cellActionAllowed, isRemoteHost, onThisMachine, pathOnHost } from "../../../src/components/remoteCell";
 import { connWsUrl, type ConnTargetUrlInput } from "../../../src/components/wsUrl";
 
 describe("isRemoteHost / onThisMachine", () => {
@@ -28,6 +28,7 @@ describe("cellActionAllowed", () => {
     "terminal-park",
     "terminal-voice",
     "terminal-note",
+    "pane-files",
   ];
 
   it("allows every action on a local cell", () => {
@@ -63,8 +64,8 @@ describe("actionAllowedOn", () => {
 
 describe("terminal paths", () => {
   it("routes a remote cell through the gateway and leaves a local one alone", () => {
-    expect(terminalPathFor("lx", "/ws/launch")).toBe("/remote/lx/ws/launch");
-    expect(terminalPathFor(null, "/ws/launch")).toBe("/ws/launch");
+    expect(pathOnHost("lx", "/ws/launch")).toBe("/remote/lx/ws/launch");
+    expect(pathOnHost(null, "/ws/launch")).toBe("/ws/launch");
   });
 
   const base: ConnTargetUrlInput = { cwd: "/srv/p", devTerminal: false, command: null, launcher: null };
