@@ -12,6 +12,19 @@ vi.mock("../../../src/composables/usePubSub", () => ({
   usePubSub: () => ({ subscribe: () => () => {}, onReconnect: () => () => {} }),
 }));
 
+// One partner always open, so the send button shows wherever the cell lets it; and the cwd each cell
+// asked partners for, which a remote cell must not hand to this server's worktree lookup.
+const relay = vi.hoisted(() => ({ cwds: [] as unknown[] }));
+vi.mock("../../../src/composables/useRelayButton", async () => {
+  const { computed } = await import("vue");
+  return {
+    useRelayButton: (_key: () => string, cwd: { value: unknown }) => {
+      relay.cwds.push(cwd.value);
+      return computed(() => [{ key: "cell-9", sessionId: "partner", cwd: "/home/me/ws", agent: "claude" }]);
+    },
+  };
+});
+
 const passed = vi.hoisted(() => ({ remoteHost: [] as unknown[] }));
 vi.mock("../../../src/components/Terminal.vue", () => ({
   default: {
@@ -39,10 +52,12 @@ let configuredIds: string[] | null = ["lx"];
 beforeEach(() => {
   requested = [];
   passed.remoteHost = [];
+  relay.cwds = [];
   configuredIds = ["lx"];
   resetConfiguredRemoteHosts();
-  globalThis.fetch = vi.fn(async (url: string) => {
-    requested.push(String(url));
+  globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+    // The body too: a POST carries the cwd there, and a URL-only check passes it by.
+    requested.push(typeof init?.body === "string" ? `${String(url)} ${init.body}` : String(url));
     if (String(url).endsWith("/api/remote-hosts/ids")) {
       const ids = configuredIds;
       if (ids === null) return new Promise(() => {});
@@ -52,15 +67,15 @@ beforeEach(() => {
   }) as unknown as typeof fetch;
 });
 
-const mountCell = (remoteHost: string | null) =>
+const mountCell = (remoteHost: string | null, launch: { initialSessionId: string | null; autoStart?: boolean } = { initialSessionId: SESSION }) =>
   mount(TerminalCell, {
     props: {
+      ...launch,
       uid: 1,
       expanded: true,
       collectionsAvailable: false,
       zoomed: false,
       reorderable: false,
-      initialSessionId: SESSION,
       initialCwd: CWD,
       defaultCwd: "/home/me/ws",
       presets: [],
@@ -103,6 +118,47 @@ describe("a remote cell", () => {
     await nextTick();
     await flushPromises();
     expect(remote.find('[data-testid="cell-launch"]').exists()).toBe(true);
+    expect(requested.filter(mentionsCell)).toEqual([]);
+  });
+
+  it("offers no path menu, copy button or send button, which act on this machine; a local cell does", async () => {
+    const local = mountCell(null);
+    await flushPromises();
+    expect(local.find('[data-testid="cell-dir"]').attributes("aria-haspopup")).toBe("true");
+    expect(local.find('[data-testid="cell-send-btn"]').exists()).toBe(true);
+    expect(local.findComponent({ name: "CopyCodeBlock" }).exists()).toBe(true);
+    local.unmount();
+
+    const remote = mountCell("lx");
+    await flushPromises();
+    const dir = remote.find('[data-testid="cell-dir"]');
+    expect(dir.text()).toContain("project");
+    expect(dir.attributes("aria-haspopup")).toBeUndefined();
+    expect(remote.find('[data-testid="cell-send-btn"]').exists()).toBe(false);
+    expect(remote.findComponent({ name: "CopyCodeBlock" }).exists()).toBe(false);
+  });
+
+  it("looks for send partners without its directory", async () => {
+    mountCell(null);
+    mountCell("lx");
+    await flushPromises();
+    expect(relay.cwds).toEqual([CWD, null]);
+  });
+
+  it("starting fresh, neither records its directory here nor reads it from this server", async () => {
+    const fresh = { initialSessionId: null, autoStart: true };
+    const local = mountCell(null, fresh);
+    await flushPromises();
+    local.findComponent({ name: "TerminalView" }).vm.$emit("cwd", CWD);
+    expect(local.emitted("record-cwd")).toEqual([[CWD]]);
+    local.unmount();
+
+    requested = [];
+    const remote = mountCell("lx", fresh);
+    await flushPromises();
+    remote.findComponent({ name: "TerminalView" }).vm.$emit("cwd", CWD);
+    await flushPromises();
+    expect(remote.emitted("record-cwd")).toBeUndefined();
     expect(requested.filter(mentionsCell)).toEqual([]);
   });
 

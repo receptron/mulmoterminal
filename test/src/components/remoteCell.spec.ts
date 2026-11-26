@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { CELL_ACTIONS } from "../../../common/headerActions";
-import { cellActionAllowed, isRemoteHost, onThisMachine, terminalPathFor } from "../../../src/components/remoteCell";
+import { actionAllowedOn, cellActionAllowed, isRemoteHost, onThisMachine, terminalPathFor } from "../../../src/components/remoteCell";
 import { connWsUrl, type ConnTargetUrlInput } from "../../../src/components/wsUrl";
 
 describe("isRemoteHost / onThisMachine", () => {
@@ -25,6 +25,29 @@ describe("cellActionAllowed", () => {
   });
   it("allows on a remote cell only what never asks this server about the cell", () => {
     expect(CELL_ACTIONS.filter((action) => cellActionAllowed("lx", action))).toEqual(ALLOWED_ON_REMOTE);
+  });
+});
+
+describe("actionAllowedOn", () => {
+  const CELLS = [{ uid: 1 }, { uid: 2, remoteHost: "lx" }, { uid: 3, remoteHost: undefined }];
+
+  it("decides by the cell the uid names", () => {
+    CELL_ACTIONS.forEach((action) => {
+      expect(actionAllowedOn(CELLS, 1, action)).toBe(true);
+      expect(actionAllowedOn(CELLS, 3, action)).toBe(true);
+      expect(actionAllowedOn(CELLS, 2, action)).toBe(cellActionAllowed("lx", action));
+    });
+  });
+  it("refuses a local terminal in a remote cell's directory, from the keyboard as from the header", () => {
+    expect(actionAllowedOn(CELLS, 2, "terminal-new-here")).toBe(false);
+    expect(actionAllowedOn(CELLS, 2, "terminal-new-adjacent")).toBe(false);
+  });
+  it("allows everything with no cell, or a uid no cell has", () => {
+    CELL_ACTIONS.forEach((action) => {
+      expect(actionAllowedOn(CELLS, null, action)).toBe(true);
+      expect(actionAllowedOn(CELLS, 99, action)).toBe(true);
+      expect(actionAllowedOn([], 2, action)).toBe(true);
+    });
   });
 });
 

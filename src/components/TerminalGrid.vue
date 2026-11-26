@@ -27,7 +27,7 @@ import type { Launcher, LaunchPick } from "./launchers";
 import type { CustomAgent } from "../../common/customAgents";
 import type { AgentAccount } from "../../common/agentAccounts";
 import { isCellSelfAction, isPaneAction, paneOfAction, type CellAction } from "../../common/headerActions";
-import { cellActionAllowed, isRemoteHost } from "./remoteCell";
+import { actionAllowedOn, isRemoteHost, onThisMachine } from "./remoteCell";
 import { registerGridCellRunner } from "../composables/useGridCellAction";
 import { requestCellAction } from "../composables/useCellAction";
 import { shouldFlipZoom } from "./cellChromeRules";
@@ -300,7 +300,7 @@ const paneOf = (uid: number): RightPane | null => shownPane(panesOf(uid));
 const sessionOf = (uid: number): string | null => props.cells.find((cell) => cell.uid === uid)?.session ?? null;
 const cellOf = (uid: number | null): Cell | undefined => (uid === null ? undefined : props.cells.find((cell) => cell.uid === uid));
 // Whether this cell may do `action` here; a remote cell's panes and tools would read this machine (remoteCell.ts).
-const allowedOn = (uid: number | null, action: CellAction): boolean => cellActionAllowed(cellOf(uid)?.remoteHost, action);
+const allowedOn = (uid: number | null, action: CellAction): boolean => actionAllowedOn(props.cells, uid, action);
 // Every side pane reads this server by the cell's session or cwd, so none opens on a remote cell.
 const panesAllowedOn = (uid: number | null): boolean => !isRemoteHost(cellOf(uid)?.remoteHost);
 
@@ -696,11 +696,16 @@ const storiesRoots = computed<StoriesRoots>(() => storiesRootsFrom(props.stories
 
 // The session of the cell the pane answers for — what Canvas and Tools read. Null for a cell with
 // no session yet (a launcher, a command cell), which both panes already render as empty.
-const paneCellSessionId = computed(() => cellOf(paneCellUid.value)?.session ?? null);
+// Null for a remote cell too: its session is on another machine, and every reader of these asks this one.
+const localSessionOf = (uid: number | null): string | null => {
+  const cell = cellOf(uid);
+  return onThisMachine(cell?.remoteHost, cell?.session ?? null);
+};
+const paneCellSessionId = computed(() => localSessionOf(paneCellUid.value));
 // The ENLARGED cell's session, which is not the same thing on the tiled grid: what opens the pane by
 // itself — a drawing, a question, an agent's showInPane — answers to this one only, so a cell whose
 // pane was closed long ago does not put one beside the tiles unasked.
-const expandedSessionId = computed(() => cellOf(props.expandedUid)?.session ?? null);
+const expandedSessionId = computed(() => localSessionOf(props.expandedUid));
 
 // Which log the Prompts pane reads: claude keeps what a person typed in its own history file,
 // codex only in its rollout, and the server needs to be told which (#1748). Absent means Claude —

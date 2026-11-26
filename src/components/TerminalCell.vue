@@ -272,7 +272,8 @@ const filmstrip = computed(() => isThumbnail(props));
 // recent preset, then the server default. Both `presets` and `defaultCwd` arrive
 // async from /api/config, so the watcher upgrades a still-pristine field once they
 // load (cold-load / open-before-config) — it never clobbers the user's own edit.
-const dirInput = ref(preferredLaunchDir(props));
+// Never a remote cell's directory: the form lists sessions, scripts and worktrees for it from THIS server.
+const dirInput = ref(preferredLaunchDir({ ...props, initialCwd: onThisMachine(props.remoteHost, props.initialCwd ?? null) }));
 const dirTouched = ref(false); // true once the user types in / picks a dir
 // Typing, a preset chip and the folder picker all report the dir the same way, so the "the user
 // chose this one" flag is set in one place.
@@ -707,10 +708,9 @@ function onServerCwd(c: string) {
   cwd.value = c;
   // Only a user-initiated fresh launch records the dir as a preset chip — not a
   // reconnect/restore of an already-running session (see recordNextCwd).
-  if (recordNextCwd) {
-    recordNextCwd = false;
-    emit("record-cwd", c);
-  }
+  // A remote directory is not one to offer for a launch on this machine.
+  if (recordNextCwd && !isRemote) emit("record-cwd", c);
+  recordNextCwd = false;
   emit("cwd", c);
 }
 
@@ -783,7 +783,7 @@ async function relayCell(target: HandoffTarget) {
 const relaySelf = (session: string): RelaySelf => ({ key: `cell-${props.uid}`, source: { sessionId: session, cwd: cwd.value, agent: agent.value } });
 
 function relayHere(action: RelayAction): boolean {
-  if (!talkStartable.value || !sessionId.value) return false;
+  if (!cellActionAllowed(props.remoteHost, action) || !talkStartable.value || !sessionId.value) return false;
   void relayWithPartner(action, relaySelf(sessionId.value));
   return true;
 }
@@ -805,11 +805,11 @@ async function finishRelay(action: RelayAction, self: RelaySelf, partner: Handof
 
 // The cell's own send button (#3399): shown, without any config, while this cell can send and some
 // partner is open, and named after the partner so the user learns the two can hand turns over.
-const livePartners = useRelayButton(() => `cell-${props.uid}`, cwd);
+const livePartners = useRelayButton(() => `cell-${props.uid}`, localCwd);
 // This cell's part of what every cell's partner list reads: its session, directory and connection.
 watch([sessionId, cwd, () => connView.get(`cell-${props.uid}`)?.status], slotsChanged);
 onUnmounted(() => void nextTick(slotsChanged));
-const sendButton = computed(() => (cellSendButton.value && talkStartable.value ? relayButtonLabel(livePartners.value) : null));
+const sendButton = computed(() => (cellSendButton.value && talkStartable.value && !isRemote ? relayButtonLabel(livePartners.value) : null));
 const sendButtonText = computed(() => {
   const label = sendButton.value;
   if (label === null) return "";
@@ -1962,7 +1962,20 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
              literally the path's own click. Occasional navigations do not each deserve a permanent
              icon in a tiled cell. The menu itself is CellPathMenu, shared with every cell type. -->
           <template #header-lead>
+            <!-- Every item in the menu acts on this machine, so a remote cell shows its path and no menu. -->
+            <span
+              v-if="isRemote"
+              data-testid="cell-dir"
+              class="cell-dir flex min-w-0 flex-auto items-center font-mono text-[11px]"
+              :class="CELL_HEADER_INK_DIM"
+              :data-tip="cwd ?? ''"
+            >
+              <span class="min-w-0" :class="DIR_TRUNCATE_FRONT"
+                ><span class="cell-dir-path" :class="CELL_DIR_PATH">{{ headerDir }}</span></span
+              >
+            </span>
             <CellPathMenu
+              v-else
               :cwd="cwd"
               :label="headerDir"
               :slot-key="`cell-${uid}`"
@@ -1973,7 +1986,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
             />
           </template>
           <template #header-actions>
-            <CopyCodeBlock v-if="sessionId" ref="copyCodeRef" :class="CELL_BTN" :session-id="sessionId" :cwd="cwd" :agent="agent" />
+            <CopyCodeBlock v-if="sessionId && !isRemote" ref="copyCodeRef" :class="CELL_BTN" :session-id="sessionId" :cwd="cwd" :agent="agent" />
             <button
               v-if="sendButton"
               type="button"

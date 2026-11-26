@@ -46,6 +46,10 @@ const ON_REMOTE_CELL: Record<CellAction, boolean> = {
 
 export const cellActionAllowed = (host: string | null | undefined, action: CellAction): boolean => !isRemoteHost(host) || ON_REMOTE_CELL[action];
 
+/** cellActionAllowed for the cell `uid` names; no cell (nothing focused) acts on this machine's defaults. */
+export const actionAllowedOn = (cells: readonly { uid: number; remoteHost?: string | undefined }[], uid: number | null, action: CellAction): boolean =>
+  cellActionAllowed(uid === null ? undefined : cells.find((cell) => cell.uid === uid)?.remoteHost, action);
+
 /** A terminal endpoint path as this browser reaches it: through the gateway for a remote cell. */
 export const terminalPathFor = (host: string | null | undefined, path: string): string => (isRemoteHost(host) ? remotePath(host, path) : path);
 
