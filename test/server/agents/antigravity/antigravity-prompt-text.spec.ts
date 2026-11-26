@@ -28,6 +28,10 @@ describe("antigravityPromptText", () => {
     );
   });
 
+  it("takes a later wrapper's request when the first wrapper is empty", () => {
+    expect(text("<USER_REQUEST></USER_REQUEST>\nOUTSIDE\n<USER_REQUEST>hello</USER_REQUEST>")).toBe("hello");
+  });
+
   it("treats a request of only whitespace as empty", () => {
     expect(text(`Approved.\n<USER_REQUEST>\n  \t\n</USER_REQUEST>`)).toBe("Approved.");
   });
