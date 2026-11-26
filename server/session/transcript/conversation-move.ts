@@ -8,8 +8,12 @@
 // A `--resume` that WE issue announces itself as `resume` too, under the id it was handed, which
 // is why the recorded successor is excluded: re-marking it on every restart would blank the
 // header each time. `/compact` keeps both the id and the file (measured on Claude Code 2.1.292).
+//
+// ← (move to the background) is the third: claude goes on with the SAME conversation in a forked
+// process under a new id, announced as `fork` (Claude Code 2.1.332). It is `follow`, not `mark`,
+// because nothing ended there — the prompts before it still belong to the conversation (#3538).
 
-export type ConversationMove = "mark" | "unmark" | "none";
+export type ConversationMove = "mark" | "follow" | "unmark" | "none";
 
 export interface ConversationMoveInput {
   /** The SessionStart payload's `source`, unchecked. */
@@ -32,8 +36,14 @@ function resumeMove({ sessionId, claudeId, recordedSuccessor, marked }: Conversa
   return "mark";
 }
 
+function forkMove({ sessionId, claudeId, recordedSuccessor }: ConversationMoveInput): ConversationMove {
+  if (!claudeId || claudeId === sessionId || claudeId === recordedSuccessor) return "none";
+  return "follow";
+}
+
 export function conversationMove(input: ConversationMoveInput): ConversationMove {
   if (input.source === "clear") return "mark";
   if (input.source === "resume") return resumeMove(input);
+  if (input.source === "fork") return forkMove(input);
   return "none";
 }

@@ -218,13 +218,18 @@ A cell in a project directory has only the tool groups registered for that direc
 
 **No — it is still on disk, under another session id.** When you move a conversation to the
 background in Claude Code (the **←** key, "Your conversation moved to the background"), Claude Code
-carries on under a **new** session id. Everything after that is written to the new one, while the
-cell still knows the old one.
+carries on under a **new** session id. Everything after that is written to the new one.
 
-While the terminal keeps running nothing looks wrong: a page reload or a server restart only
-reattaches to it. But once the terminal itself has ended — the machine restarted, or the cell was
-closed — reopening the cell resumes the id it knows, and the conversation comes back as it was when
-you pressed **←**, with no warning.
+MulmoTerminal follows the new id when Claude Code announces the split to the cell (#3538), which it
+does as of Claude Code 2.1.332. The activity timeline, the conversation pane and the header then keep
+up with the conversation, and reopening the cell resumes the new id.
+
+A split the cell did not hear about — one made before you upgraded MulmoTerminal, or under a Claude
+Code that does not announce it — still leaves the cell on the old id. The activity timeline and the
+conversation pane stop at the moment you pressed **←**, even while the terminal keeps running. And
+once the terminal itself has ended — the machine restarted, or the cell was closed — reopening the
+cell resumes the old id, and the conversation comes back as it was when you pressed **←**, with no
+warning.
 
 To get the rest back, open the launch form in that directory and pick the conversation that holds your later work under
 **OR RESUME HERE** (or run `claude --resume <new id>`). The two share a start time; the old one

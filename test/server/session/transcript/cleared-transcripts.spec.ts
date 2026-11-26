@@ -12,11 +12,13 @@ import {
   clearedAtOf,
   clearedClaudeIdOf,
   clearedTranscripts,
+  followForkedTranscript,
   forgetClearedTranscript,
   hydrateClearedTranscripts,
   MARK_SIZE_NEVER_REACHED,
   markTranscriptCleared,
   parseClearedMark,
+  transcriptIdOf,
 } from "../../../../server/session/transcript/cleared-transcripts.js";
 import { projectSessionsDir } from "../../../../server/session/project-dir.js";
 
@@ -333,5 +335,49 @@ describe("when the clear happened", () => {
     expect(clearedTranscripts.has(SESSION)).toBe(true);
     expect(clearedClaudeIdOf(SESSION)).toBe(CLAUDE_ID);
     expect(clearedAtOf(SESSION)).toBeUndefined();
+  });
+});
+
+// ← continues the SAME conversation under a new id (#3538): readers and the respawn follow it, and
+// the prompts pane's boundary is left exactly where it was.
+describe("followForkedTranscript", () => {
+  const FORKED = "77777777-6666-4555-8444-333333333333";
+  beforeEach(async () => {
+    await forgetClearedTranscript(SESSION, marksDir);
+  });
+
+  it("sends the readers to the forked id and draws no boundary", async () => {
+    await writeTranscript("{}\n");
+    await followForkedTranscript(SESSION, cwd, FORKED, marksDir);
+    expect(transcriptIdOf(SESSION)).toBe(FORKED);
+    expect(clearedAtOf(SESSION)).toBeUndefined();
+    expect(JSON.parse(await fs.readFile(markerFile(), "utf8"))).toEqual({ cwd, size: MARK_SIZE_NEVER_REACHED, claudeId: FORKED });
+  });
+
+  it("keeps the boundary an earlier /clear drew", async () => {
+    await writeTranscript("{}\n");
+    await markTranscriptCleared(SESSION, cwd, CLAUDE_ID, marksDir);
+    const clearedAt = clearedAtOf(SESSION);
+    await followForkedTranscript(SESSION, cwd, FORKED, marksDir);
+    expect(clearedAtOf(SESSION)).toBe(clearedAt);
+    expect(clearedClaudeIdOf(SESSION)).toBe(FORKED);
+    expect(JSON.parse(await fs.readFile(markerFile(), "utf8")).at).toBe(clearedAt);
+  });
+
+  // The restart is where #1812 lived: the respawn resumes the successor the mark brings back.
+  it("comes back on hydration with the forked id", async () => {
+    await writeTranscript("{}\n");
+    await followForkedTranscript(SESSION, cwd, FORKED, marksDir);
+    // Forget it in memory only, as a restart does: the marker under marksDir is left in place.
+    await forgetClearedTranscript(SESSION, path.join(home, "elsewhere"));
+    await hydrateClearedTranscripts(marksDir);
+    expect(clearedClaudeIdOf(SESSION)).toBe(FORKED);
+    expect(clearedAtOf(SESSION)).toBeUndefined();
+  });
+
+  it("stays in memory only when the hook reported no cwd", async () => {
+    await followForkedTranscript(SESSION, undefined, FORKED, marksDir);
+    expect(transcriptIdOf(SESSION)).toBe(FORKED);
+    expect(await exists(markerFile())).toBe(false);
   });
 });

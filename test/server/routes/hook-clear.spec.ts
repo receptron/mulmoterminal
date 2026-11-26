@@ -33,6 +33,7 @@ vi.mock("../../../server/session/session-reads.js", () => ({
 // hands over, which is the wiring that decides whether the mark can survive a restart at all.
 const markCalls: Array<[string, string | undefined, string | undefined]> = [];
 const successors = new Map<string, string>();
+const followCalls: Array<[string, string | undefined, string]> = [];
 vi.mock("../../../server/session/transcript/cleared-transcripts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../server/session/transcript/cleared-transcripts")>();
   return {
@@ -41,6 +42,11 @@ vi.mock("../../../server/session/transcript/cleared-transcripts", async (importO
       markCalls.push([id, cwd, claudeId]);
       actual.clearedTranscripts.add(id);
       if (claudeId) successors.set(id, claudeId);
+    },
+    followForkedTranscript: async (id: string, cwd: string | undefined, claudeId: string) => {
+      followCalls.push([id, cwd, claudeId]);
+      actual.clearedTranscripts.add(id);
+      successors.set(id, claudeId);
     },
     clearedClaudeIdOf: (id: string) => successors.get(id),
     transcriptIdOf: (id: string) => (actual.clearedTranscripts.has(id) ? (successors.get(id) ?? null) : id),
@@ -91,6 +97,7 @@ beforeEach(() => {
   clearedTranscripts.delete(ID);
   successors.clear();
   markCalls.length = 0;
+  followCalls.length = 0;
   vi.clearAllMocks();
 });
 
@@ -192,6 +199,28 @@ describe("SessionStart source=resume", () => {
   it("does nothing when the hook names no usable id", async () => {
     await postHook({ hook_event_name: "SessionStart", source: "resume", session_id: "not-a-uuid" });
     expect(markCalls).toEqual([]);
+    expect(clearedTranscripts.has(ID)).toBe(false);
+  });
+});
+
+// ← moves the same conversation to a forked process under a new id (#3538).
+describe("SessionStart source=fork", () => {
+  it("follows the forked id and leaves the header and title as they were", async () => {
+    lastPrompts.set(ID, "continue GitHub issue 1048");
+    lastResponses.set(ID, "Working on it.");
+
+    await postHook({ hook_event_name: "SessionStart", source: "fork", session_id: PICKED, cwd: "/work" });
+
+    expect(followCalls).toEqual([[ID, "/work", PICKED]]);
+    expect(markCalls).toEqual([]);
+    expect(lastPrompts.get(ID)).toBe("continue GitHub issue 1048");
+    expect(lastResponses.get(ID)).toBe("Working on it.");
+    expect(deps.forgetTitle).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when the hook names no usable id", async () => {
+    await postHook({ hook_event_name: "SessionStart", source: "fork", session_id: "not-a-uuid" });
+    expect(followCalls).toEqual([]);
     expect(clearedTranscripts.has(ID)).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 // Which sessions' transcripts are frozen — and why that has to outlive this process.
 //
-// `/clear` makes claude mint a NEW session id and a new transcript, and an in-session `/resume`
-// moves it to the picked one, while hooks keep reporting under ours (hook-settings.ts), so from
+// `/clear` makes claude mint a NEW session id and a new transcript, an in-session `/resume`
+// moves it to the picked one, and ← forks it to the background under a new id, while hooks keep reporting under ours (hook-settings.ts), so from
 // that moment `${id}.jsonl` holds a conversation the cell no longer shows. Reading it is what put
 // the pre-clear summary and reply back in the cockpit (#1085), so every reader of that file asks
 // this set first — and the spawn resumes the mark's `claudeId` instead of it (#3325).
@@ -124,15 +124,26 @@ async function markIsStale(mark: ClearedMark, id: string): Promise<boolean> {
  *  `claudeId` is what claude called ITSELF in the hook that announced this clear — the id the new
  *  conversation's prompts are filed under in its history. Undefined where the hook named none. */
 export async function markTranscriptCleared(id: string, cwd: string | undefined, claudeId?: string, dir: string = CLEARED_DIR): Promise<void> {
+  // A session with no cwd is still cleared AT a moment, and the prompts pane draws its line from
+  // that whether or not there is a file to freeze.
+  await writeMark(id, cwd, { at: Date.now(), claudeId }, dir);
+}
+
+/** Follow the conversation to the id a fork continued it under (conversation-move.ts). The boundary
+ *  is whatever it was: a fork starts no new conversation, so it draws none, and must not erase the
+ *  line an earlier `/clear` drew. */
+export async function followForkedTranscript(id: string, cwd: string | undefined, claudeId: string, dir: string = CLEARED_DIR): Promise<void> {
+  await writeMark(id, cwd, { at: clearedAtOf(id), claudeId }, dir);
+}
+
+async function writeMark(id: string, cwd: string | undefined, state: ClearedState, dir: string): Promise<void> {
   clearedTranscripts.add(id);
-  // Before the early return: a session with no cwd is still cleared AT a moment, and the prompts
-  // pane draws its line from that whether or not there is a file to freeze.
-  const at = Date.now();
-  clearedState.set(id, { at, claudeId });
+  clearedState.set(id, state);
   // No cwd (a hook that reported none, for a session with no live pty) means no transcript the boot
   // prune could look for, so that mark could never be cleaned up — it stays in memory only.
   if (!cwd || !SESSION_ID_RE.test(id)) return;
-  const mark: ClearedMark = { cwd, size: MARK_SIZE_NEVER_REACHED, at, ...(claudeId ? { claudeId } : {}) };
+  const { at, claudeId } = state;
+  const mark: ClearedMark = { cwd, size: MARK_SIZE_NEVER_REACHED, ...(at !== undefined ? { at } : {}), ...(claudeId ? { claudeId } : {}) };
   await persistInOrder(id, async () => {
     try {
       await fs.mkdir(dir, { recursive: true });
