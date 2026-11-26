@@ -12,6 +12,7 @@ import { createImagePasteHandler } from "../composables/usePasteImage";
 import { translateUiSentence } from "../utils/translateUi";
 import { currentTermTheme, termThemeFor } from "../composables/useTheme";
 import { useDirConfig } from "../composables/useDirConfig";
+import { dirKeyOf } from "../composables/dirAddress";
 import { useTerminalFontSize } from "../composables/useTerminalFontSize";
 import { globalFontFamily } from "../composables/terminalFontFamily";
 import { badgeStyleFor } from "./dirBadge";
@@ -195,7 +196,7 @@ const isRemote = computed(() => isRemoteHost(props.remoteHost));
 // A remote cell's socket runs through a tunnel the user opened themselves, so "disconnected" alone
 // sends them looking at MulmoTerminal when the usual cause is that `ssh -L` has ended.
 const tunnelHint = computed(() => (isRemote.value && status.value === "disconnected" ? t("tips.cell.remoteTunnelDown", { host: props.remoteHost }) : null));
-const dirConfigCwd = computed(() => (isRemote.value ? null : (serverCwd.value ?? props.dirCwd ?? null)));
+const dirConfigCwd = computed(() => dirKeyOf(props.remoteHost, serverCwd.value ?? props.dirCwd ?? null));
 const { config: dirConfig } = useDirConfig(dirConfigCwd);
 
 // The running model, so header buttons/chips can substitute `${model}`.
@@ -283,7 +284,7 @@ async function onDeck(absolutePath: string): Promise<void> {
 
 // Git status chip — single view only. In the grid the embedding TerminalCell shows
 // its own chip, so null the cwd here to skip redundant polling (status stays null).
-const gitCwd = computed(() => (props.devTerminal ? null : localCwd.value));
+const gitCwd = computed(() => (props.devTerminal ? null : dirKeyOf(props.remoteHost, serverCwd.value)));
 const { status: gitStatus } = useGitStatus(gitCwd);
 const dragOver = ref(false);
 const { fontSize } = useTerminalFontSize();

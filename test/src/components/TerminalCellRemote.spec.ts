@@ -7,6 +7,8 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import TerminalCell from "../../../src/components/TerminalCell.vue";
 import { resetConfiguredRemoteHosts } from "../../../src/composables/configuredRemoteHosts";
+import { invalidateDirConfig } from "../../../src/composables/useDirConfig";
+import { dirKeyOf } from "../../../src/composables/dirAddress";
 
 vi.mock("../../../src/composables/usePubSub", () => ({
   usePubSub: () => ({ subscribe: () => () => {}, onReconnect: () => () => {} }),
@@ -86,8 +88,8 @@ const mountCell = (remoteHost: string | null, launch: { initialSessionId: string
     },
   });
 
-// The gateway's forwarded routes are the one place a remote session's id may go: they answer from the remote.
-const forwardedToHost = (url: string): boolean => url.startsWith("/api/remote-hosts/lx/");
+// The gateway's routes are the one place a remote session's id or directory may go: they answer from the remote.
+const forwardedToHost = (url: string): boolean => url.startsWith("/api/remote-hosts/lx/") || url.startsWith("/remote/lx/api/");
 const mentionsCell = (url: string): boolean => !forwardedToHost(url) && (url.includes(SESSION) || url.includes(CWD) || url.includes(encodeURIComponent(CWD)));
 
 describe("a remote cell", () => {
@@ -101,6 +103,16 @@ describe("a remote cell", () => {
     mountCell("lx");
     await flushPromises();
     expect(requested.filter(mentionsCell)).toEqual([]);
+  });
+
+  it("reads its git status, work item and directory settings from its own host", async () => {
+    invalidateDirConfig(dirKeyOf("lx", CWD) ?? ""); // the settings are cached per directory across tests
+    mountCell("lx");
+    await flushPromises();
+    const remoteCwd = encodeURIComponent(CWD);
+    ["/remote/lx/api/git-status", "/remote/lx/api/pr-phase", "/remote/lx/api/dir-config"].forEach((route) =>
+      expect(requested).toContain(`${route}?cwd=${remoteCwd}`),
+    );
   });
 
   it("closes without telling this server to end a session it does not have", async () => {

@@ -25,6 +25,7 @@ export interface RemoteRoute {
 export const REMOTE_ROUTES = {
   gitStatus: { method: "GET", path: "/api/git-status", key: "cwd", access: "read", query: ["cwd", "fresh"] },
   dirConfig: { method: "GET", path: "/api/dir-config", key: "cwd", access: "read", query: ["cwd"] },
+  prPhase: { method: "GET", path: "/api/pr-phase", key: "cwd", access: "read", query: ["cwd"] },
 } as const satisfies Record<string, RemoteRoute>;
 
 export type RemoteRouteName = keyof typeof REMOTE_ROUTES;
