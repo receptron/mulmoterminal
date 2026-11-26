@@ -121,7 +121,7 @@ English, and the line under the picker says so.
 | Item | Description |
 |---|---|
 | **Language** | What language Settings itself is written in — your browser's (the default), English, 日本語, 简体中文, 繁體中文 or 한국어. Per browser, like the theme, and stored in `localStorage` rather than in any config file. "My browser's language" is resolved through CLDR, so a tag this list does not name still lands somewhere sensible, and the line under the picker names the tag your browser actually asked for. **Every entry carries its English name beside it** — `한국어 (Korean)` — and so does this row in the sidebar, so a language you cannot read is one you can still get out of |
-| **Theme** | Midnight / Nord / Daylight / Solarized Light, plus [any you defined yourself](#custom-themes). Picks from what exists; "Create a theme…" starts the `mulmoterminal-theme` skill to write a new one |
+| **Theme** | Midnight / Nord / Daylight / Solarized Light / Okamoto Taro / Pink, plus [any you defined yourself](#custom-themes). Picks from what exists; "Create a theme…" starts the `mulmoterminal-theme` skill to write a new one |
 | **Terminal font** | The font-family stack every terminal renders in (`fontFamily`) — **global**, unlike the size, because which fonts exist is a property of the machine. Empty means the built-in stack (→ [Terminal font](#font-family)) |
 | **Terminal font size** | The xterm font size in px (8–32). Applies to every terminal **in this browser** — a phone and a desktop each keep their own. A directory can override it with `fontSize` ([below](#per-dir)) |
 | **Terminal scroll speed** | How far one wheel notch or trackpad swipe moves the terminal (1× is xterm's own). Per browser, like the font size, because it is a property of the pointing device |

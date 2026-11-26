@@ -8,8 +8,8 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **13.9.0 is out.** A `git add` or `git commit` in a folder open in a cell no longer fails with
-> "index.lock: File exists", and the Files tree opens to a file you clicked in the terminal. [Setup guide](v13.9.0.html)
+> **13.10.0 is out.** Two new built-in themes in Settings → Theme: Okamoto Taro (dark, with a
+> vermilion accent) and Pink (light). [Setup guide](v13.10.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 

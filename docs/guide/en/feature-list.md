@@ -4,7 +4,7 @@ nav_title: Feature list
 layout: default
 parent: English
 nav_order: 6.5
-as_of: 13.9.0
+as_of: 13.10.0
 description: "Every capability MulmoTerminal has today, one line each with the release it arrived in, grouped by area (as of 9.1.0)."
 ---
 
@@ -339,6 +339,7 @@ More: [Configuration](config.html)
 - Settings gains controls for global keys that previously required hand-editing JSON (v4.5.0)
 - Settings sections have buttons launching the skill that writes that setting, confirming first since 4.7.5 (v2.8.0)
 - Custom colour schemes recolour the whole app; terminal ANSI colours in 4.27, a live colour picker in 7.2 (v2.5.2)
+- Built-in themes Okamoto Taro (dark, vermilion accent) and Pink (light) join Midnight, Nord, Daylight and Solarized Light (v13.10.0)
 - Settings → Directory settings shows effective values, their sources, and dropped or unread keys (v2.4.0)
 - orderPriority orders grid cells, and launcher chips follow it since 2.8 (v2.2.0)
 - fontFamily sets the terminal font, and the default stack includes CJK faces (v2.2.0)

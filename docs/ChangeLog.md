@@ -8,6 +8,18 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@13.10.0 — 2026-11-27
+
+> **Setup guide:** [13.10.0 — Two new themes, Okamoto Taro and Pink](https://receptron.github.io/mulmoterminal/guide/en/v13.10.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.10.0.html))
+
+### Built-in themes Okamoto Taro and Pink (#3570)
+
+Closes #3569. Two built-in themes join Midnight / Nord / Daylight / Solarized Light: `okamoto` (dark: near-black ground, vermilion accent, strong primary ANSI colours) and `pink` (light: pale pink ground, white panels, deep rose accent). Each has its id in `THEME_IDS` (`common/themeIds.ts`), a `THEMES` entry with all sixteen ANSI colours (`src/composables/useTheme.ts`), and a `:root[data-theme]` block with every token (`src/style.css`). Text, muted text, accent, and on-accent over both the accent and its hover clear 4.5:1, and so does every terminal foreground colour, ANSI black included, since xterm draws SGR 30 text in it.
+
+New tests: `test/scripts/style-theme-blocks.spec.ts` (every built-in has a complete stylesheet block), and in `useTheme.spec.ts` a palette sets none or all sixteen ANSI colours, and every terminal foreground colour clears 4.5:1 apart from a shrink-only list of what already fell short (twelve Solarized accents, Daylight's `brightCyan`).
+
+`okamoto` and `pink` become reserved, so a user-defined theme with either id is dropped on load, as `midnight` is. The Settings theme intro no longer counts the built-ins, in all five locales.
+
 ## mulmoterminal@13.9.0 — 2026-11-27
 
 > **Setup guide:** [13.9.0 — Your own git commands no longer collide with MulmoTerminal](https://receptron.github.io/mulmoterminal/guide/en/v13.9.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.9.0.html))

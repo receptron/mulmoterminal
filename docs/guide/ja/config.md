@@ -118,7 +118,7 @@ git チェックアウトならその横に `commit a1b2c3d` のチップが並�
 | 項目 | 内容 |
 |---|---|
 | **Language** | 設定画面自身の表示言語（ブラウザの言語＝既定 / English / 日本語 / 简体中文 / 繁體中文 / 한국어）。配色と同じくブラウザごとで、設定ファイルではなく `localStorage` に保存されます。「ブラウザの言語」は CLDR で解決するので、この一覧に無いタグも妥当な所に落ちます。ピッカーの下の行は、ブラウザが実際に要求したタグを出します。**各項目には英語名が併記され**（`한국어 (Korean)`）、サイドバーのこの行にも付くので、読めない言語に入っても戻ってこられます |
-| **Theme** | Midnight / Nord / Daylight / Solarized Light、および[自分で定義した配色](#custom-themes)。選ぶのは既にあるものだけで、新しく作るのは「Create a theme…」（`mulmoterminal-theme` スキルを起動） |
+| **Theme** | Midnight / Nord / Daylight / Solarized Light / Okamoto Taro / Pink、および[自分で定義した配色](#custom-themes)。選ぶのは既にあるものだけで、新しく作るのは「Create a theme…」（`mulmoterminal-theme` スキルを起動） |
 | **Terminal font** | 全ターミナルの font-family スタック（`fontFamily`）。サイズと違い**グローバル** — どのフォントが入っているかはマシンの性質だからです。空欄なら内蔵スタック（→ [ターミナルのフォント](#font-family)） |
 | **Terminal font size** | ターミナル（xterm）のフォントサイズ（px, 8〜32）。**このブラウザ**の全ターミナルに適用され、スマホと PC でそれぞれ別の値を保持します。ディレクトリ側の `fontSize`（[後述](#per-dir)）が優先されます |
 | **Terminal scroll speed** | ホイール1ノッチ／トラックパッドの1スワイプでターミナルがどれだけ動くか（1× が xterm 既定）。フォントサイズと同じくブラウザ単位 — ポインティングデバイスの性質なので |

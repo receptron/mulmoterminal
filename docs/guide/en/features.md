@@ -274,7 +274,7 @@ so a very large unsaved buffer may not get out.
 | Header display chips | Reorder / hide built-in chips plus custom chips via `chips` (→ [Header reference](header-reference.html#chips)) |
 | Name badge / colors | Per-directory name and per-element colors in `.mulmoterminal.json` |
 | Launchers / cwd presets / PR repos | Extend launch commands, working-directory suggestions, and cross-repo PR targets in settings |
-| Themes | Midnight / Nord / Daylight / Solarized Light |
+| Themes | Midnight / Nord / Daylight / Solarized Light / Okamoto Taro / Pink |
 | Terminal font size | Adjustable in settings (per browser), or pinned per directory with `fontSize` in `.mulmoterminal.json` |
 | Terminal scroll speed | Adjustable in settings (per browser, 0.25x-3x) — one control for both a shell's scrollback and a full-screen app like Claude Code; turn it down if a Mac trackpad swipe scrolls past what you were reading |
 | Leave history view | A shell or Codex cell that is scrolled back with the wheel (or dragged) is in tmux's **copy-mode**, where keys move through the history instead of reaching the program. The cell says so with a **"Viewing history" banner** and a **Back to input** button (`q` works too). If the banner covers what you are reading, untick **Show the "Viewing history" banner** in Settings under Terminal scroll speed; it is per browser and `q` still leaves. Leaving sends nothing to the program |
