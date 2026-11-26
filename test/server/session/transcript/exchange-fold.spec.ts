@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { type ExchangeReader, hasToolList, lastCompleteExchange, newestPromptReply } from "../../../../server/session/transcript/exchange-fold.js";
 import { proseThenCallRows, toolCallRow, unknownRow } from "../../../../server/session/transcript/transcript-view.js";
