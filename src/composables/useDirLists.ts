@@ -9,6 +9,7 @@ import { isRecord, optionalBoolean } from "../../common/isRecord";
 import { isUnknownArray } from "../../common/isUnknownArray";
 import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
+import { dirAddressOf, dirApiUrl } from "./dirAddress";
 
 // What the launch form can offer for the directory currently in its field: the sessions that can
 // be resumed there, the script.json entries that can be run there, and the worktrees the
@@ -206,15 +207,16 @@ export const useResumableSessions = () => {
 // terminal's Run menu offer the same list.
 export const useDirScripts = () =>
   useDirList<ScriptList>(
-    (dir) => `/api/scripts?cwd=${encodeURIComponent(dir)}`,
-    (body, dir) => ({ scripts: rowsOf(body.scripts, isRunnableScript), cwd: dirOf(body.cwd, dir) }),
+    (dir) => dirApiUrl(dir, "/api/scripts"),
+    // The plain path even for a remote directory's key: it is what a script runs in, on its host.
+    (body, dir) => ({ scripts: rowsOf(body.scripts, isRunnableScript), cwd: dirOf(body.cwd, dirAddressOf(dir).cwd) }),
     () => ({ scripts: [], cwd: null }),
   );
 
 // The skills a directory's session can run — the Skill menu's list, read for the command palette.
 export const useDirSkills = () =>
   useDirList<SkillList>(
-    (dir) => `/api/skills?cwd=${encodeURIComponent(dir)}`,
+    (dir) => dirApiUrl(dir, "/api/skills"),
     (body) => ({ skills: rowsOf(body.skills, isDiscoveredSkill) }),
     () => ({ skills: [] }),
   );

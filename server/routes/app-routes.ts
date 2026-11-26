@@ -14,7 +14,7 @@ import { mountAllRoutes } from "../infra/tools/plugins-registry.js";
 import { APP_CONFIG_FILE, mountConfigRoutes } from "../config/config-routes.js";
 import { getUpdateStatus } from "../config/update-status.js";
 import { loadRemoteHosts, mountRemoteHostsRoutes } from "../backends/hostGateway/remoteHostsRoutes.js";
-import { mountRemoteForwardRoutes } from "../backends/hostGateway/remoteForwardRoutes.js";
+import { mountRemoteForwardRoutes, mountRemoteRawForwardRoutes } from "../backends/hostGateway/remoteForwardRoutes.js";
 import { mountFilesBrowseRoutes } from "../files/files-browse.js";
 import { endTmuxSession, mountTmuxRoutes, type TmuxRouteDeps } from "../infra/process/tmux-routes.js";
 import { mountSwitchTokenRoutes } from "../infra/http/switch-token-routes.js";
@@ -351,6 +351,8 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
   // Ahead of express.json, carrying its own raw parser: a dropped file is bytes under its own
   // content type, and a dropped .json would otherwise be parsed as a document rather than saved.
   mountDropRoutes(app);
+  // The gateway's drop (#3506), at the same point for the same reason.
+  mountRemoteRawForwardRoutes(app, { remoteHosts: () => loadRemoteHosts(APP_CONFIG_FILE).hosts });
 
   app.use(express.json({ limit: "25mb" }));
 

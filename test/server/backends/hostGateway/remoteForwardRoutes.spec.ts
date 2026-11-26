@@ -7,7 +7,15 @@ import { createServer, request, type IncomingHttpHeaders, type Server } from "no
 import type { AddressInfo } from "node:net";
 import { mountRequestGates } from "../../../../server/routes/request-gates.js";
 import { createIsAllowedHost, createIsAllowedOrigin } from "../../../../server/infra/http/allowed-origin.js";
-import { FORWARD_RESPONSE_MAX_BYTES, mountRemoteForwardRoutes } from "../../../../server/backends/hostGateway/remoteForwardRoutes.js";
+import {
+  FORWARD_RESPONSE_MAX_BYTES,
+  FORWARD_TIMEOUT_MS,
+  RAW_FORWARD_TIMEOUT_MS,
+  SLOW_FORWARD_TIMEOUT_MS,
+  mountRemoteForwardRoutes,
+  mountRemoteRawForwardRoutes,
+  timeoutFor,
+} from "../../../../server/backends/hostGateway/remoteForwardRoutes.js";
 import type { RemoteHost } from "../../../../server/backends/hostGateway/remoteHostsConfig.js";
 import type { RemoteRoute } from "../../../../common/remoteRoutes.js";
 
@@ -17,7 +25,17 @@ const ROUTES: Record<string, RemoteRoute> = {
   page: { method: "GET", path: "/api/page", key: "none", access: "read", query: [] },
   big: { method: "GET", path: "/api/big", key: "none", access: "read", query: [] },
   moved: { method: "GET", path: "/api/moved", key: "none", access: "read", query: [] },
+  hang: { method: "GET", path: "/api/hang", key: "none", access: "read", query: [] },
   memo: { method: "POST", path: "/api/session/:sid/memo", key: "session", access: "write", query: [] },
+  drop: {
+    method: "POST",
+    path: "/api/session/:sid/drop",
+    key: "session",
+    access: "write",
+    query: [],
+    body: "raw",
+    headers: ["content-type", "x-drop-filename"],
+  },
 };
 
 interface Reached {
@@ -27,6 +45,8 @@ interface Reached {
   body: string;
 }
 let reached: Reached[] = [];
+// Whether the remote saw the gateway's request to /api/hang go away before it answered.
+let hangAbandoned: Promise<void> = Promise.resolve();
 
 const listen = async (server: Server): Promise<number> => {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -42,6 +62,10 @@ const remote = createServer((req, res) => {
     if (req.url === "/api/page") return void res.writeHead(200, { "content-type": "text/html" }).end("<script>alert(1)</script>");
     if (req.url === "/api/big") return void res.writeHead(200, { "content-type": "application/json" }).end(`"${"x".repeat(FORWARD_RESPONSE_MAX_BYTES)}"`);
     if (req.url === "/api/moved") return void res.writeHead(302, { location: "http://example.com/" }).end();
+    if (req.url === "/api/hang") {
+      hangAbandoned = new Promise((resolve) => res.on("close", () => resolve()));
+      return;
+    }
     res
       .writeHead(req.url?.startsWith("/api/session/") ? 201 : 200, { "content-type": "application/json", "set-cookie": "remote=1" })
       .end(JSON.stringify({ ok: true, url: req.url }));
@@ -61,6 +85,8 @@ beforeAll(async () => {
   ];
   const app = express();
   mountRequestGates(app, { isAllowedHost: createIsAllowedHost(new Set()), isAllowedOrigin: createIsAllowedOrigin(new Set()) });
+  // As mountAppRoutes orders them: the raw routes before the JSON parser, the rest after it.
+  mountRemoteRawForwardRoutes(app, { remoteHosts: () => hosts, routes: ROUTES });
   app.use(express.json());
   mountRemoteForwardRoutes(app, { remoteHosts: () => hosts, routes: ROUTES });
   gateway = createServer(app);
@@ -137,6 +163,31 @@ describe("/remote/<id>/api/…", () => {
     expect(reached.map((r) => [r.url, r.body])).toEqual([["/api/git-status?cwd=%2Fsrv", ""]]);
   });
 
+  // A dropped file is bytes, whatever its type says: a dropped .json must not be parsed and re-encoded.
+  it("carries a dropped file's bytes, type and name exactly, and nothing else of the browser's", async () => {
+    const bytes = '{ "a": 1,\n  "b": [2] }\n';
+    const answer = await call(
+      "POST",
+      `/remote/lx/api/session/${SESSION}/drop`,
+      { ...pageOrigin(), "content-type": "application/json", "x-drop-filename": "data%20file.json", cookie: "mac=secret", "x-custom": "1" },
+      bytes,
+    );
+    expect(answer.status).toBe(201);
+    expect(reached).toHaveLength(1);
+    expect(reached[0]?.body).toBe(bytes);
+    expect(reached[0]?.headers["content-type"]).toBe("application/json");
+    expect(reached[0]?.headers["x-drop-filename"]).toBe("data%20file.json");
+    expect(reached[0]?.headers.origin).toBe(remoteOrigin);
+    expect(reached[0]?.headers.cookie).toBeUndefined();
+    expect(reached[0]?.headers["x-custom"]).toBeUndefined();
+  });
+
+  it("refuses a foreign page's drop before any byte reaches the remote", async () => {
+    const answer = await call("POST", `/remote/lx/api/session/${SESSION}/drop`, { origin: "http://evil.example", "content-type": "image/png" }, "png");
+    expect(answer.status).toBe(403);
+    expect(reached).toEqual([]);
+  });
+
   it("refuses a foreign page's write before anything reaches the remote", async () => {
     const answer = await call("POST", `/remote/lx/api/session/${SESSION}/memo`, { origin: "http://evil.example", "content-type": "application/json" }, "{}");
     expect(answer.status).toBe(403);
@@ -190,9 +241,28 @@ describe("/remote/<id>/api/…", () => {
     expect(answer.json).toMatchObject({ error: expect.stringContaining(why) });
   });
 
+  // A search the browser has dropped for the next keystroke must not run on at the remote.
+  it("stops the remote's work when the browser walks away", async () => {
+    const req = request({ host: "127.0.0.1", port: gatewayPort, path: "/remote/lx/api/hang", headers: { host: `localhost:${gatewayPort}` } });
+    req.on("error", () => {});
+    req.end();
+    await expect.poll(() => reached.some((r) => r.url === "/api/hang")).toBe(true);
+    req.destroy();
+    await hangAbandoned;
+  });
+
   it("leaves every path outside /remote/<id>/api/ alone", async () => {
     expect((await call("GET", "/remote/lx/ws")).status).toBe(404);
     expect((await call("GET", "/api/git-status?cwd=%2Fsrv")).status).toBe(404);
     expect(reached).toEqual([]);
+  });
+});
+
+describe("timeoutFor", () => {
+  const read: RemoteRoute = { method: "GET", path: "/api/x", key: "none", access: "read", query: [] };
+  it("gives a route as long as the browser waits for it", () => {
+    expect(timeoutFor(read)).toBe(FORWARD_TIMEOUT_MS);
+    expect(timeoutFor({ ...read, wait: "slow" })).toBe(SLOW_FORWARD_TIMEOUT_MS);
+    expect(timeoutFor({ ...read, method: "POST", access: "write", body: "raw" })).toBe(RAW_FORWARD_TIMEOUT_MS);
   });
 });

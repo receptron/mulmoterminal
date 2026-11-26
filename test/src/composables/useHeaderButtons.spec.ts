@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { createApp, defineComponent, ref } from "vue";
 import { flushPromises } from "@vue/test-utils";
 import { useHeaderButtons, hasPickFileButton, isHeaderFolder, type HeaderButton } from "../../../src/composables/useHeaderButtons";
+import { dirKeyOf } from "../../../src/composables/dirAddress";
 
 function withSetup<T>(composable: () => T): { result: T; unmount: () => void } {
   let result!: T;
@@ -37,6 +38,25 @@ describe("useHeaderButtons", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toEqual(expect.stringContaining("/api/header?"));
     expect(result.buttons.value.map((b) => b.id)).toEqual(["pr"]);
     unmount();
+  });
+});
+
+// #3506: a remote directory's header is the remote's, resolved there for its own session.
+describe("useHeaderButtons on a remote directory", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("asks the host for the remote path, with the session, and asks a local one the same URL as before", async () => {
+    const fetchMock = vi.fn<(url: RequestInfo | URL) => Promise<Response>>(() => Promise.resolve(jsonResponse({ buttons: [], chips: null })));
+    vi.stubGlobal("fetch", fetchMock);
+    const session = "0b8f0a0e-7c55-4c1e-9e0a-3f1d2c4b5a69";
+    const remote = withSetup(() => useHeaderButtons({ ...params(dirKeyOf("lx", "/srv/my p")), session: ref<string | null>(session) }));
+    const local = withSetup(() => useHeaderButtons(params("/srv/my p")));
+    await flushPromises();
+    const urls = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(urls).toContain(`/remote/lx/api/header?cwd=%2Fsrv%2Fmy+p&agent=claude&session=${session}`);
+    expect(urls).toContain("/api/header?cwd=%2Fsrv%2Fmy+p&agent=claude");
+    remote.unmount();
+    local.unmount();
   });
 });
 

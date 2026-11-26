@@ -15,6 +15,7 @@ import { isRecord } from "../../common/isRecord";
 import { isUnknownArray } from "../../common/isUnknownArray";
 import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
+import { browseUrl } from "../components/filesPaneApi";
 
 /** Shorter than the search's own debounce: this is a local file read, not a subprocess, and the
  *  reader is holding an arrow key rather than typing. Long enough that walking a list does not
@@ -29,6 +30,8 @@ export interface SelectedResult {
 
 export interface SearchContextDeps {
   cwd: Ref<string | null>;
+  /** The remote host the root is on; absent or null for this machine. */
+  host?: () => string | null;
   /** The open buffer and its CURRENT text, when it has unsaved edits — the one file whose
    *  surroundings are not on disk. Null when nothing is dirty. */
   buffer: Ref<{ path: string; text: string } | null>;
@@ -111,7 +114,7 @@ export function useSearchContext(deps: SearchContextDeps): SearchContext {
     try {
       const params = new URLSearchParams({ path: selected.path, line: String(selected.line) });
       if (cwd) params.set("cwd", cwd);
-      const res = await fetchWithTimeout(`/api/files/browse/lines?${params.toString()}`, { signal: abort.signal });
+      const res = await fetchWithTimeout(browseUrl(deps.host?.() ?? null, "lines", params.toString()), { signal: abort.signal });
       const data = await jsonBody(res);
       // The generation, never the key: "is this the row we are on" is true again after leaving a
       // row and coming back, so an older request for it would pass. See `latest`.

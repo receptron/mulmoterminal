@@ -1,7 +1,7 @@
 // Pure builder for the terminal WebSocket URL. Kept separate from Terminal.vue so
 // the query it sends — including ?gui=0, which tells the server to run a plain dev
 // terminal (no GUI MCP) — is unit-testable without xterm/WebSocket.
-import { isRemoteHost, terminalPathFor } from "./remoteCell";
+import { isRemoteHost, pathOnHost } from "./remoteCell";
 import type { RunCommand } from "./runCommand";
 import type { TerminalAgent } from "../../common/sessionAgent";
 import { isUsableTerminalSize, type TerminalSize } from "../../common/terminalSize";
@@ -190,7 +190,7 @@ export function connWsUrl(target: ConnTargetUrlInput, resumeId: string | null, h
   const local = localConnWsUrl(target, resumeId, host, secure, size);
   if (!isRemoteHost(target.remoteHost)) return local;
   const url = new URL(local);
-  url.pathname = terminalPathFor(target.remoteHost, url.pathname);
+  url.pathname = pathOnHost(target.remoteHost, url.pathname);
   return url.toString();
 }
 

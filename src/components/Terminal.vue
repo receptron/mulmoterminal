@@ -7,11 +7,13 @@ import { FLIP_MS, shouldRefocusOnZoomChange } from "./cellFlip";
 import { isRemoteServer } from "../composables/remoteServer";
 import { terminalManagesAttention, terminalViewActive } from "./terminalViewActive";
 import { dragCarriesFiles, dropPlan, dropTextFromUriList, toInsertText } from "./dropPaths";
-import { dropUploadErrorMessage, uploadDropBatch } from "./dropUpload";
+import { dropUploadErrorMessage, uploadDropBatch, uploadDroppedFile } from "./dropUpload";
 import { createImagePasteHandler } from "../composables/usePasteImage";
 import { translateUiSentence } from "../utils/translateUi";
 import { currentTermTheme, termThemeFor } from "../composables/useTheme";
 import { useDirConfig } from "../composables/useDirConfig";
+import { dirKeyOf } from "../composables/dirAddress";
+import { remoteHeaderEntries } from "./remoteHeaderButtons";
 import { useTerminalFontSize } from "../composables/useTerminalFontSize";
 import { globalFontFamily } from "../composables/terminalFontFamily";
 import { badgeStyleFor } from "./dirBadge";
@@ -32,7 +34,7 @@ import { useAppConfig } from "../composables/useAppConfig";
 import { skillSeed } from "./skillSeed";
 import GitBranchChip from "./GitBranchChip.vue";
 import WorktreeEnvChip from "./WorktreeEnvChip.vue";
-import { useHeaderButtons, hasPickFileButton, isHeaderFolder, type HeaderButton } from "../composables/useHeaderButtons";
+import { useHeaderButtons, hasPickFileButton, isHeaderFolder, type HeaderButton, type HeaderEntry } from "../composables/useHeaderButtons";
 import { usePaletteHeaderEntries } from "../composables/paletteHeaderEntries";
 import { dropHintEnglish } from "./dropHint";
 import HeaderButtonFolder from "./HeaderButtonFolder.vue";
@@ -195,7 +197,9 @@ const isRemote = computed(() => isRemoteHost(props.remoteHost));
 // A remote cell's socket runs through a tunnel the user opened themselves, so "disconnected" alone
 // sends them looking at MulmoTerminal when the usual cause is that `ssh -L` has ended.
 const tunnelHint = computed(() => (isRemote.value && status.value === "disconnected" ? t("tips.cell.remoteTunnelDown", { host: props.remoteHost }) : null));
-const dirConfigCwd = computed(() => (isRemote.value ? null : (serverCwd.value ?? props.dirCwd ?? null)));
+const dirConfigCwd = computed(() => dirKeyOf(props.remoteHost, serverCwd.value ?? props.dirCwd ?? null));
+// This terminal's directory as the header, menus and git chip ask about it: on its host (dirAddress.ts).
+const menuDir = computed(() => dirKeyOf(props.remoteHost, serverCwd.value));
 const { config: dirConfig } = useDirConfig(dirConfigCwd);
 
 // The running model, so header buttons/chips can substitute `${model}`.
@@ -217,12 +221,17 @@ const {
   commands: resolvedCommands,
   env: worktreeEnv,
 } = useHeaderButtons({
-  cwd: localCwd,
-  session: localSession,
+  cwd: menuDir,
+  // A remote session is the remote's own to resolve buttons for, and the request goes there.
+  session: computed(() => props.sessionId ?? null),
   agent: computed(() => props.agent ?? "claude"),
   model: computed(() => sessionContext.value?.model ?? null),
 });
-const headerButtons = computed(() => (props.command || props.launcher || isRemote.value ? [] : resolvedButtons.value));
+function forThisCell(entries: HeaderEntry[]): HeaderEntry[] {
+  if (props.command || props.launcher) return [];
+  return isRemote.value ? remoteHeaderEntries(entries) : entries;
+}
+const headerButtons = computed(() => forThisCell(resolvedButtons.value));
 
 // `input`/`open` dispatch client-side. `shell` hands off to a command cell: the browser never holds the
 // command — it emits the button id + this session's context, and the server re-resolves it (see /ws/run).
@@ -247,10 +256,10 @@ function onHeaderButton(button: HeaderButton): void {
 // The command palette lists these and runs a pick through onHeaderButton, as the header does (#2465).
 usePaletteHeaderEntries(slotKey, {
   buttons: () => headerButtons.value,
-  commands: () => (props.command || props.launcher || isRemote.value ? [] : resolvedCommands.value),
+  commands: () => forThisCell(resolvedCommands.value),
   run: onHeaderButton,
   // And the Run and Skill menus' entries, only where this terminal shows those menus (#2697).
-  menus: () => (props.runMenu && !isRemote.value ? { cwd: serverCwd.value, runScript: (command) => emit("run", command), runSkill: onSkill } : null),
+  menus: () => (props.runMenu ? { cwd: menuDir.value, runScript: (command) => emit("run", command), runSkill: onSkill } : null),
 });
 // A skill picked from the header Skill menu runs IN this session (not a spare cell
 // like a script): type its invocation and submit, exactly like a `run:"input"` button.
@@ -283,7 +292,7 @@ async function onDeck(absolutePath: string): Promise<void> {
 
 // Git status chip — single view only. In the grid the embedding TerminalCell shows
 // its own chip, so null the cwd here to skip redundant polling (status stays null).
-const gitCwd = computed(() => (props.devTerminal ? null : localCwd.value));
+const gitCwd = computed(() => (props.devTerminal ? null : menuDir.value));
 const { status: gitStatus } = useGitStatus(gitCwd);
 const dragOver = ref(false);
 const { fontSize } = useTerminalFontSize();
@@ -519,11 +528,12 @@ function onDrop(e: DragEvent) {
   const dt = e.dataTransfer;
   if (!dt || !dragCarriesFiles(dt.types)) return; // not a file drop — leave text drags alone
   e.preventDefault();
-  if (isRemote.value) return void showHint(REMOTE_CELL_DECLINE_EN);
   const text = dropTextFromUriList(dt.getData("text/uri-list") || dt.getData("text/plain"));
   // The files are only read when the plan can use them: a path the browser gave settles a local drop,
   // as it always did (#2669).
-  const remote = isRemoteServer();
+  // A path the browser gave names a file on THIS machine, which a remote cell's agent cannot read,
+  // so a remote cell sends the bytes, as a page open from another machine does.
+  const remote = isRemoteServer() || isRemote.value;
   const files = text && !remote ? [] : Array.from(dt.files);
   const plan = dropPlan({ pathText: text, fileCount: files.length, remoteServer: remote });
   if (plan === "insert-path") insertText(text);
@@ -575,7 +585,12 @@ async function uploadAndInsert(files: File[]) {
   if (!session) return void showHint(DROP_NO_SESSION_EN);
   // Shown in English first and swapped when the (server-cached) translation lands, like the hint.
   void translateUiSentence(DROP_UPLOADING_EN, "mulmoterminal-ui").then((translated) => (dropUploadingText.value = translated));
-  const outcome = await uploadDropBatch(session, files, () => props.sessionId);
+  const outcome = await uploadDropBatch(
+    session,
+    files,
+    () => props.sessionId,
+    (id, file) => uploadDroppedFile(id, file, props.remoteHost ?? null),
+  );
   if (outcome.kind === "stale") return void showHint(DROP_SESSION_CHANGED_EN);
   if (outcome.kind === "failed") return void showHint(dropUploadErrorMessage(outcome.status));
   insertText(toInsertText(outcome.paths));
@@ -633,9 +648,10 @@ onUnmounted(() => clearTimeout(dropHintTimer));
 // the clipboard never has to be written somewhere first and picked back up. Text pastes never
 // reach this — the handler declines them and xterm's own paste handling runs as before.
 const onPaste = createImagePasteHandler({
-  sessionId: () => localSession.value ?? null,
+  sessionId: () => props.sessionId ?? null,
   insertText,
-  onError: (message) => void showHint(isRemote.value ? REMOTE_CELL_DECLINE_EN : message),
+  onError: (message) => void showHint(message),
+  host: () => props.remoteHost ?? null,
 });
 
 onUnmounted(() => {
@@ -696,8 +712,8 @@ onUnmounted(() => {
            state is why it stopped taking input. -->
       <span v-if="status !== 'connected'" data-testid="term-conn-status" class="rounded-[4px] px-2 py-0.5 text-[12px]" :class="statusClass">{{ status }}</span>
       <span v-if="tunnelHint" data-testid="term-tunnel-hint" class="min-w-0 truncate text-[12px] text-secondary" :data-tip="tunnelHint">{{ tunnelHint }}</span>
-      <RunMenu v-if="runMenu && !isRemote" :cwd="serverCwd" @run="(c) => emit('run', c)" />
-      <SkillMenu v-if="runMenu && !isRemote" :cwd="serverCwd" @skill="onSkill" />
+      <RunMenu v-if="runMenu" :cwd="menuDir" @run="(c) => emit('run', c)" />
+      <SkillMenu v-if="runMenu" :cwd="menuDir" @skill="onSkill" />
       <MulmoMenu v-if="runMenu && !isRemote" :cwd="serverCwd" @deck="onDeck" />
       <!-- flex-none: the lead slot beside it now grows and truncates (a path), and without this the
            actions would shrink to make room and clip their own icons. -->

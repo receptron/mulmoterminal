@@ -7,6 +7,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { ref } from "vue";
 import { useWorkItem } from "../../../src/composables/useWorkItem";
 import { setIssueWorkComments } from "../../../src/composables/issueWorkComments";
+import { dirKeyOf } from "../../../src/composables/dirAddress";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -172,5 +173,18 @@ describe("useWorkItem reports why the issue was not updated", () => {
     await refresh();
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     expect(commentFailure.value).toBeNull();
+  });
+});
+
+// A remote directory's work item is read through the gateway, but its comment is a write this
+// server would post for its own repository, so it is not posted (#3506).
+describe("useWorkItem on a remote directory", () => {
+  it("reads the phase from the host and posts no comment", async () => {
+    stubFetch({ posted: true, closed: false });
+    const { item, refresh } = useWorkItem(ref(dirKeyOf("lx", "/srv/p")));
+    await refresh();
+    await vi.waitFor(() => expect(item.value.issue).toBe(1234));
+    const urls = vi.mocked(globalThis.fetch).mock.calls.map(([url]) => String(url));
+    expect(urls).toEqual(["/remote/lx/api/pr-phase?cwd=%2Fsrv%2Fp"]);
   });
 });
