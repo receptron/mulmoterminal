@@ -7,7 +7,7 @@ import { FLIP_MS, shouldRefocusOnZoomChange } from "./cellFlip";
 import { isRemoteServer } from "../composables/remoteServer";
 import { terminalManagesAttention, terminalViewActive } from "./terminalViewActive";
 import { dragCarriesFiles, dropPlan, dropTextFromUriList, toInsertText } from "./dropPaths";
-import { dropUploadErrorMessage, uploadDropBatch } from "./dropUpload";
+import { dropUploadErrorMessage, uploadDropBatch, uploadDroppedFile } from "./dropUpload";
 import { createImagePasteHandler } from "../composables/usePasteImage";
 import { translateUiSentence } from "../utils/translateUi";
 import { currentTermTheme, termThemeFor } from "../composables/useTheme";
@@ -528,11 +528,12 @@ function onDrop(e: DragEvent) {
   const dt = e.dataTransfer;
   if (!dt || !dragCarriesFiles(dt.types)) return; // not a file drop — leave text drags alone
   e.preventDefault();
-  if (isRemote.value) return void showHint(REMOTE_CELL_DECLINE_EN);
   const text = dropTextFromUriList(dt.getData("text/uri-list") || dt.getData("text/plain"));
   // The files are only read when the plan can use them: a path the browser gave settles a local drop,
   // as it always did (#2669).
-  const remote = isRemoteServer();
+  // A path the browser gave names a file on THIS machine, which a remote cell's agent cannot read,
+  // so a remote cell sends the bytes, as a page open from another machine does.
+  const remote = isRemoteServer() || isRemote.value;
   const files = text && !remote ? [] : Array.from(dt.files);
   const plan = dropPlan({ pathText: text, fileCount: files.length, remoteServer: remote });
   if (plan === "insert-path") insertText(text);
@@ -584,7 +585,12 @@ async function uploadAndInsert(files: File[]) {
   if (!session) return void showHint(DROP_NO_SESSION_EN);
   // Shown in English first and swapped when the (server-cached) translation lands, like the hint.
   void translateUiSentence(DROP_UPLOADING_EN, "mulmoterminal-ui").then((translated) => (dropUploadingText.value = translated));
-  const outcome = await uploadDropBatch(session, files, () => props.sessionId);
+  const outcome = await uploadDropBatch(
+    session,
+    files,
+    () => props.sessionId,
+    (id, file) => uploadDroppedFile(id, file, props.remoteHost ?? null),
+  );
   if (outcome.kind === "stale") return void showHint(DROP_SESSION_CHANGED_EN);
   if (outcome.kind === "failed") return void showHint(dropUploadErrorMessage(outcome.status));
   insertText(toInsertText(outcome.paths));
@@ -642,9 +648,10 @@ onUnmounted(() => clearTimeout(dropHintTimer));
 // the clipboard never has to be written somewhere first and picked back up. Text pastes never
 // reach this — the handler declines them and xterm's own paste handling runs as before.
 const onPaste = createImagePasteHandler({
-  sessionId: () => localSession.value ?? null,
+  sessionId: () => props.sessionId ?? null,
   insertText,
-  onError: (message) => void showHint(isRemote.value ? REMOTE_CELL_DECLINE_EN : message),
+  onError: (message) => void showHint(message),
+  host: () => props.remoteHost ?? null,
 });
 
 onUnmounted(() => {

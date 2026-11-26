@@ -4,6 +4,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import TerminalGrid from "../../../src/components/TerminalGrid.vue";
+import FilesPane from "../../../src/components/FilesPane.vue";
+import { openInFilesPane } from "../../../src/composables/filesPaneOpener";
+import { dirKeyOf } from "../../../src/composables/dirAddress";
+import { rememberPane } from "../../../src/components/filesPaneStore";
+import { oneFile } from "./filesPaneFixture";
 import type { Cell } from "../../../src/components/gridTabs.js";
 
 const subscribed = vi.hoisted(() => ({ channels: [] as string[] }));
@@ -38,11 +43,12 @@ beforeEach(() => {
   );
 });
 
-const mountEnlarged = (remoteHost: string | undefined) => {
-  const cell: Cell = { uid: 1, session: SESSION, cwd: "/srv/project", ...(remoteHost ? { remoteHost } : {}) };
+const cellOn = (uid: number, remoteHost: string | undefined): Cell => ({ uid, session: SESSION, cwd: "/srv/project", ...(remoteHost ? { remoteHost } : {}) });
+
+const mountEnlarged = (remoteHost: string | undefined, cells: Cell[] = [cellOn(1, remoteHost)]) => {
   return mount(TerminalGrid, {
     props: {
-      cells: [cell],
+      cells,
       expandedUid: 1,
       listRows: [],
       cancelUid: null,
@@ -72,5 +78,92 @@ describe("an enlarged remote cell", () => {
     mountEnlarged("lx");
     await flushPromises();
     expect(askedAbout()).toEqual([]);
+  });
+});
+
+// The one pane a remote cell has (#3506): its files, on its host.
+describe("a remote cell's Files pane", () => {
+  const filesRequests = () => requested.filter((url) => url.includes("/api/files/"));
+
+  it("is rooted at the cell's directory on its host, and asks this server nothing about it", async () => {
+    const grid = mountEnlarged("lx");
+    await flushPromises();
+    expect(grid.vm.runCellAction("pane-files", 1)).toBe(true);
+    await flushPromises();
+
+    expect(grid.findComponent(FilesPane).props()).toMatchObject({ cwd: "/srv/project", host: "lx" });
+    expect(filesRequests().length).toBeGreaterThan(0);
+    expect(filesRequests().every((url) => url.startsWith("/remote/lx/api/files/browse/"))).toBe(true);
+  });
+
+  it("is the only pane it opens", async () => {
+    const grid = mountEnlarged("lx");
+    await flushPromises();
+    expect(grid.vm.runCellAction("pane-canvas", 1)).toBe(false);
+    expect(grid.vm.runCellAction("pane-transcript", 1)).toBe(false);
+  });
+
+  // The same path on two machines is two directories: moving between them re-roots the pane.
+  it("moves to the other machine when the zoom moves to a cell there with the same path", async () => {
+    const grid = mountEnlarged(undefined, [cellOn(1, undefined), cellOn(2, "lx")]);
+    await flushPromises();
+    grid.vm.runCellAction("pane-files", 1);
+    await flushPromises();
+    expect(grid.findComponent(FilesPane).props("host")).toBeNull();
+    expect(filesRequests().every((url) => url.startsWith("/api/files/browse/"))).toBe(true);
+
+    requested = [];
+    await grid.setProps({ expandedUid: 2 });
+    await flushPromises();
+    expect(grid.findComponent(FilesPane).props("host")).toBe("lx");
+    expect(filesRequests().length).toBeGreaterThan(0);
+    expect(filesRequests().every((url) => url.startsWith("/remote/lx/api/files/browse/"))).toBe(true);
+    // Whether it can delete is the host's answer too.
+    expect(filesRequests()).toContain("/remote/lx/api/files/browse/trash");
+  });
+
+  // A path clicked in a terminal, or asked for by an agent, is this machine's.
+  it("takes no clicked path from this machine", async () => {
+    const grid = mountEnlarged("lx");
+    await flushPromises();
+    grid.vm.runCellAction("pane-files", 1);
+    await flushPromises();
+    expect(openInFilesPane("/srv/project", "README.md", undefined, false, null)).toBe(false);
+  });
+
+  it("opens no pane beside it for a clicked path from this machine", async () => {
+    mountEnlarged("lx");
+    await flushPromises();
+    expect(openInFilesPane("/srv/project", "README.md", undefined, false, null)).toBe(false);
+  });
+
+  it("opens one beside a local cell for its clicked path (control)", async () => {
+    mountEnlarged(undefined);
+    await flushPromises();
+    expect(openInFilesPane("/srv/project", "README.md", undefined, false, null)).toBe(true);
+  });
+
+  it.each([
+    ["a local cell takes it", undefined, true],
+    ["a remote cell does not", "lx", false],
+  ])("finds a tree this machine's same path left before a reload: %s", async (_name, remoteHost, takes) => {
+    localStorage.setItem("files_pane_state", JSON.stringify(rememberPane([], "/srv/project", oneFile("README.md"))));
+    const grid = mountEnlarged(remoteHost);
+    await flushPromises();
+    grid.vm.runCellAction("pane-files", 1);
+    await flushPromises();
+    expect(grid.findComponent(FilesPane).props("initialState") !== null).toBe(takes);
+  });
+
+  it("remembers its tree under its host, apart from this machine's same path", async () => {
+    const grid = mountEnlarged("lx");
+    await flushPromises();
+    grid.vm.runCellAction("pane-files", 1);
+    await flushPromises();
+    grid.vm.runCellAction("pane-files", 1);
+    await flushPromises();
+    const stored = localStorage.getItem("files_pane_state") ?? "";
+    expect(stored).toContain(JSON.stringify(dirKeyOf("lx", "/srv/project")).slice(1, -1));
+    expect(stored).not.toContain('"/srv/project"');
   });
 });

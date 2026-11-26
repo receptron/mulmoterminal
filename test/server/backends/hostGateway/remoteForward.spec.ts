@@ -2,6 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { decideForward, REMOTE_PATH_MAX, staysInside } from "../../../../server/backends/hostGateway/remoteForward.js";
 import { REMOTE_ROUTES, type RemoteRoute } from "../../../../common/remoteRoutes.js";
+import { DROP_FILENAME_HEADER } from "../../../../common/dropUpload.js";
 
 const SESSION = "0b8f0a0e-7c55-4c1e-9e0a-3f1d2c4b5a69";
 // A table of its own, so the rules are pinned whatever the shipped table holds.
@@ -43,6 +44,31 @@ describe("decideForward: which requests cross", () => {
   });
   it("reads a missing or malformed query as no parameters", () => {
     [undefined, null, "cwd=/srv", 3].forEach((query) => expect(decide("GET", "/api/git-status", query)).toMatchObject({ kind: "refuse", status: 400 }));
+  });
+  // The drop route takes bytes; forwarded as JSON, a dropped file would arrive empty or re-encoded.
+  it("ships the drop route as a raw body carrying only its type and file name", () => {
+    expect(REMOTE_ROUTES.drop).toMatchObject({ method: "POST", key: "session", access: "write", body: "raw", headers: ["content-type", DROP_FILENAME_HEADER] });
+    expect(
+      Object.values(REMOTE_ROUTES)
+        .filter((route) => "body" in route)
+        .map((route) => route.path),
+    ).toEqual(["/api/session/:sid/drop"]);
+  });
+  // The remote cannot tell which cell asked, so the gateway is what keeps a Files pane in its directory.
+  it("ships the Files pane's routes held to the directory the request names", () => {
+    const takesPath = (query: readonly string[]): boolean => query.includes("path");
+    const browsing = Object.values(REMOTE_ROUTES).filter((route) => route.path.startsWith("/api/files/browse/") && takesPath(route.query));
+    expect(browsing.length).toBeGreaterThan(0);
+    browsing.forEach((route) => {
+      ["../x", "/etc/passwd", "/srv/pp/x"].forEach((path) =>
+        expect(decideForward(route.method, route.path, { cwd: "/srv/p", path })).toMatchObject({ kind: "refuse", status: 400 }),
+      );
+      expect(decideForward(route.method, route.path, { cwd: "/srv/p", path: "src/a.ts" })).toMatchObject({ kind: "forward" });
+    });
+  });
+  it("ships the search and the whole index, alone, as routes the browser waits longer for", () => {
+    const slow = Object.values(REMOTE_ROUTES).filter((route) => "wait" in route && route.wait === "slow");
+    expect(slow.map((route) => route.path).sort()).toEqual(["/api/files/browse/index", "/api/files/browse/search"]);
   });
   it("ships a table whose every route decides to forward itself", () => {
     Object.values(REMOTE_ROUTES).forEach((route) => {
