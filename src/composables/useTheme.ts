@@ -7,7 +7,7 @@ import { isLightTheme, isThemeIdLike, resolveThemeVars, type CustomThemeInput, t
 export type { ThemeId };
 
 export interface Theme {
-  // `string`, not ThemeId: the list the picker renders holds the four built-ins AND whatever the
+  // `string`, not ThemeId: the list the picker renders holds the built-ins AND whatever the
   // user defined in config.json, whose ids no build can enumerate (#996). THEMES below stays
   // narrowed to the built-in ids.
   id: string;
@@ -93,6 +93,62 @@ export const THEMES: (Theme & { id: ThemeId })[] = [
       brightMagenta: "#6c71c4",
       brightCyan: "#2aa198",
       brightWhite: "#586e75",
+    },
+  },
+  {
+    id: "okamoto",
+    label: "Okamoto Taro",
+    swatch: { base: "#141112", panel: "#1f1a1b", accent: "#ff4b33" },
+    term: {
+      background: "#141112",
+      foreground: "#f2ead8",
+      cursor: "#f2ead8",
+      cursorAccent: "#141112",
+      selectionBackground: "#4a2a26",
+      black: "#141112",
+      red: "#ff3b2f",
+      green: "#3ec46d",
+      yellow: "#ffd21f",
+      blue: "#4f86ff",
+      magenta: "#ff5fa2",
+      cyan: "#2ec4d6",
+      white: "#d8cfc4",
+      brightBlack: "#6e6264",
+      brightRed: "#ff6a55",
+      brightGreen: "#6ee08f",
+      brightYellow: "#ffe36b",
+      brightBlue: "#7aa4ff",
+      brightMagenta: "#ff8cbf",
+      brightCyan: "#6fdbe8",
+      brightWhite: "#ffffff",
+    },
+  },
+  {
+    id: "pink",
+    label: "Pink",
+    swatch: { base: "#fff0f5", panel: "#ffffff", accent: "#c2255c" },
+    term: {
+      background: "#fff0f5",
+      foreground: "#3a1d2b",
+      cursor: "#3a1d2b",
+      cursorAccent: "#fff0f5",
+      selectionBackground: "#fbd0e0",
+      black: "#3a1d2b",
+      red: "#c62828",
+      green: "#2e7d32",
+      yellow: "#8d6e00",
+      blue: "#1e5bd6",
+      magenta: "#ad1f72",
+      cyan: "#00796b",
+      white: "#6d4c5a",
+      brightBlack: "#6d4c5a",
+      brightRed: "#a31515",
+      brightGreen: "#1b5e20",
+      brightYellow: "#6d5400",
+      brightBlue: "#1747a6",
+      brightMagenta: "#8a1459",
+      brightCyan: "#005a50",
+      brightWhite: "#3a1d2b",
     },
   },
 ];
@@ -244,7 +300,7 @@ export function useTheme() {
     }
     applyTheme(id);
   }
-  // Built-ins first, then the user's own — the four everyone has, then the ones only this
+  // Built-ins first, then the user's own — the ones everyone has, then the ones only this
   // machine's config knows about.
   const themes = computed<Theme[]>(() => [
     ...THEMES,

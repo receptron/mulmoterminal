@@ -1068,7 +1068,7 @@ malformed file is ignored.
   "cellBorderColor": "#2a2a4e",         // cell border color (hex #rrggbb)
   "dotColor": "#00e676",                // idle status dot (hex #rrggbb)
   "buttonColor": "#c7cdf0",             // header icon buttons (hex #rrggbb)
-  "theme": "nord",                      // terminal palette: midnight | nord | daylight | solarized
+  "theme": "nord",                      // terminal palette: midnight | nord | daylight | solarized | okamoto | pink
   "colors": { "background": "#190a23", "cursor": "#ff2e63" }, // per-key palette overrides
   "fontSize": 16,                       // terminal font size in px (8–32); overrides Settings
   "fontFamily": "'Cica', monospace",    // terminal font stack; overrides the global config
@@ -2040,7 +2040,7 @@ narrow and tall for one record you are discussing — and each position keeps it
   one it is, so an English browser silently turned Japanese dictation into English.
 - **Remote host** — link MulmoTerminal to the companion phone client (Google sign-in) to
   watch and start sessions from your phone.
-- **Themes** — four terminal palettes (midnight / nord / daylight / solarized), your pick
+- **Themes** — six terminal palettes (midnight / nord / daylight / solarized / okamoto / pink), your pick
   remembered; a project's `.mulmoterminal.json` can override per directory.
 - **Editing niceties** — **Shift+Enter** inserts a newline in the prompt, and on macOS
   **Option** is treated as Meta so Claude's Alt-key bindings work. If your Claude Code is
