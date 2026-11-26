@@ -6,7 +6,7 @@ description: Build a colour scheme of your own for MulmoTerminal — one that jo
 # Make a colour scheme of your own
 
 `themes` in `~/.mulmoterminal/config.json` defines schemes that appear in Settings' picker next to
-the six built-ins, and that a project can then name in its `.mulmoterminal.json` `theme` key.
+the built-ins, and that a project can then name in its `.mulmoterminal.json` `theme` key.
 Settings can choose a theme, and copy one and change its colours one at a time (Settings → Theme →
 Your own theme). What it cannot do is design one — from a mood, a photo or a brand, with contrast
 checked — or set the terminal's `term` palette. This skill is that path.

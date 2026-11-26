@@ -2040,7 +2040,7 @@ narrow and tall for one record you are discussing — and each position keeps it
   one it is, so an English browser silently turned Japanese dictation into English.
 - **Remote host** — link MulmoTerminal to the companion phone client (Google sign-in) to
   watch and start sessions from your phone.
-- **Themes** — six terminal palettes (midnight / nord / daylight / solarized / okamoto / pink), your pick
+- **Themes** — terminal palettes (midnight / nord / daylight / solarized / okamoto / pink), your pick
   remembered; a project's `.mulmoterminal.json` can override per directory.
 - **Editing niceties** — **Shift+Enter** inserts a newline in the prompt, and on macOS
   **Option** is treated as Meta so Claude's Alt-key bindings work. If your Claude Code is

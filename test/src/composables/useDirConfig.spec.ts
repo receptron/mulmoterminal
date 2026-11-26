@@ -94,7 +94,7 @@ describe("useDirConfig theme", () => {
   });
 
   // Codex review on #996: the server keeps an id naming a theme the user defined, but this
-  // parser dropped everything except the four built-ins — so pinning a custom theme in
+  // parser dropped everything except the built-ins — so pinning a custom theme in
   // .mulmoterminal.json did nothing, silently, with both halves looking correct on their own.
   it("keeps an id the user defined, which this build cannot enumerate", async () => {
     serve({ theme: "my-dark" });

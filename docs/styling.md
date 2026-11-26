@@ -7,7 +7,7 @@ extracting a component never leaves CSS behind.
 
 ## How it's wired
 
-- **`src/style.css`** — the design tokens. Six themes (`midnight`/`nord`/`daylight`/`solarized`/`okamoto`/`pink`)
+- **`src/style.css`** — the design tokens. The built-in themes (`midnight`/`nord`/`daylight`/`solarized`/`okamoto`/`pink`)
   each redefine the same `--bg-*` / `--text-*` / `--border` / `--accent` / status
   vars under `:root[data-theme="…"]`. Switching `data-theme` on `<html>` recolors
   everything. This is the single source of color truth.

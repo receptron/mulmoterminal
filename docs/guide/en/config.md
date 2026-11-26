@@ -789,7 +789,7 @@ unless it is passed `force: true`.
 
 ## Make your own colour scheme (`themes`) {#custom-themes}
 
-Beyond the six built-ins (Midnight / Nord / Daylight / Solarized Light / Okamoto Taro / Pink), define your own in
+Beyond the built-ins (Midnight / Nord / Daylight / Solarized Light / Okamoto Taro / Pink), define your own in
 `themes` in `~/.mulmoterminal/config.json` and it **appears in Settings' theme picker**. Picking it
 recolours the whole app — grid background, headers, panels, and the terminals themselves.
 

@@ -24,3 +24,15 @@ Two built-in themes beside Midnight / Nord / Daylight / Solarized Light.
 - `--text-muted` on base / panel: above 4.5:1.
 - `--on-accent` on `--accent-bg`: above 4.5:1.
 - `--accent` on base / panel: above 4.5:1.
+- Okamoto `--accent-bg-hover` goes DARKER than `--accent-bg`, as Daylight and Pink do, so white
+  label text keeps 4.5:1 on hover.
+- Terminal: foreground, cursor and all 16 ANSI colours >= 4.5:1 on the terminal background,
+  `black` included, since xterm draws SGR 30 text in it.
+
+## Tests
+
+- `test/scripts/style-theme-blocks.spec.ts` — every `THEME_IDS` entry has a `style.css` block
+  declaring every `THEME_VAR_KEYS` token.
+- `test/src/composables/useTheme.spec.ts` — a palette sets none or all sixteen ANSI colours, and
+  every foreground colour clears 4.5:1, apart from a shrink-only list of what predates the check
+  (Solarized's accents and Daylight's `brightCyan`).

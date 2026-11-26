@@ -396,7 +396,7 @@ export const en = {
     theme: {
       missing: "The selected theme {id} is not defined. Add it to {themesKey} in {configFile}, or pick one below. Your choice is kept until then.",
       intro:
-        "Picks from the schemes that exist. Your own go in {themesKey} in {configFile} and appear here next to the built-in four — the skill writes one from a palette, a photo or a brand's colours, and checks it for contrast.",
+        "Picks from the schemes that exist. Your own go in {themesKey} in {configFile} and appear here next to the built-in ones — the skill writes one from a palette, a photo or a brand's colours, and checks it for contrast.",
       group: "Theme",
       create: "Create a theme…",
     },

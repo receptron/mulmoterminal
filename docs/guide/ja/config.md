@@ -708,7 +708,7 @@ PR が merge されたか閉じられたとき、MulmoTerminal は実装役も�
 
 ## 自分の配色を作る（`themes`） {#custom-themes}
 
-組み込みの 6 つ（Midnight / Nord / Daylight / Solarized Light / Okamoto Taro / Pink）以外の配色を、`~/.mulmoterminal/config.json`
+組み込みのテーマ（Midnight / Nord / Daylight / Solarized Light / Okamoto Taro / Pink）以外の配色を、`~/.mulmoterminal/config.json`
 の `themes` に定義すると **Settings のテーマ選択に並びます**。選ぶとアプリ全体（グリッド背景・ヘッダー・
 パネル・ターミナルの中身）がその配色になります。
 
