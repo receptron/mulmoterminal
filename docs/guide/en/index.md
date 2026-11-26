@@ -8,8 +8,8 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **13.8.2 is out.** A Claude conversation moved to the background with ← stays in the activity history
-> and conversation pane, and a skill call no longer splits a turn. [Setup guide](v13.8.2.html)
+> **13.9.0 is out.** A `git add` or `git commit` in a folder open in a cell no longer fails with
+> "index.lock: File exists", and the Files tree opens to a file you clicked in the terminal. [Setup guide](v13.9.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 

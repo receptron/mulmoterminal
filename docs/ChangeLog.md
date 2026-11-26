@@ -8,6 +8,38 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@13.9.0 — 2026-11-27
+
+> **Setup guide:** [13.9.0 — Your own git commands no longer collide with MulmoTerminal](https://receptron.github.io/mulmoterminal/guide/en/v13.9.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.9.0.html))
+
+### Background git reads take no optional lock (#3564)
+
+Fixes #3556. `git status` refreshes a stale index and writes it back under `.git/index.lock`, and git does not wait for that lock, so a user's `git add` / `commit` / `switch` landing during one of the server's polls (dirty count, Files tree status, worktree checks) failed with `index.lock: File exists`. `git()` in `server/git/worktrees.ts` now spawns every child with `GIT_OPTIONAL_LOCKS=0` (`server/git/git-env.ts`), and so does the shared-app stamp in `server/backends/sharedApp/context.ts`. Only optional locks are dropped; the mandatory locks of real writes (`worktree add`, `checkout`, `fetch`, `update-ref`) are unchanged.
+
+### Files tree follows a file the host opened while the pane was starting (#3563)
+
+Fixes #3557. A path clicked in terminal output while the Files pane was closed opened the file but left the tree folded: the file came to the front while `start()` was still listing the root, so following only scrolled. `FilesPane.vue` records the path the host last asked for (`hostOpenedPath`), and `useFilesReveal` starts following with `showInTree` when the tab in front is that path; otherwise it scrolls only, as before.
+
+### Antigravity plan approval opens its own turn (#3560)
+
+Fixes #3559. Approving a plan in Antigravity's UI writes a `USER_INPUT` step with an empty `<USER_REQUEST>`. `antigravityPromptText` (now its own pure file) takes the first `<USER_REQUEST>` with text and falls back to what agy wrote outside its blocks, so the conversation view opens a turn at the approval and the last turn / finished-turn push carries it as the prompt.
+
+### Transcript turns in a mid-file read (#3554)
+
+Fixes #3553, follow-up to #3550. A read that starts partway through a Claude transcript (the conversation view's byte window and older pages, the latest-prompt, last-turn, current-turn-reply and prompt-history tails) begins with the open turn unknown (`windowTurnBoundary`): a submitted record (`promptSource`) opens a turn, an unsubmitted meta record opens none, and a `<command-…>` record ends the unknown state. Reads from the file's start keep the #3550 rule.
+
+### What's new dialog (#3566)
+
+For #3565. The dialog opens with "MulmoTerminal {version} is out!" and a short thank-you note asking users to spread the word, in all five locales.
+
+### Remote hosts groundwork (#3511, #3513, #3518, #3520, #3522, #3523, #3524, #3527, #3528, #3533, #3534, #3535, #3536, #3537, #3539, #3543, #3547, #3549, #3551, #3552, #3555, #3558)
+
+For #3506, which is still open. Work toward a feature that is not ready yet; it is inactive unless configured and not documented yet.
+
+### Dependencies (#3561)
+
+Library and tool versions updated.
+
 ## mulmoterminal@13.8.2 — 2026-11-26
 
 > **Setup guide:** [13.8.2 — A conversation moved to the background stays in view](https://receptron.github.io/mulmoterminal/guide/en/v13.8.2.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.8.2.html))
