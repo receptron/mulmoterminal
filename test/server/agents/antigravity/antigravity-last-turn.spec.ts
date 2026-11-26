@@ -150,3 +150,25 @@ describe("antigravityFinalAnswer", () => {
     expect(antigravityFinalAnswer(record)).toBeNull();
   });
 });
+
+describe("antigravityLastTurnFromSteps, an artifact approval", () => {
+  const approval = {
+    source: "USER_EXPLICIT",
+    type: "USER_INPUT",
+    status: "DONE",
+    content: "Comments on artifact URI: file:///w/implementation_plan.md\n\nThe user has approved this document.\n\n<USER_REQUEST>\n\n</USER_REQUEST>",
+  };
+  const approved = "Comments on artifact URI: file:///w/implementation_plan.md\n\nThe user has approved this document.";
+
+  it("quotes the approval as the prompt of the work it started", () => {
+    const steps = [user("make a plan"), answer("I drafted a plan."), approval, toolOutput(), answer("Implemented.")];
+    expect(antigravityLastTurnFromSteps(steps)).toEqual({ prompt: approved, reply: "Implemented." });
+    expect(antigravityCurrentTurnReplyFromSteps(steps)).toBe("Implemented.");
+  });
+
+  it("falls back to the plan's exchange while the approved work is still running", () => {
+    const steps = [user("make a plan"), answer("I drafted a plan."), approval, toolOutput()];
+    expect(antigravityLastTurnFromSteps(steps)).toEqual({ prompt: "make a plan", reply: "I drafted a plan." });
+    expect(antigravityCurrentTurnReplyFromSteps(steps)).toBeNull();
+  });
+});

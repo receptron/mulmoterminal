@@ -19,7 +19,7 @@
 // becomes an `unknown` row naming its type rather than vanishing.
 import { isRecord } from "../../../common/isRecord.js";
 import { readString } from "../../../common/readString.js";
-import { antigravityPromptText } from "../../agents/antigravity/antigravity-sessions.js";
+import { antigravityPromptText } from "../../agents/antigravity/antigravity-prompt-text.js";
 import { type TranscriptScan, foldTurnRecord, proseThenCallRows, toolCallRow, toolResultRow, unknownRow } from "./transcript-view.js";
 import type { TranscriptRow } from "../../../common/transcriptView.js";
 

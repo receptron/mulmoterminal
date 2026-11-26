@@ -20,7 +20,7 @@
 import { readString } from "../../../common/readString.js";
 import type { LastTurn } from "../../session/transcript/last-turn.js";
 import { type ExchangeReader, hasToolList, lastCompleteExchange, newestPromptReply } from "../../session/transcript/exchange-fold.js";
-import { antigravityPromptText } from "./antigravity-sessions.js";
+import { antigravityPromptText } from "./antigravity-prompt-text.js";
 
 const isUserInput = (record: Record<string, unknown>): boolean => record.type === "USER_INPUT";
 
