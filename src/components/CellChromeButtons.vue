@@ -12,7 +12,7 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import CellPaneMenu from "./CellPaneMenu.vue";
-import { hasChoice, historyEntries, toolEntries, type CellPaneMenuId, type CellPaneMenuState } from "./cellPaneMenuEntries";
+import { actionsOnly, hasChoice, historyEntries, toolEntries, type CellPaneMenuId, type CellPaneMenuState } from "./cellPaneMenuEntries";
 import { CELL_BTN, CELL_BTN_ACTIVE, CELL_CLOSE_BTN } from "./cellChromeClasses";
 import type { RightPane } from "./gridCell";
 
@@ -99,7 +99,7 @@ const menuState = computed<CellPaneMenuState>(() => ({
   talkAvailable: !!props.talkAvailable,
 }));
 const history = computed(() => historyEntries(menuState.value, t));
-const tools = computed(() => toolEntries(menuState.value, t));
+const tools = computed(() => (props.panesHidden ? actionsOnly(toolEntries(menuState.value, t)) : toolEntries(menuState.value, t)));
 
 const PICK_EVENT = {
   prompts: "toggle-prompts",
@@ -133,7 +133,7 @@ const parkTitle = computed(() => (props.parked ? t("tips.cell.wake") : t("tips.c
       @select="onPick"
     />
     <CellPaneMenu
-      v-if="!panesHidden && hasChoice(tools)"
+      v-if="hasChoice(tools)"
       icon="build"
       :label="t('cellMenu.tools')"
       testid="cell-tools-btn"

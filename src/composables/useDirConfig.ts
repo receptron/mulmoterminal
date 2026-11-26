@@ -14,6 +14,7 @@ import { parsePublicDirBackground, type PublicDirBackground } from "../../common
 import { isRecord } from "../../common/isRecord";
 import { dirChipColor } from "../components/dirChipColor";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
+import { dirApiUrl, isRemoteDirKey } from "./dirAddress";
 
 // The per-directory overrides a terminal adopts when its cwd holds a
 // `.mulmoterminal.json` (served by GET /api/dir-config). The raw sound path stays
@@ -109,13 +110,27 @@ function parse(c: unknown): DirConfig {
   };
 }
 
+// A remote directory's own icon, background and sound are served by THIS server's routes naming the
+// remote's path, so they are dropped until those bytes come through the gateway. A web URL is kept.
+const servedHere = (url: string): boolean => url.startsWith("/");
+const onItsMachine = (key: string, config: DirConfig): DirConfig =>
+  isRemoteDirKey(key)
+    ? {
+        ...config,
+        iconUrl: config.iconUrl !== null && servedHere(config.iconUrl) ? null : config.iconUrl,
+        backgroundImage: config.backgroundImage !== null && servedHere(config.backgroundImage.url) ? null : config.backgroundImage,
+        hasSound: false,
+      }
+    : config;
+
+/** `cwd` is a directory key (dirAddress.ts): a remote one is read through the gateway. */
 export function fetchDirConfig(cwd: string): Promise<DirConfig> {
   const cached = cache.get(cwd);
   if (cached) return cached;
   const pending = (async () => {
     try {
-      const res = await fetchWithTimeout(`/api/dir-config?cwd=${encodeURIComponent(cwd)}`);
-      const parsed = res.ok ? parse(await res.json()) : EMPTY;
+      const res = await fetchWithTimeout(dirApiUrl(cwd, "/api/dir-config"));
+      const parsed = res.ok ? onItsMachine(cwd, parse(await res.json())) : EMPTY;
       resolvedConfig.set(cwd, parsed); // remember the value so a re-mount seeds it synchronously
       return parsed;
     } catch {

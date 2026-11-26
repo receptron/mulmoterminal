@@ -9,6 +9,8 @@ import { missedMarkFor } from "./missedAttention";
 import { applyMissedMark } from "./useMissedAttention";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import { fireConfettiForEvent } from "./useConfetti";
+import { remoteRowForAttention } from "./remoteAttention";
+import { parseRemoteSessionsMessage, REMOTE_SESSIONS_CHANNEL } from "../../common/remoteHosts";
 
 // What the player needs from the user's config: which moments beep, and what each plays.
 // `soundFile` is the all-kind fallback a `sounds` entry overrides.
@@ -312,7 +314,7 @@ export function useAttentionSound(enabled: Ref<boolean>, config: Ref<SoundConfig
   });
   const prev = new Map<string, ActivityState>();
   const { subscribe } = usePubSub();
-  const unsubscribe = subscribe("sessions", (d) => {
+  const onSessionRow = (d: unknown) => {
     if (!isActivityMsg(d)) return;
     // Asked BEFORE notifyKindOf, which is what records the session — a session already waiting
     // when the page loaded gets its first row swallowed as baseline, and that swallowed row is
@@ -323,9 +325,16 @@ export function useAttentionSound(enabled: Ref<boolean>, config: Ref<SoundConfig
     const wanted = kind !== null && enabled.value && config.value.kinds.includes(kind) ? kind : null;
     const sounded = wanted !== null && playNotify(wanted, d.cwd ?? null, config.value);
     applyMissedMark(d.id, missedMarkFor({ closed: d.event === "closed", firstSighting, waiting: d.waiting ?? false, suppressed: wanted !== null && !sounded }));
+  };
+  const unsubscribe = subscribe("sessions", onSessionRow);
+  // The remote hosts' rows the server relays (#3506), through the same decision as this machine's.
+  const unsubscribeRemote = subscribe(REMOTE_SESSIONS_CHANNEL, (data) => {
+    const message = parseRemoteSessionsMessage(data);
+    if (message && "row" in message) onSessionRow(remoteRowForAttention(message));
   });
   onUnmounted(() => {
     unsubscribe();
+    unsubscribeRemote();
     offResumed();
   });
 }

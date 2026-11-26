@@ -79,7 +79,7 @@ describe("useTreeFileOps", () => {
     const src: TreeNode = { name: "src", path: "src", dir: true, expanded: false, loaded: false, children: [], size: 0 };
     dirs.set("src", src);
     await ops.run({ id: "new-file", labelKey: "", icon: "", dirRel: "src", rowRel: "src" });
-    expect(treeOp).toHaveBeenCalledWith("create", "cwd=%2Fproj&path=src", { name: "new.md", kind: "file" });
+    expect(treeOp).toHaveBeenCalledWith(null, "create", "cwd=%2Fproj&path=src", { name: "new.md", kind: "file" });
     expect(deps.tree.toggleDir).toHaveBeenCalledWith(src);
     // On its editor, whatever view the pane carries (#3075): a file just made is there to be written.
     expect(deps.tabs.open).toHaveBeenCalledWith("src/new.md", false, { path: "src/new.md" });
@@ -157,7 +157,7 @@ describe("useTreeFileOps", () => {
     const { ops, deps, tabsStrip } = setup(STRIP);
     await ops.run({ id: "trash", labelKey: "", icon: "", pathRel: "src", isDir: true });
     expect(deps.confirm).toHaveBeenCalled();
-    expect(treeOp).toHaveBeenCalledWith("trash", "cwd=%2Fproj&path=src", {});
+    expect(treeOp).toHaveBeenCalledWith(null, "trash", "cwd=%2Fproj&path=src", {});
     expect(tabsStrip.value).toEqual({ tabs: [{ path: "a.md" }], activePath: "a.md" });
     expect(deps.tree.refresh).toHaveBeenCalledWith("");
   });

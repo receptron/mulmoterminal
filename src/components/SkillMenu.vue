@@ -7,6 +7,7 @@ import { isDiscoveredSkill, type DiscoveredSkill } from "../composables/useDirLi
 import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import { useI18n } from "vue-i18n";
+import { dirApiUrl } from "../composables/dirAddress";
 
 const { t } = useI18n();
 
@@ -39,7 +40,7 @@ async function loadSkills() {
     return;
   }
   try {
-    const res = await fetchWithTimeout(`/api/skills?cwd=${encodeURIComponent(dir)}`);
+    const res = await fetchWithTimeout(dirApiUrl(dir, "/api/skills"));
     const data = res.ok ? await jsonBody(res) : {};
     if (reqId !== req) return;
     skills.value = isUnknownArray(data.skills) ? data.skills.filter(isDiscoveredSkill) : [];

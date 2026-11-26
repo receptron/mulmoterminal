@@ -1,5 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { isRemoteHostId, parseRemoteHostDirs, parseRemoteHostsResponse, REMOTE_DIR_PRESETS_MAX, remotePath, remotePathOf } from "../../common/remoteHosts";
+import {
+  isRemoteHostId,
+  parseRemoteSessionsMessage,
+  remoteActivityOf,
+  remoteSessionKey,
+  remoteSessionRowOf,
+  remoteSessionDetailOf,
+  parseRemoteHostDirs,
+  parseRemoteHostIds,
+  parseRemoteHostsResponse,
+  REMOTE_DIR_PRESETS_MAX,
+  remotePath,
+  remotePathOf,
+} from "../../common/remoteHosts";
 
 describe("isRemoteHostId", () => {
   it("accepts lowercase slugs", () => {
@@ -81,5 +94,69 @@ describe("parseRemoteHostDirs", () => {
   it("caps how many directories it keeps", () => {
     const many = Array.from({ length: REMOTE_DIR_PRESETS_MAX + 5 }, (_, i) => ({ label: `d${i}`, path: `/d${i}` }));
     expect(parseRemoteHostDirs(null, many).presets).toHaveLength(REMOTE_DIR_PRESETS_MAX);
+  });
+});
+
+describe("parseRemoteHostIds", () => {
+  it("keeps the valid ids and drops everything else", () => {
+    expect(parseRemoteHostIds({ ids: ["lx", "Bad", 3, null, "b-2"] })).toEqual(["lx", "b-2"]);
+    [undefined, null, [], { ids: "lx" }, "lx"].forEach((body) => expect(parseRemoteHostIds(body)).toEqual([]));
+  });
+});
+
+describe("remote session messages", () => {
+  const ROW = { id: "s1", working: true, waiting: false, event: "Stop", cwd: "/srv", lastPrompt: null };
+  it("reads a row or a resync, and nothing else", () => {
+    expect(parseRemoteSessionsMessage({ host: "lx", row: ROW })).toEqual({ host: "lx", row: ROW });
+    expect(parseRemoteSessionsMessage({ host: "lx", resync: true })).toEqual({ host: "lx", resync: true });
+    [null, {}, { host: "LX", resync: true }, { host: "lx" }, { host: "lx", row: { id: "" } }, { host: "lx", resync: "yes" }].forEach((data) =>
+      expect(parseRemoteSessionsMessage(data)).toBeNull(),
+    );
+  });
+  it("copies only the known fields, and only with the right types", () => {
+    expect(remoteSessionRowOf({ ...ROW, memo: 3, extra: "x", failed: "no" }, () => true)).toEqual(ROW);
+    expect(remoteSessionRowOf(ROW, () => false)).toBeNull();
+  });
+  it("keys a remote session by host and id, so equal ids on two hosts stay apart", () => {
+    expect(remoteSessionKey("lx", "s1")).not.toBe(remoteSessionKey("ly", "s1"));
+    expect(remoteSessionKey("lx", "s1")).not.toBe("s1");
+  });
+  it("cuts an activity answer to the asked ids and three fields", () => {
+    expect(remoteActivityOf({ a: { working: true, waiting: true, event: "x", memo: "m" }, b: "junk" }, ["a", "b", "c"])).toEqual({
+      a: { working: true, waiting: true, event: "x" },
+      b: { working: false, waiting: false, event: null },
+      c: { working: false, waiting: false, event: null },
+    });
+    expect(remoteActivityOf(null, ["a"])).toEqual({ a: { working: false, waiting: false, event: null } });
+  });
+});
+
+describe("remoteSessionDetailOf", () => {
+  it("keeps the fields a remote cell shows, each only with the type it reads", () => {
+    const usage = { inputTokens: 1 };
+    const context = { model: "m", contextTokens: 2 };
+    expect(
+      remoteSessionDetailOf({
+        working: true,
+        waiting: "no",
+        event: "Stop",
+        lastPrompt: "p",
+        lastResponse: null,
+        aiTitle: 3,
+        customTitle: "c",
+        memo: null,
+        workPhase: "editing",
+        usage,
+        context: "big",
+        peerName: "peer",
+        collection: { slug: "x" },
+        cwd: "/srv",
+        id: "x",
+      }),
+    ).toEqual({ working: true, event: "Stop", lastPrompt: "p", lastResponse: null, customTitle: "c", memo: null, workPhase: "editing", usage });
+    expect(remoteSessionDetailOf({ context })).toEqual({ context });
+  });
+  it("answers nothing for a body that is not a record", () => {
+    [null, undefined, "x", 3, []].forEach((body) => expect(remoteSessionDetailOf(body)).toEqual({}));
   });
 });
