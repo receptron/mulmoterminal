@@ -10,6 +10,17 @@ round trip: you lay out the plan, the user tries the choices and settles them on
 decisions come back to you as a message you can act on. You do not ask the questions one by one in
 the terminal; the page asks them all at once, where they can be seen side by side.
 
+## 0. Check for `presentHtml` before anything else
+
+The whole round trip runs through `presentHtml`. In a project directory it exists only when
+**Canvas** was switched on before the session started. If you do not have it, stop here — before
+reading code or drafting a page — and tell the user: switch on Canvas for this folder in the
+launcher's MCP toggles, then start the cell again and ask once more.
+
+Do not work around a missing tool. Posting to the server's `/api/mcp/…` yourself, writing the page
+to a file, or opening it in a browser does not put it in the pane beside this terminal, and a Send
+pressed anywhere else never reaches you — the user decides everything and it is lost.
+
 ## 1. Know what you are planning before you draw anything
 
 Read the request, the code it touches and the project's own instructions (`CLAUDE.md`, `AGENTS.md`,
