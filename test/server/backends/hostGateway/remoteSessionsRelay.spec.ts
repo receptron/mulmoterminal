@@ -61,6 +61,11 @@ async function until(predicate: () => boolean, label: string, budgetMs = 4000): 
 
 const isResync = (message: RemoteSessionsMessage) => "resync" in message;
 
+// The relay asks to subscribe as it publishes the resync, so a row sent before the remote has
+// joined it to the room is sent to no one.
+const subscribed = (pubsub: ReturnType<typeof createPubSub>, count = 1) =>
+  until(() => pubsub.subscriberCount("sessions") === count, `${count} subscriber(s) on the remote`);
+
 describe("relayMessage", () => {
   it("copies a row's known fields and tags it with the host", () => {
     expect(relayMessage("lx", { ...ROW, secret: "x", working: "yes" })).toEqual({ host: "lx", row: { ...ROW, working: false } });
@@ -82,6 +87,7 @@ describe("the session relay", () => {
     const { host, pubsub } = await remote();
     const { published } = relayTo(() => [host]);
     await until(() => published.some(isResync), "resync on connect");
+    await subscribed(pubsub);
     pubsub.publish("sessions", ROW);
     await until(() => published.some((message) => "row" in message), "a relayed row");
     expect(published).toEqual([
@@ -94,6 +100,7 @@ describe("the session relay", () => {
     const { host, pubsub } = await remote();
     const { published } = relayTo(() => [host]);
     await until(() => published.some(isResync), "resync on connect");
+    await subscribed(pubsub);
     pubsub.publish("file-write", { path: "/etc/passwd" });
     pubsub.publish("ask-question", { id: SESSION });
     pubsub.publish("sessions", ROW);
@@ -118,8 +125,10 @@ describe("the session relay", () => {
     let hosts = [host];
     const { relay, published } = relayTo(() => hosts);
     await until(() => published.some(isResync), "resync on connect");
+    await subscribed(pubsub);
     hosts = [];
     await relay.reconcile();
+    await subscribed(pubsub, 0);
     const before = published.length;
     pubsub.publish("sessions", ROW);
     await new Promise((resolve) => setTimeout(resolve, 200));
