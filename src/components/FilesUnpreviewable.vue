@@ -4,7 +4,8 @@
 import type { FileMediaKind } from "./filePreviewKind";
 import FilesMediaView from "./FilesMediaView.vue";
 
-defineProps<{ kind: FileMediaKind | null; src: string; name: string; message: string }>();
+// `canOpen` false where the file is on another machine, whose OS this one cannot hand it to.
+withDefaults(defineProps<{ kind: FileMediaKind | null; src: string; name: string; message: string; canOpen?: boolean }>(), { canOpen: true });
 const emit = defineEmits<{ "open-in-os": [] }>();
 </script>
 
@@ -20,6 +21,7 @@ const emit = defineEmits<{ "open-in-os": [] }>();
       <p class="text-[13px] text-muted">{{ message }}</p>
     </template>
     <button
+      v-if="canOpen"
       type="button"
       class="mt-1 inline-flex cursor-pointer items-center gap-1 rounded-md border border-border bg-transparent px-3 py-1.5 text-[13px] text-fg hover:bg-hover"
       data-testid="files-open-in-os"

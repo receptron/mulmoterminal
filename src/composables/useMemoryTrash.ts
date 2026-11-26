@@ -29,7 +29,7 @@ export function useMemoryTrash(changed: () => void) {
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   void (async () => {
-    available.value = await trashAvailable();
+    available.value = await trashAvailable(null);
   })();
 
   function show(next: MemoryTrashNotice | null): void {

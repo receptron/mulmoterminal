@@ -43,10 +43,9 @@ import {
   type GridState,
   type Cell,
   type SortMode,
-  resolveCellStatus,
   MAX_TERMINALS,
 } from "./gridTabs";
-import { activityStatus, type AttentionStatus } from "./attentionStatus";
+import type { AttentionStatus } from "./attentionStatus";
 import { collectionTerminalClaim, publishGridSessions } from "../composables/collectionTerminalClaim";
 import { cellsToDisplay } from "./displayCells";
 import { terminalMove, type GridShortcut } from "../composables/gridShortcut";
@@ -67,7 +66,7 @@ import type { RunCommand } from "./runCommand";
 import { recordClosedCellOf } from "../composables/useRecentlyClosed";
 import { becameCiFailing, EMPTY_SESSION_META, isPrPhase, mergeSessionMeta, type PrPhase, type SessionMetaView } from "./rosterPhase";
 import { notifySound } from "../composables/notifySound";
-import { useGridActivity } from "../composables/useGridActivity";
+import { useGridCellStatus } from "../composables/useGridCellStatus";
 import { registerNewTerminalHandler, type NewTerminalRequest } from "../composables/useNewTerminal";
 import { isGridCellShortcut } from "../../common/headerActions";
 import { registerSpawnedChatHandler, type SpawnedChatRequest } from "../composables/useSpawnedChat";
@@ -85,7 +84,7 @@ import { isRecord } from "../../common/isRecord";
 import { isDrawnResult } from "../utils/drawnResult";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
 import { isFilesPaneAction } from "./filesPaneActions";
-import { isRemoteHost } from "./remoteCell";
+import { actionAllowedOn, isRemoteHost, sessionDetailPath } from "./remoteCell";
 
 // The multi-terminal grid view, shown at /terminals. Leaving the grid is just a
 // route push from the shared toolbar (Chat / Collections / a favorite), so there's
@@ -118,27 +117,19 @@ watch(
 // pointer to the guide, cleared the moment any terminal starts.
 const noRunningTerminals = computed(() => runningCount(state.value.cells) === 0);
 
-// The "auto" order needs every cell's status, including cells on pages that aren't
-// mounted. useGridActivity tracks each cell session's live attention state by id —
-// including OFF-PAGE, dev-terminal cells that the /api/sessions list drops and its
-// limit would cap — so a waiting cell on any page floats forward. The per-cell
-// `statusByUid` (reported up while a cell is mounted) is the fallback for cells with
-// no session id (command cells) and a just-launched cell before its id arrives.
 // The cells this server can be asked about; a remote cell's session and cwd belong to another machine (remoteCell.ts).
 const localCells = computed(() => state.value.cells.filter((c) => !isRemoteHost(c.remoteHost)));
-const cellSessionIds = computed(() => localCells.value.map((c) => c.session).filter((s): s is string => !!s));
-const { activity: gridActivity } = useGridActivity(cellSessionIds);
 const statusByUid = reactive<Record<number, AttentionStatus>>({});
 const onStatus = (uid: number, s: AttentionStatus) => (statusByUid[uid] = s);
 // Which cell the cursor is in, reported up from the grid. Un-zoomed this is the only notion of
 // "the terminal I am on", so the keyboard shortcuts rotate from it.
 const focusedCellUid = ref<number | null>(null);
-const sessionStatus = computed(() => {
-  const m = new Map<string, AttentionStatus>();
-  for (const [id, a] of gridActivity) m.set(id, activityStatus(a.working, a.waiting, a.event));
-  return m;
-});
-const statusForSort = computed<Record<number, AttentionStatus>>(() => resolveCellStatus(state.value.cells, sessionStatus.value, statusByUid));
+// The "auto" order needs every cell's status, including cells on pages that aren't mounted.
+const statusForSort = useGridCellStatus(
+  computed(() => state.value.cells),
+  localCells,
+  statusByUid,
+);
 // At-a-glance tally across ALL pages, for the toolbar summary.
 const statusCounts = computed(() => countByStatus(state.value.cells, statusForSort.value));
 const reorderable = computed(() => state.value.sortMode === "manual");
@@ -176,16 +167,14 @@ const sessionMeta = reactive(new Map<string, SessionMetaView>());
 // one goes out. Only the newest may be applied: an older one describes a moment already
 // overtaken, and its fields would put back what the newer answer replaced (#620).
 const latestMetaSeed = new Map<string, number>();
-async function seedMeta(id: string, cwd: string | null, agent: TerminalAgent) {
+async function seedMeta(id: string, cwd: string | null, agent: TerminalAgent, remoteHost: string | undefined) {
   const seed = (latestMetaSeed.get(id) ?? 0) + 1;
   latestMetaSeed.set(id, seed);
   try {
     // The agent names the LOG the row's prompt and reply are read from, not just the badges
     // (#2121): a codex cell's are in its rollout, and a request that omits this is answered from
     // claude's transcript — where that session has no file, so both lines read empty.
-    const params = new URLSearchParams({ agent });
-    if (cwd) params.set("cwd", cwd);
-    const res = await fetchWithTimeout(`/api/session/${id}?${params}`);
+    const res = await fetchWithTimeout(sessionDetailPath(id, agent, cwd, remoteHost));
     if (!res.ok || latestMetaSeed.get(id) !== seed) return;
     const d: unknown = await res.json();
     if (latestMetaSeed.get(id) !== seed) return;
@@ -197,7 +186,8 @@ async function seedMeta(id: string, cwd: string | null, agent: TerminalAgent) {
 // `asTerminalAgent`, not `c.agent`: the field is absent for claude (the default is stored as the
 // absence of the key) and equally absent on a launcher cell, which is not an agent session at all —
 // both mean claude to this route, which is what they were already getting.
-const refreshAllMeta = () => localCells.value.forEach((c) => c.session && void seedMeta(c.session, c.cwd, asTerminalAgent(c.agent)));
+// A remote cell's detail comes through the gateway (#3506), so every cell is asked about here.
+const refreshAllMeta = () => state.value.cells.forEach((c) => c.session && void seedMeta(c.session, c.cwd, asTerminalAgent(c.agent), c.remoteHost));
 // The PR workflow phase per directory (GET /api/pr-phase), shown in the roster beside the
 // agent status. Keyed by cwd, not session — the phase is the branch's, so cells sharing a dir
 // share one fetch. Best-effort and cached server-side, so the roster poll can re-fetch cheaply.
@@ -533,6 +523,14 @@ function runShortcut(shortcut: GridShortcut) {
   }
 }
 
+// The keyboard's twin of the header's check: a remote cell's directory is not one to open a local terminal in.
+function newTerminalFrom(origin: number | null) {
+  if (actionAllowedOn(state.value.cells, origin, "terminal-new-here")) toggleLaunchPanel(origin);
+}
+function newShellBeside(uid: number) {
+  if (actionAllowedOn(state.value.cells, uid, "terminal-new-adjacent")) state.value = insertCellAfter(state.value, uid, shellCell(adjacentCwd(uid)));
+}
+
 // The half that acts on a CELL rather than on the zoom. Its own function so neither grows past
 // what a reader can hold — and past what the complexity rule allows.
 function runCellShortcut(shortcut: GridShortcut, uid: number | null) {
@@ -546,7 +544,7 @@ function runCellShortcut(shortcut: GridShortcut, uid: number | null) {
     // No `uid !== null` guard, and so not in NEEDS_A_CURRENT_TERMINAL: with the panel over the
     // stage this works in every view mode, and with no cell to read it simply opens on the default
     // workspace instead of doing nothing.
-    toggleLaunchPanel(uid ?? focusedCellUid.value);
+    newTerminalFrom(uid ?? focusedCellUid.value);
   } else if (isGridCellShortcut(shortcut)) {
     // A pane, the timeline, talk, set aside, restart: the grid decides them for one cell, the same
     // way it does for that cell's header button. Un-zoomed they act on the cursor's cell.
@@ -555,7 +553,7 @@ function runCellShortcut(shortcut: GridShortcut, uid: number | null) {
   } else if (uid === null) {
     return; // everything below acts on one terminal, and there is none to name
   } else if (shortcut === "terminal-new-adjacent") {
-    state.value = insertCellAfter(state.value, uid, shellCell(adjacentCwd(uid)));
+    newShellBeside(uid);
   } else if (shortcut === "terminal-close") {
     if (!gridRef.value?.requestClose(uid)) onClose(uid);
   } else if (isFilesPaneAction(shortcut)) {
