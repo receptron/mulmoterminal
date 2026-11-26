@@ -82,7 +82,7 @@ describe("decideForward: which requests cross", () => {
 // A session's own record (#3506), named by `?session=` rather than by the path.
 describe("decideForward: a session named in the query", () => {
   const decideShipped = (method: string, path: string, query: unknown) => decideForward(method, path, query);
-  const routes = ["/api/transcript/prompts", "/api/transcript/view", "/api/transcript/timeline", "/api/transcript/last-turn"];
+  const routes = ["/api/transcript/prompts", "/api/transcript/view", "/api/transcript/timeline", "/api/transcript/last-turn", "/api/transcript/relay"];
   it.each(routes)("forwards %s for a session id, with the cwd its log lives under", (path) => {
     expect(decideShipped("GET", path, { session: SESSION, cwd: "/srv/p", extra: "x" })).toMatchObject({
       kind: "forward",
@@ -110,10 +110,15 @@ describe("decideForward: a session named in the query", () => {
       path: `/api/transcript/last-turn?session=${SESSION}&agent=claude&as=reply`,
     });
   });
-  it("forwards no write and no relay of a transcript", () => {
-    expect(decideShipped("GET", "/api/transcript/relay", { session: SESSION })).toMatchObject({ kind: "refuse", status: 404 });
-    expect(decideShipped("POST", "/api/transcript/relay-mark", { session: SESSION })).toMatchObject({ kind: "refuse", status: 404 });
+  // A relay's destination is a key the remote keeps its mark under, never a path it reads.
+  it("forwards the relay and its mark with the destination key, and no other write", () => {
+    const query = { session: SESSION, agent: "claude", dest: "\0/Users/me/app", cwd: "/srv/p", mark: "x" };
+    const path = `?session=${SESSION}&cwd=%2Fsrv%2Fp&agent=claude&dest=%00%2FUsers%2Fme%2Fapp`;
+    expect(decideShipped("GET", "/api/transcript/relay", query)).toMatchObject({ kind: "forward", path: `/api/transcript/relay${path}` });
+    expect(decideShipped("POST", "/api/transcript/relay-mark", query)).toMatchObject({ kind: "forward", path: `/api/transcript/relay-mark${path}` });
+    expect(decideShipped("POST", "/api/transcript/relay-mark", { dest: "/x" })).toMatchObject({ kind: "refuse", status: 400 });
     expect(decideShipped("POST", "/api/transcript/view", { session: SESSION })).toMatchObject({ kind: "refuse", status: 404 });
+    expect(decideShipped("GET", "/api/transcript/relay-mark", { session: SESSION })).toMatchObject({ kind: "refuse", status: 404 });
   });
 });
 

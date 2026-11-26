@@ -27,16 +27,16 @@ const ON_REMOTE_CELL: Record<CellAction, boolean> = {
   "terminal-new-adjacent": false,
   "terminal-restart": true,
   "terminal-timeline": true,
-  "terminal-talk": false,
+  "terminal-talk": true,
   "terminal-copy-code": true,
   "terminal-insert-path": false,
   "terminal-reveal": false,
   "terminal-diff": false,
   "terminal-note": true,
-  "terminal-send-turn": false,
-  "terminal-send-since": false,
-  "terminal-bring-turn": false,
-  "terminal-bring-since": false,
+  "terminal-send-turn": true,
+  "terminal-send-since": true,
+  "terminal-bring-turn": true,
+  "terminal-bring-since": true,
   "pane-files": true,
   "pane-prompts": true,
   "pane-transcript": true,
@@ -63,8 +63,11 @@ export const pathOnHost = (host: string | null | undefined, path: string): strin
 export const REMOTE_CELL_DECLINE_EN = "This terminal runs on another machine, so that is not available here yet.";
 
 /** A read of one session's own record: this server's route, or the gateway's for a remote cell. */
-export const transcriptPath = (host: string | null | undefined, route: "prompts" | "view" | "timeline" | "last-turn", params: URLSearchParams): string =>
-  pathOnHost(host, `/api/transcript/${route}?${params.toString()}`);
+export const transcriptPath = (
+  host: string | null | undefined,
+  route: "prompts" | "view" | "timeline" | "last-turn" | "relay" | "relay-mark",
+  params: URLSearchParams,
+): string => pathOnHost(host, `/api/transcript/${route}?${params.toString()}`);
 
 /** A write to one session: this server's route, or the gateway's for a remote cell. */
 export const sessionWritePath = (host: string | null | undefined, sessionId: string, action: "memo" | "terminate" | "drop"): string =>

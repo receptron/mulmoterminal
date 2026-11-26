@@ -14,6 +14,7 @@ import { isRecord } from "../../common/isRecord";
 import type { TerminalAgent } from "../../common/sessionAgent";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import { transcriptPath } from "../components/remoteCell";
+import { relayDestKey, type RelayEnd } from "./relayDest";
 
 // A terminal whose last exchange can be pulled: how to name it in the menu, and what
 // the server needs to find its log.
@@ -34,15 +35,18 @@ export interface HandoffSource {
 // Slot keys are `cell-<uid>`, and the uid is an ARRAY POSITION — renumbered on every grid parse
 // (useTerminalConnections.ts, `attach`) and shown on no cell. `#3` therefore names nothing the
 // reader can point at, and two terminals in one directory differ here by that number alone (#2005).
+// A remote terminal names its host, and its directory is not shortened by this machine's home (#3506).
 export const slotLabel = (slot: SlotInfo, home: string | null): string => {
   const cell = slot.key.startsWith("cell-") ? `#${slot.key.slice("cell-".length)}` : slot.key;
-  return slot.cwd ? `${cell} · ${slot.agent} · ${formatCwd(slot.cwd, home, 24)}` : `${cell} · ${slot.agent}`;
+  const where = slot.host ? `${cell} · ${slot.host}` : cell;
+  if (!slot.cwd) return `${where} · ${slot.agent}`;
+  return `${where} · ${slot.agent} · ${formatCwd(slot.cwd, slot.host ? null : home, 24)}`;
 };
 
 export const toHandoffTarget = (slot: SlotInfo, home: string | null): HandoffTarget => ({
   key: slot.key,
   label: slotLabel(slot, home),
-  source: { sessionId: slot.sessionId, cwd: slot.cwd, agent: slot.agent },
+  source: { sessionId: slot.sessionId, cwd: slot.cwd, agent: slot.agent, ...(slot.host ? { host: slot.host } : {}) },
 });
 
 export function pickHandoffTargets(slots: SlotInfo[], selfKey: string, home: string | null): HandoffTarget[] {
@@ -135,17 +139,18 @@ export interface RelayFetched {
   mark: string | null;
 }
 
-const relayParams = (source: HandoffSource, destCwd: string): string => {
-  const params = new URLSearchParams({ session: source.sessionId, agent: source.agent, dest: destCwd });
+// `dest` is the destination as the source's server remembers it (relayDest.ts), not a path to read.
+const relayParams = (source: HandoffSource, dest: string): URLSearchParams => {
+  const params = new URLSearchParams({ session: source.sessionId, agent: source.agent, dest });
   if (source.cwd) params.set("cwd", source.cwd);
-  return params.toString();
+  return params;
 };
 
 const RELAY_STATUSES: readonly RelayFetched["status"][] = ["ok", "no-turn", "nothing-new"];
 const isRelayStatus = (value: unknown): value is RelayFetched["status"] => RELAY_STATUSES.some((status) => status === value);
 
 async function fetchRelay(source: HandoffSource, destCwd: string): Promise<RelayFetched> {
-  const res = await fetchWithTimeout(`/api/transcript/relay?${relayParams(source, destCwd)}`, undefined, REQUEST_TIMEOUT_MS);
+  const res = await fetchWithTimeout(transcriptPath(source.host, "relay", relayParams(source, destCwd)), undefined, REQUEST_TIMEOUT_MS);
   if (!res.ok) throw new Error(`relay request failed (${res.status})`);
   const data: unknown = await res.json();
   if (!isRecord(data) || !isRelayStatus(data.status)) return { status: "no-turn", text: "", mark: null };
@@ -154,7 +159,7 @@ async function fetchRelay(source: HandoffSource, destCwd: string): Promise<Relay
 
 async function recordRelayMark(source: HandoffSource, destCwd: string, mark: string): Promise<void> {
   const init = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mark }) };
-  const res = await fetchWithTimeout(`/api/transcript/relay-mark?${relayParams(source, destCwd)}`, init, REQUEST_TIMEOUT_MS);
+  const res = await fetchWithTimeout(transcriptPath(source.host, "relay-mark", relayParams(source, destCwd)), init, REQUEST_TIMEOUT_MS);
   if (!res.ok) throw new Error(`relay-mark request failed (${res.status})`);
 }
 
@@ -168,12 +173,13 @@ export interface RelayDeps {
 export const defaultRelayDeps: RelayDeps = { fetchRelay, paste: pasteText, recordMark: recordRelayMark };
 
 // Null on success, or a short message for the cell — like pullLastTurn.
-export const pullSinceRelay = (target: HandoffTarget, ownKey: string, destCwd: string | null, deps: RelayDeps = defaultRelayDeps): Promise<string | null> =>
-  pasteSinceRelay(target.source, ownKey, destCwd, PULL_WORDS, deps);
+// `own` is the cell the text lands in: its directory, and its host when it is a remote one (#3506).
+export const pullSinceRelay = (target: HandoffTarget, ownKey: string, own: RelayEnd, deps: RelayDeps = defaultRelayDeps): Promise<string | null> =>
+  pasteSinceRelay(target.source, ownKey, relayDestKey(target.source, own), PULL_WORDS, deps);
 
 /** The other direction (#3397): this cell's exchanges since the last relay to `partner`'s directory. */
 export const sendSinceRelay = (self: HandoffSource, partner: HandoffTarget, deps: RelayDeps = defaultRelayDeps): Promise<string | null> =>
-  pasteSinceRelay(self, partner.key, partner.source.cwd, SEND_WORDS, deps);
+  pasteSinceRelay(self, partner.key, relayDestKey(self, partner.source), SEND_WORDS, deps);
 
 async function pasteSinceRelay(source: HandoffSource, destKey: string, destCwd: string | null, words: HandoffWords, deps: RelayDeps): Promise<string | null> {
   if (!destCwd) return `${words.destDir} no directory to remember the relay by`;

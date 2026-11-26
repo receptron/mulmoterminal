@@ -42,11 +42,11 @@ const browse = (method: RemoteRouteMethod, route: string, access: "read" | "writ
 });
 
 // A session's own record, read on its host: `cwd` only says where its log lives.
-const transcript = (route: string, query: readonly string[]): RemoteRoute => ({
-  method: "GET",
+const transcript = (route: string, query: readonly string[], method: RemoteRouteMethod = "GET", access: "read" | "write" = "read"): RemoteRoute => ({
+  method,
   path: `/api/transcript/${route}`,
   key: "session",
-  access: "read",
+  access,
   query: ["session", "cwd", ...query],
 });
 
@@ -88,6 +88,9 @@ export const REMOTE_ROUTES = {
   transcriptView: transcript("view", ["before"]),
   transcriptTimeline: transcript("timeline", []),
   transcriptLastTurn: transcript("last-turn", ["agent", "as"]),
+  // A relay's `dest` is only ever a key on the remote, never a path it reads.
+  transcriptRelay: transcript("relay", ["agent", "dest"]),
+  transcriptRelayMark: transcript("relay-mark", ["agent", "dest"], "POST", "write"),
 } as const satisfies Record<string, RemoteRoute>;
 
 export type RemoteRouteName = keyof typeof REMOTE_ROUTES;

@@ -742,7 +742,11 @@ function refreshAskTargets() {
 // Read from the slot, not kept here: the slot outlives this component, which the trip into and out of
 // a collection pane remounts.
 const talkStartable = computed(() => canStartTalk({ sessionId: sessionId.value, sessionEnded: connView.get(`cell-${props.uid}`)?.sessionEnded ?? false }));
-const talkAvailable = computed(() => !isRemote && talkStartable.value && askTargets.value.length > 0);
+const talkAvailable = computed(() => talkStartable.value && askTargets.value.length > 0);
+// An exchange and a round table wait on each seat's turn as this server sees it, so they seat only
+// this machine's terminals; a remote one is handed turns through the rows above them (#3506).
+const tableTargets = computed(() => (isRemote ? [] : askTargets.value.filter((target) => !target.source.host)));
+const exchangeable = (target: HandoffTarget): boolean => !isRemote && !target.source.host;
 
 function openAskMenu() {
   refreshAskTargets();
@@ -776,14 +780,17 @@ async function askCell(target: HandoffTarget) {
 
 async function relayCell(target: HandoffTarget) {
   askMenuOpen.value = false;
-  const error = await pullSinceRelay(target, `cell-${props.uid}`, cwd.value);
+  const error = await pullSinceRelay(target, `cell-${props.uid}`, { cwd: cwd.value, host: props.remoteHost ?? null });
   if (error) showAskMsg(error);
 }
 
 // The send / bring cell actions (#3397). One partner in this directory or repo is acted on; several
 // open the Talk menu to choose; none says so. After a send the partner comes forward with the
 // keyboard, so the user reads what landed and presses Enter there.
-const relaySelf = (session: string): RelaySelf => ({ key: `cell-${props.uid}`, source: { sessionId: session, cwd: cwd.value, agent: agent.value } });
+const relaySelf = (session: string): RelaySelf => ({
+  key: `cell-${props.uid}`,
+  source: { sessionId: session, cwd: cwd.value, agent: agent.value, ...(isRemote ? { host: props.remoteHost } : {}) },
+});
 
 function relayHere(action: RelayAction): boolean {
   if (!cellActionAllowed(props.remoteHost, action) || !talkStartable.value || !sessionId.value) return false;
@@ -792,7 +799,7 @@ function relayHere(action: RelayAction): boolean {
 }
 
 async function relayWithPartner(action: RelayAction, self: RelaySelf) {
-  const pick = await findPartner(self.key, cwd.value, props.home);
+  const pick = await findPartner(self.key, cwd.value, props.home, undefined, props.remoteHost ?? null);
   if (pick.kind === "none") return showAskMsg("No other agent terminal in this directory or repo");
   if (pick.kind === "choose") return openAskMenu();
   await finishRelay(action, self, pick.partner);
@@ -808,11 +815,11 @@ async function finishRelay(action: RelayAction, self: RelaySelf, partner: Handof
 
 // The cell's own send button (#3399): shown, without any config, while this cell can send and some
 // partner is open, and named after the partner so the user learns the two can hand turns over.
-const livePartners = useRelayButton(() => `cell-${props.uid}`, localCwd);
+const livePartners = useRelayButton(() => `cell-${props.uid}`, cwd, props.remoteHost ?? null);
 // This cell's part of what every cell's partner list reads: its session, directory and connection.
 watch([sessionId, cwd, () => connView.get(`cell-${props.uid}`)?.status], slotsChanged);
 onUnmounted(() => void nextTick(slotsChanged));
-const sendButton = computed(() => (cellSendButton.value && talkStartable.value && !isRemote ? relayButtonLabel(livePartners.value) : null));
+const sendButton = computed(() => (cellSendButton.value && talkStartable.value ? relayButtonLabel(livePartners.value) : null));
 const sendButtonText = computed(() => {
   const label = sendButton.value;
   if (label === null) return "";
@@ -1879,6 +1886,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                       <span class="material-symbols-outlined" aria-hidden="true">forward_to_inbox</span>
                     </button>
                     <button
+                      v-if="exchangeable(target)"
                       type="button"
                       data-testid="cell-exchange-item"
                       :aria-label="t('tips.cell.exchangeTurnAria', { name: target.label })"
@@ -1893,8 +1901,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                 </div>
                 <p v-if="!askTargets.length" class="m-0 px-2 py-1.5 font-sans text-[12px] text-dim">No other terminal to read</p>
                 <RoundTableMenu
-                  v-if="askTargets.length"
-                  :targets="askTargets"
+                  v-if="tableTargets.length"
+                  :targets="tableTargets"
                   :self-label="`#${uid}`"
                   :running="tableRunning"
                   :room="tableRoom"

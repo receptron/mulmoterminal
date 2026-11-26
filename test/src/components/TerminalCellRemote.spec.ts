@@ -15,18 +15,32 @@ vi.mock("../../../src/composables/usePubSub", () => ({
   usePubSub: () => ({ subscribe: () => () => {}, onReconnect: () => () => {} }),
 }));
 
-// One partner always open, so the send button shows wherever the cell lets it; and the cwd each cell
-// asked partners for, which a remote cell must not hand to this server's worktree lookup.
+// One partner always open, so the send button shows wherever the cell lets it; and the cwd and host
+// each cell asked partners for: a remote cell's directory is looked up only with its host.
 const relay = vi.hoisted(() => ({ cwds: [] as unknown[] }));
 vi.mock("../../../src/composables/useRelayButton", async () => {
   const { computed } = await import("vue");
   return {
-    useRelayButton: (_key: () => string, cwd: { value: unknown }) => {
-      relay.cwds.push(cwd.value);
+    useRelayButton: (_key: () => string, cwd: { value: unknown }, host: unknown) => {
+      relay.cwds.push([cwd.value, host]);
       return computed(() => [{ key: "cell-9", sessionId: "partner", cwd: "/home/me/ws", agent: "claude" }]);
     },
   };
 });
+
+// The slots a send or bring pairs with, empty unless a test sets them.
+const slots = vi.hoisted(() => ({ list: [] as unknown[] }));
+vi.mock("../../../src/composables/useTerminalConnections", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../src/composables/useTerminalConnections")>()),
+  listSlots: () => slots.list,
+}));
+
+// The terminals the Talk menu lists, empty unless a test sets them.
+const others = vi.hoisted(() => ({ list: [] as unknown[] }));
+vi.mock("../../../src/composables/useHandoff", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../src/composables/useHandoff")>()),
+  handoffTargets: () => others.list,
+}));
 
 const passed = vi.hoisted(() => ({ remoteHost: [] as unknown[] }));
 vi.mock("../../../src/components/Terminal.vue", () => ({
@@ -56,6 +70,8 @@ beforeEach(() => {
   requested = [];
   passed.remoteHost = [];
   relay.cwds = [];
+  others.list = [];
+  slots.list = [];
   configuredIds = ["lx"];
   resetConfiguredRemoteHosts();
   globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
@@ -71,6 +87,8 @@ beforeEach(() => {
     return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
   }) as unknown as typeof fetch;
 });
+
+const runSend = (): boolean => requestCellAction("cell-1", "terminal-send-turn");
 
 const mountCell = (remoteHost: string | null, launch: { initialSessionId: string | null; autoStart?: boolean } = { initialSessionId: SESSION }) =>
   mount(TerminalCell, {
@@ -164,7 +182,7 @@ describe("a remote cell", () => {
     remote.unmount();
   });
 
-  it("offers no path menu or send button, which act on this machine; a local cell does", async () => {
+  it("offers no path menu, which acts on this machine; a local cell does", async () => {
     const local = mountCell(null);
     await flushPromises();
     expect(local.find('[data-testid="cell-dir"]').attributes("aria-haspopup")).toBe("true");
@@ -177,7 +195,13 @@ describe("a remote cell", () => {
     const dir = remote.find('[data-testid="cell-dir"]');
     expect(dir.text()).toContain("project");
     expect(dir.attributes("aria-haspopup")).toBeUndefined();
-    expect(remote.find('[data-testid="cell-send-btn"]').exists()).toBe(false);
+  });
+
+  // #3506. Its turns are read on its host, so it hands them over like a local cell.
+  it("offers the send button for its partner", async () => {
+    const remote = mountCell("lx");
+    await flushPromises();
+    expect(remote.find('[data-testid="cell-send-btn"]').exists()).toBe(true);
   });
 
   // #3506. Its history menu opens what is read on its host: the prompts, the conversation and the
@@ -195,6 +219,67 @@ describe("a remote cell", () => {
     expect(requested.filter(mentionsCell)).toEqual([]);
   });
 
+  // #3506. Its turns are handed over from its host: the Talk menu sends its relay through the gateway,
+  // remembered there under the partner's machine. An exchange or a table is not offered.
+  it("hands its turns over from its host, and seats no exchange or table", async () => {
+    const LOCAL = { key: "cell-2", label: "#2 · claude", source: { sessionId: "22222222-2222-4222-8222-222222222222", cwd: "/home/me/ws", agent: "claude" } };
+    others.list = [LOCAL];
+    const remote = mountCell("lx");
+    await flushPromises();
+    remote.findComponent({ name: "TerminalView" }).vm.$emit("cwd", CWD);
+    await remote.find('[data-testid="cell-tools-btn"]').trigger("click");
+    await flushPromises();
+    document.body.querySelector<HTMLElement>('[data-testid="cell-pane-menu-talk"]')?.click();
+    await flushPromises();
+    expect(remote.find('[data-testid="cell-exchange-item"]').exists()).toBe(false);
+    expect(remote.findComponent({ name: "RoundTableMenu" }).exists()).toBe(false);
+    requested = [];
+    await remote.find('[data-testid="cell-send-since-item"]').trigger("click");
+    await flushPromises();
+    const relay = requested.find((url) => url.includes("/transcript/relay"));
+    expect(relay?.startsWith("/remote/lx/api/transcript/relay?")).toBe(true);
+    expect(new URL(relay ?? "", "https://x").searchParams.get("dest")).toBe("\0/home/me/ws");
+    expect(requested.filter(mentionsCell)).toEqual([]);
+    remote.unmount();
+  });
+
+  it("relays a terminal on this machine into itself, remembered there under its own host", async () => {
+    others.list = [{ key: "cell-2", label: "#2 · claude", source: { sessionId: "22222222-2222-4222-8222-222222222222", cwd: "/home/me/ws", agent: "claude" } }];
+    const remote = mountCell("lx");
+    await flushPromises();
+    remote.findComponent({ name: "TerminalView" }).vm.$emit("cwd", CWD);
+    await remote.find('[data-testid="cell-tools-btn"]').trigger("click");
+    await flushPromises();
+    document.body.querySelector<HTMLElement>('[data-testid="cell-pane-menu-talk"]')?.click();
+    await flushPromises();
+    requested = [];
+    await remote.find('[data-testid="cell-relay-item"]').trigger("click");
+    await flushPromises();
+    const relay = requested.find((url) => url.includes("/transcript/relay"));
+    expect(relay?.startsWith("/api/transcript/relay?")).toBe(true);
+    expect(new URL(relay ?? "", "https://x").searchParams.get("dest")).toBe(`lx\0${CWD}`);
+    remote.unmount();
+  });
+
+  // The same path on this machine is another directory: a send pairs only terminals on its host.
+  it("pairs a send with a terminal on its host, not one at the same path here", async () => {
+    slots.list = [{ key: "cell-2", sessionId: "22222222-2222-4222-8222-222222222222", cwd: CWD, agent: "claude" }];
+    const remote = mountCell("lx");
+    await flushPromises();
+    remote.findComponent({ name: "TerminalView" }).vm.$emit("cwd", CWD);
+    requested = [];
+    expect(runSend()).toBe(true);
+    await flushPromises();
+    expect(requested.filter((url) => url.includes("/transcript/"))).toEqual([]);
+    expect(remote.text()).toContain("No other agent terminal");
+    slots.list = [{ key: "cell-3", sessionId: "33333333-3333-4333-8333-333333333333", cwd: CWD, agent: "claude", host: "lx" }];
+    runSend();
+    await flushPromises();
+    expect(requested.filter((url) => url.includes("/transcript/last-turn")).every((url) => url.startsWith("/remote/lx/"))).toBe(true);
+    expect(requested.some((url) => url.includes("/transcript/last-turn"))).toBe(true);
+    remote.unmount();
+  });
+
   // #3506. The last code block is read from the session's own log, on its host.
   it("copies its last code block from its host", async () => {
     const remote = mountCell("lx");
@@ -210,11 +295,14 @@ describe("a remote cell", () => {
     expect(requested.filter(mentionsCell)).toEqual([]);
   });
 
-  it("looks for send partners without its directory", async () => {
+  it("looks for send partners in its directory on its host", async () => {
     mountCell(null);
     mountCell("lx");
     await flushPromises();
-    expect(relay.cwds).toEqual([CWD, null]);
+    expect(relay.cwds).toEqual([
+      [CWD, null],
+      [CWD, "lx"],
+    ]);
   });
 
   it("starting fresh, neither records its directory here nor reads it from this server", async () => {
