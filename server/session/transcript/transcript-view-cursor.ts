@@ -40,16 +40,10 @@
 import { isRecord } from "../../../common/isRecord.js";
 import { contentOf } from "../../agents/cursor/cursor-last-turn.js";
 import { userQueryText } from "../../agents/user-query.js";
-import { type TranscriptScan, foldTurnRecord, unknownRow } from "./transcript-view.js";
+import { type TranscriptScan, foldTurnRecord, toolCallRow, unknownRow } from "./transcript-view.js";
 import type { TranscriptRow } from "../../../common/transcriptView.js";
 
-/** How much of a tool call's input is shown — the same bound codex's calls get, for the same
- *  reason: the phone wants to know WHAT ran, not to re-read the whole invocation. */
-const CALL_ARGS_MAX_CHARS = 200;
-
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
-
-const clipHead = (value: string): string => (value.length > CALL_ARGS_MAX_CHARS ? `${value.slice(0, CALL_ARGS_MAX_CHARS)}…` : value);
 
 /** The input of a tool call, as text. A value that will not serialise — a cycle, a BigInt — answers
  *  the empty string rather than throwing: this runs inside a read the phone polls every five
@@ -66,9 +60,7 @@ function serialised(value: unknown): string {
 /** A tool call: the name, then the head of its input. The input is an OBJECT (trap 2), so it is
  *  serialised rather than printed. */
 function toolUseRow(part: Record<string, unknown>): TranscriptRow {
-  const name = text(part.name).trim() || "(unnamed tool)";
-  const head = clipHead(serialised(part.input));
-  return { kind: "tool", text: head === "" ? name : `${name} ${head}`, call: true };
+  return toolCallRow(text(part.name), serialised(part.input));
 }
 
 /** One content block, rendered. An unrecognised one becomes claude's own `unknown` row rather than

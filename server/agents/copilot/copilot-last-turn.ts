@@ -24,7 +24,8 @@
 // be quoted as what the user asked.
 import { isRecord } from "../../../common/isRecord.js";
 import { readString } from "../../../common/readString.js";
-import { EMPTY_TURN, type LastTurn } from "../../session/transcript/last-turn.js";
+import type { LastTurn } from "../../session/transcript/last-turn.js";
+import { type ExchangeReader, hasToolList, lastCompleteExchange, newestPromptReply } from "../../session/transcript/exchange-fold.js";
 
 const FINAL_ANSWER = "final_answer";
 
@@ -34,43 +35,27 @@ const isUserPrompt = (record: Record<string, unknown>): boolean => record.type =
 
 const promptOf = (record: Record<string, unknown>): string | null => (isRecord(record.data) ? readString(record.data.content).trim() || null : null);
 
-// Absent or an empty list is "no tools"; any other value — including a shape that is not a list —
-// is not trusted as a turn's end, so a malformed record cannot be quoted as the answer.
-const hasToolRequests = (data: Record<string, unknown>): boolean =>
-  data.toolRequests !== undefined && !(Array.isArray(data.toolRequests) && data.toolRequests.length === 0);
-
 /** The text of an answer that ends the turn, or null for every other record. */
 export function copilotFinalAnswer(record: Record<string, unknown>): string | null {
   if (record.type !== "assistant.message" || !isRecord(record.data)) return null;
-  if (record.data.phase !== FINAL_ANSWER || hasToolRequests(record.data)) return null;
+  if (record.data.phase !== FINAL_ANSWER || hasToolList(record.data.toolRequests)) return null;
   return readString(record.data.content).trim() || null;
 }
 
 const mainAgentRecords = (records: readonly Record<string, unknown>[]): Record<string, unknown>[] => records.filter((record) => !isSubagentRecord(record));
 
+const COPILOT_EXCHANGE: ExchangeReader = { isPrompt: isUserPrompt, promptOf, finalAnswer: copilotFinalAnswer };
+
 /** The last COMPLETE exchange. A turn still running, or one interrupted before it answered, falls
  *  back to the previous complete one, as claude's and cursor's readers do: a handoff should quote
  *  the answer the agent finished, not the question it is working on. */
 export function copilotLastTurnFromEvents(records: readonly Record<string, unknown>[]): LastTurn {
-  const folded = mainAgentRecords(records).reduce<ExchangeFold>(foldExchange, { prompt: null, complete: EMPTY_TURN });
-  return folded.complete;
-}
-
-interface ExchangeFold {
-  /** The newest prompt seen so far, answered or not. */
-  prompt: string | null;
-  complete: LastTurn;
-}
-
-function foldExchange(fold: ExchangeFold, record: Record<string, unknown>): ExchangeFold {
-  if (isUserPrompt(record)) return { prompt: promptOf(record), complete: fold.complete };
-  const reply = copilotFinalAnswer(record);
-  return reply === null ? fold : { prompt: fold.prompt, complete: { prompt: fold.prompt, reply } };
+  return lastCompleteExchange(mainAgentRecords(records), COPILOT_EXCHANGE);
 }
 
 /** The reply to the NEWEST prompt, or null when that prompt has none — never an older exchange.
  *  The push needs this rather than the fallback above (#1650): an interrupted turn would otherwise
  *  be announced with the previous turn's answer. */
 export function copilotCurrentTurnReplyFromEvents(records: readonly Record<string, unknown>[]): string | null {
-  return mainAgentRecords(records).reduce<string | null>((reply, record) => (isUserPrompt(record) ? null : (copilotFinalAnswer(record) ?? reply)), null);
+  return newestPromptReply(mainAgentRecords(records), COPILOT_EXCHANGE);
 }

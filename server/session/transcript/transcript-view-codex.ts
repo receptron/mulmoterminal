@@ -47,13 +47,8 @@
 // in the store hits the fallback today — it is a tripwire, not a source of rows.
 import { isRecord } from "../../../common/isRecord.js";
 import { codexUserTurn, isDoubleWrite, type CodexUserTurn } from "../../agents/codex/codex-user-turn.js";
-import { type TranscriptScan, foldTurnRecord, toolResultRow } from "./transcript-view.js";
+import { type TranscriptScan, foldTurnRecord, toolCallRow, toolResultRow } from "./transcript-view.js";
 import type { TranscriptRow } from "../../../common/transcriptView.js";
-
-/** How much of a tool CALL is shown: the tool's name and the head of its arguments. Both families'
- *  argument fields are unbounded strings — one measured at 4 KB of embedded shell — and the phone
- *  wants to know WHAT ran, not to re-read the whole invocation. */
-const CALL_ARGS_MAX_CHARS = 200;
 
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
 
@@ -82,10 +77,7 @@ function outputText(output: unknown): string {
 /** A tool call: the name, then the head of whatever it was called with. `arguments` is the
  *  `function_call` spelling and `input` the `custom_tool_call` one; they play the same part. */
 function callRow(payload: Record<string, unknown>): TranscriptRow {
-  const name = text(payload.name).trim() || "(unnamed tool)";
-  const args = (text(payload.arguments) || text(payload.input)).trim();
-  const head = args.length > CALL_ARGS_MAX_CHARS ? `${args.slice(0, CALL_ARGS_MAX_CHARS)}…` : args;
-  return { kind: "tool", text: head === "" ? name : `${name} ${head}`, call: true };
+  return toolCallRow(text(payload.name), (text(payload.arguments) || text(payload.input)).trim());
 }
 
 /** What a web search did. The `action` is the readable half — an opened page's URL, or a query —

@@ -8,6 +8,7 @@ import { PROJECTS_ENTRY, type LibraryStorageAnswer, type StorageEntry } from "..
 import { formatSize } from "../folderView";
 import { whenLabel } from "./libraryRows";
 import { movedIndex } from "./libraryKeys";
+import LibraryBackButton from "./LibraryBackButton.vue";
 
 const props = defineProps<{
   answer: LibraryStorageAnswer | null;
@@ -127,13 +128,7 @@ defineExpose({ move });
       </button>
     </div>
     <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto" :class="readerShown ? '' : 'max-[760px]:hidden'">
-      <button
-        type="button"
-        class="hidden cursor-pointer items-center gap-1 border-0 bg-transparent px-4 pt-3 font-sans text-[13px] text-secondary max-[760px]:flex"
-        @click="readerShown = false"
-      >
-        <span class="material-symbols-outlined text-[18px]">arrow_back</span>{{ t("libraryView.back") }}
-      </button>
+      <LibraryBackButton @click="readerShown = false" />
       <article v-if="selected" class="mx-auto w-full max-w-[760px] px-6 py-5 font-sans" data-testid="storage-reader">
         <h2 class="m-0 text-[20px] font-[650] text-fg">{{ entryLabel(selected) }}</h2>
         <p class="m-0 mt-1 text-[13px] tabular-nums text-dim">

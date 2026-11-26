@@ -19,7 +19,8 @@
 // discarded — so it simply has no answer, and the reader falls back to the turn before.
 import { isRecord } from "../../../common/isRecord.js";
 import { readString } from "../../../common/readString.js";
-import { EMPTY_TURN, type LastTurn } from "../../session/transcript/last-turn.js";
+import type { LastTurn } from "../../session/transcript/last-turn.js";
+import { hasToolList, lastCompleteExchange } from "../../session/transcript/exchange-fold.js";
 import { userQueryText } from "../user-query.js";
 
 const isUserPrompt = (record: Record<string, unknown>): boolean => record.type === "user" && typeof record.prompt_index === "number";
@@ -36,31 +37,14 @@ const textOf = (content: unknown): string =>
 
 const promptOf = (record: Record<string, unknown>): string | null => userQueryText(textOf(record.content)) || null;
 
-// Absent or an empty list is "no tools"; any other value — including a shape that is not a list —
-// is not trusted as a turn's end, so a malformed record cannot be quoted as the answer.
-const hasToolCalls = (record: Record<string, unknown>): boolean =>
-  record.tool_calls !== undefined && !(Array.isArray(record.tool_calls) && record.tool_calls.length === 0);
-
 /** The text of an answer that ends the turn, or null for every other message. */
 export function grokFinalAnswer(record: Record<string, unknown>): string | null {
-  if (record.type !== "assistant" || hasToolCalls(record)) return null;
+  if (record.type !== "assistant" || hasToolList(record.tool_calls)) return null;
   return readString(record.content).trim() || null;
-}
-
-interface ExchangeFold {
-  /** The newest prompt seen so far, answered or not. */
-  prompt: string | null;
-  complete: LastTurn;
-}
-
-function foldExchange(fold: ExchangeFold, record: Record<string, unknown>): ExchangeFold {
-  if (isUserPrompt(record)) return { prompt: promptOf(record), complete: fold.complete };
-  const reply = grokFinalAnswer(record);
-  return reply === null ? fold : { prompt: fold.prompt, complete: { prompt: fold.prompt, reply } };
 }
 
 /** The last COMPLETE exchange. A turn still running, or one cancelled before it answered, falls back
  *  to the previous complete one, as the other agents' readers do. */
 export function grokLastTurnFromMessages(records: readonly Record<string, unknown>[]): LastTurn {
-  return records.reduce<ExchangeFold>(foldExchange, { prompt: null, complete: EMPTY_TURN }).complete;
+  return lastCompleteExchange(records, { isPrompt: isUserPrompt, promptOf, finalAnswer: grokFinalAnswer });
 }
