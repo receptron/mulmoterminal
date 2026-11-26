@@ -80,6 +80,9 @@ export interface FilesRowTarget {
   canvas: { roots: StoriesRoots } | null;
   /** Whether the machine has a Trash the server knows; without one the row offers no delete (#2578). */
   trash?: boolean;
+  /** False for a root on a remote host (#3506): this machine's file manager cannot show its files,
+   *  and its gallery is pictures served as bytes, which the gateway does not carry. */
+  onThisMachine?: boolean;
 }
 
 // The same icon for both, and it is the one the path menu's "Insert a file path" already uses:
@@ -143,7 +146,7 @@ export function filesRowActions(target: FilesRowTarget): FilesRowAction[] {
   return [...viewActions(target), ...fileOpActions(target.pathRel, target.isDir, target.trash === true)];
 }
 
-function viewActions({ pathRel, isDir, cwd, terminal, canvas }: FilesRowTarget): FilesRowAction[] {
+function viewActions({ pathRel, isDir, cwd, terminal, canvas, onThisMachine = true }: FilesRowTarget): FilesRowAction[] {
   // No root means no path worth offering: the tree is on the server's default and its rows cannot
   // be resolved against anything the terminal — or the plugins' file layer — knows.
   if (pathRel === "" || cwd === null) return [];
@@ -151,7 +154,7 @@ function viewActions({ pathRel, isDir, cwd, terminal, canvas }: FilesRowTarget):
   // A plain click replaces the front tab, so this — and Cmd/Ctrl+click — is how a second tab is
   // asked for. First because it is the menu's only way to READ the file.
   if (!isDir) actions.push({ id: "open-tab", labelKey: "filesRowMenu.openTab", icon: TAB_ICON, pathRel });
-  else actions.push({ id: "open-gallery", labelKey: "filesRowMenu.openGallery", icon: "photo_library", pathRel });
+  else if (onThisMachine) actions.push({ id: "open-gallery", labelKey: "filesRowMenu.openGallery", icon: "photo_library", pathRel });
   // Before the inserts, because "show me this" is the stronger reason to right-click a row than
   // "type its path" — it is what #1374 exists for.
   //
@@ -170,12 +173,13 @@ function viewActions({ pathRel, isDir, cwd, terminal, canvas }: FilesRowTarget):
   // composer or an upload form, or for dropping a file too big to paste into a folder the agent
   // reads (#2039). Offered on every row, including in the full-screen view that has no terminal,
   // because neither use needs one.
-  actions.push({
-    id: "reveal",
-    labelKey: isDir ? "filesRowMenu.openFolder" : "filesRowMenu.showInFolder",
-    icon: REVEAL_ICON,
-    pathAbs: absoluteUnder(cwd, pathRel),
-  });
+  if (onThisMachine)
+    actions.push({
+      id: "reveal",
+      labelKey: isDir ? "filesRowMenu.openFolder" : "filesRowMenu.showInFolder",
+      icon: REVEAL_ICON,
+      pathAbs: absoluteUnder(cwd, pathRel),
+    });
   if (terminal === null) return actions;
   // Only when a relative path means the same thing at the other end. The pane keeps the cell it
   // is on when a re-root could not be saved out of, so the tree and the terminal on screen can
