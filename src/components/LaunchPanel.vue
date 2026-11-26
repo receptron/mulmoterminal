@@ -147,7 +147,7 @@ onBeforeUnmount(() => {
     :aria-label="t('tips.overlays.startTerminal')"
   >
     <RemoteHostPicker v-if="remoteHosts.length" v-model="remoteHostId" :hosts="remoteHosts" />
-    <RemoteLaunchForm v-if="remoteHost" :host="remoteHost" @start="(value) => emit('start-remote', value)" @close="emit('close')" />
+    <RemoteLaunchForm v-if="remoteHost" :key="remoteHost.id" :host="remoteHost" @start="(value) => emit('start-remote', value)" @close="emit('close')" />
     <CellLaunchForm
       v-else
       :dir="dir"

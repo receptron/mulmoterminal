@@ -12,11 +12,15 @@ const HOSTS: RemoteHostSummary[] = [
   { id: "old", label: "Old", state: "version-mismatch", version: "0.9.0" },
 ];
 
+const NO_DIRS = { status: 200, body: { cwd: null, presets: [] } };
 let requested: string[] = [];
+let dirsAnswer: { status: number; body: unknown } = NO_DIRS;
 const stubFetch = (hosts: RemoteHostSummary[]) => {
   requested = [];
+  dirsAnswer = NO_DIRS;
   globalThis.fetch = vi.fn(async (url: string) => {
     requested.push(String(url));
+    if (String(url).endsWith("/dirs")) return { ok: dirsAnswer.status === 200, status: dirsAnswer.status, json: async () => dirsAnswer.body };
     if (String(url).includes("/api/remote-hosts")) return { ok: true, json: async () => ({ hosts, rejected: [] }) };
     if (String(url).includes("/api/worktrees")) return { ok: true, json: async () => ({ isGit: false, base: null, worktrees: [] }) };
     if (String(url).includes("/api/sessions")) return { ok: true, json: async () => ({ cwd: "/repo", sessions: [] }) };
@@ -96,5 +100,42 @@ describe("the launch panel's host picker", () => {
     await w.find('[data-testid="remote-host-picker"] [role="radio"]').trigger("click");
     await flushPromises();
     expect(w.find('[data-testid="cell-launch"]').exists()).toBe(true);
+  });
+
+  it("asks for the picked host's directories through this server, by host id only", async () => {
+    const w = await mountPanel();
+    await pickHost(w, "lx");
+    expect(requested).toContain("/api/remote-hosts/lx/dirs");
+  });
+
+  it("opens on the remote's workspace and fills the field from its saved directories", async () => {
+    const w = await mountPanel();
+    dirsAnswer = {
+      status: 200,
+      body: {
+        cwd: "/home/u/ws",
+        presets: [
+          { label: "app", path: "/home/u/app" },
+          { label: "ws", path: "/home/u/ws" },
+        ],
+      },
+    };
+    await pickHost(w, "lx");
+    const input = () => (w.find('[data-testid="remote-launch"] [data-testid="cell-dir-input"]').element as HTMLInputElement).value;
+    expect(input()).toBe("/home/u/ws");
+    const chips = w.findAll('[data-testid="remote-dir-chip"]');
+    expect(chips.map((chip) => chip.attributes("data-tip"))).toEqual(["/home/u/ws", "/home/u/app"]);
+    await chips[1]?.trigger("click");
+    expect(input()).toBe("/home/u/app");
+  });
+
+  it("says why when the remote's directories cannot be read, and still starts on a typed one", async () => {
+    const w = await mountPanel();
+    dirsAnswer = { status: 502, body: { error: "Linux box did not answer" } };
+    await pickHost(w, "lx");
+    expect(w.find('[data-testid="remote-dirs-error"]').text()).toContain("Linux box did not answer");
+    await typeDir(w, "/srv/app");
+    await w.find('[data-testid="remote-launch"]').trigger("submit");
+    expect(w.emitted("start-remote")).toHaveLength(1);
   });
 });

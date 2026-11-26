@@ -39,6 +39,7 @@ import { createTitleManager } from "./session/list/session-title.js";
 import { resolveSessionTitle } from "./config/header/header-title.js";
 import { mountTerminalWebSockets } from "./routes/ws-routes.js";
 import { configuredRemoteUpgrade } from "./backends/hostGateway/configuredRemoteUpgrade.js";
+import { configuredRemoteSessionsRelay } from "./backends/hostGateway/configuredRemoteSessionsRelay.js";
 import { createConnectionHandlers } from "./session/pty/pty-connection.js";
 import { createTmuxSizeSync } from "./session/pty/tmux-size-sync.js";
 import { createIssueSessionSpawner } from "./session/spawn/issue-session-spawn.js";
@@ -463,6 +464,8 @@ const loopbackServers = [http.createServer(app), http.createServer(app)] as cons
 const listeners: readonly [http.Server, http.Server, http.Server] = [server, ...loopbackServers];
 pubsub = createPubSub(listeners, isAllowedOrigin);
 onPtyRegistered((sessionId, entry) => pubsub?.publish(PTY_OPENED_CHANNEL, { sessionId, cwd: entry.cwd } satisfies PtyOpenedEvent));
+// The remote hosts' session rows onto this pub/sub (#3506), for the dots and sounds of remote cells.
+configuredRemoteSessionsRelay((channel, data) => pubsub?.publish(channel, data));
 
 // Every backend, in the order they need each other (backends/boot-backends.ts). `retain` is called
 // lazily because the registry it reaches is built further down — a feeds refresh cannot dispatch
