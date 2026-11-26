@@ -182,7 +182,7 @@ export function renderRecord(record: Record<string, unknown>): TranscriptRow[] {
  *  would miss them, fusing every exchange into one turn that the line budget can never evict.
  *
  *  Text written into a turn already open (a skill's body, an image note) does not open another: the
- *  `promptId` rule in turn-boundary.ts, which falls back to the text alone for a record without one.
+ *  `promptId` rule in turn-boundary.ts, which holds only META records to the id.
  *
  *  Returns the PROMPT rather than a boolean, because the fold needs the text as well: a record can
  *  satisfy this predicate and render no rows (`userPromptText` reads `.text` off any block, while the
