@@ -5,6 +5,7 @@ import {
   remoteActivityOf,
   remoteSessionKey,
   remoteSessionRowOf,
+  remoteSessionDetailOf,
   parseRemoteHostDirs,
   parseRemoteHostIds,
   parseRemoteHostsResponse,
@@ -127,5 +128,35 @@ describe("remote session messages", () => {
       c: { working: false, waiting: false, event: null },
     });
     expect(remoteActivityOf(null, ["a"])).toEqual({ a: { working: false, waiting: false, event: null } });
+  });
+});
+
+describe("remoteSessionDetailOf", () => {
+  it("keeps the fields a remote cell shows, each only with the type it reads", () => {
+    const usage = { inputTokens: 1 };
+    const context = { model: "m", contextTokens: 2 };
+    expect(
+      remoteSessionDetailOf({
+        working: true,
+        waiting: "no",
+        event: "Stop",
+        lastPrompt: "p",
+        lastResponse: null,
+        aiTitle: 3,
+        customTitle: "c",
+        memo: null,
+        workPhase: "editing",
+        usage,
+        context: "big",
+        peerName: "peer",
+        collection: { slug: "x" },
+        cwd: "/srv",
+        id: "x",
+      }),
+    ).toEqual({ working: true, event: "Stop", lastPrompt: "p", lastResponse: null, customTitle: "c", memo: null, workPhase: "editing", usage });
+    expect(remoteSessionDetailOf({ context })).toEqual({ context });
+  });
+  it("answers nothing for a body that is not a record", () => {
+    [null, undefined, "x", 3, []].forEach((body) => expect(remoteSessionDetailOf(body)).toEqual({}));
   });
 });

@@ -295,3 +295,62 @@ describe("a sound whose bytes never arrive", () => {
     wrapper.unmount();
   });
 });
+
+// #3506: a remote host's rows arrive on their own channel, relayed by the server.
+describe("useAttentionSound for a remote host's sessions", () => {
+  const pushRemote = (row: Record<string, unknown>) =>
+    subscribers.get("remote-sessions")?.({ host: "lx", row: { working: false, waiting: false, event: null, ...row } });
+  const recordFetches = () => {
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        urls.push(String(url));
+        return { ok: false, status: 404, arrayBuffer: async () => new ArrayBuffer(0) };
+      }),
+    );
+    return urls;
+  };
+
+  it("beeps on the same transitions as a local session", async () => {
+    const { wrapper, ctx } = await mountPlayer();
+    await ctx.resume();
+    pushRemote({ id: "a", working: true, event: "UserPromptSubmit" }); // baseline
+    pushRemote({ id: "a", working: false, event: "Stop" });
+    expect(ctx.started).toBeGreaterThan(0);
+    wrapper.unmount();
+  });
+
+  it("never asks this machine for the directory sound of a remote path, while a local row does", async () => {
+    const urls = recordFetches();
+    const { wrapper, ctx } = await mountPlayer();
+    await ctx.resume();
+    pushRemote({ id: "a", working: true, event: "UserPromptSubmit", cwd: "/srv/remote" });
+    pushRemote({ id: "a", working: false, event: "Stop", cwd: "/srv/remote" });
+    expect(urls.filter((url) => url.includes("/api/dir-sound"))).toEqual([]);
+    push({ id: "b", working: true, event: "UserPromptSubmit", cwd: "/home/me/p" });
+    push({ id: "b", working: false, event: "Stop", cwd: "/home/me/p" });
+    expect(urls.filter((url) => url.includes("/api/dir-sound"))).toEqual([expect.stringContaining(encodeURIComponent("/home/me/p"))]);
+    wrapper.unmount();
+  });
+
+  it("keeps a remote session apart from a local one with the same id, for the baseline and the missed mark", async () => {
+    const { wrapper, isMissed } = await mountPlayer();
+    push({ id: "a", working: true, event: "UserPromptSubmit" });
+    pushRemote({ id: "a", working: false, event: "Stop", waiting: true }); // first sighting of lx/a: a baseline, so no beep
+    expect(isMissed("a")).toBe(false);
+    pushRemote({ id: "a", working: true, event: "UserPromptSubmit" });
+    pushRemote({ id: "a", working: false, event: "Stop", waiting: true });
+    expect(isMissed("lx/a")).toBe(true);
+    expect(isMissed("a")).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("does nothing on a resync", async () => {
+    const { wrapper, ctx } = await mountPlayer();
+    await ctx.resume();
+    subscribers.get("remote-sessions")?.({ host: "lx", resync: true });
+    expect(ctx.started).toBe(0);
+    wrapper.unmount();
+  });
+});

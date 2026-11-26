@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { CELL_ACTIONS } from "../../../common/headerActions";
-import { cellActionAllowed, isRemoteHost, onThisMachine, terminalPathFor } from "../../../src/components/remoteCell";
+import { actionAllowedOn, cellActionAllowed, isRemoteHost, onThisMachine, pathOnHost } from "../../../src/components/remoteCell";
 import { connWsUrl, type ConnTargetUrlInput } from "../../../src/components/wsUrl";
 
 describe("isRemoteHost / onThisMachine", () => {
@@ -18,7 +18,18 @@ describe("isRemoteHost / onThisMachine", () => {
 
 describe("cellActionAllowed", () => {
   // The whole list, so a change to what a remote cell may do is a visible edit here.
-  const ALLOWED_ON_REMOTE = ["zoom-toggle", "mark-unread", "terminal-close", "terminal-move-prev", "terminal-move-next", "terminal-park", "terminal-voice"];
+  const ALLOWED_ON_REMOTE = [
+    "zoom-toggle",
+    "mark-unread",
+    "terminal-close",
+    "terminal-move-prev",
+    "terminal-move-next",
+    "terminal-restart",
+    "terminal-park",
+    "terminal-voice",
+    "terminal-note",
+    "pane-files",
+  ];
 
   it("allows every action on a local cell", () => {
     CELL_ACTIONS.forEach((action) => expect(cellActionAllowed(null, action)).toBe(true));
@@ -28,10 +39,33 @@ describe("cellActionAllowed", () => {
   });
 });
 
+describe("actionAllowedOn", () => {
+  const CELLS = [{ uid: 1 }, { uid: 2, remoteHost: "lx" }, { uid: 3, remoteHost: undefined }];
+
+  it("decides by the cell the uid names", () => {
+    CELL_ACTIONS.forEach((action) => {
+      expect(actionAllowedOn(CELLS, 1, action)).toBe(true);
+      expect(actionAllowedOn(CELLS, 3, action)).toBe(true);
+      expect(actionAllowedOn(CELLS, 2, action)).toBe(cellActionAllowed("lx", action));
+    });
+  });
+  it("refuses a local terminal in a remote cell's directory, from the keyboard as from the header", () => {
+    expect(actionAllowedOn(CELLS, 2, "terminal-new-here")).toBe(false);
+    expect(actionAllowedOn(CELLS, 2, "terminal-new-adjacent")).toBe(false);
+  });
+  it("allows everything with no cell, or a uid no cell has", () => {
+    CELL_ACTIONS.forEach((action) => {
+      expect(actionAllowedOn(CELLS, null, action)).toBe(true);
+      expect(actionAllowedOn(CELLS, 99, action)).toBe(true);
+      expect(actionAllowedOn([], 2, action)).toBe(true);
+    });
+  });
+});
+
 describe("terminal paths", () => {
   it("routes a remote cell through the gateway and leaves a local one alone", () => {
-    expect(terminalPathFor("lx", "/ws/launch")).toBe("/remote/lx/ws/launch");
-    expect(terminalPathFor(null, "/ws/launch")).toBe("/ws/launch");
+    expect(pathOnHost("lx", "/ws/launch")).toBe("/remote/lx/ws/launch");
+    expect(pathOnHost(null, "/ws/launch")).toBe("/ws/launch");
   });
 
   const base: ConnTargetUrlInput = { cwd: "/srv/p", devTerminal: false, command: null, launcher: null };

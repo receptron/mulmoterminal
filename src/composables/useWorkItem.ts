@@ -14,6 +14,7 @@ import { isIssueWorkCommentsEnabled } from "./issueWorkComments";
 import type { WorkCommentKind } from "../../common/workComment";
 import { isWorkCommentFailure, type WorkCommentFailure } from "../../common/workCommentFailure";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
+import { dirApiUrl, isRemoteDirKey } from "./dirAddress";
 import { fireConfettiForEvent } from "./useConfetti";
 
 const POLL_MS = 30_000;
@@ -110,6 +111,7 @@ async function postWorkComment(cwd: string, item: WorkItem, kind: WorkCommentKin
   }
 }
 
+/** `cwd` is a directory key (dirAddress.ts): a remote one is read through the gateway. */
 export function useWorkItem(cwd: Ref<string | null>) {
   const item = ref<WorkItem>({ ...EMPTY_WORK_ITEM });
   // Why the last attempt to update the issue failed. Held rather than logged: the user turned the
@@ -130,7 +132,7 @@ export function useWorkItem(cwd: Ref<string | null>) {
       return;
     }
     try {
-      const res = await fetchWithTimeout(`/api/pr-phase?cwd=${encodeURIComponent(dir)}`, undefined, SLOW_COMMAND_TIMEOUT_MS);
+      const res = await fetchWithTimeout(dirApiUrl(dir, "/api/pr-phase"), undefined, SLOW_COMMAND_TIMEOUT_MS);
       if (!res.ok) return;
       const data: unknown = await res.json();
       if (my !== req) return;
@@ -152,7 +154,8 @@ export function useWorkItem(cwd: Ref<string | null>) {
       // token as the item above: this call outlives the fetch, and a cell that moved to another
       // directory meanwhile must not be told about the repository it left — `permission` is a
       // per-repository answer.
-      if (kind) {
+      // Not on a remote directory yet: the comment is a write, and this server would post it for its own repo.
+      if (kind && !isRemoteDirKey(dir)) {
         void postWorkComment(dir, next, kind).then((failure) => {
           if (my === req) commentFailure.value = failure;
         });

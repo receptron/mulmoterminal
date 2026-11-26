@@ -103,5 +103,11 @@ function actionEntry(id: "talk" | "restart", t: Translate): CellPaneMenuEntry {
   return { id, icon: ICONS[id], label: t(`cellMenu.items.${id}.label`), detail: t(`cellMenu.items.${id}.detail`), disabled: false };
 }
 
+const ACTION_IDS: readonly CellPaneMenuId[] = ["talk", "restart"];
+
+/** The menu without its panes, for a cell whose panes are hidden (a remote one): its actions alone. */
+export const actionsOnly = (entries: CellPaneMenuEntry[]): CellPaneMenuEntry[] =>
+  entries.filter((entry) => ACTION_IDS.includes(entry.id)).map((entry) => ({ ...entry, separated: false }));
+
 /** A menu is worth an icon only when something in it can be chosen. */
 export const hasChoice = (entries: CellPaneMenuEntry[]): boolean => entries.some((entry) => !entry.disabled);
