@@ -26,8 +26,12 @@ and a wakeup prompt carry a new one. So:
 - any other user record with prompt text opens a turn, as before — the id is not unique to a typed
   prompt: after a resume, Claude Desktop writes its meta "Continue from where you left off." and
   the person's next prompt under one id, and holding typed records to the id dropped that prompt;
-- a tagged record (`<local-command-caveat>` and the like) never opens one and does not claim its
-  id.
+- a tagged record (`<local-command-caveat>`, `<command-name>`) never opens one and does not claim
+  its id: a slash command's expansion is a meta skill body under the command's id, and it must still
+  open that turn;
+- a tool result teaches the open turn's id (`continuesTurn`), since it belongs to the turn that
+  called the tool. That is what lets a window starting mid-turn recognise the skill body after the
+  Skill call's result.
 
 The decision is `opensTurn` in `server/session/transcript/turn-boundary.ts`, pure, with the open id
 as the only state. It is taken ONCE per record: it advances the state, so a second caller asking
@@ -55,6 +59,9 @@ notes and harness nudges. The summary differs only where those were dropped.
 
 ## Left out
 
-- A window that starts mid-turn (a tail read, a backwards page) has no open id, so a skill body at
-  its very first record still opens a turn there, as today.
+- A window that begins exactly at a skill body, or with only assistant records before a harness
+  nudge, has nothing in it naming the open turn, so the body still opens a turn there, as before.
+  Rejected: treating a meta record seen before any other as non-opening (it would drop the first
+  prompt of a session a peer message started) and seeding from the bytes before the window (a
+  second read path for a rare case whose outcome is the old behaviour).
 - Codex and the other agents have their own readers and are untouched.

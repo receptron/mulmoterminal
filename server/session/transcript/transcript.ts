@@ -5,7 +5,7 @@
 import { isRecord } from "../../../common/isRecord.js";
 import { readString } from "../../../common/readString.js";
 import type { SessionContextInfo } from "../../../common/sessionContext.js";
-import { emptyTurnBoundary, opensTurn, type TurnBoundaryState } from "./turn-boundary.js";
+import { continuesTurn, emptyTurnBoundary, opensTurn, type TurnBoundaryState } from "./turn-boundary.js";
 
 // Text the HARNESS put in the user channel, rather than something a person typed:
 // slash-command wrappers, bash input, and the notification a finished background task
@@ -42,9 +42,17 @@ export function userPromptText(content: unknown): string | null {
  *  and hand the answer to every rule that needs it. */
 export function turnOpeningPrompt(state: TurnBoundaryState, o: Record<string, unknown>): string | null {
   if (o.type !== "user") return null;
-  const text = userPromptText(isRecord(o.message) ? o.message.content : undefined);
-  return text !== null && opensTurn(state, o) ? text : null;
+  const content = isRecord(o.message) ? o.message.content : undefined;
+  const text = userPromptText(content);
+  if (text === null) {
+    if (holdsToolResult(content)) continuesTurn(state, o);
+    return null;
+  }
+  return opensTurn(state, o) ? text : null;
 }
+
+const holdsToolResult = (content: unknown): boolean =>
+  Array.isArray(content) && content.some((block: unknown) => isRecord(block) && block.type === "tool_result");
 
 // Parse a JSONL file into the objects on each non-blank, valid line.
 export function parseJsonl(raw: string): Record<string, unknown>[] {

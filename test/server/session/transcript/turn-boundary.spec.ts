@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { emptyTurnBoundary, isTurnBoundaryState, opensTurn } from "../../../../server/session/transcript/turn-boundary.js";
+import { continuesTurn, emptyTurnBoundary, isTurnBoundaryState, opensTurn } from "../../../../server/session/transcript/turn-boundary.js";
 import {
   conversationTurnsFromParsed,
   currentTurnToolNamesFromParsed,
@@ -99,6 +99,23 @@ describe("opensTurn", () => {
   });
 });
 
+describe("continuesTurn", () => {
+  it("takes the id as the open turn's, so a meta record under it is the same turn", () => {
+    const state = emptyTurnBoundary();
+    continuesTurn(state, { promptId: "a" });
+    expect(opensTurn(state, { isMeta: true, promptId: "a" })).toBe(false);
+  });
+
+  it("leaves the open id alone for a record without a usable one", () => {
+    [{}, { promptId: "" }, { promptId: 3 }].forEach((record) => {
+      const state = emptyTurnBoundary();
+      opensTurn(state, { promptId: "a" });
+      continuesTurn(state, record);
+      expect(state.openPromptId).toBe("a");
+    });
+  });
+});
+
 describe("isTurnBoundaryState", () => {
   it("accepts what the fold writes and nothing else", () => {
     expect(isTurnBoundaryState({ openPromptId: null })).toBe(true);
@@ -114,10 +131,18 @@ describe("turnOpeningPrompt", () => {
     expect(turnOpeningPrompt(state, typed("fix it", "a"))).toBe("fix it");
   });
 
-  it("a tool result never opens a turn nor claims an id", () => {
+  it("a tool result never opens a turn, and teaches the open turn's id", () => {
     const state = emptyTurnBoundary();
     expect(turnOpeningPrompt(state, toolResult("a"))).toBeNull();
+    expect(turnOpeningPrompt(state, meta(SKILL_BODY, "a"))).toBeNull();
     expect(turnOpeningPrompt(state, typed("fix it", "a"))).toBe("fix it");
+  });
+
+  it("a tagged record does not teach its id: a slash command's expansion still opens its turn", () => {
+    const state = emptyTurnBoundary();
+    turnOpeningPrompt(state, typed("first", "p0"));
+    expect(turnOpeningPrompt(state, typed("<command-name>/clone-as</command-name>", "p1"))).toBeNull();
+    expect(turnOpeningPrompt(state, meta(SKILL_BODY, "p1"))).toBe(SKILL_BODY);
   });
 
   it("is null for anything that is not a user record", () => {
@@ -194,6 +219,20 @@ describe("a skill's body is not a prompt (#3546)", () => {
     const users = transcript.flatMap((record) => foldConversationRecord(state, record) ?? []).filter((turn) => turn.role === "user");
     expect(users.map((turn) => turn.text)).toEqual(["clone this repo as foo", "Another Claude session sent a message: review PR 1"]);
     expect(state.userTurns).toBe(2);
+  });
+
+  it("a window that opens mid-turn, at the Skill call or its result, keeps the body out", () => {
+    const whole = skillTurn("p1");
+    [1, 2].forEach((from) => {
+      const users = conversationTurnsFromParsed(whole.slice(from)).filter((turn) => turn.role === "user");
+      expect(users, `from ${from}`).toEqual([]);
+      expect(latestUserPromptFromParsed(whole.slice(from)), `from ${from}`).toBeNull();
+    });
+  });
+
+  it("a window that opens exactly at the body still reads it as a prompt: nothing before it says otherwise", () => {
+    const users = conversationTurnsFromParsed(skillTurn("p1").slice(3)).filter((turn) => turn.role === "user");
+    expect(users.map((turn) => turn.text)).toEqual([SKILL_BODY]);
   });
 
   it("a transcript with no promptId still keeps a meta skill body out", () => {

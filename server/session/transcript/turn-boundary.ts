@@ -28,5 +28,13 @@ export function opensTurn(state: TurnBoundaryState, record: Record<string, unkno
   return true;
 }
 
+/** A tool result belongs to the turn that called the tool, so its id IS the open turn's. Learning it
+ *  is what lets a window that begins mid-turn — a tail read, an older page — recognise the skill
+ *  body that follows the Skill call's result as part of that turn. */
+export function continuesTurn(state: TurnBoundaryState, record: Record<string, unknown>): void {
+  const promptId = promptIdOf(record);
+  if (promptId !== null) state.openPromptId = promptId;
+}
+
 export const isTurnBoundaryState = (value: unknown): value is TurnBoundaryState =>
   isRecord(value) && (value.openPromptId === null || typeof value.openPromptId === "string");
