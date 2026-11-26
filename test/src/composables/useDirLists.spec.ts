@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useResumableSessions, useDirScripts, useDirWorktrees } from "../../../src/composables/useDirLists";
+import { dirKeyOf } from "../../../src/composables/dirAddress";
 
 // The three launcher lists share one loader, so the hazards are tested once each: a superseded
 // answer must not land, a refused read must not keep the previous directory's rows, and no
@@ -166,6 +167,15 @@ describe("useResumableSessions", () => {
 });
 
 describe("useDirScripts", () => {
+  // #3506: a remote directory's scripts are its host's, and run in its plain path there.
+  it("asks a remote directory's host, and gives the plain path to run in", async () => {
+    globalThis.fetch = vi.fn(async () => ok({ scripts: [{ index: 0, label: "build", command: "yarn build" }] })) as unknown as typeof fetch;
+    const { value, load } = useDirScripts();
+    await load(dirKeyOf("lx", "/srv/p"));
+    expect(vi.mocked(globalThis.fetch).mock.calls.map(([url]) => String(url))).toEqual(["/remote/lx/api/scripts?cwd=%2Fsrv%2Fp"]);
+    expect(value.value.cwd).toBe("/srv/p");
+  });
+
   it("lists the scripts and the cwd they run in", async () => {
     globalThis.fetch = vi.fn(async () => ok({ scripts: [{ index: 0, label: "build", command: "yarn build" }], cwd: "/resolved" })) as unknown as typeof fetch;
     const { value, load } = useDirScripts();

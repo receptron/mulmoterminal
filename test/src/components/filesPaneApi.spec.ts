@@ -54,13 +54,13 @@ describe("browseQuery", () => {
 describe("writeBuffer", () => {
   it("reports the new version on a save", async () => {
     globalThis.fetch = answering({ status: 200, body: { ok: true, version: "v2" } });
-    expect(await writeBuffer("path=a.ts", "hi", "v1")).toEqual({ status: "saved", version: "v2", dirConfig: null });
+    expect(await writeBuffer(null, "path=a.ts", "hi", "v1")).toEqual({ status: "saved", version: "v2", dirConfig: null });
   });
 
   // #2624: a directory config's save carries what took; any other file carries nothing.
   it("reads the directory-config report a save carries", async () => {
     globalThis.fetch = answering({ status: 200, body: { ok: true, version: "v2", dirConfig: { parsed: true, ignored: ["headerColor"], unknown: [] } } });
-    expect(await writeBuffer("path=.mulmoterminal.json", "{}", "v1")).toEqual({
+    expect(await writeBuffer(null, "path=.mulmoterminal.json", "{}", "v1")).toEqual({
       status: "saved",
       version: "v2",
       dirConfig: { parsed: true, ignored: ["headerColor"], unknown: [] },
@@ -71,47 +71,47 @@ describe("writeBuffer", () => {
   // the version that comes back is what an "Overwrite anyway" re-sends as its base.
   it("reports a conflict with the version now on disk", async () => {
     globalThis.fetch = answering({ status: 409, body: { error: "file changed on disk", version: "v9" } });
-    expect(await writeBuffer("path=a.ts", "hi", "v1")).toEqual({ status: "conflict", version: "v9" });
+    expect(await writeBuffer(null, "path=a.ts", "hi", "v1")).toEqual({ status: "conflict", version: "v9" });
   });
 
   it("passes the server's own words through on a refusal", async () => {
     globalThis.fetch = answering({ status: 415, body: { error: "this file cannot be edited as text" } });
-    expect(await writeBuffer("path=a.xlsx", "hi", null)).toEqual({ status: "error", message: "this file cannot be edited as text" });
+    expect(await writeBuffer(null, "path=a.xlsx", "hi", null)).toEqual({ status: "error", message: "this file cannot be edited as text" });
   });
 
   it("falls back to the status when the body says nothing", async () => {
     globalThis.fetch = answering({ status: 500, body: {} });
-    expect(await writeBuffer("path=a.ts", "hi", null)).toEqual({ status: "error", message: "HTTP 500" });
+    expect(await writeBuffer(null, "path=a.ts", "hi", null)).toEqual({ status: "error", message: "HTTP 500" });
   });
 
   // A server that is not there must not throw past the caller: the buffer still has to be banked.
   it("turns an unreachable server into an error outcome rather than a rejection", async () => {
     globalThis.fetch = refusing("Failed to fetch");
-    expect(await writeBuffer("path=a.ts", "hi", null)).toEqual({ status: "error", message: "Failed to fetch" });
+    expect(await writeBuffer(null, "path=a.ts", "hi", null)).toEqual({ status: "error", message: "Failed to fetch" });
   });
 
   it("reports no version when the body's is not a string", async () => {
     globalThis.fetch = answering({ status: 200, body: { version: 7 } });
-    expect(await writeBuffer("path=a.ts", "hi", null)).toEqual({ status: "saved", version: null, dirConfig: null });
+    expect(await writeBuffer(null, "path=a.ts", "hi", null)).toEqual({ status: "saved", version: null, dirConfig: null });
   });
 });
 
 describe("bankText", () => {
   it("says the copy landed", async () => {
     globalThis.fetch = answering({ status: 200, body: { stored: true } });
-    expect(await bankText("path=a.ts", "hi")).toBe(true);
+    expect(await bankText(null, "path=a.ts", "hi")).toBe(true);
   });
 
   // The conflict banner promises "your version is kept either way", so a store that refuses has to
   // be distinguishable — discarding anyway is what loses what was typed.
   it("says it did not when the store refuses", async () => {
     globalThis.fetch = answering({ status: 507, body: {} });
-    expect(await bankText("path=a.ts", "hi")).toBe(false);
+    expect(await bankText(null, "path=a.ts", "hi")).toBe(false);
   });
 
   it("says it did not when the server is unreachable", async () => {
     globalThis.fetch = refusing("Failed to fetch");
-    expect(await bankText("path=a.ts", "hi")).toBe(false);
+    expect(await bankText(null, "path=a.ts", "hi")).toBe(false);
   });
 });
 

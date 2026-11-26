@@ -1,0 +1,14 @@
+export const remoteLaunchKo = {
+  runOn: "실행 위치",
+  thisMachine: "이 컴퓨터",
+  unreachable: "{label}에 연결할 수 없습니다. ssh 터널이 열려 있나요?",
+  versionMismatch: "{label}의 MulmoTerminal은 메이저 버전이 다릅니다.",
+  dirLabel: "{label}의 디렉터리",
+  dirPlaceholder: "/home/you/project",
+  dirNeedsAbsolute: "{label}의 절대 경로를 /로 시작해 입력하세요.",
+  start: "{label}에서 시작",
+  localOnly: "위의 디렉터리는 {label}의 것입니다. 이 컴퓨터의 저장된 디렉터리, 런처, 사용자 정의 에이전트, 계정은 여기에 표시하지 않습니다.",
+  workspace: "워크스페이스",
+  dirsFailed: "{label}의 저장된 디렉터리를 읽지 못했습니다: {error}",
+  chipFill: "{path} 사용",
+};

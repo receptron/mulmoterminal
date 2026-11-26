@@ -1,6 +1,7 @@
 // Pure builder for the terminal WebSocket URL. Kept separate from Terminal.vue so
 // the query it sends — including ?gui=0, which tells the server to run a plain dev
 // terminal (no GUI MCP) — is unit-testable without xterm/WebSocket.
+import { isRemoteHost, pathOnHost } from "./remoteCell";
 import type { RunCommand } from "./runCommand";
 import type { TerminalAgent } from "../../common/sessionAgent";
 import { isUsableTerminalSize, type TerminalSize } from "../../common/terminalSize";
@@ -164,6 +165,8 @@ export interface ConnTargetUrlInput {
   // The account this slot's session is started on (#2215), or null/absent for the default login.
   account?: string | null;
   launch?: LaunchChoice | null;
+  // The remote host this slot's terminal runs on (#3506), reached through this server's gateway; absent is local.
+  remoteHost?: string | null;
 }
 
 // A command cell's endpoint: a script.json entry by index, or a header shell button by id
@@ -184,6 +187,14 @@ function runCommandWsUrl(command: RunCommand, host: string, secure: boolean, siz
 // exercised at all. `size` is the terminal's already-fitted geometry: every endpoint here spawns a
 // pty, and one born at the browser's size never draws a frame at the server's default.
 export function connWsUrl(target: ConnTargetUrlInput, resumeId: string | null, host: string, secure: boolean, size: TerminalSize | null = null): string {
+  const local = localConnWsUrl(target, resumeId, host, secure, size);
+  if (!isRemoteHost(target.remoteHost)) return local;
+  const url = new URL(local);
+  url.pathname = pathOnHost(target.remoteHost, url.pathname);
+  return url.toString();
+}
+
+function localConnWsUrl(target: ConnTargetUrlInput, resumeId: string | null, host: string, secure: boolean, size: TerminalSize | null): string {
   if (target.command) return runCommandWsUrl(target.command, host, secure, size);
   if (target.launcher) {
     return "shell" in target.launcher

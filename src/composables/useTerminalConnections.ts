@@ -45,6 +45,7 @@ import { initialFitGate, reportOnScreen, requestFit, type FitGate } from "./term
 import type { CanvasAddon } from "@xterm/addon-canvas";
 import "@xterm/xterm/css/xterm.css";
 import { connWsUrl, type ConnTargetUrlInput } from "../components/wsUrl";
+import { isRemoteHost } from "../components/remoteCell";
 import { connectionWillReturn, reconnectDelayMs, shouldReconnect } from "./reconnectPolicy";
 import type { RunCommand } from "../components/runCommand";
 import { readableSlot, type SlotCandidate, type SlotInfo } from "./readableSlot";
@@ -70,7 +71,7 @@ export type ConnStatus = "connecting" | "connected" | "disconnected";
 // What the session STARTS as — the agent (absent = Claude), the provider/model pick (#584), the
 // custom agent (#1414) and the account (#2215) — is taken from the endpoint builder's own input, so
 // the two cannot disagree about a field the URL is built from.
-export interface ConnTarget extends Pick<ConnTargetUrlInput, "agent" | "launch" | "customAgent" | "account"> {
+export interface ConnTarget extends Pick<ConnTargetUrlInput, "agent" | "launch" | "customAgent" | "account" | "remoteHost"> {
   sessionId: string | null;
   cwd: string | null;
   devTerminal: boolean;
@@ -488,7 +489,8 @@ function buildTerminal(swallowedMouseModes: Set<number>, font: TerminalFont): Te
 
 // The wiring that needs the connection itself, so it is re-applied to every terminal a slot owns.
 function wireTerminalToConn(term: Terminal, c: Conn): void {
-  registerFilePathLinks(term, { cwd: () => c.knownCwd, session: () => c.knownSessionId });
+  // A path a remote terminal prints names a file on that machine; opening it here would show this one's.
+  if (!isRemoteHost(c.target.remoteHost)) registerFilePathLinks(term, { cwd: () => c.knownCwd, session: () => c.knownSessionId });
   wireTerminalInput(term, c);
   if (c.theme) term.options.theme = c.theme;
 }
@@ -913,7 +915,8 @@ const slotCandidate = (c: Conn): SlotCandidate => ({
 });
 
 export function listSlots(): SlotInfo[] {
-  return [...conns.values()].map(slotCandidate).flatMap((candidate) => readableSlot(candidate) ?? []);
+  // A remote cell's conversation is on another machine; this server cannot read it for a handoff.
+  return [...conns.values()].flatMap((c) => (isRemoteHost(c.target.remoteHost) ? [] : (readableSlot(slotCandidate(c)) ?? [])));
 }
 
 /** Whether the slot still exists at all. What a close path asks before cleaning up: a cell whose

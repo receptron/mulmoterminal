@@ -7,6 +7,7 @@
 import { DROP_FILENAME_HEADER, MAX_DROP_BYTES, type DropUploadResponse } from "../../common/dropUpload";
 import { isRecord } from "../../common/isRecord";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
+import { sessionWritePath } from "./remoteCell";
 
 // Generous: this is a real upload of up to MAX_DROP_BYTES, possibly over a phone's connection.
 // Matched to the server's own ceiling for network mutations rather than a UI-scale timeout.
@@ -16,7 +17,8 @@ const FALLBACK_MIME = "application/octet-stream";
 
 export type DropUploadResult = { ok: true; path: string } | { ok: false; status: number | null };
 
-export const dropUploadUrl = (sessionId: string): string => `/api/session/${encodeURIComponent(sessionId)}/drop`;
+/** Where a file is sent: this server, or the gateway for a session on a remote host (#3506). */
+export const dropUploadUrl = (sessionId: string, host: string | null = null): string => sessionWritePath(host, sessionId, "drop");
 
 /** The sentence to show when an upload did not happen. Keyed on status because the four cases
  *  need different actions from the user, and "it failed" tells them none of them. English —
@@ -73,11 +75,11 @@ export async function uploadDropBatch(
   return currentSession() === session ? { kind: "inserted", paths } : { kind: "stale" };
 }
 
-export async function uploadDroppedFile(sessionId: string, file: File): Promise<DropUploadResult> {
+export async function uploadDroppedFile(sessionId: string, file: File, host: string | null = null): Promise<DropUploadResult> {
   if (isTooLargeToDrop(file.size)) return { ok: false, status: 413 };
   try {
     const res = await fetchWithTimeout(
-      dropUploadUrl(sessionId),
+      dropUploadUrl(sessionId, host),
       {
         method: "POST",
         headers: { "content-type": file.type || FALLBACK_MIME, [DROP_FILENAME_HEADER]: encodeURIComponent(file.name) },

@@ -7,6 +7,7 @@ import type { LaunchChoice } from "./wsUrl";
 import { isLaunchAgent, type LaunchAgent } from "../../common/launchAgent";
 import { customAgentIdOf, type AgentPick } from "../../common/customAgents";
 import { asTerminalAgent } from "../../common/sessionAgent";
+import { remoteDirOf, type RemoteStart } from "./remoteLaunch";
 
 // Each kind is already expressible as a cell: a shell is a shell launcher, a non-Claude agent is
 // marked with `agent`, and Claude is the plain default. The session id arrives from the server once
@@ -79,3 +80,9 @@ export const cellForPanelResume = ({ id, cwd, agent, account }: PanelResume): Om
   ...sessionCell(id, cwd, agent ?? "claude"),
   ...withAccount(account),
 });
+
+/** A launch panel start on a remote host, or null when the directory is not one the remote can use. */
+export function cellForRemoteStart({ host, dir, agent }: RemoteStart): Omit<Cell, "uid"> | null {
+  const remoteDir = remoteDirOf(dir);
+  return remoteDir === null ? null : { ...cellForAgent(remoteDir, agent), remoteHost: host };
+}
