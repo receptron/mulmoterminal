@@ -105,9 +105,12 @@ function actionEntry(id: "talk" | "restart", t: Translate): CellPaneMenuEntry {
 
 const ACTION_IDS: readonly CellPaneMenuId[] = ["talk", "restart"];
 
-/** The menu without its panes, for a cell whose panes are hidden (a remote one): its actions alone. */
-export const actionsOnly = (entries: CellPaneMenuEntry[]): CellPaneMenuEntry[] =>
-  entries.filter((entry) => ACTION_IDS.includes(entry.id)).map((entry) => ({ ...entry, separated: false }));
+/** The menu without its panes, for a cell whose panes are hidden (a remote one): its actions alone,
+ *  and the panes in `kept` it can still open. The divider stays only where something is above it. */
+export const actionsOnly = (entries: CellPaneMenuEntry[], kept: readonly CellPaneMenuId[] = []): CellPaneMenuEntry[] =>
+  entries
+    .filter((entry) => ACTION_IDS.includes(entry.id) || kept.includes(entry.id))
+    .map((entry, index) => ({ ...entry, separated: index > 0 && entry.separated === true }));
 
 /** A menu is worth an icon only when something in it can be chosen. */
 export const hasChoice = (entries: CellPaneMenuEntry[]): boolean => entries.some((entry) => !entry.disabled);

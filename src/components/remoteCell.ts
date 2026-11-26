@@ -40,16 +40,16 @@ const ON_REMOTE_CELL: Record<CellAction, boolean> = {
   "pane-files": true,
   "pane-prompts": true,
   "pane-transcript": true,
-  "pane-tools": false,
+  "pane-tools": true,
   "pane-canvas": false,
   "pane-collections": false,
 };
 
 export const cellActionAllowed = (host: string | null | undefined, action: CellAction): boolean => !isRemoteHost(host) || ON_REMOTE_CELL[action];
 
-// The panes a remote cell opens: its files, read and written on its host, and its session's prompts
-// and conversation, read there. Every other pane reads this machine's copy of a session or its tools.
-const REMOTE_CELL_PANES: readonly RightPane[] = ["files", "prompts", "transcript"];
+// The panes a remote cell opens: its files, read and written on its host, and its session's prompts,
+// conversation and tool calls, read there. Canvas and collections read this machine's.
+const REMOTE_CELL_PANES: readonly RightPane[] = ["files", "prompts", "transcript", "tools"];
 
 export const paneAllowed = (host: string | null | undefined, pane: RightPane): boolean => !isRemoteHost(host) || REMOTE_CELL_PANES.includes(pane);
 

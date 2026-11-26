@@ -60,10 +60,13 @@ function forwardedQuery(route: RemoteRoute, query: Record<string, unknown>): Que
   return escaping ? { reason: `${escaping} leaves ${cwd}` } : { params };
 }
 
+const SESSION_PARAMS = ["session", "sessionId"] as const;
+
 // A session named by the query rather than the path is held to the same id rule.
 function sessionQuery(route: RemoteRoute, params: URLSearchParams): QueryResult {
-  const session = params.get("session");
-  if (route.query.includes("session") && (session === null || !SESSION_ID_RE.test(session))) return { reason: "session must be a session id" };
+  const named = SESSION_PARAMS.find((name) => route.query.includes(name));
+  const session = named === undefined ? null : params.get(named);
+  if (named !== undefined && (session === null || !SESSION_ID_RE.test(session))) return { reason: `${named} must be a session id` };
   const cwd = params.get("cwd");
   return cwd !== null && !isCleanAbsolute(cwd) ? { reason: "cwd must be a clean absolute path" } : { params };
 }

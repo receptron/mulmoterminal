@@ -149,6 +149,27 @@ export const parseRemotePromptSubmitted = (data: unknown): RemotePromptSubmitted
     ? { host: data.host, sessionId: data.sessionId }
     : null;
 
+/** A remote session's own channels the relay follows on demand (#3506): the kinds a browser may ask
+ *  for, each carrying one session's live items. */
+export const REMOTE_SESSION_CHANNEL_KINDS = ["toolcalls"] as const;
+export type RemoteSessionChannelKind = (typeof REMOTE_SESSION_CHANNEL_KINDS)[number];
+
+const REMOTE_CHANNEL_PREFIX = "remote:";
+
+/** The Mac's channel for `kind` of a remote session: a browser subscribing to it is what makes the
+ *  relay follow `<kind>:<id>` on that host, and what it hears is that channel's messages, unchanged. */
+export const remoteSessionChannel = (host: string, kind: RemoteSessionChannelKind, id: string): string => `${REMOTE_CHANNEL_PREFIX}${host}:${kind}:${id}`;
+
+/** The host and the remote's own channel a Mac channel names, or null for any other name. The id is
+ *  the caller's to check, and the channel is rebuilt from the parts, never taken from the room. */
+export function parseRemoteSessionChannel(room: string, isValidId: (id: string) => boolean): { host: string; channel: string } | null {
+  if (!room.startsWith(REMOTE_CHANNEL_PREFIX)) return null;
+  const [host, kind, id, ...rest] = room.slice(REMOTE_CHANNEL_PREFIX.length).split(":");
+  const known = REMOTE_SESSION_CHANNEL_KINDS.find((candidate) => candidate === kind);
+  if (rest.length > 0 || !isRemoteHostId(host) || known === undefined || id === undefined || !isValidId(id)) return null;
+  return { host, channel: `${known}:${id}` };
+}
+
 /** The one key a client map uses for a remote session: ids are unique per host, not across hosts. */
 export const remoteSessionKey = (host: string, id: string): string => `${host}/${id}`;
 

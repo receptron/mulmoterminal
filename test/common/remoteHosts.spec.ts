@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  parseRemoteSessionChannel,
+  remoteSessionChannel,
   isRemoteHostId,
   parseRemoteSessionsMessage,
   remoteActivityOf,
@@ -158,5 +160,30 @@ describe("remoteSessionDetailOf", () => {
   });
   it("answers nothing for a body that is not a record", () => {
     [null, undefined, "x", 3, []].forEach((body) => expect(remoteSessionDetailOf(body)).toEqual({}));
+  });
+});
+
+// #3506. The Mac-side name of a remote session's channel: a browser listening to it makes the relay
+// follow the remote's own channel, so only known kinds with a real id and host may name one.
+describe("remote session channels", () => {
+  const ID = "0b8f0a0e-7c55-4c1e-9e0a-3f1d2c4b5a69";
+  const isId = (id: string) => /^[0-9a-f-]{36}$/.test(id);
+  it("round-trips a known kind of a session on a host", () => {
+    expect(remoteSessionChannel("lx", "toolcalls", ID)).toBe(`remote:lx:toolcalls:${ID}`);
+    expect(parseRemoteSessionChannel(remoteSessionChannel("lx", "toolcalls", ID), isId)).toEqual({ host: "lx", channel: `toolcalls:${ID}` });
+  });
+  it.each([
+    `toolcalls:${ID}`,
+    `remote:lx:session:${ID}`,
+    `remote:lx:plugin:x:file:${ID}`,
+    `remote:lx:toolcalls:not-an-id`,
+    `remote:lx:toolcalls:${ID}:extra`,
+    `remote:LX:toolcalls:${ID}`,
+    `remote::toolcalls:${ID}`,
+    "remote:lx:toolcalls",
+    "remote-sessions",
+    "",
+  ])("names nothing for %j", (room) => {
+    expect(parseRemoteSessionChannel(room, isId)).toBeNull();
   });
 });

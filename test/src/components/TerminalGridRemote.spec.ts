@@ -7,6 +7,7 @@ import TerminalGrid from "../../../src/components/TerminalGrid.vue";
 import FilesPane from "../../../src/components/FilesPane.vue";
 import PromptsPane from "../../../src/components/PromptsPane.vue";
 import TranscriptPane from "../../../src/components/TranscriptPane.vue";
+import ToolsPane from "../../../src/components/ToolsPane.vue";
 import { openInFilesPane } from "../../../src/composables/filesPaneOpener";
 import { dirKeyOf } from "../../../src/composables/dirAddress";
 import { rememberPane } from "../../../src/components/filesPaneStore";
@@ -98,11 +99,10 @@ describe("a remote cell's Files pane", () => {
     expect(filesRequests().every((url) => url.startsWith("/remote/lx/api/files/browse/"))).toBe(true);
   });
 
-  it("opens no pane that reads this machine's tools or Canvas", async () => {
+  it("opens no pane that reads this machine's Canvas or collections", async () => {
     const grid = mountEnlarged("lx");
     await flushPromises();
     expect(grid.vm.runCellAction("pane-canvas", 1)).toBe(false);
-    expect(grid.vm.runCellAction("pane-tools", 1)).toBe(false);
     expect(grid.vm.runCellAction("pane-collections", 1)).toBe(false);
   });
 
@@ -197,5 +197,34 @@ describe("a remote cell's history panes", () => {
     await flushPromises();
     expect(grid.findComponent(PromptsPane).props()).toMatchObject({ sessionId: SESSION, host: null });
     expect(transcriptRequests().map((url) => url.split("?")[0])).toEqual(["/api/transcript/prompts"]);
+  });
+});
+
+// Its tool calls, read on its host and heard on the channel the relay follows for it (#3506).
+describe("a remote cell's Tools pane", () => {
+  it("reads the tools and calls on its host, and listens on its Mac-side channel", async () => {
+    const grid = mountEnlarged("lx");
+    await flushPromises();
+    requested = [];
+    subscribed.channels = [];
+    expect(grid.vm.runCellAction("pane-tools", 1)).toBe(true);
+    await flushPromises();
+    expect(grid.findComponent(ToolsPane).props()).toMatchObject({ sessionId: SESSION, host: "lx" });
+    expect(requested.filter((url) => url.includes("/tool")).sort()).toEqual([
+      `/remote/lx/api/tool-calls/${SESSION}`,
+      `/remote/lx/api/tools?sessionId=${SESSION}`,
+    ]);
+    expect(subscribed.channels.filter((channel) => channel.includes(SESSION))).toEqual([`remote:lx:toolcalls:${SESSION}`]);
+  });
+
+  it("reads them on this machine for a local cell (control)", async () => {
+    const grid = mountEnlarged(undefined);
+    await flushPromises();
+    requested = [];
+    subscribed.channels = [];
+    grid.vm.runCellAction("pane-tools", 1);
+    await flushPromises();
+    expect(requested.filter((url) => url.includes("/tool")).sort()).toEqual([`/api/tool-calls/${SESSION}`, `/api/tools?sessionId=${SESSION}`]);
+    expect(subscribed.channels).toContain(`toolcalls:${SESSION}`);
   });
 });

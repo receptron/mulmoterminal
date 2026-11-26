@@ -703,7 +703,8 @@ const localSessionOf = (uid: number | null): string | null => {
   return onThisMachine(cell?.remoteHost, cell?.session ?? null);
 };
 const paneCellSessionId = computed(() => localSessionOf(paneCellUid.value));
-// The prompts and the conversation are read where the session runs, a remote cell's on its host (#3506).
+// The prompts, the conversation and the tool calls are read where the session runs, a remote cell's
+// on its host (#3506).
 const paneCellSessionOnHost = computed(() => cellOf(paneCellUid.value)?.session ?? null);
 const paneCellHost = computed(() => cellOf(paneCellUid.value)?.remoteHost ?? null);
 // The ENLARGED cell's session, which is not the same thing on the tiled grid: what opens the pane by
@@ -2052,7 +2053,8 @@ function onRosterDragLeave(event: DragEvent) {
         />
         <ToolsPane
           v-else-if="rightPane === 'tools'"
-          :session-id="paneCellSessionId"
+          :session-id="paneCellSessionOnHost"
+          :host="paneCellHost"
           :expanded="paneFull"
           :style="rightPaneStyle(paneFull, paneWidth)"
           class="border-l border-border"
