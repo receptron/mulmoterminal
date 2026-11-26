@@ -10,7 +10,7 @@
 
 import { pastedImageFile } from "../components/pasteImage";
 import { toInsertText } from "../components/dropPaths";
-import { dropUploadErrorMessage, uploadDropBatch } from "../components/dropUpload";
+import { dropUploadErrorMessage, uploadDropBatch, uploadDroppedFile } from "../components/dropUpload";
 
 interface PasteImageHandlers {
   // Null while the cell has no session yet — the same state a drop reports rather than uploading
@@ -18,11 +18,13 @@ interface PasteImageHandlers {
   sessionId: () => string | null;
   insertText: (text: string) => void;
   onError: (message: string) => void;
+  // The host the session runs on (#3506), or null for this machine: where the image is saved.
+  host?: () => string | null;
 }
 
 /** A `paste` handler for the terminal's container. Returns false — and touches nothing —
  *  when the paste isn't an image, leaving xterm's own text handling alone. */
-export function createImagePasteHandler({ sessionId, insertText, onError }: PasteImageHandlers) {
+export function createImagePasteHandler({ sessionId, insertText, onError, host = () => null }: PasteImageHandlers) {
   return function onPaste(event: ClipboardEvent): boolean {
     const file = pastedImageFile(event.clipboardData);
     if (!file) return false;
@@ -41,7 +43,7 @@ export function createImagePasteHandler({ sessionId, insertText, onError }: Past
     // Through the BATCH helper rather than a bare upload, for its session rule: a saved path is
     // granted to one session by `--add-dir`, so a switch while the bytes are in flight must drop
     // the path rather than hand the new session one it was never granted and cannot read.
-    void uploadDropBatch(session, [file], sessionId).then((outcome) => {
+    void uploadDropBatch(session, [file], sessionId, (id, image) => uploadDroppedFile(id, image, host())).then((outcome) => {
       if (outcome.kind === "inserted") return insertText(toInsertText(outcome.paths));
       onError(outcome.kind === "stale" ? PASTE_SESSION_CHANGED_EN : dropUploadErrorMessage(outcome.status));
     });

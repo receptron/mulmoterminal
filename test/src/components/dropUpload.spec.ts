@@ -7,6 +7,12 @@ describe("dropUploadUrl", () => {
     expect(dropUploadUrl("2f1c0b4e-0000-4000-8000-000000000000")).toBe("/api/session/2f1c0b4e-0000-4000-8000-000000000000/drop");
   });
 
+  // #3506: a session on a remote host is reached through the gateway.
+  it("addresses a remote host's session through the gateway", () => {
+    expect(dropUploadUrl("2f1c0b4e-0000-4000-8000-000000000000", "lx")).toBe("/remote/lx/api/session/2f1c0b4e-0000-4000-8000-000000000000/drop");
+    expect(dropUploadUrl("2f1c0b4e-0000-4000-8000-000000000000", null)).toBe("/api/session/2f1c0b4e-0000-4000-8000-000000000000/drop");
+  });
+
   // The id reaches the URL from component state rather than from a user, but a value that
   // needs escaping must not silently address a different path.
   it("escapes an id that would otherwise reshape the path", () => {

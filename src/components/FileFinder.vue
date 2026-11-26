@@ -14,6 +14,7 @@ import { usePickerPanelKeys } from "../composables/usePickerPanelKeys";
 import { isUnknownArray } from "../../common/isUnknownArray";
 import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
+import { browseUrl } from "./filesPaneApi";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
@@ -22,7 +23,7 @@ const { t } = useI18n();
  *  who has typed two characters is still scanning rather than reading. */
 const MAX_RESULTS = 50;
 
-const props = defineProps<{ cwd: string | null; seed?: FilesPanelSeed | undefined }>();
+const props = defineProps<{ cwd: string | null; host?: string | null; seed?: FilesPanelSeed | undefined }>();
 const emit = defineEmits<{ pick: [pathRel: string]; close: [] }>();
 // Per instance: two panes can be mounted at once, and the list and row ids must name this one's.
 const listId = `file-finder-list-${useId()}`;
@@ -72,7 +73,7 @@ async function load(): Promise<void> {
     // server is 10s, and a repository that misses it is then WALKED. With the default the browser
     // would give up first — every time — and a slow project would report a timeout for a request
     // that was about to succeed.
-    const res = await fetchWithTimeout(`/api/files/browse/index?${params.toString()}`, { signal: abort.signal }, SLOW_COMMAND_TIMEOUT_MS);
+    const res = await fetchWithTimeout(browseUrl(props.host ?? null, "index", params.toString()), { signal: abort.signal }, SLOW_COMMAND_TIMEOUT_MS);
     const data = await jsonBody(res);
     if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : `HTTP ${res.status}`);
     // Checked off the wire: the list is rendered and then OPENED, so a malformed entry would

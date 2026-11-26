@@ -675,6 +675,13 @@ describe("reopen rows", () => {
     expect(keys).toEqual(expect.arrayContaining(["reopen:session::s1", "reopen:session::s2"]));
   });
 
+  // #3506: a remote cell's row names its host, and is found by it.
+  it("names the host of a cell closed on a remote one", () => {
+    const remote = { ...CLOSED[1], remoteHost: "lx" };
+    const row = paletteRows("tools (lx)", {}, UNZOOMED, TEXT, { ...NONE, closedCells: [remote] }).find((candidate) => candidate.kind === "reopen");
+    expect(row && [rowKey(row), labelText(row)]).toEqual(["reopen:remote:lx:shell:/w/tools", "Reopen tools (lx)"]);
+  });
+
   it("lists nothing when nothing was closed", () => {
     expect(paletteRows("", {}, UNZOOMED, TEXT, NONE).some((row) => row.kind === "reopen")).toBe(false);
   });
