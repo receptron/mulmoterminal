@@ -28,6 +28,7 @@ import type { LibraryConversation } from "../../../common/library";
 import { projectName, whenLabel } from "./libraryRows";
 import { movedIndex } from "./libraryKeys";
 import { fileIssues, filterMemory, filterTidy, indexFill, linkTarget, memoryKey, memoryTitle, tidyCount } from "./memoryRows";
+import LibraryBackButton from "./LibraryBackButton.vue";
 
 const props = defineProps<{
   projects: LibraryMemoryProject[];
@@ -405,13 +406,7 @@ defineExpose({ move, startEdit });
       </section>
     </div>
     <article v-if="selected" class="flex min-h-0 min-w-0 flex-1 flex-col" :class="readerShown ? '' : 'max-[760px]:hidden'" data-testid="memory-reader">
-      <button
-        type="button"
-        class="hidden cursor-pointer items-center gap-1 border-0 bg-transparent px-4 pt-3 font-sans text-[13px] text-secondary max-[760px]:flex"
-        @click="readerShown = false"
-      >
-        <span class="material-symbols-outlined text-[18px]">arrow_back</span>{{ t("libraryView.back") }}
-      </button>
+      <LibraryBackButton @click="readerShown = false" />
       <header class="px-4 pb-2 pt-5">
         <h2 class="m-0 text-balance font-sans text-[20px] font-[650] text-fg">{{ memoryTitle(selected.memory) }}</h2>
         <p class="m-0 mt-1 flex flex-wrap gap-x-3 font-sans text-[12px] text-dim">

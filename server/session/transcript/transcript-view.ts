@@ -121,6 +121,25 @@ export function toolResultRow(text: string): TranscriptRow {
   return { kind: "tool", text: lines.slice(0, TOOL_RESULT_MAX_LINES).join("\n"), clipped: true };
 }
 
+/** How much of a tool CALL's arguments is shown. Argument fields are unbounded — one measured at
+ *  4 KB of embedded shell — and a reader wants to know WHAT ran, not to re-read the invocation. */
+const CALL_ARGS_MAX_CHARS = 200;
+
+/** A tool call: the name, then the head of its arguments — one shape for every agent's calls. */
+export function toolCallRow(name: string, args: string): TranscriptRow {
+  const label = name.trim() || "(unnamed tool)";
+  const head = args.length > CALL_ARGS_MAX_CHARS ? `${args.slice(0, CALL_ARGS_MAX_CHARS)}…` : args;
+  return { kind: "tool", text: head === "" ? label : `${label} ${head}`, call: true };
+}
+
+/** An assistant step's prose, then one row per call — or one `unknown` row when the calls are not a list. */
+export function proseThenCallRows(content: unknown, calls: unknown, callRow: (call: unknown) => TranscriptRow): TranscriptRow[] {
+  const prose = readString(content).trim();
+  const rows: TranscriptRow[] = prose === "" ? [] : [{ kind: "assistant", text: prose }];
+  if (calls === undefined) return rows;
+  return [...rows, ...(Array.isArray(calls) ? calls.map(callRow) : [unknownRow(calls)])];
+}
+
 function renderBlock(part: unknown, speaker: TranscriptRowKind): TranscriptRow[] {
   if (!isRecord(part)) return [unknownRow(part)];
   switch (part.type) {

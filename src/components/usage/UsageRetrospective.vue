@@ -30,6 +30,10 @@ const widest = computed(() => Math.max(...(totals.value?.weeks ?? []).map((week)
 const barWidth = (usd: number): string => `${widest.value === 0 ? 0 : Math.round((usd / widest.value) * PERCENT)}%`;
 const projects = computed(() => (totals.value?.projects ?? []).slice(0, PROJECTS_SHOWN));
 const CELL = "py-1 pr-4 text-right font-mono tabular-nums";
+const HEAD = "py-1 pr-4 text-right font-[550]";
+const HEAD_LAST = "py-1 text-right font-[550]";
+/** The money, conversation and PR columns the week and project tables both end with. */
+const COUNT_HEADS = ["usageView.retro.cost", "usageView.retro.conversations", "usageView.retro.prs"] as const;
 </script>
 
 <template>
@@ -56,9 +60,7 @@ const CELL = "py-1 pr-4 text-right font-mono tabular-nums";
           <tr class="border-b border-border text-left text-[12px] text-secondary">
             <th class="py-1 pr-4 font-[550]">{{ t("usageView.retro.week") }}</th>
             <th class="w-full py-1 pr-4 font-[550]"></th>
-            <th class="py-1 pr-4 text-right font-[550]">{{ t("usageView.retro.cost") }}</th>
-            <th class="py-1 pr-4 text-right font-[550]">{{ t("usageView.retro.conversations") }}</th>
-            <th class="py-1 text-right font-[550]">{{ t("usageView.retro.prs") }}</th>
+            <th v-for="(label, index) in COUNT_HEADS" :key="label" :class="index === COUNT_HEADS.length - 1 ? HEAD_LAST : HEAD">{{ t(label) }}</th>
           </tr>
         </thead>
         <tbody>
@@ -78,9 +80,7 @@ const CELL = "py-1 pr-4 text-right font-mono tabular-nums";
           <thead>
             <tr class="border-b border-border text-left text-[12px] text-secondary">
               <th class="py-1 pr-4 font-[550]">{{ t("usageView.retro.project") }}</th>
-              <th class="py-1 pr-4 text-right font-[550]">{{ t("usageView.retro.cost") }}</th>
-              <th class="py-1 pr-4 text-right font-[550]">{{ t("usageView.retro.conversations") }}</th>
-              <th class="py-1 text-right font-[550]">{{ t("usageView.retro.prs") }}</th>
+              <th v-for="(label, index) in COUNT_HEADS" :key="label" :class="index === COUNT_HEADS.length - 1 ? HEAD_LAST : HEAD">{{ t(label) }}</th>
             </tr>
           </thead>
           <tbody>

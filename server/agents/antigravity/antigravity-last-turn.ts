@@ -18,44 +18,30 @@
 // interrupted turn would read as one that ended with an empty answer. A preamble always carries its
 // tool calls in the same record, which is what keeps it from being quoted as the conclusion (#1487).
 import { readString } from "../../../common/readString.js";
-import { EMPTY_TURN, type LastTurn } from "../../session/transcript/last-turn.js";
+import type { LastTurn } from "../../session/transcript/last-turn.js";
+import { type ExchangeReader, hasToolList, lastCompleteExchange, newestPromptReply } from "../../session/transcript/exchange-fold.js";
 import { antigravityPromptText } from "./antigravity-sessions.js";
 
 const isUserInput = (record: Record<string, unknown>): boolean => record.type === "USER_INPUT";
 
 const promptOf = (record: Record<string, unknown>): string | null => antigravityPromptText(readString(record.content)).trim() || null;
 
-// Absent or an empty list is "no tools"; any other value — including a shape that is not a list —
-// is not trusted as a turn's end, so a malformed record cannot be quoted as the answer.
-const hasToolCalls = (record: Record<string, unknown>): boolean =>
-  record.tool_calls !== undefined && !(Array.isArray(record.tool_calls) && record.tool_calls.length === 0);
-
 /** The text of a response that ends the turn, or null for every other step. */
 export function antigravityFinalAnswer(record: Record<string, unknown>): string | null {
-  if (record.type !== "PLANNER_RESPONSE" || record.status !== "DONE" || hasToolCalls(record)) return null;
+  if (record.type !== "PLANNER_RESPONSE" || record.status !== "DONE" || hasToolList(record.tool_calls)) return null;
   return readString(record.content).trim() || null;
 }
 
-interface ExchangeFold {
-  /** The newest prompt seen so far, answered or not. */
-  prompt: string | null;
-  complete: LastTurn;
-}
-
-function foldExchange(fold: ExchangeFold, record: Record<string, unknown>): ExchangeFold {
-  if (isUserInput(record)) return { prompt: promptOf(record), complete: fold.complete };
-  const reply = antigravityFinalAnswer(record);
-  return reply === null ? fold : { prompt: fold.prompt, complete: { prompt: fold.prompt, reply } };
-}
+const ANTIGRAVITY_EXCHANGE: ExchangeReader = { isPrompt: isUserInput, promptOf, finalAnswer: antigravityFinalAnswer };
 
 /** The last COMPLETE exchange. A turn still running, or one interrupted before it answered, falls
  *  back to the previous complete one, as the other agents' readers do. */
 export function antigravityLastTurnFromSteps(records: readonly Record<string, unknown>[]): LastTurn {
-  return records.reduce<ExchangeFold>(foldExchange, { prompt: null, complete: EMPTY_TURN }).complete;
+  return lastCompleteExchange(records, ANTIGRAVITY_EXCHANGE);
 }
 
 /** The reply to the NEWEST prompt, or null when that prompt has none — never an older exchange, so
  *  an interrupted turn is not announced with the previous turn's answer (#1650). */
 export function antigravityCurrentTurnReplyFromSteps(records: readonly Record<string, unknown>[]): string | null {
-  return records.reduce<string | null>((reply, record) => (isUserInput(record) ? null : (antigravityFinalAnswer(record) ?? reply)), null);
+  return newestPromptReply(records, ANTIGRAVITY_EXCHANGE);
 }
