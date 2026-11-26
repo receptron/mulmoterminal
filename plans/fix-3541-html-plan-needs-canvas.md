@@ -13,7 +13,7 @@ it, stop and tell the user to switch on Canvas for the folder and use the cell m
 workarounds (calling `/api/mcp/…`, writing a file, opening a browser) as not to be tried, since none of
 them delivers the Send back.
 
-Wording follows the precondition `mulmoterminal-data-analysis` already states for the same toggle.
+Wording follows the precondition `mulmoterminal-data-analysis` already states for the same toggle; that skill gets the same "Restart the agent" instruction.
 
 ## Out of scope
 
