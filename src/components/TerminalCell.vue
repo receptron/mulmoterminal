@@ -1964,18 +1964,20 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
              literally the path's own click. Occasional navigations do not each deserve a permanent
              icon in a tiled cell. The menu itself is CellPathMenu, shared with every cell type. -->
           <template #header-lead>
-            <!-- Every item in the menu acts on this machine, so a remote cell shows its path and no menu. -->
-            <span
+            <!-- The menu's other items act on this machine, so a remote cell's path only opens its Files pane. -->
+            <button
               v-if="isRemote"
+              type="button"
               data-testid="cell-dir"
-              class="cell-dir flex min-w-0 flex-auto items-center font-mono text-[11px]"
+              class="cell-dir flex min-w-0 flex-auto cursor-pointer items-center border-0 bg-transparent p-0 text-left font-mono text-[11px]"
               :class="CELL_HEADER_INK_DIM"
-              :data-tip="cwd ?? ''"
+              :data-tip="t('tips.cell.remoteBrowseFiles', { path: cwd ?? '' })"
+              @click="emit('open-files')"
             >
               <span class="min-w-0" :class="DIR_TRUNCATE_FRONT"
                 ><span class="cell-dir-path" :class="CELL_DIR_PATH">{{ headerDir }}</span></span
               >
-            </span>
+            </button>
             <CellPathMenu
               v-else
               :cwd="cwd"
