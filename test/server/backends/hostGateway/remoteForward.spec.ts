@@ -122,6 +122,52 @@ describe("decideForward: a session named in the query", () => {
   });
 });
 
+// The worktree and GitHub writes (#3506) name their directory in the body; the gateway holds each such
+// path to the query's `cwd`, absolute and inside it, without a request.
+describe("decideForward: a path named in the body", () => {
+  const decideWith = (path: string, body: unknown, query: Record<string, unknown> = { cwd: "/srv/p" }) => decideForward("POST", path, query, undefined, body);
+  it.each(["/api/worktrees/push", "/api/worktrees/pr", "/api/work-comment"])("forwards %s for the cell's own directory", (path) => {
+    expect(decideWith(path, { cwd: "/srv/p", issue: 3, kind: "pr", pr: 4 })).toMatchObject({ kind: "forward", path: `${path}?cwd=%2Fsrv%2Fp` });
+    expect(decideWith(path, { cwd: "/srv/p/sub" })).toMatchObject({ kind: "forward" });
+  });
+  it.each([
+    ["another directory", "/srv/other"],
+    ["a sibling sharing the prefix", "/srv/px"],
+    ["a climb out", "/srv/p/../other"],
+    ["a relative path", "sub"],
+    ["a home path the remote expands", "~/p"],
+    ["a non-string", 3],
+    ["an array", ["/srv/p"]],
+    ["a NUL", "/srv/p\0"],
+  ])("refuses %s in the body", (_name, cwd) => {
+    ["/api/worktrees/push", "/api/worktrees/pr", "/api/work-comment"].forEach((path) =>
+      expect(decideWith(path, { cwd })).toMatchObject({ kind: "refuse", status: 400 }),
+    );
+  });
+  it("holds both of a removal's paths to the cell's directory", () => {
+    const path = "/api/worktrees/remove";
+    expect(decideWith(path, { repoDir: "/srv/p", path: "/srv/p", deleteBranch: true, force: true })).toMatchObject({ kind: "forward" });
+    expect(decideWith(path, { repoDir: "/srv/p", path: "/srv/other" })).toMatchObject({ kind: "refuse", status: 400 });
+    expect(decideWith(path, { repoDir: "/", path: "/srv/p" })).toMatchObject({ kind: "refuse", status: 400 });
+  });
+  it("requires the query's cwd that the body is held to", () => {
+    expect(decideWith("/api/worktrees/push", { cwd: "/srv/p" }, {})).toMatchObject({ kind: "refuse", status: 400 });
+    expect(decideWith("/api/worktrees/push", { cwd: "/srv/p" }, { cwd: "/srv/other" })).toMatchObject({ kind: "refuse", status: 400 });
+  });
+  it("leaves an absent field to the remote, which refuses it", () => {
+    expect(decideWith("/api/worktrees/push", {})).toMatchObject({ kind: "forward" });
+    expect(decideWith("/api/worktrees/push", undefined)).toMatchObject({ kind: "forward" });
+  });
+  it("reads the diff for the cell's directory, and forwards no create or cleanup", () => {
+    expect(decideForward("GET", "/api/worktrees/diff", { cwd: "/srv/p", extra: 1 })).toMatchObject({
+      kind: "forward",
+      path: "/api/worktrees/diff?cwd=%2Fsrv%2Fp",
+    });
+    expect(decideWith("/api/worktrees/create", { repoDir: "/srv/p" })).toMatchObject({ kind: "refuse", status: 404 });
+    expect(decideWith("/api/worktrees/cleanup/remove", { repoDir: "/srv/p" })).toMatchObject({ kind: "refuse", status: 404 });
+  });
+});
+
 describe("decideForward: the cell's directory", () => {
   it.each(["", "relative/dir", "/srv/p/", "/srv//p", "/srv/p/..", "/srv/../etc", "/srv/./p", "/srv/p\0", `/${"a".repeat(REMOTE_PATH_MAX)}`])(
     "refuses the cwd %j",

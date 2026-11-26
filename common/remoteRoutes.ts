@@ -29,6 +29,9 @@ export interface RemoteRoute {
   headers?: readonly string[];
   /** slow: the remote may take as long as the browser waits for it (a search, a whole file index). */
   wait?: "slow";
+  /** The JSON body's fields naming a path, each an absolute path inside `cwd` when present. For a
+   *  route that reads its directory from the body: the query's `cwd` is what the gateway pins it to. */
+  bodyWithin?: readonly string[];
 }
 
 // The Files pane's routes: rooted at the cell's directory, and a `path` never leaves it.
@@ -48,6 +51,16 @@ const transcript = (route: string, query: readonly string[], method: RemoteRoute
   key: "session",
   access,
   query: ["session", "cwd", ...query],
+});
+
+// A write to the cell's repo, which names its directory in the body; the query carries it too.
+const repoWrite = (path: string, bodyWithin: readonly string[]): RemoteRoute => ({
+  method: "POST",
+  path,
+  key: "cwd",
+  access: "write",
+  query: ["cwd"],
+  bodyWithin,
 });
 
 export const REMOTE_ROUTES = {
@@ -91,6 +104,11 @@ export const REMOTE_ROUTES = {
   // A relay's `dest` is only ever a key on the remote, never a path it reads.
   transcriptRelay: transcript("relay", ["agent", "dest"]),
   transcriptRelayMark: transcript("relay-mark", ["agent", "dest"], "POST", "write"),
+  worktreeDiff: { method: "GET", path: "/api/worktrees/diff", key: "cwd", access: "read", query: ["cwd"] },
+  worktreePush: repoWrite("/api/worktrees/push", ["cwd"]),
+  worktreePr: repoWrite("/api/worktrees/pr", ["cwd"]),
+  worktreeRemove: repoWrite("/api/worktrees/remove", ["repoDir", "path"]),
+  workComment: repoWrite("/api/work-comment", ["cwd"]),
 } as const satisfies Record<string, RemoteRoute>;
 
 export type RemoteRouteName = keyof typeof REMOTE_ROUTES;

@@ -89,7 +89,7 @@ import { handoffTargets, pullLastTurn, pullSinceRelay, slotLabel, type HandoffTa
 import { findPartner, isSendAction, runRelay, type RelayAction, type RelaySelf } from "../composables/useRelayActions";
 import { gridSessionJump } from "../composables/gridSessionJump";
 import { useRelayButton } from "../composables/useRelayButton";
-import { dirKeyOf } from "../composables/dirAddress";
+import { dirApiUrl, dirKeyOf } from "../composables/dirAddress";
 import { slotsChanged } from "../composables/slotsVersion";
 import { relayButtonLabel } from "../composables/relayButtonLabel";
 import { cellSendButton } from "../composables/cellSendButton";
@@ -113,7 +113,16 @@ import RemoteHostGone from "./RemoteHostGone.vue";
 import { useRemoteCellActivity } from "../composables/useRemoteCellActivity";
 import { useRemoteHostStatus } from "../composables/configuredRemoteHosts";
 import { mayConnect } from "./remoteHostStatus";
-import { activityKeyOf, cellActionAllowed, isRemoteHost, onThisMachine, REMOTE_CELL_DECLINE_EN, sessionDetailPath, sessionWritePath } from "./remoteCell";
+import {
+  activityKeyOf,
+  cellActionAllowed,
+  isRemoteHost,
+  onThisMachine,
+  REMOTE_CELL_DECLINE_EN,
+  repoWritePath,
+  sessionDetailPath,
+  sessionWritePath,
+} from "./remoteCell";
 
 // How long a handoff failure stays on the cell before it clears itself.
 const ASK_MSG_MS = 4000;
@@ -1206,12 +1215,11 @@ async function removeAndClose() {
 }
 
 async function requestRemove(dir: string) {
-  if (isRemote) return; // the path names a worktree on the other machine, and this server would remove its own
   closeError.value = null;
   termRef.value?.terminate(); // free the worktree dir first (Windows locks a process's cwd)
   try {
     const res = await fetchWithTimeout(
-      "/api/worktrees/remove",
+      repoWritePath(props.remoteHost, "/api/worktrees/remove", dir),
       {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -1438,7 +1446,7 @@ const isWorktreeDiffData = (value: unknown): value is WorktreeDiffData =>
 
 const diff = ref<WorktreeDiffData | null>(null);
 const diffOpen = ref(false);
-const isWorktreeCell = computed(() => worktreeLabel(localCwd.value) !== null);
+const isWorktreeCell = computed(() => worktreeLabel(cwd.value) !== null);
 const showDiffBadge = computed(() => !!diff.value?.isWorktree && (diff.value.ahead > 0 || diff.value.dirty > 0));
 let diffReq = 0;
 
@@ -1451,7 +1459,7 @@ async function loadDiff() {
   }
   const reqId = ++diffReq;
   try {
-    const res = await fetchWithTimeout(`/api/worktrees/diff?cwd=${encodeURIComponent(cwd.value)}`, undefined, SLOW_COMMAND_TIMEOUT_MS);
+    const res = await fetchWithTimeout(dirApiUrl(dirKey.value ?? cwd.value, "/api/worktrees/diff"), undefined, SLOW_COMMAND_TIMEOUT_MS);
     if (reqId !== diffReq) return;
     const data = res.ok ? await jsonBody(res) : {};
     if (reqId !== diffReq) return;
@@ -1486,16 +1494,17 @@ function commitViaClaude() {
 const reasonOf = (data: Record<string, unknown>): string | null => (typeof data.reason === "string" ? data.reason : null);
 
 async function worktreeAction(endpoint: "push" | "pr"): Promise<Record<string, unknown> | null> {
-  if (!cwd.value || prBusy.value) return null;
+  const dir = cwd.value;
+  if (!dir || prBusy.value) return null;
   prBusy.value = true;
   prMsg.value = endpoint === "push" ? "Pushing…" : "Creating PR…";
   try {
     const res = await fetchWithTimeout(
-      `/api/worktrees/${endpoint}`,
+      repoWritePath(props.remoteHost, `/api/worktrees/${endpoint}`, dir),
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ cwd: cwd.value }),
+        body: JSON.stringify({ cwd: dir }),
       },
       SLOW_COMMAND_TIMEOUT_MS,
     );

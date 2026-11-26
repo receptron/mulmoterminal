@@ -30,6 +30,7 @@ describe("cellActionAllowed", () => {
     "terminal-park",
     "terminal-copy-code",
     "terminal-voice",
+    "terminal-diff",
     "terminal-note",
     "terminal-send-turn",
     "terminal-send-since",

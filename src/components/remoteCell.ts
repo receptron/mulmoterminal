@@ -31,7 +31,7 @@ const ON_REMOTE_CELL: Record<CellAction, boolean> = {
   "terminal-copy-code": true,
   "terminal-insert-path": false,
   "terminal-reveal": false,
-  "terminal-diff": false,
+  "terminal-diff": true,
   "terminal-note": true,
   "terminal-send-turn": true,
   "terminal-send-since": true,
@@ -68,6 +68,11 @@ export const transcriptPath = (
   route: "prompts" | "view" | "timeline" | "last-turn" | "relay" | "relay-mark",
   params: URLSearchParams,
 ): string => pathOnHost(host, `/api/transcript/${route}?${params.toString()}`);
+
+/** A write to the cell's repo, which names its directory in the body: this server's route, or the
+ *  gateway's with that directory in the query too, which the gateway holds the body's paths to. */
+export const repoWritePath = (host: string | null | undefined, route: string, cwd: string): string =>
+  isRemoteHost(host) ? `${remotePath(host, route)}?cwd=${encodeURIComponent(cwd)}` : route;
 
 /** A write to one session: this server's route, or the gateway's for a remote cell. */
 export const sessionWritePath = (host: string | null | undefined, sessionId: string, action: "memo" | "terminate" | "drop"): string =>

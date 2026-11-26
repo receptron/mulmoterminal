@@ -82,6 +82,9 @@ beforeEach(() => {
       if (ids === null) return new Promise(() => {});
       return { ok: true, json: async () => ({ ids }) };
     }
+    if (String(url).includes("/worktrees/diff"))
+      return { ok: true, json: async () => ({ isWorktree: true, base: "main", ahead: 1, dirty: 0, files: [], patch: "", truncated: false }) };
+    if (String(url).includes("/worktrees/")) return { ok: true, json: async () => ({ ok: true, branch: "fix-x" }) };
     // A reap that confirms, so a restart goes on to reconnect.
     if (String(url).endsWith("/terminate")) return { ok: true, json: async () => ({ ended: true }) };
     return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
@@ -277,6 +280,39 @@ describe("a remote cell", () => {
     await flushPromises();
     expect(requested.filter((url) => url.includes("/transcript/last-turn")).every((url) => url.startsWith("/remote/lx/"))).toBe(true);
     expect(requested.some((url) => url.includes("/transcript/last-turn"))).toBe(true);
+    remote.unmount();
+  });
+
+  // #3506. A remote worktree's diff, push, pull request and removal are its host's: each goes through
+  // the gateway, with the directory in the query that the gateway holds the body to.
+  it("reads its worktree's diff and pushes, opens a PR and removes it on its host", async () => {
+    const WT = "/srv/.mulmoterminal/worktrees/app-0123abcd/fix-x";
+    vi.spyOn(window, "open").mockReturnValue(null);
+    const remote = mount(TerminalCell, { props: { ...mountCell("lx").props(), initialCwd: WT } });
+    await flushPromises();
+    const query = `?cwd=${encodeURIComponent(WT)}`;
+    expect(requested).toContain(`/remote/lx/api/worktrees/diff${query}`);
+    expect(remote.findAll('[data-testid="cell-diff-btn"]')).toHaveLength(0);
+    requested = [];
+    expect(requestCellAction("cell-1", "terminal-diff")).toBe(true);
+    await flushPromises();
+    const [, push, pr] = remote.findAll('[data-testid="cell-diff-btn"]');
+    await push?.trigger("click");
+    await flushPromises();
+    await pr?.trigger("click");
+    await flushPromises();
+    await remote.vm.close();
+    await flushPromises();
+    await remote.find('[data-testid="ccx-remove"]').trigger("click");
+    await flushPromises();
+    const body = JSON.stringify({ cwd: WT });
+    expect(requested.filter((url) => /worktrees\/(push|pr|remove)/.test(url))).toEqual([
+      `/remote/lx/api/worktrees/push${query} ${body}`,
+      `/remote/lx/api/worktrees/pr${query} ${body}`,
+      `/remote/lx/api/worktrees/remove${query} ${JSON.stringify({ repoDir: WT, path: WT, deleteBranch: true, force: true })}`,
+    ]);
+    // Nothing about the remote worktree reaches this server (the launch form it closes to lists this machine's own).
+    expect(requested.filter((url) => !url.startsWith("/remote/lx/") && (url.includes(WT) || url.includes(encodeURIComponent(WT))))).toEqual([]);
     remote.unmount();
   });
 

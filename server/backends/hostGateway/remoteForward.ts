@@ -68,17 +68,34 @@ function sessionQuery(route: RemoteRoute, params: URLSearchParams): QueryResult 
   return cwd !== null && !isCleanAbsolute(cwd) ? { reason: "cwd must be a clean absolute path" } : { params };
 }
 
-/** The forward for `method` on `pathname` (the remote's own `/api/…` path), or why not. */
+// A path the body names is held to the query's `cwd` like one in the query, and written absolute: the
+// remote expands a `~` the gateway cannot see the meaning of.
+function bodyEscape(route: RemoteRoute, cwd: string | null, body: unknown): string | null {
+  const fields = route.bodyWithin ?? [];
+  if (fields.length === 0) return null;
+  const given = isRecord(body) ? body : {};
+  const bad = fields.find((name) => {
+    const value = given[name];
+    return value !== undefined && (typeof value !== "string" || cwd === null || !isCleanAbsolute(value) || !staysInside(cwd, value));
+  });
+  return bad === undefined ? null : `${bad} must be an absolute path inside ${cwd ?? "the cwd"}`;
+}
+
+/** The forward for `method` on `pathname` (the remote's own `/api/…` path), or why not. `body` is the
+ *  parsed JSON body, for a route whose body names a path. */
 export function decideForward(
   method: string,
   pathname: string,
   query: unknown,
   routes: Readonly<Record<string, RemoteRoute>> = REMOTE_ROUTES,
+  body: unknown = undefined,
 ): ForwardDecision {
   const matched = Object.values(routes).find((route) => route.method === method.toUpperCase() && filledPath(route, pathname) !== null);
   if (!matched) return refuse(404, `${method.toUpperCase()} ${pathname} is not forwarded to a remote host`);
   const result = forwardedQuery(matched, isRecord(query) ? query : {});
   if ("reason" in result) return refuse(400, result.reason);
+  const escape = bodyEscape(matched, result.params.get("cwd"), body);
+  if (escape !== null) return refuse(400, escape);
   const search = result.params.toString();
   return { kind: "forward", route: matched, path: search ? `${pathname}?${search}` : pathname };
 }
