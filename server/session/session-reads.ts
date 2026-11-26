@@ -74,6 +74,7 @@ import { grokSessionsRoot, isGrokConversationId } from "../agents/grok/grok-sess
 import { grokChatHistoryPath } from "../agents/grok/grok-sessions.js";
 import { grokLastTurnFromMessages } from "../agents/grok/grok-last-turn.js";
 import type { DiskStat, PendingSession, SessionMeta } from "./types.js";
+import { isTurnBoundaryState } from "./transcript/turn-boundary.js";
 import { readString } from "../../common/readString.js";
 import type { TerminalAgent } from "../../common/sessionAgent.js";
 
@@ -190,11 +191,12 @@ const isSummaryState = (value: unknown): value is SummaryState =>
   (value.context.model === null || typeof value.context.model === "string") &&
   typeof value.context.contextTokens === "number" &&
   Array.isArray(value.turnTools) &&
-  value.turnTools.every((tool) => typeof tool === "string");
+  value.turnTools.every((tool) => typeof tool === "string") &&
+  isTurnBoundaryState(value.boundary);
 
 const summaryFold = createTranscriptFold<SummaryState>({
   kind: "summary",
-  version: 2,
+  version: 3,
   isValue: isSummaryState,
   empty: emptySummaryState,
   fold: foldSummary,

@@ -8,6 +8,7 @@
 // published contract, so these are pinned the way project-dir.ts's are: what upstream writes today,
 // with the fallbacks that keep a change VISIBLE rather than silent.
 import { describe, it, expect } from "vitest";
+import { emptyTurnBoundary } from "../../../../server/session/transcript/turn-boundary";
 import { toJsonObject } from "@mulmoclaude/core/remote-host";
 import { undefinedPaths } from "@mulmoclaude/core/remote-host/server";
 import {
@@ -49,7 +50,8 @@ const toolResultRecord = (content: unknown, over: Record<string, unknown> = {}) 
 
 const scanOf = (records: Record<string, unknown>[]): TranscriptScan => {
   const scan = emptyTranscriptScan();
-  records.forEach((record) => foldTranscriptView(scan, record));
+  const boundary = emptyTurnBoundary();
+  records.forEach((record) => foldTranscriptView(scan, record, boundary));
   return scan;
 };
 

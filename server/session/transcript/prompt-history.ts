@@ -10,11 +10,11 @@
 // typed. history.jsonl carries one line per submission, and nothing else.
 //
 // Pure: the reading and the agent branch live in session-reads.ts.
-import { isRecord } from "../../../common/isRecord.js";
 import { readString } from "../../../common/readString.js";
 import type { PromptEntry, PromptWindow } from "../../../common/promptHistory.js";
 import { codexUserTurn, isDoubleWrite, type CodexUserTurn } from "../../agents/codex/codex-user-turn.js";
-import { userPromptText } from "./transcript.js";
+import { turnOpeningPrompt } from "./transcript.js";
+import { emptyTurnBoundary } from "./turn-boundary.js";
 
 /** Enough to recognise a prompt again, which is what this is for. Deliberately far above
  *  LAST_PROMPT_CAP (200): that one keeps a header to one line, this one is read back. */
@@ -209,13 +209,14 @@ export function codexPrompts(records: Record<string, unknown>[], limit: number =
  *  silently empty. Worse than the real thing by construction (it is missing the interruptions and
  *  carries injected text that `userPromptText` does not recognise), which is why it is the
  *  fallback and not the source. */
-export const transcriptPrompts = (records: Record<string, unknown>[], limit: number = PROMPT_HISTORY_MAX): PromptEntry[] =>
-  collect(
+export function transcriptPrompts(records: Record<string, unknown>[], limit: number = PROMPT_HISTORY_MAX): PromptEntry[] {
+  const boundary = emptyTurnBoundary();
+  return collect(
     records,
     (record) => {
-      if (record.type !== "user" || !isRecord(record.message)) return null;
-      const text = userPromptText(record.message.content);
+      const text = turnOpeningPrompt(boundary, record);
       return text === null ? null : entry(epochMs(record.timestamp), text);
     },
     limit,
   );
+}

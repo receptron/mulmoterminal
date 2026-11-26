@@ -5,6 +5,7 @@
 import { isRecord } from "../../../common/isRecord.js";
 import { readString } from "../../../common/readString.js";
 import type { SessionContextInfo } from "../../../common/sessionContext.js";
+import { emptyTurnBoundary, opensTurn, type TurnBoundaryState } from "./turn-boundary.js";
 
 // Text the HARNESS put in the user channel, rather than something a person typed:
 // slash-command wrappers, bash input, and the notification a finished background task
@@ -34,6 +35,15 @@ export function userPromptText(content: unknown): string | null {
     return text.trim();
   }
   return null;
+}
+
+/** The prompt a user record OPENS a turn with, or null: no prompt text, or text written into the
+ *  turn already open (a skill's body, an image note). Advances `state`, so take it once per record
+ *  and hand the answer to every rule that needs it. */
+export function turnOpeningPrompt(state: TurnBoundaryState, o: Record<string, unknown>): string | null {
+  if (o.type !== "user") return null;
+  const text = userPromptText(isRecord(o.message) ? o.message.content : undefined);
+  return text !== null && opensTurn(state, o) ? text : null;
 }
 
 // Parse a JSONL file into the objects on each non-blank, valid line.
@@ -70,12 +80,11 @@ export interface PromptTrail {
 
 export const emptyPromptTrail = (): PromptTrail => ({ meaningful: null, latest: null, record: null });
 
-export function foldPromptTrail(into: PromptTrail, o: Record<string, unknown>): void {
-  if (o.type === "user") {
-    const prompt = userPromptText(isRecord(o.message) ? o.message.content : undefined);
-    if (!prompt) return;
-    into.latest = prompt;
-    if (!isTrivialPrompt(prompt)) into.meaningful = prompt;
+/** `opening` is `turnOpeningPrompt`'s answer for this record. */
+export function foldPromptTrail(into: PromptTrail, o: Record<string, unknown>, opening: string | null): void {
+  if (opening !== null) {
+    into.latest = opening;
+    if (!isTrivialPrompt(opening)) into.meaningful = opening;
   } else if (o.type === "last-prompt" && o.lastPrompt) {
     into.record = readString(o.lastPrompt);
   }
@@ -83,7 +92,8 @@ export function foldPromptTrail(into: PromptTrail, o: Record<string, unknown>): 
 
 const promptTrailOf = (records: Record<string, unknown>[]): PromptTrail => {
   const trail = emptyPromptTrail();
-  for (const o of records) foldPromptTrail(trail, o);
+  const boundary = emptyTurnBoundary();
+  for (const o of records) foldPromptTrail(trail, o, turnOpeningPrompt(boundary, o));
   return trail;
 };
 
@@ -151,12 +161,12 @@ function assistantText(content: unknown): string | null {
 }
 
 // One record as a turn, or null when it carries no prose (a tool-only assistant record, a
-// slash-command wrapper).
-function turnFromRecord(o: Record<string, unknown>): ConversationTurn | null {
+// slash-command wrapper) or is text written into the turn already open.
+export function conversationTurnOf(boundary: TurnBoundaryState, o: Record<string, unknown>): ConversationTurn | null {
   const message = isRecord(o.message) ? o.message : null;
   const content = message?.content;
   if (o.type === "user") {
-    const text = userPromptText(content);
+    const text = turnOpeningPrompt(boundary, o);
     return text ? { role: "user", text } : null;
   }
   if (o.type !== "assistant") return null;
@@ -166,7 +176,15 @@ function turnFromRecord(o: Record<string, unknown>): ConversationTurn | null {
 
 // Ordered user/assistant turns as plain text, skipping slash/local-command wrappers and
 // tool-only assistant turns. Feeds the header-title summarizer.
-export const conversationTurnsFromParsed = (records: Record<string, unknown>[]): ConversationTurn[] => records.flatMap((o) => turnFromRecord(o) ?? []);
+export const conversationTurnsFromParsed = (records: Record<string, unknown>[]): ConversationTurn[] => {
+  const turnOf = createConversationTurnScan();
+  return records.flatMap((o) => turnOf(o) ?? []);
+};
+
+/** The same rule for a caller fed one record at a time: the boundary needs the records before. */
+export function createConversationTurnScan(boundary: TurnBoundaryState = emptyTurnBoundary()): (o: Record<string, unknown>) => ConversationTurn | null {
+  return (o) => conversationTurnOf(boundary, o);
+}
 export const conversationTurnsFromJsonl = (raw: string): ConversationTurn[] => conversationTurnsFromParsed(parseJsonl(raw));
 
 // How many user turns the transcript holds, so the roster can tell whether a session has
@@ -404,7 +422,7 @@ export function timelineEventsIn(o: Record<string, unknown>): TimelineEvent[] {
 // last-N window over the whole transcript) is what keeps a prior turn's Edit from leaking
 // into a new turn that's only reading, AND keeps the phase stable within a turn: an edit
 // early in the turn still reads as "implementing" even after many later verification reads.
-// A fresh user prompt resets; tool-result user turns don't (userPromptText is null for them).
+// A turn's opening prompt resets; tool results and text written mid-turn don't.
 // Reuses readSessionSummary's single parse.
 export function currentTurnToolNamesFromParsed(records: Record<string, unknown>[]): string[] {
   const scan = createCurrentTurnToolScan();
@@ -417,9 +435,9 @@ export function currentTurnToolNamesFromParsed(records: Record<string, unknown>[
  *  them with a window. That matters: measured across the eight largest transcripts here, the
  *  longest single turn spans 3,615 records, so ANY fixed window would drop a turn's early edits and
  *  report `planning` for a turn that has already been implementing. */
-export function foldTurnToolNames(names: string[], o: Record<string, unknown>): void {
-  if (o.type === "user" && userPromptText(isRecord(o.message) ? o.message.content : undefined) !== null) {
-    names.length = 0; // a fresh user prompt starts a new turn
+export function foldTurnToolNames(names: string[], o: Record<string, unknown>, opening: string | null): void {
+  if (opening !== null) {
+    names.length = 0;
     return;
   }
   if (o.type !== "assistant" || !isRecord(o.message) || !Array.isArray(o.message.content)) return;
@@ -430,8 +448,9 @@ export function foldTurnToolNames(names: string[], o: Record<string, unknown>): 
 
 export function createCurrentTurnToolScan() {
   const names: string[] = [];
+  const boundary = emptyTurnBoundary();
   return {
-    add: (o: Record<string, unknown>) => foldTurnToolNames(names, o),
+    add: (o: Record<string, unknown>) => foldTurnToolNames(names, o, turnOpeningPrompt(boundary, o)),
     names: (): string[] => names,
   };
 }

@@ -10,7 +10,8 @@ import { isRecord } from "../../../common/isRecord.js";
 import { readString } from "../../../common/readString.js";
 import { finiteNumber } from "../../../common/finiteNumber.js";
 import type { LibraryConversation, LibraryPrLink } from "../../../common/library.js";
-import { conversationTurnsFromParsed, customTitleOfRecord } from "../../session/transcript/transcript.js";
+import { conversationTurnOf, customTitleOfRecord } from "../../session/transcript/transcript.js";
+import { emptyTurnBoundary, isTurnBoundaryState, type TurnBoundaryState } from "../../session/transcript/turn-boundary.js";
 import { memoryWritesOf } from "./memory-source.js";
 import { emptySpendState, foldSpendRecord, isSpendState, spentUsd, type SpendState } from "./spend-fold.js";
 
@@ -38,6 +39,8 @@ export type ConversationState = Omit<LibraryConversation, "id" | "agent" | "titl
   memoryWrites: string[];
   /** What it spent, when and on which model. */
   spend: SpendState;
+  /** Which turn is open, so a skill's body is not indexed as the next prompt. */
+  boundary: TurnBoundaryState;
 };
 
 export interface IndexedTurn {
@@ -52,6 +55,7 @@ export const emptyConversationState = (): ConversationState => ({
   firstPrompt: null,
   memoryWrites: [],
   spend: emptySpendState(),
+  boundary: emptyTurnBoundary(),
   cwd: null,
   gitBranch: null,
   prs: [],
@@ -149,9 +153,8 @@ function foldMemoryWrites(state: ConversationState, record: Record<string, unkno
 }
 
 function foldTurn(state: ConversationState, record: Record<string, unknown>): IndexedTurn | null {
-  if (record.isMeta === true) return null;
-  const turn = conversationTurnsFromParsed([record])[0];
-  if (turn === undefined) return null;
+  const turn = conversationTurnOf(state.boundary, record);
+  if (turn === null) return null;
   if (turn.role === "user") {
     state.userTurns += 1;
     state.firstPrompt ??= firstLine(turn.text).slice(0, FIRST_PROMPT_TITLE_CAP);
@@ -182,6 +185,7 @@ export function isConversationState(value: unknown): value is ConversationState 
     Array.isArray(value.skills) &&
     value.skills.every((skill) => typeof skill === "string") &&
     isSpendState(value.spend) &&
+    isTurnBoundaryState(value.boundary) &&
     Array.isArray(value.memoryWrites) &&
     value.memoryWrites.every((key) => typeof key === "string") &&
     typeof value.hookErrors === "number" &&

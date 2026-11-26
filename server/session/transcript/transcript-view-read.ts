@@ -16,6 +16,7 @@ import { hasErrnoCode, messageOf } from "../../errors.js";
 import { forEachJsonlRecordIn } from "../../infra/fs/jsonl-file.js";
 import { transcriptIdOf } from "./cleared-transcripts.js";
 import { emptyTranscriptScan, foldTranscriptView, trackTurnStarts, transcriptViewOf, type TranscriptScan } from "./transcript-view.js";
+import { emptyTurnBoundary } from "./turn-boundary.js";
 import type { TranscriptPage, TranscriptView } from "../../../common/transcriptView.js";
 import { createCodexFold } from "./transcript-view-codex.js";
 import { createCursorFold } from "./transcript-view-cursor.js";
@@ -265,7 +266,10 @@ const claudeSource: FileTranscriptSource = {
     // what still holds if someone later loosens it.
     return Promise.resolve(isInside(dir, file) ? file : null);
   },
-  createFold: (scan) => (record) => foldTranscriptView(scan, record),
+  createFold: (scan) => {
+    const boundary = emptyTurnBoundary();
+    return (record) => foldTranscriptView(scan, record, boundary);
+  },
 };
 
 const codexSource: FileTranscriptSource = {
