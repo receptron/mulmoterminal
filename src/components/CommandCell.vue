@@ -12,6 +12,11 @@ import { fireConfettiForEvent } from "../composables/useConfetti";
 import { CELL_BTN, CELL_BTN_BOX, CELL_BTN_INK, CELL_BTN_SIZE, CELL_TERM } from "./cellChromeClasses";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import { useI18n } from "vue-i18n";
+import HostMark from "./HostMark.vue";
+import RemoteHostGone from "./RemoteHostGone.vue";
+import { useRemoteHostStatus } from "../composables/configuredRemoteHosts";
+import { mayConnect } from "./remoteHostStatus";
+import { onThisMachine } from "./remoteCell";
 
 const { t } = useI18n();
 
@@ -29,6 +34,8 @@ const SUMMARY_CLOSE_BTN = `${CELL_BTN_BOX} h-[22px] w-[22px] text-[13px] ${CELL_
 const props = defineProps<
   GridCellProps & {
     command: RunCommand;
+    // The remote host the command runs on (#3506): its header button or script, run there.
+    remoteHost?: string | null;
     // Manual sort mode: show move buttons to swap this cell with its neighbour.
     reorderable?: boolean;
   }
@@ -37,6 +44,10 @@ const thumbnail = computed(() => isThumbnail(props));
 const emit = defineEmits<GridCellEmits>();
 
 const shellEvents = cellShellEvents(emit);
+
+// The path menu and the directory's sound are this machine's, so a remote command gets neither.
+const localCwd = computed(() => onThisMachine(props.remoteHost, props.command.cwd));
+const hostStatus = useRemoteHostStatus(props.remoteHost);
 
 // connectKey forces Terminal.vue to (re)connect — bumped to re-run after exit.
 const connectKey = ref(0);
@@ -51,7 +62,7 @@ function onExit(exitCode: number | null) {
   // A Run PTY is ephemeral: it never enters the session registry, so nothing publishes a
   // "closed" activity for it and useAttentionSound cannot see this. The cell is the only
   // place that knows the command ended, and with what status.
-  notifySound(commandExitKind(exitCode), props.command.cwd);
+  notifySound(commandExitKind(exitCode), localCwd.value);
   if (exitCode === 0) fireConfettiForEvent("command-done");
 }
 
@@ -143,7 +154,7 @@ function copyPrompt() {
     :canvas-available="canvasAvailable"
     :collections-available="collectionsAvailable"
     :home="home"
-    :cwd="command.cwd"
+    :cwd="localCwd"
     :default-cwd="defaultCwd"
     :finished="finished"
     :idle-title="t('tips.cell.finished')"
@@ -154,10 +165,12 @@ function copyPrompt() {
     :thumbnail="thumbnail"
     :row-menu="rowMenu"
     :slot-key="null"
+    :panes-hidden="!!remoteHost"
     v-on="shellEvents"
     @path-problem="(message) => void termRef?.showHint(message, 'folder_open')"
   >
     <template #actions>
+      <HostMark v-if="remoteHost" :host="remoteHost" />
       <button v-if="finished" class="cell-btn" :class="CELL_BTN" :data-tip="t('tips.cell.rerun')" :aria-label="t('tips.cell.rerunCommand')" @click="rerun">
         <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
       </button>
@@ -172,7 +185,9 @@ function copyPrompt() {
         <span class="material-symbols-outlined" aria-hidden="true">{{ summaryState === "loading" ? "more_horiz" : "auto_awesome" }}</span>
       </button>
     </template>
+    <RemoteHostGone v-if="remoteHost && hostStatus === 'gone'" :host="remoteHost" />
     <TerminalView
+      v-else-if="mayConnect(hostStatus)"
       ref="termRef"
       class="cell-term"
       :class="CELL_TERM"
@@ -180,6 +195,7 @@ function copyPrompt() {
       :connect-key="connectKey"
       :cwd="command.cwd"
       :command="command"
+      :remote-host="remoteHost ?? null"
       :expanded="expanded"
       :zoomed="zoomed"
       :hide-header="thumbnail"

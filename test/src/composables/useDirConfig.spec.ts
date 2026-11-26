@@ -14,6 +14,9 @@ vi.mock("../../../src/composables/usePubSub", () => ({
 
 import { useDirConfig, useDirPriorities, useDirColors, boundDirCount, invalidateDirConfig } from "../../../src/composables/useDirConfig";
 import { TERMINAL_FONT_SIZE_MAX } from "../../../common/terminalFontSize";
+import { DIR_ICON_ROUTE } from "../../../common/dirIcon";
+import { DIR_BACKGROUND_ROUTE } from "../../../common/dirBackground";
+import { dirKeyOf } from "../../../src/composables/dirAddress";
 
 let served = "first";
 // Two macrotask hops, not one: a request now resolves through fetchWithTimeout, and its extra
@@ -371,5 +374,38 @@ describe("useDirConfig live reload", () => {
 
     scope.stop();
     expect(boundDirCount()).toBe(before);
+  });
+});
+
+// A remote directory is read through the gateway (#3506). Its own icon, background and sound are
+// this server's routes naming the remote's path, so they are dropped; a web URL is kept.
+describe("useDirConfig on a remote directory", () => {
+  const SERVED_HERE = {
+    name: "remote",
+    iconUrl: `${DIR_ICON_ROUTE}?cwd=%2Fsrv%2Fp`,
+    backgroundImage: { url: `${DIR_BACKGROUND_ROUTE}?cwd=%2Fsrv%2Fp`, opacity: 0.5, fit: "cover" },
+    hasSound: true,
+  };
+
+  it("asks the host, and drops what this server would serve", async () => {
+    serve(SERVED_HERE);
+    const config = await read(dirKeyOf("lx", "/srv/remote-assets") ?? "");
+    expect(vi.mocked(globalThis.fetch).mock.calls.map(([url]) => String(url))).toEqual(["/remote/lx/api/dir-config?cwd=%2Fsrv%2Fremote-assets"]);
+    expect(config).toMatchObject({ name: "remote", iconUrl: null, backgroundImage: null, hasSound: false });
+  });
+
+  it("keeps a web icon and background", async () => {
+    const web = "https://example.com/icon.png";
+    serve({ ...SERVED_HERE, iconUrl: web, backgroundImage: { url: web, opacity: 0.5, fit: "cover" } });
+    const config = await read(dirKeyOf("lx", "/srv/remote-web") ?? "");
+    expect(config?.iconUrl).toBe(web);
+    expect(config?.backgroundImage?.url).toBe(web);
+  });
+
+  it("keeps all of it for the same answer on a local directory", async () => {
+    serve(SERVED_HERE);
+    const config = await read("/srv/local-assets");
+    expect(config).toMatchObject({ iconUrl: SERVED_HERE.iconUrl, hasSound: true });
+    expect(config?.backgroundImage?.url).toBe(SERVED_HERE.backgroundImage.url);
   });
 });

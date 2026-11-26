@@ -37,6 +37,7 @@ const publish = (channel: string, data: unknown) => bus.listeners.get(channel)?.
 const row = (fields: Record<string, unknown>) => ({ id: SESSION, working: false, waiting: false, event: null, ...fields });
 
 let remoteSeed: Record<string, unknown> = {};
+let remoteDetail: Record<string, unknown> = {};
 let remoteDown = false;
 let requested: string[] = [];
 beforeEach(() => {
@@ -44,11 +45,13 @@ beforeEach(() => {
   bus.reconnects.clear();
   requested = [];
   remoteSeed = {};
+  remoteDetail = {};
   remoteDown = false;
   resetConfiguredRemoteHosts();
   globalThis.fetch = vi.fn(async (url: string) => {
     requested.push(String(url));
     if (String(url).endsWith("/api/remote-hosts/ids")) return { ok: true, json: async () => ({ ids: ["lx"] }) };
+    if (String(url).startsWith(`/api/remote-hosts/lx/session/${SESSION}`)) return { ok: true, json: async () => remoteDetail };
     if (String(url).includes("/api/remote-hosts/lx/activity")) {
       if (remoteDown) return { ok: false, status: 502, json: async () => ({ error: "Linux did not answer" }) };
       return { ok: true, json: async () => ({ [SESSION]: remoteSeed }) };
@@ -107,7 +110,7 @@ describe("a remote cell's dot", () => {
     publish("remote-sessions", { host: "lx", resync: true });
     await flushPromises();
     expect(lastStatus(w)).toBe("blocked");
-    expect(requested.filter((url) => url.includes(SESSION) && !url.includes("/api/remote-hosts/lx/activity"))).toEqual([]);
+    expect(requested.filter((url) => url.includes(SESSION) && !url.startsWith("/api/remote-hosts/lx/"))).toEqual([]);
   });
 });
 
@@ -138,6 +141,30 @@ describe("a remote cell's missed-beep ring", () => {
     expect(dotTip(w)).not.toBe(plain);
     applyMissedMark(SESSION, "clear");
     applyMissedMark(`lx/${SESSION}`, "clear");
+  });
+});
+
+// The badges come from the remote's own session detail, through the gateway (#3506).
+describe("a remote cell's token and context badges", () => {
+  it("reads them through the gateway's detail route, with the agent and the remote's directory", async () => {
+    remoteDetail = {
+      usage: { inputTokens: 1200, outputTokens: 300, cacheReadTokens: 0, cacheCreationTokens: 0 },
+      context: { model: "claude-opus-5-5", contextTokens: 50_000, contextWindow: 200_000 },
+    };
+    const w = await mountCell("lx");
+    expect(requested).toContain(`/api/remote-hosts/lx/session/${SESSION}?agent=claude&cwd=%2Fsrv%2Fp`);
+    expect(requested.filter((url) => url.startsWith(`/api/session/${SESSION}`))).toEqual([]);
+    expect(w.findComponent({ name: "ModelContextBadge" }).exists()).toBe(true);
+  });
+
+  it("re-reads them when a turn ends, as a local cell does", async () => {
+    await mountCell("lx");
+    const before = requested.filter((url) => url.includes("/session/")).length;
+    publish("remote-sessions", { host: "lx", row: row({ working: true, event: "UserPromptSubmit" }) });
+    await flushPromises();
+    publish("remote-sessions", { host: "lx", row: row({ working: false, event: "Stop" }) });
+    await flushPromises();
+    expect(requested.filter((url) => url.includes("/session/")).length).toBeGreaterThan(before);
   });
 });
 

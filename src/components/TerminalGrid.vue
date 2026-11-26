@@ -27,7 +27,8 @@ import type { Launcher, LaunchPick } from "./launchers";
 import type { CustomAgent } from "../../common/customAgents";
 import type { AgentAccount } from "../../common/agentAccounts";
 import { isCellSelfAction, isPaneAction, paneOfAction, type CellAction } from "../../common/headerActions";
-import { cellActionAllowed, isRemoteHost } from "./remoteCell";
+import { actionAllowedOn, onThisMachine, paneAllowed } from "./remoteCell";
+import { dirKeyOf } from "../composables/dirAddress";
 import { registerGridCellRunner } from "../composables/useGridCellAction";
 import { requestCellAction } from "../composables/useCellAction";
 import { shouldFlipZoom } from "./cellChromeRules";
@@ -37,6 +38,7 @@ import { rowMenuFor, type RowMenuModel } from "./thumbnailRowMenu";
 import { useRosterAlert } from "../composables/useRosterAlert";
 import { formatCwd } from "./cwdDisplay";
 import FilesPane from "./FilesPane.vue";
+import HostMark from "./HostMark.vue";
 import type { FilesPaneState } from "./filesPaneState";
 import GuiPanel from "./GuiPanel.vue";
 import CheckCard from "./CheckCard.vue";
@@ -60,7 +62,7 @@ import {
 import { setFilesPaneOpener } from "../composables/filesPaneOpener";
 import { isFileLinkOpensPaneEnabled } from "../composables/fileLinkOpensPane";
 import type { FileLocation } from "../composables/filePathLocation";
-import { paneCanShowClick, paneToOpenBeside } from "./paneClickTarget";
+import { paneCanShowClick, paneRootedHere, paneToOpenBeside } from "./paneClickTarget";
 import { onToolGroupsAnnounced } from "../composables/useToolGroupsAnnounce";
 import { usePubSub } from "../composables/usePubSub";
 import { isDrawnResult } from "../utils/drawnResult";
@@ -70,7 +72,6 @@ import { NO_PANES, withPaneOpened, withPaneRemoved, withShownPaneClosed, readSta
 import QuestionPane from "./QuestionPane.vue";
 import { ASK_QUESTION_CHANNEL, isAskQuestionDone, isAskQuestionEvent } from "../../common/askQuestion";
 import { PANE_COMMAND_CHANNEL, checkClosedNotice, checkSummary, isPaneCommand, type CheckAnswer, type PaneTarget } from "../../common/paneCommand";
-import { dirPathKey } from "../../common/dirPathKey";
 import { createPaneCommandBox } from "../composables/paneCommandBox";
 import { fetchOpenCheck, postCheckClosed } from "../composables/openCheck";
 import { fetchOpenQuestion, postAnswer, postWords } from "../composables/openQuestion";
@@ -300,9 +301,9 @@ const paneOf = (uid: number): RightPane | null => shownPane(panesOf(uid));
 const sessionOf = (uid: number): string | null => props.cells.find((cell) => cell.uid === uid)?.session ?? null;
 const cellOf = (uid: number | null): Cell | undefined => (uid === null ? undefined : props.cells.find((cell) => cell.uid === uid));
 // Whether this cell may do `action` here; a remote cell's panes and tools would read this machine (remoteCell.ts).
-const allowedOn = (uid: number | null, action: CellAction): boolean => cellActionAllowed(cellOf(uid)?.remoteHost, action);
+const allowedOn = (uid: number | null, action: CellAction): boolean => actionAllowedOn(props.cells, uid, action);
 // Every side pane reads this server by the cell's session or cwd, so none opens on a remote cell.
-const panesAllowedOn = (uid: number | null): boolean => !isRemoteHost(cellOf(uid)?.remoteHost);
+const panesAllowedOn = (uid: number | null, pane: RightPane): boolean => paneAllowed(cellOf(uid)?.remoteHost, pane);
 
 // The cell the re-root watcher puts the pane on: the enlarged one, or with nothing enlarged the one
 // asked for from a tile.
@@ -454,7 +455,7 @@ function setRightPane(pane: RightPane | null, uid: number | null): void {
   if (paneUid.value === uid) paneExpanded.value = shown === "transcript";
   // Leaving files drops the directory it was on, so coming back re-roots to whichever cell the pane
   // is on THEN rather than resuming a directory the user has since walked away from.
-  if (leavingFiles) paneCwd.value = null;
+  if (leavingFiles) [paneCwd.value, paneHost.value] = [null, null];
 }
 
 // The unread-canvas chip on a tiled cell: enlarge that cell AND put the pane beside it, in one
@@ -500,7 +501,7 @@ function openPaneCellCanvas(): void {
 }
 
 async function openCanvasFor(uid: number, enlarge = true, stillWanted?: () => boolean): Promise<void> {
-  if (!panesAllowedOn(uid)) return;
+  if (!panesAllowedOn(uid, "canvas")) return;
   const isLatest = startPaneRequest();
   if (filesOpen.value && (await filesPane.value?.flush()) === false) return;
   if (!isLatest() || (stillWanted && !stillWanted())) return;
@@ -554,7 +555,7 @@ async function adoptStoredCard(): Promise<void> {
 // `stillWanted` is asked again after the save, which awaits: a caller that did not come from a click
 // (an agent's showInPane) must not take the zoom back from a cell the user moved to meanwhile.
 async function openPaneFor(uid: number, pane: RightPane, stillWanted: () => boolean = () => true): Promise<void> {
-  if (!panesAllowedOn(uid)) return;
+  if (!panesAllowedOn(uid, pane)) return;
   const isLatest = startPaneRequest();
   const filesUnmounts = filesOpen.value && (paneUid.value !== uid || pane !== "files");
   if (filesUnmounts && (await filesPane.value?.flush()) === false) return;
@@ -575,7 +576,7 @@ async function openPaneFor(uid: number, pane: RightPane, stillWanted: () => bool
 // menu's toggle; on any other cell it is the gesture above, because a toggle there would only record
 // what that cell should show later, and an action that visibly does nothing reads as broken.
 function pressPane(uid: number, pane: RightPane): void {
-  if (!panesAllowedOn(uid)) return;
+  if (!panesAllowedOn(uid, pane)) return;
   if (uid === paneTargetUid.value) void toggleRightPane(pane, uid);
   else if (pane === "canvas" && props.expandedUid !== null) void openCanvasFor(uid);
   else void openPaneFor(uid, pane);
@@ -696,11 +697,16 @@ const storiesRoots = computed<StoriesRoots>(() => storiesRootsFrom(props.stories
 
 // The session of the cell the pane answers for — what Canvas and Tools read. Null for a cell with
 // no session yet (a launcher, a command cell), which both panes already render as empty.
-const paneCellSessionId = computed(() => cellOf(paneCellUid.value)?.session ?? null);
+// Null for a remote cell too: its session is on another machine, and every reader of these asks this one.
+const localSessionOf = (uid: number | null): string | null => {
+  const cell = cellOf(uid);
+  return onThisMachine(cell?.remoteHost, cell?.session ?? null);
+};
+const paneCellSessionId = computed(() => localSessionOf(paneCellUid.value));
 // The ENLARGED cell's session, which is not the same thing on the tiled grid: what opens the pane by
 // itself — a drawing, a question, an agent's showInPane — answers to this one only, so a cell whose
 // pane was closed long ago does not put one beside the tiles unasked.
-const expandedSessionId = computed(() => cellOf(props.expandedUid)?.session ?? null);
+const expandedSessionId = computed(() => localSessionOf(props.expandedUid));
 
 // Which log the Prompts pane reads: claude keeps what a person typed in its own history file,
 // codex only in its rollout, and the server needs to be told which (#1748). Absent means Claude —
@@ -850,7 +856,7 @@ async function showInFilesPane(target: PaneTarget, cwd: string): Promise<void> {
   const stillWanted = (): boolean => show === latestShow && props.expandedUid === uid;
   await openPaneFor(uid, "files", stillWanted);
   await nextTick();
-  if (!stillWanted() || !filesOpen.value || dirPathKey(paneCwd.value ?? "") !== dirPathKey(cwd)) return;
+  if (!stillWanted() || !filesOpen.value || !paneRootedHere({ host: paneHost.value, cwd: paneCwd.value }, cwd)) return;
   await filesPane.value?.showFile(target);
 }
 
@@ -1163,7 +1169,8 @@ const rememberPaneState = (uid: number | null): void => {
   if (uid === null || !snapshot) return;
   paneStateByUid.set(uid, snapshot);
   // Filed under the directory the pane is ACTUALLY on, which is what it will be looked up by.
-  if (paneCwd.value) remember(PANE_STATE_KEY, JSON.stringify(rememberPane(parsePaneStore(stored(PANE_STATE_KEY)), paneCwd.value, snapshot)));
+  const paneKey = dirKeyOf(paneHost.value, paneCwd.value);
+  if (paneKey) remember(PANE_STATE_KEY, JSON.stringify(rememberPane(parsePaneStore(stored(PANE_STATE_KEY)), paneKey, snapshot)));
 };
 
 // A remembered directory is handed out at most ONCE per session. It describes what was on
@@ -1186,6 +1193,8 @@ const paneState = ref<FilesPaneState | null>(null);
 // is declined over unsaved edits — and it, not `paneCellCwd`, is what the pane is handed, so a
 // file opened from a tree that stayed put still resolves against the directory it came from.
 const paneCwd = ref<string | null>(null);
+// The remote host `paneCwd` is on, or null for this machine — set with it, so the two always name one directory.
+const paneHost = ref<string | null>(null);
 
 // Walking the zoom to another terminal moves the pane to that cell: which pane it shows is that
 // cell's (paneByCell), and a files pane additionally re-roots — it deliberately ignores its `cwd`
@@ -1240,7 +1249,8 @@ watch(
       tiledPaneUid.value = uid;
       restoreSessionPane(uid);
       paneCwd.value = targetCwd;
-      paneState.value = claimPaneState(uid, targetCwd);
+      paneHost.value = cellOf(uid)?.remoteHost ?? null;
+      paneState.value = claimPaneState(uid, dirKeyOf(paneHost.value, targetCwd));
       // Only when the files pane STAYS the pane. Arriving at one mounts it fresh, which reads the
       // new root and `initial-state` on its own; leaving one has nothing left to reload.
       if (!wasFiles || !filesOpen.value) return;
@@ -1263,7 +1273,12 @@ function openClickedPath(cwd: string, pathRel: string, location: FileLocation | 
     void showClickedPathBeside(beside, pathRel, location, newTab);
     return true;
   }
-  const state = { roomForPane: zoomed.value || tiledPane.value, paneCellCwd: paneCellCwd.value, paneCwd: paneCwd.value };
+  const state = {
+    roomForPane: zoomed.value || tiledPane.value,
+    paneCellCwd: paneCellCwd.value,
+    paneCwd: paneCwd.value,
+    paneHost: paneHost.value,
+  };
   if (!paneCanShowClick(state, cwd)) return false;
   void showClickedPath(pathRel, location, newTab);
   return true;
@@ -1997,6 +2012,7 @@ function onRosterDragLeave(event: DragEvent) {
           v-if="rightPane === 'files'"
           ref="filesPane"
           :cwd="paneCwd"
+          :host="paneHost"
           :initial-state="paneState"
           :canvas-target="paneCellUid !== null"
           :view-mode-session="paneCellSessionId"
@@ -2013,7 +2029,8 @@ function onRosterDragLeave(event: DragEvent) {
                cell, but declining a re-root leaves it behind — and then this is the only thing
                that says so. -->
           <template #title>
-            <span class="truncate font-mono text-[11px] text-muted" :data-tip="paneCwd ?? ''">{{ formatCwd(paneCwd, home) }}</span>
+            <HostMark v-if="paneHost" :host="paneHost" />
+            <span class="truncate font-mono text-[11px] text-muted" :data-tip="paneCwd ?? ''">{{ formatCwd(paneCwd, paneHost ? null : home) }}</span>
           </template>
         </FilesPane>
         <!-- Canvas and Tools follow the pane cell's SESSION, not its directory, and neither
@@ -2144,7 +2161,13 @@ function onRosterDragLeave(event: DragEvent) {
         :to="paneTargetFor(cell) ?? zoomMain"
         :disabled="placementOf(cell) === 'tile'"
       >
-        <CommandCell v-if="cell.command" v-bind="gridCellProps(cell)" :command="cell.command" v-on="gridCellEvents(cell)" />
+        <CommandCell
+          v-if="cell.command"
+          v-bind="gridCellProps(cell)"
+          :command="cell.command"
+          :remote-host="cell.remoteHost ?? null"
+          v-on="gridCellEvents(cell)"
+        />
         <LauncherCell
           v-else-if="cell.launcher"
           :uid="cell.uid"
