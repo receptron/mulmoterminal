@@ -40,6 +40,7 @@ describe("cellActionAllowed", () => {
     "pane-prompts",
     "pane-transcript",
     "pane-tools",
+    "pane-canvas",
   ];
 
   it("allows every action on a local cell", () => {

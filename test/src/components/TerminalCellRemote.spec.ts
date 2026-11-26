@@ -323,15 +323,16 @@ describe("a remote cell", () => {
     remote.unmount();
   });
 
-  // #3506. Its tools menu opens its tool calls, read on its host, beside the actions it always had.
-  it("offers its Tools pane beside its actions", async () => {
+  // #3506. Its tools menu opens its tool calls and cards, read on its host, beside its actions.
+  it("offers its Tools and Canvas panes beside its actions, and no collections", async () => {
     const remote = mountCell("lx");
     await flushPromises();
     await remote.find('[data-testid="cell-tools-btn"]').trigger("click");
     await flushPromises();
     const entries = [...document.body.querySelectorAll<HTMLElement>('[data-testid^="cell-pane-menu-"]')].map((entry) => entry.dataset.testid);
     expect(entries).toContain("cell-pane-menu-tools");
-    expect(entries).not.toContain("cell-pane-menu-canvas");
+    expect(entries).toContain("cell-pane-menu-canvas");
+    expect(entries).not.toContain("cell-pane-menu-collections");
     remote.unmount();
   });
 
