@@ -25,6 +25,7 @@ import { fileHistoryEn } from "./fileHistory/en";
 import { filesRecentEn } from "./filesRecent/en";
 import { dirConfigSaveEn } from "./dirConfigSave/en";
 import { releaseNotesEn } from "./releaseNotes/en";
+import { whatsNewEn } from "./whatsNew/en";
 import { dirConfigOpenEn } from "./dirConfigOpen/en";
 import { dirSettingsFormEn } from "./dirSettingsForm/en";
 import { themeEditorEn } from "./themeEditor/en";
@@ -645,14 +646,7 @@ export const en = {
     tip: "Headings in this file — pick one to go there",
     empty: "No headings in this file.",
   },
-  whatsNew: {
-    title: "What's new",
-    intro: "MulmoTerminal was updated to {version}. Here is what changed since you last used it.",
-    englishOnly: "The release notes are written in English.",
-    openOnWeb: "Open this page on the web",
-    older: "Older releases are in the changelog.",
-    close: "Got it",
-  },
+  whatsNew: whatsNewEn,
   fileHistory: fileHistoryEn,
   filesRecent: filesRecentEn,
   dirConfigSave: dirConfigSaveEn,

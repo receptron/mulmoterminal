@@ -12,6 +12,7 @@ import { fileHistoryZhCN } from "./fileHistory/zh-CN";
 import { filesRecentZhCN } from "./filesRecent/zh-CN";
 import { dirConfigSaveZhCN } from "./dirConfigSave/zh-CN";
 import { releaseNotesZhCN } from "./releaseNotes/zh-CN";
+import { whatsNewZhCN } from "./whatsNew/zh-CN";
 import { dirConfigOpenZhCN } from "./dirConfigOpen/zh-CN";
 import { dirSettingsFormZhCN } from "./dirSettingsForm/zh-CN";
 import { themeEditorZhCN } from "./themeEditor/zh-CN";
@@ -610,14 +611,7 @@ export const zhCN: Messages = {
     tip: "此文件的标题（选择即可跳转）",
     empty: "此文件没有标题。",
   },
-  whatsNew: {
-    title: "新功能",
-    intro: "MulmoTerminal 已更新到 {version}。以下是自上次使用以来的变化。",
-    englishOnly: "版本说明以英文撰写。",
-    openOnWeb: "在网页中打开此页",
-    older: "更早的版本请查看更新日志。",
-    close: "知道了",
-  },
+  whatsNew: whatsNewZhCN,
   fileHistory: fileHistoryZhCN,
   filesRecent: filesRecentZhCN,
   dirConfigSave: dirConfigSaveZhCN,

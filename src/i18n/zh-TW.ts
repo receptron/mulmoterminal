@@ -12,6 +12,7 @@ import { fileHistoryZhTW } from "./fileHistory/zh-TW";
 import { filesRecentZhTW } from "./filesRecent/zh-TW";
 import { dirConfigSaveZhTW } from "./dirConfigSave/zh-TW";
 import { releaseNotesZhTW } from "./releaseNotes/zh-TW";
+import { whatsNewZhTW } from "./whatsNew/zh-TW";
 import { dirConfigOpenZhTW } from "./dirConfigOpen/zh-TW";
 import { dirSettingsFormZhTW } from "./dirSettingsForm/zh-TW";
 import { themeEditorZhTW } from "./themeEditor/zh-TW";
@@ -615,14 +616,7 @@ export const zhTW: Messages = {
     tip: "此檔案的標題（選取即可跳轉）",
     empty: "此檔案沒有標題。",
   },
-  whatsNew: {
-    title: "新功能",
-    intro: "MulmoTerminal 已更新至 {version}。以下是自上次使用以來的變化。",
-    englishOnly: "版本說明以英文撰寫。",
-    openOnWeb: "在網頁中開啟此頁",
-    older: "更早的版本請查看更新紀錄。",
-    close: "知道了",
-  },
+  whatsNew: whatsNewZhTW,
   fileHistory: fileHistoryZhTW,
   filesRecent: filesRecentZhTW,
   dirConfigSave: dirConfigSaveZhTW,
