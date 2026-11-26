@@ -1,12 +1,12 @@
 ---
 name: mulmoterminal-theme
-description: Build a colour scheme of your own for MulmoTerminal — one that joins Midnight, Nord, Daylight and Solarized in Settings' theme picker and can then be pinned per project. Writes `themes` in `~/.mulmoterminal/config.json`, the whole-app palette (panels, borders, accent, text). Settings → Theme can copy an existing theme and change its colours one by one; this skill is for a scheme described in words or drawn from an image, contrast checking, and the terminal's own `term` palette. Use when the user wants their own theme, a dark/light variant that isn't shipped, a scheme drawn from a painting, a photo or a brand's colours, or says the built-in themes are too dark, too blue, too low-contrast. For colouring ONE project's cell (its badge and header), or assigning an existing theme to a directory, use mulmoterminal-dirs instead.
+description: Build a colour scheme of your own for MulmoTerminal — one that joins Midnight, Nord, Daylight, Solarized, Okamoto Taro and Pink in Settings' theme picker and can then be pinned per project. Writes `themes` in `~/.mulmoterminal/config.json`, the whole-app palette (panels, borders, accent, text). Settings → Theme can copy an existing theme and change its colours one by one; this skill is for a scheme described in words or drawn from an image, contrast checking, and the terminal's own `term` palette. Use when the user wants their own theme, a dark/light variant that isn't shipped, a scheme drawn from a painting, a photo or a brand's colours, or says the built-in themes are too dark, too blue, too low-contrast. For colouring ONE project's cell (its badge and header), or assigning an existing theme to a directory, use mulmoterminal-dirs instead.
 ---
 
 # Make a colour scheme of your own
 
 `themes` in `~/.mulmoterminal/config.json` defines schemes that appear in Settings' picker next to
-the four built-ins, and that a project can then name in its `.mulmoterminal.json` `theme` key.
+the built-ins, and that a project can then name in its `.mulmoterminal.json` `theme` key.
 Settings can choose a theme, and copy one and change its colours one at a time (Settings → Theme →
 Your own theme). What it cannot do is design one — from a mood, a photo or a brand, with contrast
 checked — or set the terminal's `term` palette. This skill is that path.
@@ -33,7 +33,7 @@ Ask for the direction first, with concrete options rather than "what colours?":
 ```
 
 - **With `extends`**, `colors` is a diff over that built-in (`midnight` / `nord` / `daylight` /
-  `solarized`). Anything you leave out is inherited. Start here — it is far easier to get right,
+  `solarized` / `okamoto` / `pink`). Anything you leave out is inherited. Start here — it is far easier to get right,
   and a three-key diff is a real theme.
 - **Without `extends`**, the theme must set **every** one of the 20 keys below. This is enforced
   when the config is saved, not when the theme is painted: an incomplete theme with no base is
@@ -87,11 +87,11 @@ A theme is global. If the user wanted "this project in my new scheme", the secon
 |---|---|
 | `id` | **Required.** Lowercase letter first, then lowercase/digits/dashes, ≤ 32 chars (`^[a-z][a-z0-9-]{0,31}$`). It becomes a `data-theme` attribute value and is what a project's `theme` key names. |
 | `label` | **Required.** What the picker shows, ≤ 40 chars after trimming. |
-| `extends` | Optional: `"midnight"` / `"nord"` / `"daylight"` / `"solarized"`. Omit only if you set all 20 colours. |
+| `extends` | Optional: `"midnight"` / `"nord"` / `"daylight"` / `"solarized"` / `"okamoto"` / `"pink"`. Omit only if you set all 20 colours. |
 | `colors` | Hex only — `#rgb` / `#rgba` / `#rrggbb` / `#rrggbbaa`. **A key outside the 20 drops the whole theme**, so check spelling before writing. |
 | `term` | Optional. The xterm palette, set outright — see [The terminal palette](#the-terminal-palette-term) below. Same hex rule, and its own key vocabulary. |
 
-**`id` must not be a built-in id.** `midnight`, `nord`, `daylight` and `solarized` are refused
+**`id` must not be a built-in id.** `midnight`, `nord`, `daylight`, `solarized`, `okamoto` and `pink` are refused
 rather than merged into — someone reading the guide's description of Midnight has to get Midnight.
 
 The hex shape is doing security work in `colors`, not tidiness: those values land in CSS custom

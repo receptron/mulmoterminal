@@ -423,7 +423,7 @@ repo.json  →  .mulmoterminal.json  →  .mulmoterminal.local.json
 }
 ```
 
-`theme` に `midnight` / `nord` / `daylight` / `solarized` を指定するとプリセットのパレットになり、`colors` はその上へ部分上書き。
+`theme` に `midnight` / `nord` / `daylight` / `solarized` / `okamoto` / `pink` を指定するとプリセットのパレットになり、`colors` はその上へ部分上書き。
 [応用編 6](scenarios.html) の色分けスクショは、ヘッダー色と `colors` を組み合わせて**ヘッダーから端末の中身まで**プロジェクトごとに染めた例です。
 
 これは**プロジェクト単位**の設定です。同じ上書きを**全セル**に効かせたい（アプリ全体でカーソル色を
@@ -708,7 +708,7 @@ PR が merge されたか閉じられたとき、MulmoTerminal は実装役も�
 
 ## 自分の配色を作る（`themes`） {#custom-themes}
 
-組み込みの 4 つ（Midnight / Nord / Daylight / Solarized Light）以外の配色を、`~/.mulmoterminal/config.json`
+組み込みのテーマ（Midnight / Nord / Daylight / Solarized Light / Okamoto Taro / Pink）以外の配色を、`~/.mulmoterminal/config.json`
 の `themes` に定義すると **Settings のテーマ選択に並びます**。選ぶとアプリ全体（グリッド背景・ヘッダー・
 パネル・ターミナルの中身）がその配色になります。
 

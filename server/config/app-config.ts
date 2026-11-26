@@ -236,7 +236,7 @@ export interface AppConfig {
   // status wash and its ink is a property of the THEME the user runs, not of one project.
   headerStatusColors: HeaderStatusColors;
   headerStatusTint: HeaderStatusTint;
-  // Colour schemes the user defined, offered in Settings alongside the four built-ins (#996).
+  // Colour schemes the user defined, offered in Settings alongside the built-ins (#996).
   // Server-side rather than per-browser (like `fontFamily`, unlike `fontSize`): a palette you
   // authored is an asset you want on every browser you open the app from. WHICH one is selected
   // stays in localStorage, because "the dark one on this laptop" is a per-device answer.

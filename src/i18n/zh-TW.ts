@@ -382,7 +382,7 @@ export const zhTW: Messages = {
     theme: {
       missing: "選取的主題 {id} 沒有定義。請把它加到 {configFile} 的 {themesKey} 裡，或者在下面選一個。在那之前會保留你的選擇。",
       intro:
-        "從既有的配色裡選。你自己的寫在 {configFile} 的 {themesKey} 裡，就會出現在這裡，和內建的四個並排 —— skill 能從一組色票、一張照片或一個品牌的顏色寫出一套，並檢查對比。",
+        "從既有的配色裡選。你自己的寫在 {configFile} 的 {themesKey} 裡，就會出現在這裡，和內建的配色並排 —— skill 能從一組色票、一張照片或一個品牌的顏色寫出一套，並檢查對比。",
       group: "主題",
       create: "建立一個主題…",
     },

@@ -433,7 +433,7 @@ itself (xterm)**. `colors` overrides xterm's ITheme — `background` / `foregrou
 }
 ```
 
-Set `theme` to `midnight` / `nord` / `daylight` / `solarized` for a preset palette; `colors` layers per-key
+Set `theme` to `midnight` / `nord` / `daylight` / `solarized` / `okamoto` / `pink` for a preset palette; `colors` layers per-key
 overrides on top. The color-coding screenshot in [Scenario 6](scenarios.html) combines header colors with `colors` to
 paint each project — **from the header down to the terminal body**.
 
@@ -789,7 +789,7 @@ unless it is passed `force: true`.
 
 ## Make your own colour scheme (`themes`) {#custom-themes}
 
-Beyond the four built-ins (Midnight / Nord / Daylight / Solarized Light), define your own in
+Beyond the built-ins (Midnight / Nord / Daylight / Solarized Light / Okamoto Taro / Pink), define your own in
 `themes` in `~/.mulmoterminal/config.json` and it **appears in Settings' theme picker**. Picking it
 recolours the whole app — grid background, headers, panels, and the terminals themselves.
 

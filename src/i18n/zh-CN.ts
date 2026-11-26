@@ -379,7 +379,7 @@ export const zhCN: Messages = {
     theme: {
       missing: "选中的主题 {id} 没有定义。请把它加到 {configFile} 的 {themesKey} 里，或者在下面选一个。在那之前会保留你的选择。",
       intro:
-        "从已有的配色里选。你自己的写在 {configFile} 的 {themesKey} 里，就会出现在这里，和内置的四个并排 —— skill 能从一组色板、一张照片或者一个品牌的颜色里写出一套，并检查对比度。",
+        "从已有的配色里选。你自己的写在 {configFile} 的 {themesKey} 里，就会出现在这里，和内置的配色并排 —— skill 能从一组色板、一张照片或者一个品牌的颜色里写出一套，并检查对比度。",
       group: "主题",
       create: "创建一个主题…",
     },

@@ -47,8 +47,8 @@ describe("isUsableCustomThemeId", () => {
 });
 
 // Codex review on #996: the client's dir-config guard claimed `value is ThemeId` (the closed set
-// of four) while custom ids flowed through it, so anything downstream was free to treat a
-// four-way switch as exhaustive. ThemeIdLike is the honest type for "built-in or user-defined".
+// of built-ins) while custom ids flowed through it, so anything downstream was free to treat a
+// switch over the built-ins as exhaustive. ThemeIdLike is the honest type for "built-in or user-defined".
 describe("isThemeIdLike", () => {
   it("accepts both a built-in id and a user-defined one", () => {
     expect(isThemeIdLike("midnight")).toBe(true);

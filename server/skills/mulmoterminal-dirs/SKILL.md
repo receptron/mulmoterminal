@@ -319,7 +319,7 @@ behind a transparent canvas, so the text stays readable on either theme.
 The seven above tint the **chrome** around the terminal. These paint the **terminal contents**.
 
 - `theme` — a palette id: one of the built-in `"midnight"` / `"nord"` / `"daylight"` /
-  `"solarized"` (the id is `solarized`; "Solarized Light" is only its display label), **or the id of
+  `"solarized"` / `"okamoto"` / `"pink"` (the id is `solarized`; "Solarized Light" is only its display label), **or the id of
   a scheme the user defined** in `themes` in `~/.mulmoterminal/config.json`. A directory naming a
   theme that isn't defined falls back rather than erroring, so check it exists. To create one, use
   the `mulmoterminal-theme` skill.

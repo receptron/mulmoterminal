@@ -387,7 +387,7 @@ export const ko: Messages = {
     theme: {
       missing: "선택한 테마 {id}이(가) 정의되어 있지 않습니다. {configFile}의 {themesKey}에 추가하거나 아래에서 하나 고르세요. 그때까지 선택은 유지됩니다.",
       intro:
-        "있는 것 중에서 고릅니다. 직접 만든 배색은 {configFile}의 {themesKey}에 두면 내장된 넷 옆에 나옵니다 —— skill은 팔레트나 사진, 브랜드 색에서 하나를 써 내고 대비까지 확인합니다.",
+        "있는 것 중에서 고릅니다. 직접 만든 배색은 {configFile}의 {themesKey}에 두면 내장 테마 옆에 나옵니다 —— skill은 팔레트나 사진, 브랜드 색에서 하나를 써 내고 대비까지 확인합니다.",
       group: "테마",
       create: "테마 만들기…",
     },
