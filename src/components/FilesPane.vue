@@ -51,6 +51,7 @@ import { askTheMachine } from "./filesPaneApi";
 import { isRemoteHost } from "./remoteCell";
 import { selectionReferenceText } from "../composables/selectionReferenceText";
 import type { FileLocation } from "../composables/filePathLocation";
+import type { PaneTarget } from "../../common/paneCommand";
 import { useI18n } from "vue-i18n";
 import { useFileOutline } from "../composables/useFileOutline";
 import FilesOutlineMenu from "./FilesOutlineMenu.vue";
@@ -146,6 +147,14 @@ const folder = useFolderView(
 // root has no row, so nothing is marked while it is shown.
 const currentRowPath = computed(() => openPath.value ?? (folderShown.value && folder.dir.value ? folder.dir.value : null));
 const { openRequested, openFromTerminal } = useRequestedOpen(tabs, file, (pathRel) => canvasMode.hide(pathRel));
+// The file the host last asked for, so a startup can tell it from the remembered front tab (#3557).
+// Not the read generation: the restore's own open bumps that too, and its folders are the reader's
+// to keep closed. A path, not a flag: an open still in flight or declined leaves another tab in front.
+let hostOpenedPath: string | null = null;
+function openForHost(pathRel: string): string {
+  hostOpenedPath = pathRel;
+  return pathRel;
+}
 const strip = tabs.strip;
 const { showStrip, focusablePath, labels } = tabStripView(strip, openPath);
 const storiesRoots = computed<StoriesRoots>(() => props.storiesRoots ?? { workspaces: [], roots: [] });
@@ -430,6 +439,7 @@ async function start(): Promise<void> {
   // Before any await: a start that a reload has since replaced must not reach it (#3122).
   sideBySide.switchedOn.value = props.initialState?.sideBySide === true;
   const reqIdAtStart = file.generation();
+  hostOpenedPath = null;
   const startedAt = startEpoch();
   await nextTick();
   if (editorHost.value) file.attach(editorHost.value);
@@ -438,11 +448,13 @@ async function start(): Promise<void> {
   void gitStatus.refresh();
   await tree.loadRoot();
   await restore(props.initialState ?? null, reqIdAtStart);
-  if (!followFrontTab(startedAt)) return;
+  if (!followFrontTab(startedAt, hostOpenedPath)) return;
   // An explicitly requested path wins over whatever was remembered — it is the more recent
   // intent (a clicked path in terminal output).
   if (props.requestedPath) void openRequested(requestedUnderRoot(props.requestedPath), props.requestedLocation ?? null);
 }
+
+const showFile = showFileWith({ tabs, file, canvasMode, sideBySide, openAt: openFromTerminal });
 
 // A URL may spell a root file absolute; the pane reads an absolute tab path as a file OUTSIDE the
 // root (#3238), so one under it is put back relative first — and one written relative is left as
@@ -459,7 +471,7 @@ const restore = (state: FilesPaneState | null, reqIdAtStart: number): Promise<vo
 watch(
   () => JSON.stringify([props.requestedPath ?? null, props.requestedLocation ?? null]),
   () => {
-    if (props.requestedPath) void openRequested(requestedUnderRoot(props.requestedPath), props.requestedLocation ?? null);
+    if (props.requestedPath) void openRequested(openForHost(requestedUnderRoot(props.requestedPath)), props.requestedLocation ?? null);
   },
 );
 
@@ -501,9 +513,9 @@ defineExpose({
   // A page, an SVG or a table comes up drawn: a path clicked in terminal output to a chart is asking
   // to see the chart, and a CSV opened from there as a table before the pane took the click (#2559).
   // Markdown opens as it always has.
-  openFile: openFromTerminal,
+  openFile: (pathRel: string, location: FileLocation | undefined, newTab: boolean) => openFromTerminal(openForHost(pathRel), location, newTab),
   /** A file in a given view and at a given line, for an agent's `showInPane` or a check item (#3022). */
-  showFile: showFileWith({ tabs, file, canvasMode, sideBySide, openAt: openFromTerminal }),
+  showFile: (target: PaneTarget) => showFile({ ...target, path: openForHost(target.path) }),
   /** The `files-insert-selection` key (#2575), reached from the grid like the tab keys. */
   insertSelection,
   /** The `files-tab-*` keys (#2267), reached from the grid like the finder's. */
