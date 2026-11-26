@@ -7,6 +7,9 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import TerminalCell from "../../../src/components/TerminalCell.vue";
 import { resetConfiguredRemoteHosts } from "../../../src/composables/configuredRemoteHosts";
+import { invalidateDirConfig } from "../../../src/composables/useDirConfig";
+import { dirKeyOf } from "../../../src/composables/dirAddress";
+import { requestCellAction } from "../../../src/composables/useCellAction";
 
 vi.mock("../../../src/composables/usePubSub", () => ({
   usePubSub: () => ({ subscribe: () => () => {}, onReconnect: () => () => {} }),
@@ -63,6 +66,8 @@ beforeEach(() => {
       if (ids === null) return new Promise(() => {});
       return { ok: true, json: async () => ({ ids }) };
     }
+    // A reap that confirms, so a restart goes on to reconnect.
+    if (String(url).endsWith("/terminate")) return { ok: true, json: async () => ({ ended: true }) };
     return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
   }) as unknown as typeof fetch;
 });
@@ -86,8 +91,8 @@ const mountCell = (remoteHost: string | null, launch: { initialSessionId: string
     },
   });
 
-// The gateway's forwarded routes are the one place a remote session's id may go: they answer from the remote.
-const forwardedToHost = (url: string): boolean => url.startsWith("/api/remote-hosts/lx/");
+// The gateway's routes are the one place a remote session's id or directory may go: they answer from the remote.
+const forwardedToHost = (url: string): boolean => url.startsWith("/api/remote-hosts/lx/") || url.startsWith("/remote/lx/api/");
 const mentionsCell = (url: string): boolean => !forwardedToHost(url) && (url.includes(SESSION) || url.includes(CWD) || url.includes(encodeURIComponent(CWD)));
 
 describe("a remote cell", () => {
@@ -101,6 +106,16 @@ describe("a remote cell", () => {
     mountCell("lx");
     await flushPromises();
     expect(requested.filter(mentionsCell)).toEqual([]);
+  });
+
+  it("reads its git status, work item and directory settings from its own host", async () => {
+    invalidateDirConfig(dirKeyOf("lx", CWD) ?? ""); // the settings are cached per directory across tests
+    mountCell("lx");
+    await flushPromises();
+    const remoteCwd = encodeURIComponent(CWD);
+    ["/remote/lx/api/git-status", "/remote/lx/api/pr-phase", "/remote/lx/api/dir-config"].forEach((route) =>
+      expect(requested).toContain(`${route}?cwd=${remoteCwd}`),
+    );
   });
 
   it("closes without telling this server to end a session it does not have", async () => {
@@ -119,6 +134,34 @@ describe("a remote cell", () => {
     await flushPromises();
     expect(remote.find('[data-testid="cell-launch"]').exists()).toBe(true);
     expect(requested.filter(mentionsCell)).toEqual([]);
+    // It tells its own host instead, through the gateway (#3506).
+    expect(requested.some((url) => url.startsWith(`/remote/lx/api/session/${SESSION}/terminate`))).toBe(true);
+  });
+
+  it("saves its note on its host", async () => {
+    const remote = mountCell("lx");
+    await flushPromises();
+    await remote.find('[data-testid="cell-memo-edit"]').trigger("click");
+    await nextTick();
+    const input = remote.find('[data-testid="cell-memo-input"]');
+    await input.setValue("ship it");
+    await input.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(requested).toContain(`/remote/lx/api/session/${SESSION}/memo {"text":"ship it"}`);
+    expect(requested.filter(mentionsCell)).toEqual([]);
+  });
+
+  it("restarts by ending the session on its host, then reconnecting", async () => {
+    const remote = mountCell("lx");
+    await flushPromises();
+    const connectKey = () => Number(remote.findComponent({ name: "TerminalView" }).props("connectKey"));
+    const before = connectKey();
+    expect(requestCellAction("cell-1", "terminal-restart")).toBe(true);
+    await flushPromises();
+    expect(requested.some((url) => url.startsWith(`/remote/lx/api/session/${SESSION}/terminate`))).toBe(true);
+    expect(requested.filter(mentionsCell)).toEqual([]);
+    expect(connectKey()).toBeGreaterThan(before);
+    remote.unmount();
   });
 
   it("offers no path menu, copy button or send button, which act on this machine; a local cell does", async () => {
@@ -136,6 +179,14 @@ describe("a remote cell", () => {
     expect(dir.attributes("aria-haspopup")).toBeUndefined();
     expect(remote.find('[data-testid="cell-send-btn"]').exists()).toBe(false);
     expect(remote.findComponent({ name: "CopyCodeBlock" }).exists()).toBe(false);
+  });
+
+  it("opens its Files pane from its path, without asking this server", async () => {
+    const remote = mountCell("lx");
+    await flushPromises();
+    await remote.find('[data-testid="cell-dir"]').trigger("click");
+    expect(remote.emitted("open-files")).toHaveLength(1);
+    expect(requested.filter(mentionsCell)).toEqual([]);
   });
 
   it("looks for send partners without its directory", async () => {
