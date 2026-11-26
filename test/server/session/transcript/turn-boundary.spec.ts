@@ -1,6 +1,13 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { continuesTurn, emptyTurnBoundary, isTurnBoundaryState, opensTurn } from "../../../../server/session/transcript/turn-boundary.js";
+import {
+  continuesTurn,
+  emptyTurnBoundary,
+  isTurnBoundaryState,
+  opensTurn,
+  startsCommandTurn,
+  windowTurnBoundary,
+} from "../../../../server/session/transcript/turn-boundary.js";
 import {
   conversationTurnsFromParsed,
   currentTurnToolNamesFromParsed,
@@ -116,11 +123,89 @@ describe("continuesTurn", () => {
   });
 });
 
+describe("a window that starts mid-file (#3553)", () => {
+  it("an unsubmitted meta record before anything else opens nothing and names the open turn", () => {
+    const state = windowTurnBoundary();
+    expect(opensTurn(state, { isMeta: true, promptId: "a" })).toBe(false);
+    expect(state).toEqual({ openPromptId: "a", known: true });
+    expect(opensTurn(state, { isMeta: true, promptId: "a" })).toBe(false);
+    expect(opensTurn(state, { isMeta: true, promptId: "b" })).toBe(true);
+  });
+
+  it("a submitted meta record opens a turn even there: another session's message, a wakeup prompt", () => {
+    ["system", "typed", "sdk"].forEach((promptSource) => expect(opensTurn(windowTurnBoundary(), { isMeta: true, promptId: "a", promptSource })).toBe(true));
+  });
+
+  it("an empty or non-string promptSource is not a submission", () => {
+    [{ promptSource: "" }, { promptSource: 1 }, { promptSource: null }].forEach((extra) =>
+      expect(opensTurn(windowTurnBoundary(), { isMeta: true, promptId: "a", ...extra })).toBe(false),
+    );
+  });
+
+  it("a typed record opens there as anywhere", () => {
+    expect(opensTurn(windowTurnBoundary(), { promptId: "a" })).toBe(true);
+    expect(opensTurn(windowTurnBoundary(), {})).toBe(true);
+  });
+
+  it("a meta record without an id leaves the state unknown", () => {
+    const state = windowTurnBoundary();
+    expect(opensTurn(state, { isMeta: true })).toBe(false);
+    expect(state.known).toBe(false);
+  });
+
+  it("a slash command's record ends the unknown state without claiming an id, so its expansion opens", () => {
+    const state = windowTurnBoundary();
+    startsCommandTurn(state);
+    expect(state).toEqual({ openPromptId: null, known: true });
+    expect(opensTurn(state, { isMeta: true, promptId: "c" })).toBe(true);
+  });
+
+  it("a tool result ends the unknown state too", () => {
+    const state = windowTurnBoundary();
+    continuesTurn(state, { promptId: "a" });
+    expect(state).toEqual({ openPromptId: "a", known: true });
+  });
+
+  it("the readers keep a body at the window's head out, and keep the turns after it", () => {
+    const window = [...skillTurn("p1"), ...peerTurn].slice(3);
+    const users = conversationTurnsFromParsed(window, windowTurnBoundary()).filter((turn) => turn.role === "user");
+    expect(users.map((turn) => turn.text)).toEqual(["Another Claude session sent a message: review PR 1"]);
+    expect(latestUserPromptFromParsed(skillTurn("p1").slice(3))).toBe(SKILL_BODY);
+    expect(lastTurnFromClaudeParsed(window, windowTurnBoundary())).toEqual({ prompt: "Another Claude session sent a message: review PR 1", reply: "reviewed" });
+    expect(lastTurnFromClaudeParsed(skillTurn("p1").slice(3), windowTurnBoundary())).toEqual({ prompt: null, reply: "cloned" });
+    expect(transcriptPrompts(window, 10, windowTurnBoundary()).map((entry) => entry.text)).toEqual(["Another Claude session sent a message: review PR 1"]);
+  });
+
+  it("an image note at the window's head is kept out the same way", () => {
+    const users = conversationTurnsFromParsed([meta(IMAGE_NOTE, "p1"), reply("it is a cat")], windowTurnBoundary()).filter((turn) => turn.role === "user");
+    expect(users).toEqual([]);
+  });
+
+  it("a slash command at the window's head still opens its turn with its expansion", () => {
+    const command = typed("<command-message>clone-as</command-message>\n<command-name>/clone-as</command-name>", "c1");
+    const window = [command, meta(SKILL_BODY, "c1"), toolUse("Bash"), toolResult("c1"), reply("cloned")];
+    const users = conversationTurnsFromParsed(window, windowTurnBoundary()).filter((turn) => turn.role === "user");
+    expect(users.map((turn) => turn.text)).toEqual([SKILL_BODY]);
+  });
+
+  it("the view drops a body at the window's head as the fragment before the first turn", () => {
+    const scan = emptyTranscriptScan();
+    const boundary = windowTurnBoundary();
+    [...skillTurn("p1"), ...peerTurn].slice(3).forEach((record) => foldTranscriptView(scan, record, boundary));
+    const view = transcriptViewOf(scan, true);
+    if (view.status !== "ok") throw new Error(`expected turns, got ${view.status}`);
+    expect(view.turns).toHaveLength(1);
+    expect(view.turns[0]?.rows[0]?.text).toContain("Another Claude session sent a message");
+    expect(view.truncated).toBe(true);
+  });
+});
+
 describe("isTurnBoundaryState", () => {
   it("accepts what the fold writes and nothing else", () => {
-    expect(isTurnBoundaryState({ openPromptId: null })).toBe(true);
-    expect(isTurnBoundaryState({ openPromptId: "a" })).toBe(true);
-    [undefined, null, "a", [], {}, { openPromptId: 1 }, { openPromptId: undefined }].forEach((value) => expect(isTurnBoundaryState(value)).toBe(false));
+    [emptyTurnBoundary(), windowTurnBoundary(), { openPromptId: "a", known: true }].forEach((value) => expect(isTurnBoundaryState(value)).toBe(true));
+    [undefined, null, "a", [], {}, { openPromptId: null }, { openPromptId: 1, known: true }, { openPromptId: null, known: "yes" }].forEach((value) =>
+      expect(isTurnBoundaryState(value)).toBe(false),
+    );
   });
 });
 
@@ -230,7 +315,7 @@ describe("a skill's body is not a prompt (#3546)", () => {
     });
   });
 
-  it("a window that opens exactly at the body still reads it as a prompt: nothing before it says otherwise", () => {
+  it("a read from the file's start takes a leading meta body as the prompt it is there", () => {
     const users = conversationTurnsFromParsed(skillTurn("p1").slice(3)).filter((turn) => turn.role === "user");
     expect(users.map((turn) => turn.text)).toEqual([SKILL_BODY]);
   });

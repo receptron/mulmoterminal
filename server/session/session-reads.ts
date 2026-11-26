@@ -59,7 +59,7 @@ import { anchorOf, memoKeyFor, resumePlan, ANCHOR_BYTES, EMPTY_ANCHOR, type Hist
 import { clearedAtOf, clearedClaudeIdOf, transcriptIdOf } from "./transcript/cleared-transcripts.js";
 import { currentTurnReplyFromClaudeParsed, lastTurnFromClaudeParsed, lastTurnFromCodexRolloutDocs, EMPTY_TURN, type LastTurn } from "./transcript/last-turn.js";
 import { fileContains } from "../infra/fs/file-contains.js";
-import { forEachJsonlRecord, forEachJsonlRecordIn, readTailRecords } from "../infra/fs/jsonl-file.js";
+import { forEachJsonlRecord, forEachJsonlRecordIn, readTailRecords, readTailWindow } from "../infra/fs/jsonl-file.js";
 import { copySummaryState, emptySummaryState, foldSummary, summaryPartsOf, type SummaryState } from "./transcript/summary-scan.js";
 import { partitionPending } from "./partitionPending.js";
 import { codexRolloutPath } from "../agents/codex/codex-sessions.js";
@@ -74,7 +74,14 @@ import { grokSessionsRoot, isGrokConversationId } from "../agents/grok/grok-sess
 import { grokChatHistoryPath } from "../agents/grok/grok-sessions.js";
 import { grokLastTurnFromMessages } from "../agents/grok/grok-last-turn.js";
 import type { DiskStat, PendingSession, SessionMeta } from "./types.js";
-import { isTurnBoundaryState } from "./transcript/turn-boundary.js";
+import { emptyTurnBoundary, isTurnBoundaryState, windowTurnBoundary, type TurnBoundaryState } from "./transcript/turn-boundary.js";
+
+/** The tail of a claude transcript, with the boundary its first record is read under: a tail that
+ *  starts mid-file does not know which turn is open (#3553). */
+function claudeTail(cwd: string, id: string): { records: Record<string, unknown>[]; boundary: TurnBoundaryState } {
+  const { records, fromFileStart } = readTailWindow(claudeTranscriptFile(cwd, id));
+  return { records, boundary: fromFileStart ? emptyTurnBoundary() : windowTurnBoundary() };
+}
 import { readString } from "../../common/readString.js";
 import type { TerminalAgent } from "../../common/sessionAgent.js";
 
@@ -134,7 +141,8 @@ export function claudeOnDiskSessionIds(): Set<string> {
 // there's no transcript yet (a never-prompted session) or it can't be read.
 export async function latestUserPrompt(cwd: string, id: string): Promise<string | null> {
   try {
-    return latestMeaningfulUserPromptFromParsed(readTailRecords(claudeTranscriptFile(cwd, id)));
+    const tail = claudeTail(cwd, id);
+    return latestMeaningfulUserPromptFromParsed(tail.records, tail.boundary);
   } catch {
     return null;
   }
@@ -196,7 +204,7 @@ const isSummaryState = (value: unknown): value is SummaryState =>
 
 const summaryFold = createTranscriptFold<SummaryState>({
   kind: "summary",
-  version: 3,
+  version: 4,
   isValue: isSummaryState,
   empty: emptySummaryState,
   fold: foldSummary,
@@ -374,7 +382,8 @@ export async function sessionLastTurn(cwd: string, id: string, agent: TerminalAg
   // thing and would not have survived the first agent whose ids collided.
   if (agent !== "claude") return EMPTY_TURN;
   try {
-    return lastTurnFromClaudeParsed(readTailRecords(claudeTranscriptFile(cwd, id)));
+    const tail = claudeTail(cwd, id);
+    return lastTurnFromClaudeParsed(tail.records, tail.boundary);
   } catch {
     return EMPTY_TURN; // no transcript on disk yet
   }
@@ -401,7 +410,8 @@ function claudeTranscriptPrompts(cwd: string, id: string): SessionPrompts {
   const transcriptId = transcriptIdOf(id);
   if (transcriptId === null) return NO_PROMPTS;
   try {
-    return promptWindow(transcriptPrompts(readTailRecords(claudeTranscriptFile(cwd, transcriptId)), PROMPT_SCAN_LIMIT));
+    const tail = claudeTail(cwd, transcriptId);
+    return promptWindow(transcriptPrompts(tail.records, PROMPT_SCAN_LIMIT, tail.boundary));
   } catch {
     return NO_PROMPTS;
   }
@@ -563,7 +573,8 @@ export async function sessionPrompts(cwd: string, id: string, agent: TerminalAge
 // reading the very record that carries its reply, so its trigger cannot outrun its own data.
 export async function claudeCurrentTurnReply(cwd: string, id: string): Promise<string | null> {
   try {
-    return currentTurnReplyFromClaudeParsed(readTailRecords(claudeTranscriptFile(cwd, id)));
+    const tail = claudeTail(cwd, id);
+    return currentTurnReplyFromClaudeParsed(tail.records, tail.boundary);
   } catch {
     return null; // no transcript on disk yet
   }
