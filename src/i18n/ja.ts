@@ -12,6 +12,7 @@ import { fileHistoryJa } from "./fileHistory/ja";
 import { filesRecentJa } from "./filesRecent/ja";
 import { dirConfigSaveJa } from "./dirConfigSave/ja";
 import { releaseNotesJa } from "./releaseNotes/ja";
+import { whatsNewJa } from "./whatsNew/ja";
 import { dirConfigOpenJa } from "./dirConfigOpen/ja";
 import { dirSettingsFormJa } from "./dirSettingsForm/ja";
 import { themeEditorJa } from "./themeEditor/ja";
@@ -628,14 +629,7 @@ export const ja: Messages = {
     tip: "このファイルの見出し（選ぶとそこへ移動）",
     empty: "このファイルには見出しがありません。",
   },
-  whatsNew: {
-    title: "新しくなったこと",
-    intro: "MulmoTerminal が {version} になりました。前回使ってから変わったことをまとめています。",
-    englishOnly: "リリースの説明は英語で書かれています。",
-    openOnWeb: "このページを Web で開く",
-    older: "それより前の版は変更履歴にあります。",
-    close: "わかった",
-  },
+  whatsNew: whatsNewJa,
   fileHistory: fileHistoryJa,
   filesRecent: filesRecentJa,
   dirConfigSave: dirConfigSaveJa,

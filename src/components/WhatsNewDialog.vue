@@ -37,6 +37,10 @@ useModalKeyboard({ modalEl, onClose: () => emit("close"), trapSelector: MODAL_FO
           <h2 class="m-0 font-sans text-[16px] font-semibold text-fg">{{ t("whatsNew.title") }}</h2>
           <p class="m-0 font-sans text-[12px] text-secondary">{{ t("whatsNew.intro", { version: props.whatsNew.version }) }}</p>
           <p v-if="!readsTranslatedGuide" class="m-0 font-sans text-[11px] text-dim">{{ t("whatsNew.englishOnly") }}</p>
+          <p class="m-0 mt-2 flex items-start gap-2 rounded-md border border-border bg-elevated px-3 py-2 font-sans text-[12px] leading-[1.6] text-fg">
+            <span class="material-symbols-outlined shrink-0 text-[16px] leading-[1.6] text-secondary" aria-hidden="true">favorite</span>
+            <span>{{ t("whatsNew.thanks") }}</span>
+          </p>
         </div>
         <button
           type="button"
