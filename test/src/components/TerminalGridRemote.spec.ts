@@ -5,6 +5,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import TerminalGrid from "../../../src/components/TerminalGrid.vue";
 import FilesPane from "../../../src/components/FilesPane.vue";
+import PromptsPane from "../../../src/components/PromptsPane.vue";
+import TranscriptPane from "../../../src/components/TranscriptPane.vue";
 import { openInFilesPane } from "../../../src/composables/filesPaneOpener";
 import { dirKeyOf } from "../../../src/composables/dirAddress";
 import { rememberPane } from "../../../src/components/filesPaneStore";
@@ -96,11 +98,12 @@ describe("a remote cell's Files pane", () => {
     expect(filesRequests().every((url) => url.startsWith("/remote/lx/api/files/browse/"))).toBe(true);
   });
 
-  it("is the only pane it opens", async () => {
+  it("opens no pane that reads this machine's tools or Canvas", async () => {
     const grid = mountEnlarged("lx");
     await flushPromises();
     expect(grid.vm.runCellAction("pane-canvas", 1)).toBe(false);
-    expect(grid.vm.runCellAction("pane-transcript", 1)).toBe(false);
+    expect(grid.vm.runCellAction("pane-tools", 1)).toBe(false);
+    expect(grid.vm.runCellAction("pane-collections", 1)).toBe(false);
   });
 
   // The same path on two machines is two directories: moving between them re-roots the pane.
@@ -165,5 +168,34 @@ describe("a remote cell's Files pane", () => {
     const stored = localStorage.getItem("files_pane_state") ?? "";
     expect(stored).toContain(JSON.stringify(dirKeyOf("lx", "/srv/project")).slice(1, -1));
     expect(stored).not.toContain('"/srv/project"');
+  });
+});
+
+// Its session's prompts and conversation, read on its host (#3506).
+describe("a remote cell's history panes", () => {
+  const transcriptRequests = () => requested.filter((url) => url.includes("/api/transcript/"));
+
+  it.each([
+    ["pane-prompts", PromptsPane, "prompts"],
+    ["pane-transcript", TranscriptPane, "view"],
+  ] as const)("opens %s on its host, and asks this server nothing about the session", async (action, pane, route) => {
+    const grid = mountEnlarged("lx");
+    await flushPromises();
+    requested = [];
+    expect(grid.vm.runCellAction(action, 1)).toBe(true);
+    await flushPromises();
+    expect(grid.findComponent(pane).props()).toMatchObject({ sessionId: SESSION, host: "lx" });
+    expect(transcriptRequests().map((url) => url.split("?")[0])).toEqual([`/remote/lx/api/transcript/${route}`]);
+    expect(askedAbout().every((url) => url.startsWith("/remote/lx/"))).toBe(true);
+  });
+
+  it("opens them on this machine for a local cell (control)", async () => {
+    const grid = mountEnlarged(undefined);
+    await flushPromises();
+    requested = [];
+    grid.vm.runCellAction("pane-prompts", 1);
+    await flushPromises();
+    expect(grid.findComponent(PromptsPane).props()).toMatchObject({ sessionId: SESSION, host: null });
+    expect(transcriptRequests().map((url) => url.split("?")[0])).toEqual(["/api/transcript/prompts"]);
   });
 });

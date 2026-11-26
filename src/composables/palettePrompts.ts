@@ -10,6 +10,8 @@ export interface PalettePromptSource {
   session: string;
   agent: TerminalAgent;
   cwd: string | null;
+  /** The remote host the session runs on (#3506), null for this machine: its prompts are read there. */
+  host: string | null;
 }
 
 export interface PalettePrompt {
@@ -25,7 +27,7 @@ export interface PalettePrompt {
  *  A custom agent's cell keeps `agent` absent, as Claude's does, because it runs Claude Code. */
 export function promptSourceOf(cell: Cell | null): PalettePromptSource | null {
   if (!cell || !cell.session || cell.command || cell.launcher) return null;
-  return { uid: cell.uid, slotKey: `cell-${cell.uid}`, session: cell.session, agent: cell.agent ?? "claude", cwd: cell.cwd };
+  return { uid: cell.uid, slotKey: `cell-${cell.uid}`, session: cell.session, agent: cell.agent ?? "claude", cwd: cell.cwd, host: cell.remoteHost ?? null };
 }
 
 /** Newest first, the order the Prompts pane reads them in. */

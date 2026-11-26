@@ -13,6 +13,7 @@ import { formatCwd } from "../components/cwdDisplay";
 import { isRecord } from "../../common/isRecord";
 import type { TerminalAgent } from "../../common/sessionAgent";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
+import { transcriptPath } from "../components/remoteCell";
 
 // A terminal whose last exchange can be pulled: how to name it in the menu, and what
 // the server needs to find its log.
@@ -26,6 +27,8 @@ export interface HandoffSource {
   sessionId: string;
   cwd: string | null;
   agent: TerminalAgent;
+  /** The remote host the session runs on (#3506), absent for this machine. */
+  host?: string | null;
 }
 
 // Slot keys are `cell-<uid>`, and the uid is an ARRAY POSITION — renumbered on every grid parse
@@ -63,7 +66,7 @@ export async function fetchLastTurn(source: HandoffSource, shape: "exchange" | "
   if (source.cwd) params.set("cwd", source.cwd);
   // No try/catch: the caller decides what a failed handoff means, and it always did — the block
   // that used to be here existed only to clear the timer.
-  const res = await fetchWithTimeout(`/api/transcript/last-turn?${params.toString()}`, undefined, REQUEST_TIMEOUT_MS);
+  const res = await fetchWithTimeout(transcriptPath(source.host, "last-turn", params), undefined, REQUEST_TIMEOUT_MS);
   if (!res.ok) throw new Error(`last-turn request failed (${res.status})`);
   const data: unknown = await res.json();
   if (!isRecord(data)) return { prompt: null, reply: null, text: "" };

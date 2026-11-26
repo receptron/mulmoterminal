@@ -66,6 +66,8 @@ const props = defineProps<{
   talkAvailable?: boolean;
   // A remote cell (#3506): every pane reads this machine's copy of the session, which it has none of.
   panesHidden?: boolean;
+  // Except its history, which a remote agent cell reads on its host.
+  historyOnHost?: boolean;
 }>();
 const emit = defineEmits<{
   (
@@ -125,7 +127,7 @@ const parkTitle = computed(() => (props.parked ? t("tips.cell.wake") : t("tips.c
 <template>
   <template v-if="!closeOnly">
     <CellPaneMenu
-      v-if="!panesHidden && hasChoice(history)"
+      v-if="(!panesHidden || historyOnHost) && hasChoice(history)"
       icon="history"
       :label="t('cellMenu.history')"
       testid="cell-history-btn"

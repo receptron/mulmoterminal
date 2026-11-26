@@ -164,7 +164,7 @@ describe("a remote cell", () => {
     remote.unmount();
   });
 
-  it("offers no path menu, copy button or send button, which act on this machine; a local cell does", async () => {
+  it("offers no path menu or send button, which act on this machine; a local cell does", async () => {
     const local = mountCell(null);
     await flushPromises();
     expect(local.find('[data-testid="cell-dir"]').attributes("aria-haspopup")).toBe("true");
@@ -178,7 +178,28 @@ describe("a remote cell", () => {
     expect(dir.text()).toContain("project");
     expect(dir.attributes("aria-haspopup")).toBeUndefined();
     expect(remote.find('[data-testid="cell-send-btn"]').exists()).toBe(false);
-    expect(remote.findComponent({ name: "CopyCodeBlock" }).exists()).toBe(false);
+  });
+
+  // #3506. Its history menu opens what is read on its host: the prompts, the conversation and the
+  // timeline. The tools menu keeps only its actions, and the timeline asks the host, not this server.
+  it("offers its history from its host, and opens the timeline there", async () => {
+    const remote = mountCell("lx");
+    await flushPromises();
+    await remote.find('[data-testid="cell-history-btn"]').trigger("click");
+    await flushPromises();
+    const entries = [...document.body.querySelectorAll<HTMLElement>('[data-testid^="cell-pane-menu-"]')].map((entry) => entry.dataset.testid);
+    expect(entries).toEqual(["cell-pane-menu-prompts", "cell-pane-menu-transcript", "cell-pane-menu-timeline"]);
+    document.body.querySelector<HTMLElement>('[data-testid="cell-pane-menu-timeline"]')?.click();
+    await flushPromises();
+    expect(requested.filter((url) => url.includes("/transcript/timeline"))).toEqual([expect.stringMatching(/^\/remote\/lx\/api\/transcript\/timeline\?/)]);
+    expect(requested.filter(mentionsCell)).toEqual([]);
+  });
+
+  // #3506. The last code block is read from the session's own log, on its host.
+  it("copies its last code block from its host", async () => {
+    const remote = mountCell("lx");
+    await flushPromises();
+    expect(remote.findComponent({ name: "CopyCodeBlock" }).props()).toMatchObject({ host: "lx" });
   });
 
   it("opens its Files pane from its path, without asking this server", async () => {

@@ -15,7 +15,8 @@ export interface RemoteRoute {
   /** The remote's own path. A `:sid` segment is a session id. */
   path: string;
   /** cwd: the request names a directory, `query.cwd`, which the other paths stay inside.
-   *  session: the path names one. none: neither. */
+   *  session: it names one session, by a `:sid` segment or else by `query.session`; a `query.cwd`
+   *  beside it must be a clean absolute path. none: neither. */
   key: "cwd" | "session" | "none";
   access: "read" | "write";
   /** The query parameters forwarded; any other is dropped. */
@@ -38,6 +39,15 @@ const browse = (method: RemoteRouteMethod, route: string, access: "read" | "writ
   access,
   query,
   within: ["path"],
+});
+
+// A session's own record, read on its host: `cwd` only says where its log lives.
+const transcript = (route: string, query: readonly string[]): RemoteRoute => ({
+  method: "GET",
+  path: `/api/transcript/${route}`,
+  key: "session",
+  access: "read",
+  query: ["session", "cwd", ...query],
 });
 
 export const REMOTE_ROUTES = {
@@ -74,6 +84,10 @@ export const REMOTE_ROUTES = {
   filesCreate: browse("POST", "create", "write"),
   filesRename: browse("POST", "rename", "write"),
   filesTrash: browse("POST", "trash", "write"),
+  transcriptPrompts: transcript("prompts", ["agent"]),
+  transcriptView: transcript("view", ["before"]),
+  transcriptTimeline: transcript("timeline", []),
+  transcriptLastTurn: transcript("last-turn", ["agent", "as"]),
 } as const satisfies Record<string, RemoteRoute>;
 
 export type RemoteRouteName = keyof typeof REMOTE_ROUTES;

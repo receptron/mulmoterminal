@@ -1796,7 +1796,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
               :can-park="true"
               :parked="parked"
               :panes-hidden="isRemote"
-              :timeline-available="!!localSession && agent === 'claude'"
+              :history-on-host="isRemote"
+              :timeline-available="!!sessionId && agent === 'claude'"
               :library-available="!!localSession && agent === 'claude'"
               :restart-available="launched && !!sessionId"
               :talk-available="talkAvailable"
@@ -1923,7 +1924,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
             </span>
           </span>
         </div>
-        <TimelineOverlay :session-id="sessionId" :cwd="cwd" :open="timelineOpen" @close="timelineOpen = false" />
+        <TimelineOverlay :session-id="sessionId" :cwd="cwd" :host="remoteHost ?? null" :open="timelineOpen" @close="timelineOpen = false" />
         <RemoteHostGone v-if="remoteHost && hostStatus === 'gone'" :host="remoteHost" />
         <TerminalView
           v-else-if="mayConnect(hostStatus)"
@@ -1990,7 +1991,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
             />
           </template>
           <template #header-actions>
-            <CopyCodeBlock v-if="sessionId && !isRemote" ref="copyCodeRef" :class="CELL_BTN" :session-id="sessionId" :cwd="cwd" :agent="agent" />
+            <CopyCodeBlock v-if="sessionId" ref="copyCodeRef" :class="CELL_BTN" :session-id="sessionId" :cwd="cwd" :agent="agent" :host="remoteHost ?? null" />
             <button
               v-if="sendButton"
               type="button"

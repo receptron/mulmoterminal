@@ -703,6 +703,9 @@ const localSessionOf = (uid: number | null): string | null => {
   return onThisMachine(cell?.remoteHost, cell?.session ?? null);
 };
 const paneCellSessionId = computed(() => localSessionOf(paneCellUid.value));
+// The prompts and the conversation are read where the session runs, a remote cell's on its host (#3506).
+const paneCellSessionOnHost = computed(() => cellOf(paneCellUid.value)?.session ?? null);
+const paneCellHost = computed(() => cellOf(paneCellUid.value)?.remoteHost ?? null);
 // The ENLARGED cell's session, which is not the same thing on the tiled grid: what opens the pane by
 // itself — a drawing, a question, an agent's showInPane — answers to this one only, so a cell whose
 // pane was closed long ago does not put one beside the tiles unasked.
@@ -2062,8 +2065,9 @@ function onRosterDragLeave(event: DragEvent) {
              which (#1748). -->
         <PromptsPane
           v-else-if="rightPane === 'prompts'"
-          :session-id="paneCellSessionId"
+          :session-id="paneCellSessionOnHost"
           :cwd="paneCellCwd"
+          :host="paneCellHost"
           :agent="paneCellAgent"
           :expanded="paneFull"
           :style="rightPaneStyle(paneFull, paneWidth)"
@@ -2078,8 +2082,9 @@ function onRosterDragLeave(event: DragEvent) {
              (server/session/transcript/transcript-view-read.ts). -->
         <TranscriptPane
           v-else-if="rightPane === 'transcript'"
-          :session-id="paneCellSessionId"
+          :session-id="paneCellSessionOnHost"
           :cwd="paneCellCwd"
+          :host="paneCellHost"
           :agent="paneCellAgent"
           :expanded="paneFull"
           :style="rightPaneStyle(paneFull, paneWidth)"

@@ -12,6 +12,7 @@ const ROUTES: Record<string, RemoteRoute> = {
   memo: { method: "POST", path: "/api/session/:sid/memo", key: "session", access: "write", query: [] },
 };
 const decide = (method: string, path: string, query: unknown = {}) => decideForward(method, path, query, ROUTES);
+const namesSession = (query: readonly string[]): boolean => query.includes("session");
 
 describe("decideForward: which requests cross", () => {
   it("forwards a table route with its method", () => {
@@ -72,9 +73,47 @@ describe("decideForward: which requests cross", () => {
   });
   it("ships a table whose every route decides to forward itself", () => {
     Object.values(REMOTE_ROUTES).forEach((route) => {
-      const query = route.key === "cwd" ? { cwd: "/srv/p" } : {};
+      const query = { ...(route.key === "cwd" ? { cwd: "/srv/p" } : {}), ...(namesSession(route.query) ? { session: SESSION } : {}) };
       expect(decideForward(route.method, route.path.replace(":sid", SESSION), query)).toMatchObject({ kind: "forward", route });
     });
+  });
+});
+
+// A session's own record (#3506), named by `?session=` rather than by the path.
+describe("decideForward: a session named in the query", () => {
+  const decideShipped = (method: string, path: string, query: unknown) => decideForward(method, path, query);
+  const routes = ["/api/transcript/prompts", "/api/transcript/view", "/api/transcript/timeline", "/api/transcript/last-turn"];
+  it.each(routes)("forwards %s for a session id, with the cwd its log lives under", (path) => {
+    expect(decideShipped("GET", path, { session: SESSION, cwd: "/srv/p", extra: "x" })).toMatchObject({
+      kind: "forward",
+      path: `${path}?session=${SESSION}&cwd=%2Fsrv%2Fp`,
+    });
+    expect(decideShipped("GET", path, { session: SESSION })).toMatchObject({ kind: "forward", path: `${path}?session=${SESSION}` });
+  });
+  it.each([{}, { session: "" }, { session: "not-an-id" }, { session: `${SESSION}/../x` }, { session: [SESSION, SESSION] }])(
+    "refuses the session %j without a request",
+    (query) => {
+      routes.forEach((path) => expect(decideShipped("GET", path, query)).toMatchObject({ kind: "refuse", status: 400 }));
+    },
+  );
+  it.each(["relative/dir", "/srv/p/..", "/srv//p", "/srv/p/", "/srv/p\0"])("refuses the cwd %j beside it", (cwd) => {
+    routes.forEach((path) => expect(decideShipped("GET", path, { session: SESSION, cwd })).toMatchObject({ kind: "refuse", status: 400 }));
+  });
+  it("carries only the parameters each route reads", () => {
+    expect(decideShipped("GET", "/api/transcript/prompts", { session: SESSION, agent: "codex", before: "x" })).toMatchObject({
+      path: `/api/transcript/prompts?session=${SESSION}&agent=codex`,
+    });
+    expect(decideShipped("GET", "/api/transcript/view", { session: SESSION, before: "c1", agent: "codex" })).toMatchObject({
+      path: `/api/transcript/view?session=${SESSION}&before=c1`,
+    });
+    expect(decideShipped("GET", "/api/transcript/last-turn", { session: SESSION, as: "reply", agent: "claude" })).toMatchObject({
+      path: `/api/transcript/last-turn?session=${SESSION}&agent=claude&as=reply`,
+    });
+  });
+  it("forwards no write and no relay of a transcript", () => {
+    expect(decideShipped("GET", "/api/transcript/relay", { session: SESSION })).toMatchObject({ kind: "refuse", status: 404 });
+    expect(decideShipped("POST", "/api/transcript/relay-mark", { session: SESSION })).toMatchObject({ kind: "refuse", status: 404 });
+    expect(decideShipped("POST", "/api/transcript/view", { session: SESSION })).toMatchObject({ kind: "refuse", status: 404 });
   });
 });
 

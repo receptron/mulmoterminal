@@ -134,6 +134,21 @@ export interface RemoteSessionRow {
 export type RemoteSessionRowMessage = { host: string; row: RemoteSessionRow };
 export type RemoteSessionsMessage = RemoteSessionRowMessage | { host: string; resync: true };
 
+/** The Mac's channel for a remote host's "a prompt was just submitted" (common/promptChannel.ts), so a
+ *  remote cell's Prompts pane keeps up as a local one does. Separate from `prompt-submitted` for the
+ *  reason above: its listeners take a bare id to be this machine's session. */
+export const REMOTE_PROMPT_SUBMITTED_CHANNEL = "remote-prompt-submitted";
+
+export interface RemotePromptSubmitted {
+  host: string;
+  sessionId: string;
+}
+
+export const parseRemotePromptSubmitted = (data: unknown): RemotePromptSubmitted | null =>
+  isRecord(data) && isRemoteHostId(data.host) && typeof data.sessionId === "string" && data.sessionId !== ""
+    ? { host: data.host, sessionId: data.sessionId }
+    : null;
+
 /** The one key a client map uses for a remote session: ids are unique per host, not across hosts. */
 export const remoteSessionKey = (host: string, id: string): string => `${host}/${id}`;
 

@@ -14,6 +14,8 @@ import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import type { TerminalAgent } from "../../common/sessionAgent";
 import { readPrompt, type PromptEntry } from "../../common/promptHistory";
 import { PROMPT_SUBMITTED_CHANNEL, isPromptSubmittedEvent } from "../../common/promptChannel";
+import { REMOTE_PROMPT_SUBMITTED_CHANNEL, parseRemotePromptSubmitted } from "../../common/remoteHosts";
+import { transcriptPath } from "./remoteCell";
 import { isTextSelected } from "./textSelected";
 import { clockLabel } from "./clockLabel";
 import { useI18n } from "vue-i18n";
@@ -24,6 +26,8 @@ const props = defineProps<{
   sessionId: string | null;
   cwd: string | null;
   agent: TerminalAgent;
+  /** The remote host the session runs on (#3506), null or absent for this machine. */
+  host?: string | null;
   // Whether this pane currently covers the terminal area. Owned by the grid, shown here because
   // the button that flips it lives in this header — the same contract ToolsPane has.
   expanded?: boolean;
@@ -64,7 +68,7 @@ async function load(reset: boolean): Promise<void> {
   try {
     const params = new URLSearchParams({ session: sessionId, agent: props.agent });
     if (props.cwd) params.set("cwd", props.cwd);
-    const res = await fetchWithTimeout(`/api/transcript/prompts?${params.toString()}`);
+    const res = await fetchWithTimeout(transcriptPath(props.host, "prompts", params));
     if (!res.ok) throw new Error(String(res.status));
     const body = await jsonBody(res);
     if (my !== req) return; // superseded
@@ -104,17 +108,23 @@ function scheduleReload(): void {
 }
 
 const { subscribe } = usePubSub();
-const unsubscribe = subscribe(PROMPT_SUBMITTED_CHANNEL, (data: unknown) => {
-  if (isPromptSubmittedEvent(data) && data.sessionId === props.sessionId) scheduleReload();
+const unsubscribeLocal = subscribe(PROMPT_SUBMITTED_CHANNEL, (data: unknown) => {
+  if (!props.host && isPromptSubmittedEvent(data) && data.sessionId === props.sessionId) scheduleReload();
+});
+// A remote session's prompts are announced by its host, relayed with the host's name (#3506).
+const unsubscribeRemote = subscribe(REMOTE_PROMPT_SUBMITTED_CHANNEL, (data: unknown) => {
+  const prompt = parseRemotePromptSubmitted(data);
+  if (prompt && props.host && prompt.host === props.host && prompt.sessionId === props.sessionId) scheduleReload();
 });
 
 // One watch over the identity: the pane stays mounted while the grid walks the zoom from cell to
 // cell, so a changed session/agent has to reload rather than keep another terminal's prompts.
-watch([() => props.sessionId, () => props.agent, () => props.cwd], () => void load(true), { immediate: true });
+watch([() => props.sessionId, () => props.agent, () => props.cwd, () => props.host], () => void load(true), { immediate: true });
 
 onUnmounted(() => {
   window.clearTimeout(reloadTimer);
-  unsubscribe();
+  unsubscribeLocal();
+  unsubscribeRemote();
 });
 
 // The time is INSIDE the toggle, so a label naming only the action would replace it in the

@@ -49,6 +49,7 @@ function forwardedQuery(route: RemoteRoute, query: Record<string, unknown>): Que
     const value = query[name];
     if (typeof value === "string") params.set(name, value);
   });
+  if (route.key === "session") return sessionQuery(route, params);
   if (route.key !== "cwd") return { params };
   const cwd = params.get("cwd");
   if (cwd === null || !isCleanAbsolute(cwd)) return { reason: "cwd must be a clean absolute path" };
@@ -57,6 +58,14 @@ function forwardedQuery(route: RemoteRoute, query: Record<string, unknown>): Que
     return value !== null && !staysInside(cwd, value);
   });
   return escaping ? { reason: `${escaping} leaves ${cwd}` } : { params };
+}
+
+// A session named by the query rather than the path is held to the same id rule.
+function sessionQuery(route: RemoteRoute, params: URLSearchParams): QueryResult {
+  const session = params.get("session");
+  if (route.query.includes("session") && (session === null || !SESSION_ID_RE.test(session))) return { reason: "session must be a session id" };
+  const cwd = params.get("cwd");
+  return cwd !== null && !isCleanAbsolute(cwd) ? { reason: "cwd must be a clean absolute path" } : { params };
 }
 
 /** The forward for `method` on `pathname` (the remote's own `/api/…` path), or why not. */
