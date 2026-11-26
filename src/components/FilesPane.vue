@@ -146,6 +146,15 @@ const folder = useFolderView(
 // root has no row, so nothing is marked while it is shown.
 const currentRowPath = computed(() => openPath.value ?? (folderShown.value && folder.dir.value ? folder.dir.value : null));
 const { openRequested, openFromTerminal } = useRequestedOpen(tabs, file, (pathRel) => canvasMode.hide(pathRel));
+// Counted so a startup can tell the host put a file in front while it ran (#3557). Not the read
+// generation: the restore's own open bumps that too, and its folders are the reader's to keep closed.
+let hostOpens = 0;
+const hostOpen =
+  <A extends unknown[]>(open: (...args: A) => Promise<void>) =>
+  (...args: A): Promise<void> => {
+    hostOpens += 1;
+    return open(...args);
+  };
 const strip = tabs.strip;
 const { showStrip, focusablePath, labels } = tabStripView(strip, openPath);
 const storiesRoots = computed<StoriesRoots>(() => props.storiesRoots ?? { workspaces: [], roots: [] });
@@ -430,6 +439,7 @@ async function start(): Promise<void> {
   // Before any await: a start that a reload has since replaced must not reach it (#3122).
   sideBySide.switchedOn.value = props.initialState?.sideBySide === true;
   const reqIdAtStart = file.generation();
+  const hostOpensAtStart = hostOpens;
   const startedAt = startEpoch();
   await nextTick();
   if (editorHost.value) file.attach(editorHost.value);
@@ -438,7 +448,7 @@ async function start(): Promise<void> {
   void gitStatus.refresh();
   await tree.loadRoot();
   await restore(props.initialState ?? null, reqIdAtStart);
-  if (!followFrontTab(startedAt)) return;
+  if (!followFrontTab(startedAt, hostOpens !== hostOpensAtStart)) return;
   // An explicitly requested path wins over whatever was remembered — it is the more recent
   // intent (a clicked path in terminal output).
   if (props.requestedPath) void openRequested(requestedUnderRoot(props.requestedPath), props.requestedLocation ?? null);
@@ -501,9 +511,9 @@ defineExpose({
   // A page, an SVG or a table comes up drawn: a path clicked in terminal output to a chart is asking
   // to see the chart, and a CSV opened from there as a table before the pane took the click (#2559).
   // Markdown opens as it always has.
-  openFile: openFromTerminal,
+  openFile: hostOpen(openFromTerminal),
   /** A file in a given view and at a given line, for an agent's `showInPane` or a check item (#3022). */
-  showFile: showFileWith({ tabs, file, canvasMode, sideBySide, openAt: openFromTerminal }),
+  showFile: hostOpen(showFileWith({ tabs, file, canvasMode, sideBySide, openAt: openFromTerminal })),
   /** The `files-insert-selection` key (#2575), reached from the grid like the tab keys. */
   insertSelection,
   /** The `files-tab-*` keys (#2267), reached from the grid like the finder's. */

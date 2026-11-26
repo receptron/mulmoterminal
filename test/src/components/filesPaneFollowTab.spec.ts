@@ -81,6 +81,42 @@ describe("the Files tree follows the tab in front", () => {
     expect(rows(w)).toContain("docs/a.md");
     expect(scrolled).toContain("docs/a.md");
   });
+
+  // #3557. A path clicked in terminal output opens the pane and the file together, so the file comes
+  // to the front while the root is still being listed — before following starts.
+  const mountWithRootHeld = (): { w: VueWrapper; releaseRoot: () => void } => {
+    let releaseRoot = (): void => {};
+    const rootHeld = new Promise<void>((resolve) => (releaseRoot = resolve));
+    const serve = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), "https://x");
+      if (url.pathname.includes("/list") && (url.searchParams.get("path") ?? "") === "") await rootHeld;
+      return serve(input);
+    }) as unknown as typeof fetch;
+    const w = mount(FilesPane, { props: { cwd: "/proj", initialState: { tabs: [], activePath: null, expanded: [] } }, attachTo: document.body });
+    return { w, releaseRoot };
+  };
+  const rowsAfterRoot = async (w: VueWrapper, releaseRoot: () => void): Promise<string[]> => {
+    await flushPromises();
+    releaseRoot();
+    await flushPromises();
+    return rows(w);
+  };
+  const SHOWN = ["docs", "docs/deep", "docs/deep/x.md", "docs/a.md", "readme.md"];
+
+  it("follows a file the host opened while the pane was still starting", async () => {
+    const { w, releaseRoot } = mountWithRootHeld();
+    void (w.vm as unknown as { openFile: (p: string) => Promise<void> }).openFile("docs/deep/x.md");
+    expect(await rowsAfterRoot(w, releaseRoot)).toEqual(SHOWN);
+    expect(scrolled).toContain("docs/deep/x.md");
+  });
+
+  it("follows a file an agent showed while the pane was still starting", async () => {
+    const { w, releaseRoot } = mountWithRootHeld();
+    void (w.vm as unknown as { showFile: (t: { path: string; view: string }) => Promise<void> }).showFile({ path: "docs/deep/x.md", view: "editor" });
+    expect(await rowsAfterRoot(w, releaseRoot)).toEqual(SHOWN);
+    expect(scrolled).toContain("docs/deep/x.md");
+  });
 });
 
 // #3058. A directory with many files hid which one was open: the remembered scroll could leave its row

@@ -285,6 +285,16 @@ describe("following the tab in front", () => {
     expect(h.opened).toEqual([]);
   });
 
+  // #3557. The host's file is not part of the remembered tree, so its folders open.
+  it("opens the front row's folders when following starts on a file the host opened", async () => {
+    const h = harness();
+    h.frontPath.value = "src/deep/buried.ts";
+    h.reveal.followFrontTab(h.reveal.startEpoch(), true);
+    await flushPromises();
+    expect(h.opened).toEqual(["src", "src/deep"]);
+    expect(h.scrolled).toEqual(["src/deep/buried.ts"]);
+  });
+
   // #3238 (CodeRabbit on #3264). A file outside the root has no row here; coming to the front it
   // still overtakes a reveal under way for the previous tab, which must not go on opening folders
   // and scrolling after the outside file is what is shown.

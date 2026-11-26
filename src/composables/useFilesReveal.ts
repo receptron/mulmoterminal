@@ -43,8 +43,9 @@ export interface FilesReveal {
   stopShowing: () => void;
   /** The remembered pane is back: from now on the tree follows the tab in front, and it is put on
    *  that tab's row at once — the remembered scroll may have left the row off screen (#3058).
-   *  False, and nothing done, for a startup a reset has since made stale. */
-  followFrontTab: (startedAt: number) => boolean;
+   *  False, and nothing done, for a startup a reset has since made stale. `hostOpened`: the host
+   *  opened a file during this startup, so the front tab is that file and its folders open (#3557). */
+  followFrontTab: (startedAt: number, hostOpened?: boolean) => boolean;
   /** Which startup this is, for `followFrontTab`: a reset makes every earlier one stale. */
   startEpoch: () => number;
   /** The pane is re-rooting: a reveal in flight must not scroll the new tree to a row from the
@@ -65,11 +66,12 @@ export function rowElementFor(treeEl: HTMLElement | null, pathRel: string): HTML
 // Not while the remembered pane is being put back: its expanded folders (#2156) are where the reader
 // LEFT the tree. Once it is back, the front row is brought into view only if those folders show it
 // (#3058) — the remembered scroll may have left it off screen, but a folder they closed stays closed.
+// A file the host opened during the startup is not part of that tree, and is shown as any front tab is.
 function followsFrontTab(
   frontPath: () => string | null,
   showInTree: (pathRel: string) => Promise<void>,
   scrollToRow: (pathRel: string) => void,
-): { start: (startedAt: number) => boolean; stop: () => void; epoch: () => number } {
+): { start: (startedAt: number, hostOpened?: boolean) => boolean; stop: () => void; epoch: () => number } {
   let following = false;
   // A startup still running when the pane re-rooted must not switch following on in the new root.
   let epoch = 0;
@@ -77,11 +79,12 @@ function followsFrontTab(
     if (pathRel && following) void showInTree(pathRel);
   });
   return {
-    start: (startedAt) => {
+    start: (startedAt, hostOpened = false) => {
       if (startedAt !== epoch) return false;
       following = true;
       const pathRel = frontPath();
-      if (pathRel) scrollToRow(pathRel);
+      if (pathRel && hostOpened) void showInTree(pathRel);
+      else if (pathRel) scrollToRow(pathRel);
       return true;
     },
     stop: () => {
