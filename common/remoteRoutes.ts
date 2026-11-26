@@ -6,6 +6,8 @@
 // A forwarded request reaches the remote with the power of the remote's own UI, so adding a row is
 // a decision about what a page on this machine may do there, not plumbing.
 
+import { DROP_FILENAME_HEADER } from "./dropUpload.js";
+
 export type RemoteRouteMethod = "GET" | "POST" | "PUT" | "DELETE";
 
 export interface RemoteRoute {
@@ -20,6 +22,10 @@ export interface RemoteRoute {
   query: readonly string[];
   /** Of those, the ones naming a path, which must stay inside `cwd`. */
   within?: readonly string[];
+  /** raw: the body is bytes (a dropped file), read before any JSON parser and sent as they came. */
+  body?: "raw";
+  /** The request headers forwarded besides the gateway's own; any other is dropped. */
+  headers?: readonly string[];
 }
 
 export const REMOTE_ROUTES = {
@@ -31,6 +37,15 @@ export const REMOTE_ROUTES = {
   skills: { method: "GET", path: "/api/skills", key: "cwd", access: "read", query: ["cwd"] },
   memo: { method: "POST", path: "/api/session/:sid/memo", key: "session", access: "write", query: [] },
   terminate: { method: "POST", path: "/api/session/:sid/terminate", key: "session", access: "write", query: [] },
+  drop: {
+    method: "POST",
+    path: "/api/session/:sid/drop",
+    key: "session",
+    access: "write",
+    query: [],
+    body: "raw",
+    headers: ["content-type", DROP_FILENAME_HEADER],
+  },
 } as const satisfies Record<string, RemoteRoute>;
 
 export type RemoteRouteName = keyof typeof REMOTE_ROUTES;

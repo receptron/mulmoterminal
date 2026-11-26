@@ -55,8 +55,8 @@ export const terminalPathFor = (host: string | null | undefined, path: string): 
 
 export const REMOTE_CELL_DECLINE_EN = "This terminal runs on another machine, so that is not available here yet.";
 
-/** A write to one session (`memo`, `terminate`): this server's route, or the gateway's for a remote cell. */
-export const sessionWritePath = (host: string | null | undefined, sessionId: string, action: "memo" | "terminate"): string =>
+/** A write to one session: this server's route, or the gateway's for a remote cell. */
+export const sessionWritePath = (host: string | null | undefined, sessionId: string, action: "memo" | "terminate" | "drop"): string =>
   terminalPathFor(host, `/api/session/${encodeURIComponent(sessionId)}/${action}`);
 
 /** A remote cell's session, as the remote's rows name it. */

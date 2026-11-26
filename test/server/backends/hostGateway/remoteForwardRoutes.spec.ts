@@ -7,7 +7,11 @@ import { createServer, request, type IncomingHttpHeaders, type Server } from "no
 import type { AddressInfo } from "node:net";
 import { mountRequestGates } from "../../../../server/routes/request-gates.js";
 import { createIsAllowedHost, createIsAllowedOrigin } from "../../../../server/infra/http/allowed-origin.js";
-import { FORWARD_RESPONSE_MAX_BYTES, mountRemoteForwardRoutes } from "../../../../server/backends/hostGateway/remoteForwardRoutes.js";
+import {
+  FORWARD_RESPONSE_MAX_BYTES,
+  mountRemoteForwardRoutes,
+  mountRemoteRawForwardRoutes,
+} from "../../../../server/backends/hostGateway/remoteForwardRoutes.js";
 import type { RemoteHost } from "../../../../server/backends/hostGateway/remoteHostsConfig.js";
 import type { RemoteRoute } from "../../../../common/remoteRoutes.js";
 
@@ -18,6 +22,15 @@ const ROUTES: Record<string, RemoteRoute> = {
   big: { method: "GET", path: "/api/big", key: "none", access: "read", query: [] },
   moved: { method: "GET", path: "/api/moved", key: "none", access: "read", query: [] },
   memo: { method: "POST", path: "/api/session/:sid/memo", key: "session", access: "write", query: [] },
+  drop: {
+    method: "POST",
+    path: "/api/session/:sid/drop",
+    key: "session",
+    access: "write",
+    query: [],
+    body: "raw",
+    headers: ["content-type", "x-drop-filename"],
+  },
 };
 
 interface Reached {
@@ -61,6 +74,8 @@ beforeAll(async () => {
   ];
   const app = express();
   mountRequestGates(app, { isAllowedHost: createIsAllowedHost(new Set()), isAllowedOrigin: createIsAllowedOrigin(new Set()) });
+  // As mountAppRoutes orders them: the raw routes before the JSON parser, the rest after it.
+  mountRemoteRawForwardRoutes(app, { remoteHosts: () => hosts, routes: ROUTES });
   app.use(express.json());
   mountRemoteForwardRoutes(app, { remoteHosts: () => hosts, routes: ROUTES });
   gateway = createServer(app);
@@ -135,6 +150,31 @@ describe("/remote/<id>/api/…", () => {
     const answer = await call("GET", "/remote/lx/api/git-status?cwd=%2Fsrv", { "content-type": "application/json" }, JSON.stringify({ cwd: "/etc" }));
     expect(answer.status).toBe(200);
     expect(reached.map((r) => [r.url, r.body])).toEqual([["/api/git-status?cwd=%2Fsrv", ""]]);
+  });
+
+  // A dropped file is bytes, whatever its type says: a dropped .json must not be parsed and re-encoded.
+  it("carries a dropped file's bytes, type and name exactly, and nothing else of the browser's", async () => {
+    const bytes = '{ "a": 1,\n  "b": [2] }\n';
+    const answer = await call(
+      "POST",
+      `/remote/lx/api/session/${SESSION}/drop`,
+      { ...pageOrigin(), "content-type": "application/json", "x-drop-filename": "data%20file.json", cookie: "mac=secret", "x-custom": "1" },
+      bytes,
+    );
+    expect(answer.status).toBe(201);
+    expect(reached).toHaveLength(1);
+    expect(reached[0]?.body).toBe(bytes);
+    expect(reached[0]?.headers["content-type"]).toBe("application/json");
+    expect(reached[0]?.headers["x-drop-filename"]).toBe("data%20file.json");
+    expect(reached[0]?.headers.origin).toBe(remoteOrigin);
+    expect(reached[0]?.headers.cookie).toBeUndefined();
+    expect(reached[0]?.headers["x-custom"]).toBeUndefined();
+  });
+
+  it("refuses a foreign page's drop before any byte reaches the remote", async () => {
+    const answer = await call("POST", `/remote/lx/api/session/${SESSION}/drop`, { origin: "http://evil.example", "content-type": "image/png" }, "png");
+    expect(answer.status).toBe(403);
+    expect(reached).toEqual([]);
   });
 
   it("refuses a foreign page's write before anything reaches the remote", async () => {

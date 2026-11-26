@@ -50,6 +50,16 @@ describe("createImagePasteHandler", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  // #3506: a remote cell's screenshot is saved on its host, where its agent can read it.
+  it("saves on the cell's host when it has one", async () => {
+    const fetchMock = vi.fn<(url: string) => Promise<ReturnType<typeof jsonResponse>>>(async () => jsonResponse(200, { path: "/srv/remote/.drops/abc.png" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const insertText = vi.fn();
+    createImagePasteHandler({ sessionId: () => SESSION, insertText, onError: vi.fn(), host: () => "lx" })(pasteEvent(["image/png"], png()));
+    await vi.waitFor(() => expect(insertText).toHaveBeenCalledWith("/srv/remote/.drops/abc.png "));
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([`/remote/lx/api/session/${SESSION}/drop`]);
+  });
+
   it("quotes a path that a shell would otherwise split", async () => {
     vi.stubGlobal(
       "fetch",
