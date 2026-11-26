@@ -7,12 +7,16 @@ import { agentPickerOptions } from "../../../src/components/agentPicker";
 import CellLaunchFormSource from "../../../src/components/CellLaunchForm.vue?raw";
 import ChatModalAgentPickerSource from "../../../src/components/ChatModalAgentPicker.vue?raw";
 import agentPickerSource from "../../../src/components/agentPicker.ts?raw";
+import RemoteHostPickerSource from "../../../src/components/RemoteHostPicker.vue?raw";
+import RemoteLaunchFormSource from "../../../src/components/RemoteLaunchForm.vue?raw";
 
 // The surface this section covers. A file added to the launch form belongs here too.
 describeTipSurface("launch", {
   "CellLaunchForm.vue": CellLaunchFormSource,
   "ChatModalAgentPicker.vue": ChatModalAgentPickerSource,
   "agentPicker.ts": agentPickerSource,
+  "RemoteHostPicker.vue": RemoteHostPickerSource,
+  "RemoteLaunchForm.vue": RemoteLaunchFormSource,
 });
 
 // agentPicker.ts has no i18n of its own, so it hands the form a key and the command; the hover is

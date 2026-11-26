@@ -10,6 +10,7 @@ import { usePubSub } from "./usePubSub";
 import { useDynamicFavicon } from "./useDynamicFavicon";
 import type { Session } from "./useSessions";
 import { isRecord } from "../../common/isRecord";
+import { parseRemoteSessionsMessage, REMOTE_SESSIONS_CHANNEL, remoteSessionKey } from "../../common/remoteHosts";
 
 export type FaviconState = "idle" | "working" | "attention";
 
@@ -42,6 +43,24 @@ const STATE_COLOR: Record<FaviconState, string> = {
   attention: "#e0a030", // amber — needs you
 };
 
+// The remote hosts' sessions (#3506), relayed by the server and kept apart from `live`, whose keys
+// are bare ids reconciled against this server's list. A resync drops the host's entries: the relay
+// lost or regained the remote, and what it last said may no longer hold. The next row puts it back.
+function useRemoteFaviconActivity(subscribe: ReturnType<typeof usePubSub>["subscribe"]): Ref<Map<string, Activity>> {
+  const remote = ref(new Map<string, Activity>());
+  const unsubscribe = subscribe(REMOTE_SESSIONS_CHANNEL, (data) => {
+    const message = parseRemoteSessionsMessage(data);
+    if (!message) return;
+    const next = new Map(remote.value);
+    if ("resync" in message) [...next.keys()].filter((key) => key.startsWith(remoteSessionKey(message.host, ""))).forEach((key) => next.delete(key));
+    else if (message.row.event === "closed") next.delete(remoteSessionKey(message.host, message.row.id));
+    else next.set(remoteSessionKey(message.host, message.row.id), { working: message.row.working, waiting: message.row.waiting });
+    remote.value = next;
+  });
+  onUnmounted(unsubscribe);
+  return remote;
+}
+
 export function useFaviconState(sessions: Ref<Session[]>): void {
   const live = ref(new Map<string, Activity>());
 
@@ -54,6 +73,7 @@ export function useFaviconState(sessions: Ref<Session[]>): void {
     live.value = next;
   });
   onUnmounted(unsubscribe);
+  const remote = useRemoteFaviconActivity(subscribe);
 
   // Reconcile with the authoritative list: adopt its truth and drop default-project
   // ids it no longer reports (cross-dir grid ids never appear here, so they stay,
@@ -75,6 +95,6 @@ export function useFaviconState(sessions: Ref<Session[]>): void {
     { immediate: true },
   );
 
-  const color = computed(() => STATE_COLOR[deriveFaviconState(live.value.values())]);
+  const color = computed(() => STATE_COLOR[deriveFaviconState([...live.value.values(), ...remote.value.values()])]);
   useDynamicFavicon(color);
 }

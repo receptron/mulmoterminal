@@ -11,8 +11,12 @@ import { launchAgentPick } from "../composables/launchAgentPick";
 //
 // This component owns only what the form edits (dir / agent / model choice) and forwards the four
 // launch intents. Turning an intent into a cell is GridView's job, because only it can place one.
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import CellLaunchForm from "./CellLaunchForm.vue";
+import RemoteHostPicker from "./RemoteHostPicker.vue";
+import RemoteLaunchForm from "./RemoteLaunchForm.vue";
+import { useRemoteHosts } from "../composables/useRemoteHosts";
+import type { RemoteStart } from "./remoteLaunch";
 import type { AgentPick, CustomAgent } from "../../common/customAgents";
 import type { AgentAccount } from "../../common/agentAccounts";
 import type { CwdPreset } from "./presets";
@@ -46,6 +50,7 @@ const emit = defineEmits<{
   (e: "resume", value: ResumeRequest): void;
   (e: "run", value: RunCommand): void;
   (e: "launch", value: LaunchPick): void;
+  (e: "start-remote", value: RemoteStart): void;
   (e: "remove-preset", value: string): void;
   // A directory can be deleted while the app is open, so the host re-checks the saved ones on every open.
   (e: "close" | "retry-config" | "opened"): void;
@@ -78,6 +83,17 @@ const account = ref<string | null>(null);
 
 const panel = ref<HTMLElement | null>(null);
 
+// Where the next terminal runs (#3506). The picker is shown only when a remote host is configured,
+// so a machine without one sees the panel exactly as before.
+const { hosts: remoteHosts } = useRemoteHosts();
+const remoteHostId = ref<string | null>(null);
+const remoteHost = computed(() => remoteHosts.value.find((host) => host.id === remoteHostId.value) ?? null);
+const focusDirInput = () => panel.value?.querySelector<HTMLInputElement>('[data-testid="cell-dir-input"]')?.focus();
+watch(remoteHostId, async () => {
+  await nextTick();
+  focusDirInput();
+});
+
 // Escape closes it from ANYWHERE, not only from inside the panel. The panel covers the right of
 // the stage and takes focus when it opens, but a click on the uncovered grid or the toolbar moves
 // focus out — and a `@keydown.escape` bound to the <aside> then never fires, which is how "Escape
@@ -108,7 +124,7 @@ onMounted(() => emit("opened"));
 onMounted(async () => {
   opener = document.activeElement;
   await nextTick();
-  panel.value?.querySelector<HTMLInputElement>('[data-testid="cell-dir-input"]')?.focus();
+  focusDirInput();
 });
 
 // Only when focus is still OURS to give back. A launch moves it on purpose (the new terminal takes
@@ -130,7 +146,10 @@ onBeforeUnmount(() => {
     role="dialog"
     :aria-label="t('tips.overlays.startTerminal')"
   >
+    <RemoteHostPicker v-if="remoteHosts.length" v-model="remoteHostId" :hosts="remoteHosts" />
+    <RemoteLaunchForm v-if="remoteHost" :key="remoteHost.id" :host="remoteHost" @start="(value) => emit('start-remote', value)" @close="emit('close')" />
     <CellLaunchForm
+      v-else
       :dir="dir"
       :agent="pickedAgent"
       :choice="launchChoice"

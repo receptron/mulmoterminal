@@ -80,6 +80,7 @@ const props = defineProps<
     // A filmstrip thumbnail's ⋮ (the roster row's menu), or null. Command and launcher cells cannot
     // be set aside or marked, so theirs holds moving and closing.
     rowMenu?: RowMenuModel | null | undefined;
+    panesHidden?: boolean;
   }
 >();
 
@@ -175,7 +176,7 @@ function onHeaderClick(event: MouseEvent) {
                ones — which is where both callers already had theirs. -->
           <slot v-if="!thumbnail" name="actions" />
           <CockpitRowMenu v-if="thumbnail && rowMenu" v-bind="rowMenu" axis="horizontal" @move="(dir) => emit('move', dir)" @close="emit('close')" />
-          <CellChromeButtons v-bind="chromeProps" :close-only="thumbnail" v-on="chromeEvents" />
+          <CellChromeButtons v-bind="chromeProps" :close-only="thumbnail" :panes-hidden="panesHidden" v-on="chromeEvents" />
         </span>
       </div>
       <slot />

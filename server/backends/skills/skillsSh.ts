@@ -4,6 +4,7 @@
 // not read it" rather than a guess. Nothing here writes to disk.
 import { z } from "zod";
 import { isRemoteSkillId, isRemoteSource, type RemoteSkill, type RemoteSkillDoc } from "../../../common/skillsSh.js";
+import { readChunks } from "../../infra/http/readChunks.js";
 
 const SKILLS_SH_ORIGIN = "https://skills.sh";
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -32,20 +33,6 @@ export async function readCapped(res: Response, maxBytes: number): Promise<strin
   if (!res.body) return "";
   const chunks = await readChunks(res.body.getReader(), maxBytes);
   return chunks === null ? null : new TextDecoder().decode(Buffer.concat(chunks));
-}
-
-async function readChunks(reader: ReadableStreamDefaultReader<Uint8Array>, maxBytes: number): Promise<Uint8Array[] | null> {
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (let next = await reader.read(); !next.done; next = await reader.read()) {
-    total += next.value.byteLength;
-    if (total > maxBytes) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(next.value);
-  }
-  return chunks;
 }
 
 export const fetchText: FetchText = async (url, signal) =>

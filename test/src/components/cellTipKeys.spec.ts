@@ -19,6 +19,8 @@ import PinToggleSource from "../../../src/components/PinToggle.vue?raw";
 import AccountMarkSource from "../../../src/components/AccountMark.vue?raw";
 import CollectionMarkSource from "../../../src/components/CollectionMark.vue?raw";
 import PeerNameChipSource from "../../../src/components/PeerNameChip.vue?raw";
+import HostMarkSource from "../../../src/components/HostMark.vue?raw";
+import RemoteHostGoneSource from "../../../src/components/RemoteHostGone.vue?raw";
 import workCommentNoticeSource from "../../../src/composables/workCommentNotice.ts?raw";
 
 // The surface this section covers. A file added to the cell's chrome belongs here too.
@@ -37,6 +39,8 @@ const CELL_SOURCES: Record<string, string> = {
   "AccountMark.vue": AccountMarkSource,
   "CollectionMark.vue": CollectionMarkSource,
   "PeerNameChip.vue": PeerNameChipSource,
+  "HostMark.vue": HostMarkSource,
+  "RemoteHostGone.vue": RemoteHostGoneSource,
   "workCommentNotice.ts": workCommentNoticeSource,
 };
 

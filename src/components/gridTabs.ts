@@ -1,3 +1,4 @@
+import { isRemoteHostId } from "../../common/remoteHosts";
 import type { RunCommand } from "./runCommand";
 import type { Translate } from "../i18n/translate";
 import type { LaunchChoice } from "./wsUrl";
@@ -66,6 +67,9 @@ export interface Cell {
   // Kept across a reload so the header can keep saying which login it is; the SERVER is what holds
   // the session to it, so a stale value here can mislabel a cell but never move its conversation.
   account?: string;
+  // The remote host this cell's terminal runs on (#3506), or absent for this machine. Fixed for the
+  // cell's life: what it decides (src/components/remoteCell.ts) must not change under a live session.
+  remoteHost?: string;
   // Set aside by the user: still connected and still holding its history, just sunk out of the
   // way (#992). Stored as the ABSENCE of the key when not parked, for the same reason `agent`
   // is — only an absent key survives the JSON a persisted cell round-trips.
@@ -170,9 +174,12 @@ export function setCellParked(state: GridState, uid: number, parked: boolean): G
 
 // A cell's launcher ran a script.json command: attach it, turning the launch cell
 // into a command terminal. Ephemeral — command cells aren't persisted.
+// The command came from THIS machine's launch form, so it runs here even in a cell that was remote.
 export function runCommand(state: GridState, uid: number, command: Cell["command"]): GridState {
-  return { ...state, cells: state.cells.map((c) => (c.uid === uid ? { ...c, command } : c)) };
+  return { ...state, cells: state.cells.map((c) => (c.uid === uid ? { ...withoutRemoteHost(c), command } : c)) };
 }
+
+const withoutRemoteHost = ({ remoteHost: _dropped, ...rest }: Cell): Cell => rest;
 
 // A cell launched a configured program (shell/codex/…): attach the launcher and its
 // directory, turning the launch cell into a persistent launcher terminal. Its session
@@ -218,8 +225,10 @@ export function jumpTo(state: GridState, uid: number, order: readonly number[]):
 }
 
 // The Run button opened a script in a spare cell next to the cell that triggered it.
+// On the host of the cell it was run from: a remote cell's Run menu and header buttons are the remote's.
 export function runScriptInNewCell(state: GridState, afterUid: number, command: NonNullable<Cell["command"]>): GridState {
-  return insertCellAfter(state, afterUid, { session: null, cwd: null, command });
+  const remoteHost = state.cells.find((c) => c.uid === afterUid)?.remoteHost;
+  return insertCellAfter(state, afterUid, { session: null, cwd: null, command, ...(remoteHost ? { remoteHost } : {}) });
 }
 
 // Close a cell: drop it and reflow the list (later cells pack forward across
@@ -661,6 +670,7 @@ export function parseGridState(raw: string | null): GridState | null {
         ...(agent === undefined ? {} : { agent }),
         ...(isCustomAgentId(c.customAgent) ? { customAgent: c.customAgent } : {}),
         ...(isAccountId(c.account) ? { account: c.account } : {}),
+        ...(isRemoteHostId(c.remoteHost) ? { remoteHost: c.remoteHost } : {}),
         ...(c.parked === true ? { parked: true as const } : {}),
       };
     });

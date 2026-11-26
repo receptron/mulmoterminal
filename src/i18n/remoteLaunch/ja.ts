@@ -1,0 +1,14 @@
+export const remoteLaunchJa = {
+  runOn: "起動先",
+  thisMachine: "このマシン",
+  unreachable: "{label} に接続できません。ssh のトンネルは開いていますか？",
+  versionMismatch: "{label} の MulmoTerminal はメジャーバージョンが異なります。",
+  dirLabel: "{label} 上のディレクトリ",
+  dirPlaceholder: "/home/you/project",
+  dirNeedsAbsolute: "{label} 上の絶対パスを / から入力してください。",
+  start: "{label} で起動",
+  localOnly: "上のディレクトリは {label} 側のものです。このマシンの保存済みディレクトリ、ランチャー、カスタムエージェント、アカウントはここには出しません。",
+  workspace: "ワークスペース",
+  dirsFailed: "{label} の保存済みディレクトリを読めませんでした: {error}",
+  chipFill: "{path} を使う",
+};

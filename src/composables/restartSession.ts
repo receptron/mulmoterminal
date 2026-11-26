@@ -10,6 +10,7 @@
 // process back, with the old config, and looks exactly like a restart that worked.
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import { jsonBody } from "../jsonBody";
+import { sessionWritePath } from "../components/remoteCell";
 
 /** Everything the restart does to the world, injected so the ordering above can be tested. */
 export interface RestartSteps {
@@ -46,9 +47,9 @@ export async function restartSession(sessionId: string | null, steps: RestartSte
  *  Strictly `=== true`: an unreadable body parses to `{}`, and jsonBody's own warning is that a
  *  caller recording success must not take that for an answer. Unconfirmed here costs a retry; a
  *  false confirmation costs a restart that silently did not happen. */
-export async function reapSessionOnServer(sessionId: string): Promise<boolean> {
+export async function reapSessionOnServer(sessionId: string, host: string | null = null): Promise<boolean> {
   try {
-    const res = await fetchWithTimeout(`/api/session/${encodeURIComponent(sessionId)}/terminate`, { method: "POST" });
+    const res = await fetchWithTimeout(sessionWritePath(host, sessionId, "terminate"), { method: "POST" });
     if (!res.ok) {
       console.warn(`[restart] terminate ${sessionId} answered HTTP ${res.status}`);
       return false;
