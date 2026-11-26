@@ -8,6 +8,40 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@13.8.2 — 2026-11-26
+
+> **Setup guide:** [13.8.2 — A conversation moved to the background stays in view](https://receptron.github.io/mulmoterminal/guide/en/v13.8.2.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.8.2.html))
+
+### Conversations moved to the background (#3540, #3545)
+
+For #3538 and #3544.
+
+- `SessionStart` with `source: "fork"` (Claude Code 2.1.332, sent by the process ← forks the conversation into) is a new conversation move, `follow`: the cleared mark records the forked id as its successor and keeps the boundary it already had, so every `transcriptIdOf()` reader (activity timeline, conversation pane, header reply, title, push) and the respawn follow the new id. The header and title are left alone. The FAQ entry for #1812 says so (en / ja).
+- `speaksForConversation()` keeps `SessionEnd` and `SessionStart` `startup` from re-learning claude's own id (`claudeSessionIds`). Claude Code's pre-warmed background spare posts `startup` under the cell's hook header with an id of its own, and every process posts `SessionEnd` at teardown in no fixed order; the prompts pane reads that id ahead of the mark's successor.
+
+### Transcript turns (#3550)
+
+For #3546.
+
+- A user record opens a turn by one rule, `opensTurn()`: a meta record (`isMeta`: a skill's body after a Skill call, a pasted image's note) opens one only under a `promptId` other than the open turn's. Conversation turns, last turn and current-turn reply, latest prompt, current-turn tool names, user-turn counts, the prompt-history fallback, the title window, the conversation view and the Library index all use it, and the conversation view renders nothing for a meta record that opens no turn.
+
+### Skill evaluation (#3531, #3532)
+
+For #3529 and #3530.
+
+- An improvement is compared with the measurement it was written from by the summary's own rule: better or worse only when the with-skill pass-rate gap exceeds either run's spread and one task's worth, otherwise no evidence, pending when either run has nothing to compare. The panel names the tasks it passed less often, and the next step points at Adopt only for better.
+- The summary lists use tasks that pass every time with and without the skill (`passesEitherWay`); the result names them and the per-task table marks them. The drafting skill asks for tasks an agent without the skill is likely to get wrong.
+
+### HTML plan skill (#3542)
+
+For #3541.
+
+- `mulmoterminal-html-plan` checks for `presentHtml` first and, without it, stops and names switching Canvas on in the launcher's MCP toggles and **Restart the agent**, ruling out posting to `/api/mcp/…`, writing a file or opening a browser. `mulmoterminal-data-analysis` uses the same recovery wording.
+
+### Development (#3548)
+
+- Code jscpd flagged is shared: `exchange-fold.ts` for the copilot / Antigravity / Grok last-turn readers, `toolCallRow` / `proseThenCallRows` in `transcript-view.ts`, `mountProjectsRead` for two Library routes, `LibraryBackButton.vue`, and one header list in the usage retrospective.
+
 ## mulmoterminal@13.8.1 — 2026-11-26
 
 > **Setup guide:** [13.8.1 — Skill evaluation you can rely on, and its guide](https://receptron.github.io/mulmoterminal/guide/en/v13.8.1.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.8.1.html))

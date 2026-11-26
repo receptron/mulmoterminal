@@ -208,7 +208,7 @@ npx mulmoterminal@latest
 この 3 つならどれでも同じで、WORKING DIRECTORY 行の先頭にある **WORKSPACE** チップがそこへの近道です（Antigravity・Grok・Muse・Cursor は例外で、どこで動かしてもディレクトリに登録されたぶんだけ → [Antigravity・Grok・Muse・Cursor はどこでも登録が要る](basics.html#antigravity-gui-tools)）。**起動コマンド（launch command）はこれには当たりません** — コマンドラインを逐語的に実行するだけで、`claude` であっても GUI ツールは付きません。
 プロジェクトのディレクトリで起動したセルは、そのディレクトリに登録されているツールグループだけを持つので、GUI ツールが要るならランチャの MCP トグルで登録します（→ [どのディレクトリで起動するか](basics.html#launch-dir)）。
 
-### 開き直したセルで、最後の会話が消えていました。なくなったのですか？
+### 開き直したセルで、最後の会話が消えていました。なくなったのですか？ {#cell-reopened}
 
 **なくなっていません。別のセッション ID で、ディスクに残っています。** Claude Code で会話を
 バックグラウンドに移すと（**←** キー、"Your conversation moved to the background"）、Claude Code は

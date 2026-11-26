@@ -214,7 +214,7 @@ cells that get colour, a chime and a phone push, because they're the ones that s
 Claude, Codex or Copilot, it is the same, and the **WORKSPACE** chip at the head of the WORKING DIRECTORY row is the quick way to get there (Antigravity, Grok, Muse and Cursor are the exceptions: wherever one of them runs, it gets what its directory registered → [Antigravity, Grok, Muse and Cursor register everywhere](basics.html#antigravity-gui-tools)). A **launch command** is not this — it runs your command line verbatim and carries no GUI tools, `claude` included.
 A cell in a project directory has only the tool groups registered for that directory, so register one with the launcher's MCP toggles when you want GUI tools there (→ [which directory to launch in](basics.html#launch-dir)).
 
-### A cell I reopened came back without my latest conversation. Is it gone?
+### A cell I reopened came back without my latest conversation. Is it gone? {#cell-reopened}
 
 **No — it is still on disk, under another session id.** When you move a conversation to the
 background in Claude Code (the **←** key, "Your conversation moved to the background"), Claude Code

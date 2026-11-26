@@ -8,8 +8,8 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **13.8.1 is out.** Skill evaluation you can rely on — drafted tasks always save, checks are graded by
-> meaning, improvements keep untested rules — and a step-by-step guide to it. [Setup guide](v13.8.1.html)
+> **13.8.2 is out.** A Claude conversation moved to the background with ← stays in the activity history
+> and conversation pane, and a skill call no longer splits a turn. [Setup guide](v13.8.2.html)
 
 ## What is MulmoTerminal? {#what-is}
 
