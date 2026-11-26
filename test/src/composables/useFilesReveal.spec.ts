@@ -288,10 +288,21 @@ describe("following the tab in front", () => {
   // #3557. The host's file is not part of the remembered tree, so its folders open.
   it("opens the front row's folders when following starts on a file the host opened", async () => {
     const h = harness();
-    h.frontPath.value = "src/deep/buried.ts";
-    h.reveal.followFrontTab(h.reveal.startEpoch(), true);
+    await frontTo(h, "src/deep/buried.ts");
+    h.reveal.followFrontTab(h.reveal.startEpoch(), "src/deep/buried.ts");
     await flushPromises();
     expect(h.opened).toEqual(["src", "src/deep"]);
+    expect(h.scrolled).toEqual(["src/deep/buried.ts"]);
+  });
+
+  // The host's open is still on its way, or was declined: the tab in front is the remembered one, and
+  // a folder the reader closed stays closed.
+  it("only scrolls when the tab in front is not the file the host asked for", async () => {
+    const h = harness();
+    await frontTo(h, "src/deep/buried.ts");
+    h.reveal.followFrontTab(h.reveal.startEpoch(), "README.md");
+    await flushPromises();
+    expect(h.opened).toEqual([]);
     expect(h.scrolled).toEqual(["src/deep/buried.ts"]);
   });
 

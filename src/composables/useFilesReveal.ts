@@ -43,9 +43,9 @@ export interface FilesReveal {
   stopShowing: () => void;
   /** The remembered pane is back: from now on the tree follows the tab in front, and it is put on
    *  that tab's row at once — the remembered scroll may have left the row off screen (#3058).
-   *  False, and nothing done, for a startup a reset has since made stale. `hostOpened`: the host
-   *  opened a file during this startup, so the front tab is that file and its folders open (#3557). */
-  followFrontTab: (startedAt: number, hostOpened?: boolean) => boolean;
+   *  False, and nothing done, for a startup a reset has since made stale. `hostOpened`: the file the
+   *  host asked for during this startup, whose folders open when it is the one in front (#3557). */
+  followFrontTab: (startedAt: number, hostOpened?: string | null) => boolean;
   /** Which startup this is, for `followFrontTab`: a reset makes every earlier one stale. */
   startEpoch: () => number;
   /** The pane is re-rooting: a reveal in flight must not scroll the new tree to a row from the
@@ -71,7 +71,7 @@ function followsFrontTab(
   frontPath: () => string | null,
   showInTree: (pathRel: string) => Promise<void>,
   scrollToRow: (pathRel: string) => void,
-): { start: (startedAt: number, hostOpened?: boolean) => boolean; stop: () => void; epoch: () => number } {
+): { start: (startedAt: number, hostOpened?: string | null) => boolean; stop: () => void; epoch: () => number } {
   let following = false;
   // A startup still running when the pane re-rooted must not switch following on in the new root.
   let epoch = 0;
@@ -79,11 +79,11 @@ function followsFrontTab(
     if (pathRel && following) void showInTree(pathRel);
   });
   return {
-    start: (startedAt, hostOpened = false) => {
+    start: (startedAt, hostOpened = null) => {
       if (startedAt !== epoch) return false;
       following = true;
       const pathRel = frontPath();
-      if (pathRel && hostOpened) void showInTree(pathRel);
+      if (pathRel && pathRel === hostOpened) void showInTree(pathRel);
       else if (pathRel) scrollToRow(pathRel);
       return true;
     },

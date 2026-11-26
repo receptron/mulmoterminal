@@ -111,6 +111,13 @@ describe("the Files tree follows the tab in front", () => {
     expect(scrolled).toContain("docs/deep/x.md");
   });
 
+  it("follows a file the route asked for while the pane was still starting", async () => {
+    const { w, releaseRoot } = mountWithRootHeld();
+    await w.setProps({ requestedPath: "docs/deep/x.md" });
+    expect(await rowsAfterRoot(w, releaseRoot)).toEqual(SHOWN);
+    expect(scrolled).toContain("docs/deep/x.md");
+  });
+
   it("follows a file an agent showed while the pane was still starting", async () => {
     const { w, releaseRoot } = mountWithRootHeld();
     void (w.vm as unknown as { showFile: (t: { path: string; view: string }) => Promise<void> }).showFile({ path: "docs/deep/x.md", view: "editor" });
