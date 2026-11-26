@@ -8,10 +8,12 @@ import { usePollWhileVisible } from "./usePollWhileVisible";
 import type { GitStatus } from "../../common/gitStatus";
 import { isRecord } from "../../common/isRecord";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
+import { dirApiUrl } from "./dirAddress";
 
 const POLL_MS = 10_000;
 const isGitStatus = (v: unknown): v is GitStatus => isRecord(v) && typeof v.repo === "boolean";
 
+/** `cwd` is a directory key (dirAddress.ts): a remote one is read through the gateway. */
 export function useGitStatus(cwd: Ref<string | null>) {
   const status = ref<GitStatus | null>(null);
   let req = 0;
@@ -32,7 +34,7 @@ export function useGitStatus(cwd: Ref<string | null>) {
     }
     active += 1;
     try {
-      const url = `/api/git-status?cwd=${encodeURIComponent(dir)}${forced ? "&fresh=1" : ""}`;
+      const url = dirApiUrl(dir, "/api/git-status", forced ? { fresh: "1" } : {});
       const res = await fetchWithTimeout(url, undefined, SLOW_COMMAND_TIMEOUT_MS);
       if (!res.ok) return;
       const data: unknown = await res.json();

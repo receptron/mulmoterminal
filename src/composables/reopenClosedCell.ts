@@ -4,9 +4,14 @@ import { paletteTerminals } from "./commandPalette";
 import { cellForClosed, reopenableClosed, type ClosedCell } from "./recentlyClosed";
 import { openCellAt } from "./useNewTerminal";
 import { forgetClosedCell, recentlyClosed } from "./useRecentlyClosed";
+import { configuredRemoteHosts } from "./configuredRemoteHosts";
+import { remoteHostStatus } from "../components/remoteHostStatus";
+
+// Asked only for an entry that names a host, so the list is never fetched on a machine without one.
+const hostGone = (host: string): boolean => remoteHostStatus(host, configuredRemoteHosts().value) === "gone";
 
 /** The closed cells worth offering: a conversation the grid has open again is not closed any more. */
-export const reopenableNow = (): ClosedCell[] => reopenableClosed(recentlyClosed.value, paletteTerminals.value?.openSessionIds() ?? []);
+export const reopenableNow = (): ClosedCell[] => reopenableClosed(recentlyClosed.value, paletteTerminals.value?.openSessionIds() ?? [], hostGone);
 
 export function reopenClosedCell(closed: ClosedCell): void {
   forgetClosedCell(closed);

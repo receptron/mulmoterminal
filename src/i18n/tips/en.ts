@@ -1,8 +1,13 @@
+import { remoteLaunchEn } from "../remoteLaunch/en";
 // Hover tips and aria-labels, one section per surface. Kept in its own file per locale so the
 // bundles do not grow past the line limit; each bundle takes it as its `tips` section.
 export const tipsEn = {
   cell: {
-    remoteHost: "Runs on {host}. Files, git, panes and tools for this terminal are not available here yet.",
+    remoteHost: "Runs on {host}. Its files open in the Files pane; its other panes and tools are not available here yet.",
+    remoteBrowseFiles: "{path}: browse its files",
+    remoteHostGone: "{host} is no longer in remoteHosts in config.json, so this terminal cannot connect. Close it, or add the host back and reload.",
+    remoteTunnelDown:
+      "Cannot reach {host}. Is its ssh tunnel (ssh -L) still running, and MulmoTerminal on {host}? This terminal reconnects by itself once it is back.",
     running: "Running…",
     finished: "Finished",
     exited: "Exited",
@@ -89,6 +94,7 @@ export const tipsEn = {
     },
   },
   launch: {
+    remote: remoteLaunchEn,
     cancel: "Cancel new terminal",
     chipRunning: "{path} — a session is already running here",
     chipWorkspace: "{path} — the workspace: every GUI tool is available here",

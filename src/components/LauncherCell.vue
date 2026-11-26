@@ -8,6 +8,9 @@ import { isThumbnail, type GridCellEmits, type GridCellProps } from "./gridCell"
 import { CELL_BTN, CELL_TERM } from "./cellChromeClasses";
 import { useI18n } from "vue-i18n";
 import HostMark from "./HostMark.vue";
+import RemoteHostGone from "./RemoteHostGone.vue";
+import { useRemoteHostStatus } from "../composables/configuredRemoteHosts";
+import { mayConnect } from "./remoteHostStatus";
 import { onThisMachine } from "./remoteCell";
 
 const { t } = useI18n();
@@ -49,6 +52,7 @@ const finished = ref(false);
 
 // The path menu acts on this machine's directory of that name, so a remote launcher offers none.
 const localCwd = computed(() => onThisMachine(props.remoteHost, props.cwd));
+const hostStatus = useRemoteHostStatus(props.remoteHost);
 const target = computed(() => (isShellLauncher(props.launcher) ? { shell: true as const } : { index: props.launcher.index }));
 
 // Running counts as "working"; once the process exits it's idle (never "waiting").
@@ -84,6 +88,7 @@ function relaunch() {
     :thumbnail="thumbnail"
     :row-menu="rowMenu"
     :slot-key="`cell-${uid}`"
+    :panes-hidden="!!remoteHost"
     v-on="shellEvents"
     @path-problem="(message) => void termRef?.showHint(message, 'folder_open')"
   >
@@ -93,7 +98,9 @@ function relaunch() {
         <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
       </button>
     </template>
+    <RemoteHostGone v-if="remoteHost && hostStatus === 'gone'" :host="remoteHost" />
     <TerminalView
+      v-else-if="mayConnect(hostStatus)"
       ref="termRef"
       class="cell-term"
       :class="CELL_TERM"

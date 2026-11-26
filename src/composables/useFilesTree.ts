@@ -7,7 +7,8 @@
 // it, and the request generation that decides which answer is still wanted.
 import { computed, ref, type ComputedRef, type Ref } from "vue";
 import { cacheListing, cachedListingFor, type ListingEntry } from "../components/filesTreeCache";
-import { browseQuery } from "../components/filesPaneApi";
+import { browseQuery, browseUrl } from "../components/filesPaneApi";
+import { dirKeyOf } from "./dirAddress";
 import { isRecord } from "../../common/isRecord";
 import { isUnknownArray } from "../../common/isUnknownArray";
 import { jsonBody } from "../jsonBody";
@@ -94,6 +95,7 @@ export function adoptListing(before: TreeNode[] | null, entries: ListingEntry[],
 interface TreeReads {
   roots: () => TreeNode[];
   cwd: () => string | null;
+  host: () => string | null;
   generation: () => number;
   asked: Map<string, number>;
 }
@@ -107,7 +109,7 @@ async function refreshDir(tree: TreeReads, dirRel: string): Promise<void> {
   const read = (tree.asked.get(dirRel) ?? 0) + 1;
   tree.asked.set(dirRel, read);
   try {
-    const entries = await fetchListing(tree.cwd(), dirRel);
+    const entries = await fetchListing(tree.cwd(), dirRel, tree.host());
     if (generation !== tree.generation() || tree.asked.get(dirRel) !== read) return;
     const current = findIn(tree.roots(), dirRel);
     if (current?.dir && current.loaded) current.children = adoptListing(current.children, entries, dirRel);
@@ -129,11 +131,11 @@ async function refreshLoadedUnder(tree: TreeReads, nodes: TreeNode[], wanted: ()
 }
 
 /** Open a closed directory, reading it the first time, or close an open one. */
-async function toggleDir(cwd: () => string | null, node: TreeNode): Promise<void> {
+async function toggleDir(tree: Pick<TreeReads, "cwd" | "host">, node: TreeNode): Promise<void> {
   node.expanded = !node.expanded;
   if (node.expanded && !node.loaded) {
     try {
-      node.children = (await fetchListing(cwd(), node.path)).map((entry) => makeNode(entry, node.path));
+      node.children = (await fetchListing(tree.cwd(), node.path, tree.host())).map((entry) => makeNode(entry, node.path));
       node.loaded = true;
     } catch {
       node.expanded = false; // couldn't read — collapse again
@@ -141,9 +143,9 @@ async function toggleDir(cwd: () => string | null, node: TreeNode): Promise<void
   }
 }
 
-/** One directory's listing, off the wire. */
-export async function fetchListing(cwd: string | null, pathRel: string): Promise<ListingEntry[]> {
-  const res = await fetchWithTimeout(`/api/files/browse/list?${browseQuery(cwd, pathRel)}`);
+/** One directory's listing, off the wire: this machine's, or `host`'s. */
+export async function fetchListing(cwd: string | null, pathRel: string, host: string | null = null): Promise<ListingEntry[]> {
+  const res = await fetchWithTimeout(browseUrl(host, "list", browseQuery(cwd, pathRel)));
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await jsonBody(res);
   // A directory with no children answers `{ entries: [] }`, so an ABSENT array is a body we could
@@ -173,16 +175,18 @@ export interface FilesTree {
   reset: () => void;
 }
 
-export function useFilesTree(cwd: () => string | null): FilesTree {
+export function useFilesTree(cwd: () => string | null, host: () => string | null = () => null): FilesTree {
   const roots = ref<TreeNode[] | null>(null);
   const error = ref<string | null>(null);
   let reqId = 0;
-  const reads: TreeReads = { roots: () => roots.value ?? [], cwd, generation: () => reqId, asked: new Map() };
+  const reads: TreeReads = { roots: () => roots.value ?? [], cwd, host, generation: () => reqId, asked: new Map() };
+  // Filed by host as well, so a remote directory never paints this machine's listing of the same path.
+  const cacheKey = (): string | null => dirKeyOf(host(), cwd());
 
   /** Show this directory's last listing, if there is one. Says whether it painted, because what
    *  happens to it when the read fails is not what happens to a tree that was really read. */
   function paintCachedRoot(): boolean {
-    const cached = cachedListingFor(cwd());
+    const cached = cachedListingFor(cacheKey());
     if (!cached) return false;
     roots.value = cached.map((entry) => makeNode(entry, ""));
     return true;
@@ -196,10 +200,10 @@ export function useFilesTree(cwd: () => string | null): FilesTree {
     // tree already up, and replacing that with an older copy would be a step backwards (#2148).
     const painted = roots.value === null && paintCachedRoot();
     try {
-      const entries = await fetchListing(cwd(), "");
+      const entries = await fetchListing(cwd(), "", host());
       if (id === reqId) {
         roots.value = adoptListing(roots.value, entries);
-        cacheListing(cwd(), entries);
+        cacheListing(cacheKey(), entries);
       }
     } catch (e) {
       if (id !== reqId) return;
@@ -223,7 +227,7 @@ export function useFilesTree(cwd: () => string | null): FilesTree {
     error,
     rows: computed(() => flattenRows(roots.value ?? [])),
     loadRoot,
-    toggleDir: (node) => toggleDir(cwd, node),
+    toggleDir: (node) => toggleDir(reads, node),
     refresh: (dirRel) => (dirRel === "" ? loadRoot() : refreshDir(reads, dirRel)),
     refreshAll,
     findNode: (target) => findIn(roots.value ?? [], target),

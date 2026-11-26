@@ -1,8 +1,12 @@
+import { remoteLaunchKo } from "../remoteLaunch/ko";
 import type { Messages } from "../messages";
 
 export const tipsKo: Messages["tips"] = {
   cell: {
-    remoteHost: "{host}에서 실행 중입니다. 이 터미널의 파일, git, 패널, 도구는 아직 여기서 사용할 수 없습니다.",
+    remoteHost: "{host}에서 실행 중입니다. 파일은 파일 패널에서 열 수 있습니다. 다른 패널과 도구는 아직 여기서 사용할 수 없습니다.",
+    remoteBrowseFiles: "{path}: 파일 보기",
+    remoteHostGone: "{host}이(가) config.json의 remoteHosts에서 사라져 이 터미널은 연결할 수 없습니다. 닫거나, 호스트를 다시 추가한 뒤 새로 고치세요.",
+    remoteTunnelDown: "{host}에 연결할 수 없습니다. ssh 터널(ssh -L)과 {host}의 MulmoTerminal이 실행 중인가요? 다시 연결되면 자동으로 이어집니다.",
     running: "실행 중…",
     finished: "완료",
     exited: "종료됨",
@@ -90,6 +94,7 @@ export const tipsKo: Messages["tips"] = {
     },
   },
   launch: {
+    remote: remoteLaunchKo,
     cancel: "새 터미널 취소",
     chipRunning: "{path} — 여기서 이미 세션이 실행 중입니다",
     chipWorkspace: "{path} — 작업 공간: 여기서는 모든 GUI 도구를 쓸 수 있습니다",
