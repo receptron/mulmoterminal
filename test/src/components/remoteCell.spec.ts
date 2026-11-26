@@ -18,7 +18,17 @@ describe("isRemoteHost / onThisMachine", () => {
 
 describe("cellActionAllowed", () => {
   // The whole list, so a change to what a remote cell may do is a visible edit here.
-  const ALLOWED_ON_REMOTE = ["zoom-toggle", "mark-unread", "terminal-close", "terminal-move-prev", "terminal-move-next", "terminal-park", "terminal-voice"];
+  const ALLOWED_ON_REMOTE = [
+    "zoom-toggle",
+    "mark-unread",
+    "terminal-close",
+    "terminal-move-prev",
+    "terminal-move-next",
+    "terminal-restart",
+    "terminal-park",
+    "terminal-voice",
+    "terminal-note",
+  ];
 
   it("allows every action on a local cell", () => {
     CELL_ACTIONS.forEach((action) => expect(cellActionAllowed(null, action)).toBe(true));

@@ -113,7 +113,7 @@ import RemoteHostGone from "./RemoteHostGone.vue";
 import { useRemoteCellActivity } from "../composables/useRemoteCellActivity";
 import { useRemoteHostStatus } from "../composables/configuredRemoteHosts";
 import { mayConnect } from "./remoteHostStatus";
-import { activityKeyOf, cellActionAllowed, isRemoteHost, onThisMachine, REMOTE_CELL_DECLINE_EN, sessionDetailPath } from "./remoteCell";
+import { activityKeyOf, cellActionAllowed, isRemoteHost, onThisMachine, REMOTE_CELL_DECLINE_EN, sessionDetailPath, sessionWritePath } from "./remoteCell";
 
 // How long a handoff failure stays on the cell before it clears itself.
 const ASK_MSG_MS = 4000;
@@ -924,7 +924,7 @@ function teardown() {
   // Reap on the server over HTTP too — the WS `terminate` only reaches the server while
   // the socket is open, so a disconnected cell's close button would otherwise leave its tmux alive.
   // Not awaited, unlike the restart's: this cell is going back to its launch form either way.
-  if (id && !isRemote) void reapSessionOnServer(id);
+  if (id) void reapSessionOnServer(id, props.remoteHost ?? null);
   launched.value = false;
   recordNextCwd = false; // drop any pending fresh-launch record from a torn-down session
   sessionId.value = null;
@@ -970,7 +970,7 @@ function teardown() {
 const restarting = ref(false);
 const RESTART_FAILED_EN = "Couldn't end the old session, so nothing was restarted — try again, or close the cell.";
 async function restart(): Promise<void> {
-  await restartWith(reapSessionOnServer);
+  await restartWith((id) => reapSessionOnServer(id, props.remoteHost ?? null));
 }
 
 // Move the session to the subscription picked on the account mark (#2950): the restart, with the
@@ -978,13 +978,12 @@ async function restart(): Promise<void> {
 async function switchSubscription(tokenId: string): Promise<void> {
   const id = sessionId.value;
   if (!id) return;
+  // The subscriptions are this machine's; a remote agent runs on the other machine's own login.
+  if (isRemote) return void termRef.value?.showHint(REMOTE_CELL_DECLINE_EN, "restart_alt");
   await restartWith((sessionToReap) => switchTokenOnServer(sessionToReap, tokenId));
 }
 
 async function restartWith(reap: (sessionId: string) => Promise<boolean>): Promise<void> {
-  // The reap would ask THIS server, which has no such process, answer "ended", and reconnect to the
-  // remote agent still running: a restart that looks done and did nothing.
-  if (isRemote) return void termRef.value?.showHint(REMOTE_CELL_DECLINE_EN, "restart_alt");
   // A worktree removal is running or waiting to be confirmed — that flow owns the pty. A restart
   // never opens that dialog itself: it discards nothing, so there is nothing to confirm.
   if (restarting.value || closeConfirm.value || closeBusy.value !== null) return;
@@ -1368,7 +1367,7 @@ function onMemoBlur() {
 // ordinary way to leave a text field, and losing the sentence to it would be the bug.
 async function saveMemo() {
   if (!memoEditing.value) return; // Enter or Escape already closed it; the blur that follows is not a second save
-  const id = localSession.value;
+  const id = sessionId.value;
   memoEditing.value = false;
   if (!id) return;
   const text = normalizeMemo(memoDraft.value);
@@ -1376,7 +1375,7 @@ async function saveMemo() {
   const previous = memo.value;
   memo.value = text || null;
   try {
-    const res = await fetchWithTimeout(`/api/session/${encodeURIComponent(id)}/memo`, {
+    const res = await fetchWithTimeout(sessionWritePath(props.remoteHost, id, "memo"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
@@ -1799,7 +1798,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
               :panes-hidden="isRemote"
               :timeline-available="!!localSession && agent === 'claude'"
               :library-available="!!localSession && agent === 'claude'"
-              :restart-available="launched && !!localSession"
+              :restart-available="launched && !!sessionId"
               :talk-available="talkAvailable"
               v-on="chromeEvents"
               @toggle-park="togglePark"

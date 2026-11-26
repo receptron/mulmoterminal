@@ -29,6 +29,8 @@ export const REMOTE_ROUTES = {
   header: { method: "GET", path: "/api/header", key: "cwd", access: "read", query: ["cwd", "agent", "session", "model"] },
   scripts: { method: "GET", path: "/api/scripts", key: "cwd", access: "read", query: ["cwd"] },
   skills: { method: "GET", path: "/api/skills", key: "cwd", access: "read", query: ["cwd"] },
+  memo: { method: "POST", path: "/api/session/:sid/memo", key: "session", access: "write", query: [] },
+  terminate: { method: "POST", path: "/api/session/:sid/terminate", key: "session", access: "write", query: [] },
 } as const satisfies Record<string, RemoteRoute>;
 
 export type RemoteRouteName = keyof typeof REMOTE_ROUTES;

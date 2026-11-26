@@ -24,14 +24,14 @@ const ON_REMOTE_CELL: Record<CellAction, boolean> = {
   "terminal-voice": true,
   "terminal-new-here": false,
   "terminal-new-adjacent": false,
-  "terminal-restart": false,
+  "terminal-restart": true,
   "terminal-timeline": false,
   "terminal-talk": false,
   "terminal-copy-code": false,
   "terminal-insert-path": false,
   "terminal-reveal": false,
   "terminal-diff": false,
-  "terminal-note": false,
+  "terminal-note": true,
   "terminal-send-turn": false,
   "terminal-send-since": false,
   "terminal-bring-turn": false,
@@ -54,6 +54,10 @@ export const actionAllowedOn = (cells: readonly { uid: number; remoteHost?: stri
 export const terminalPathFor = (host: string | null | undefined, path: string): string => (isRemoteHost(host) ? remotePath(host, path) : path);
 
 export const REMOTE_CELL_DECLINE_EN = "This terminal runs on another machine, so that is not available here yet.";
+
+/** A write to one session (`memo`, `terminate`): this server's route, or the gateway's for a remote cell. */
+export const sessionWritePath = (host: string | null | undefined, sessionId: string, action: "memo" | "terminate"): string =>
+  terminalPathFor(host, `/api/session/${encodeURIComponent(sessionId)}/${action}`);
 
 /** A remote cell's session, as the remote's rows name it. */
 export interface RemoteCellSession {
