@@ -8,7 +8,7 @@
 // generating one from that same pre-clear file, an in-flight set so a Stop hook and a roster
 // view do not both summarize, and a retry floor so a viewed-but-failing session is not
 // re-summarized on every poll.
-import { aiTitleFromParsed, conversationTurnsFromParsed, isTrivialPrompt, type ConversationTurn } from "../transcript/transcript.js";
+import { aiTitleFromParsed, createConversationTurnScan, isTrivialPrompt, type ConversationTurn } from "../transcript/transcript.js";
 import { forEachJsonlRecord } from "../../infra/fs/jsonl-file.js";
 import {
   emptyTitleWindow,
@@ -69,12 +69,14 @@ async function readTitleInputs(transcriptId: string, cwd: string): Promise<Title
   let anyTurn = false;
   let diskAiTitle: string | null = null;
   let read = true;
+  const turnOf = createConversationTurnScan();
   await forEachJsonlRecord(claudeTranscriptFile(cwd, transcriptId), (record) => {
-    conversationTurnsFromParsed([record]).forEach((turn) => {
+    const turn = turnOf(record);
+    if (turn !== null) {
       anyTurn = true;
       if (turn.role === "user") userTurns++;
       foldTitleWindow(window, turn);
-    });
+    }
     // The LAST one wins, the same rule session-reads.ts folds by.
     diskAiTitle = aiTitleFromParsed([record]) ?? diskAiTitle;
   }).catch(() => (read = false));

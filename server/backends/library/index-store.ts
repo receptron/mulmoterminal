@@ -14,7 +14,7 @@ import type { HistoryPrompt } from "./history-fold.js";
 import { spendTotals, type ReplyWeight } from "./spend-fold.js";
 
 /** Bump when a column or what a column means changes: the next open drops and rebuilds. */
-export const LIBRARY_SCHEMA_VERSION = 7;
+export const LIBRARY_SCHEMA_VERSION = 8;
 // A write that meets another process's lock waits SYNCHRONOUSLY, with the event loop stopped, for up
 // to this long; a reader in WAL mode never waits. So it stays short: a write that gives up is a pass
 // that runs again later, while a long wait is a frozen server.

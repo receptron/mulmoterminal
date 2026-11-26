@@ -27,7 +27,6 @@
 import {
   aiTitleFromParsed,
   customTitleOfRecord,
-  countUserTurnsFromParsed,
   emptyPromptTrail,
   foldPromptTrail,
   foldTurnToolNames,
@@ -35,8 +34,10 @@ import {
   latestTurnContextFromParsed,
   meaningfulPromptOf,
   sessionUsageFromParsed,
+  turnOpeningPrompt,
   type PromptTrail,
 } from "./transcript.js";
+import { emptyTurnBoundary, type TurnBoundaryState } from "./turn-boundary.js";
 import type { LatestTurnContext, SessionUsage } from "./transcript.js";
 import { isRecord } from "../../../common/isRecord.js";
 
@@ -66,6 +67,8 @@ export interface SummaryState {
   context: LatestTurnContext;
   /** Tool names in the current turn, emptied by each new user prompt. */
   turnTools: string[];
+  /** Which turn is open, so text written into it is not read as the next prompt. */
+  boundary: TurnBoundaryState;
 }
 
 export const emptySummaryState = (): SummaryState => ({
@@ -77,6 +80,7 @@ export const emptySummaryState = (): SummaryState => ({
   lastAssistantText: null,
   context: { model: null, contextTokens: 0 },
   turnTools: [],
+  boundary: emptyTurnBoundary(),
 });
 
 /** Every part of it, including the ones holding a collection: a resumed fold pushes into
@@ -90,13 +94,16 @@ export const copySummaryState = (state: SummaryState): SummaryState => ({
   lastAssistantText: state.lastAssistantText,
   context: { ...state.context },
   turnTools: [...state.turnTools],
+  boundary: { ...state.boundary },
 });
 
 export function foldSummary(into: SummaryState, record: Record<string, unknown>): void {
   // One-record windows: each rule still decides for itself what counts, so "what is a user
   // turn" or "which usage fields exist" lives in one place, not two.
   const one = [record];
-  into.userTurns += countUserTurnsFromParsed(one);
+  // Taken once: it advances the boundary, so the three rules below must share the answer.
+  const opening = turnOpeningPrompt(into.boundary, record);
+  if (opening !== null) into.userTurns += 1;
   const perRecord = sessionUsageFromParsed(one);
   into.usage.inputTokens += perRecord.inputTokens;
   into.usage.outputTokens += perRecord.outputTokens;
@@ -105,8 +112,8 @@ export function foldSummary(into: SummaryState, record: Record<string, unknown>)
   into.aiTitle = aiTitleFromParsed(one) ?? into.aiTitle;
   const renamed = customTitleOfRecord(record);
   if (renamed !== undefined) into.customTitle = renamed;
-  foldTurnToolNames(into.turnTools, record);
-  foldPromptTrail(into.prompts, record);
+  foldTurnToolNames(into.turnTools, record, opening);
+  foldPromptTrail(into.prompts, record, opening);
   // `?? previous` rather than an unconditional assign: an assistant record carrying only a
   // tool_use has no text, and must not blank out the reply the user is looking at.
   into.lastAssistantText = latestAssistantTextFromParsed(one) ?? into.lastAssistantText;

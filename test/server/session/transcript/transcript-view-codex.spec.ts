@@ -9,6 +9,7 @@
 // harness could not survive — half of it was the code it replaced — but the two things worth
 // keeping did: WHICH record shapes matter, and WHAT must hold once the old code is gone.
 import { describe, it, expect } from "vitest";
+import { emptyTurnBoundary } from "../../../../server/session/transcript/turn-boundary";
 import { createCodexFold, renderCodexRecord } from "../../../../server/session/transcript/transcript-view-codex";
 import { seededRandom } from "../../../helpers/seededRandom";
 import {
@@ -224,13 +225,15 @@ describe("claude's fold is exactly the shared fold plus claude's renderers", () 
       sequences.add(JSON.stringify(records));
       const viaClaude = emptyTranscriptScan();
       const viaShared = emptyTranscriptScan();
+      const claudeBoundary = emptyTurnBoundary();
+      const sharedBoundary = emptyTurnBoundary();
       for (const record of records) {
-        foldTranscriptView(viaClaude, record);
+        foldTranscriptView(viaClaude, record, claudeBoundary);
         // Claude's three readers, spelled out. A sidechain record is dropped WHOLE — not merely
         // disqualified as a boundary — or its rows land in whichever turn happens to be open.
         if (record.isSidechain === true) continue;
         foldTurnRecord(viaShared, {
-          prompt: turnBoundaryPrompt(record),
+          prompt: turnBoundaryPrompt(record, sharedBoundary),
           at: typeof record.timestamp === "string" ? record.timestamp : null,
           rows: renderRecord(record),
         });
