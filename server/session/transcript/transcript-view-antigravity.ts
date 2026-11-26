@@ -20,11 +20,8 @@
 import { isRecord } from "../../../common/isRecord.js";
 import { readString } from "../../../common/readString.js";
 import { antigravityPromptText } from "../../agents/antigravity/antigravity-sessions.js";
-import { type TranscriptScan, foldTurnRecord, toolResultRow, unknownRow } from "./transcript-view.js";
+import { type TranscriptScan, foldTurnRecord, proseThenCallRows, toolCallRow, toolResultRow, unknownRow } from "./transcript-view.js";
 import type { TranscriptRow } from "../../../common/transcriptView.js";
-
-/** How much of a tool call's arguments is shown — the bound the other agents' calls get. */
-const CALL_ARGS_MAX_CHARS = 200;
 
 const STAMP_LINE = /^(Created|Completed) At: .*\n/;
 
@@ -56,22 +53,7 @@ function argsText(args: unknown): string {
   }
 }
 
-const clipHead = (value: string): string => (value.length > CALL_ARGS_MAX_CHARS ? `${value.slice(0, CALL_ARGS_MAX_CHARS)}…` : value);
-
-function callRow(call: unknown): TranscriptRow {
-  if (!isRecord(call)) return unknownRow(call);
-  const name = readString(call.name).trim() || "(unnamed tool)";
-  const head = clipHead(argsText(call.args));
-  return { kind: "tool", text: head === "" ? name : `${name} ${head}`, call: true };
-}
-
-function plannerRows(record: Record<string, unknown>): TranscriptRow[] {
-  const prose = readString(record.content).trim();
-  const proseRows: TranscriptRow[] = prose === "" ? [] : [{ kind: "assistant", text: prose }];
-  const calls = record.tool_calls;
-  if (calls === undefined) return proseRows;
-  return [...proseRows, ...(Array.isArray(calls) ? calls.map(callRow) : [unknownRow(calls)])];
-}
+const callRow = (call: unknown): TranscriptRow => (isRecord(call) ? toolCallRow(readString(call.name), argsText(call.args)) : unknownRow(call));
 
 /** A tool's output, without the two timestamp lines agy opens every one with. */
 function outputRows(content: string): TranscriptRow[] {
@@ -85,7 +67,7 @@ export function renderAntigravityStep(record: Record<string, unknown>): Transcri
     const prompt = antigravityTurnPrompt(record);
     return prompt === null ? [] : [{ kind: "user", text: prompt }];
   }
-  if (record.type === "PLANNER_RESPONSE") return plannerRows(record);
+  if (record.type === "PLANNER_RESPONSE") return proseThenCallRows(record.content, record.tool_calls, callRow);
   if (record.source === "SYSTEM") return [];
   if (record.source === "MODEL" && typeof record.content === "string") return outputRows(record.content);
   if (record.source === "MODEL" && record.content === undefined) return [];

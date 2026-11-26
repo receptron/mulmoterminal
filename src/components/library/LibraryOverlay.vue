@@ -32,6 +32,7 @@ import type { LibraryConversation } from "../../../common/library";
 import LibraryStorage from "./LibraryStorage.vue";
 import LibraryRepeats from "./LibraryRepeats.vue";
 import { useLibraryStorage } from "../../composables/useLibraryStorage";
+import LibraryBackButton from "./LibraryBackButton.vue";
 
 const { t } = useI18n();
 const { isOpen, close } = useLibraryView();
@@ -466,14 +467,7 @@ onBeforeUnmount(() => {
           />
         </div>
         <div class="flex min-h-0 min-w-0 flex-1 flex-col" :class="readerShown ? '' : 'max-[760px]:hidden'">
-          <button
-            type="button"
-            class="hidden cursor-pointer items-center gap-1 border-0 bg-transparent px-4 pt-3 font-sans text-[13px] text-secondary max-[760px]:flex"
-            data-testid="library-back"
-            @click="readerShown = false"
-          >
-            <span class="material-symbols-outlined text-[18px]">arrow_back</span>{{ t("libraryView.back") }}
-          </button>
+          <LibraryBackButton data-testid="library-back" @click="readerShown = false" />
           <LibraryReader
             v-if="selected"
             :conversation="selected"

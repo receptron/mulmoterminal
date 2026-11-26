@@ -17,11 +17,8 @@
 import { isRecord } from "../../../common/isRecord.js";
 import { readString } from "../../../common/readString.js";
 import { userQueryText } from "../../agents/user-query.js";
-import { type TranscriptScan, foldTurnRecord, toolResultRow, unknownRow } from "./transcript-view.js";
+import { type TranscriptScan, foldTurnRecord, proseThenCallRows, toolCallRow, toolResultRow, unknownRow } from "./transcript-view.js";
 import type { TranscriptRow } from "../../../common/transcriptView.js";
-
-/** How much of a tool call's arguments is shown — the bound codex's and cursor's calls get. */
-const CALL_ARGS_MAX_CHARS = 200;
 
 /** Records that carry nothing a reader of the conversation wants. */
 const SILENT_TYPES: ReadonlySet<string> = new Set(["system", "reasoning"]);
@@ -43,22 +40,9 @@ export function grokTurnPrompt(record: Record<string, unknown>): string | null {
   return userQueryText(raw) || null;
 }
 
-const clipHead = (value: string): string => (value.length > CALL_ARGS_MAX_CHARS ? `${value.slice(0, CALL_ARGS_MAX_CHARS)}…` : value);
-
 /** A tool call: the name, then the head of its arguments (a JSON string as grok writes it). */
 function callRow(call: unknown): TranscriptRow {
-  if (!isRecord(call)) return unknownRow(call);
-  const name = readString(call.name).trim() || "(unnamed tool)";
-  const head = clipHead(readString(call.arguments).trim());
-  return { kind: "tool", text: head === "" ? name : `${name} ${head}`, call: true };
-}
-
-function assistantRows(record: Record<string, unknown>): TranscriptRow[] {
-  const prose = readString(record.content).trim();
-  const proseRows: TranscriptRow[] = prose === "" ? [] : [{ kind: "assistant", text: prose }];
-  const calls = record.tool_calls;
-  if (calls === undefined) return proseRows;
-  return [...proseRows, ...(Array.isArray(calls) ? calls.map(callRow) : [unknownRow(calls)])];
+  return isRecord(call) ? toolCallRow(readString(call.name), readString(call.arguments).trim()) : unknownRow(call);
 }
 
 /** A user prompt's rows: the unwrapped prompt, then anything that is not a text part. */
@@ -76,7 +60,7 @@ function promptRows(record: Record<string, unknown>): TranscriptRow[] {
 /** One chat_history message, rendered. */
 export function renderGrokRecord(record: Record<string, unknown>): TranscriptRow[] {
   if (record.type === "user") return isUserPrompt(record) ? promptRows(record) : [];
-  if (record.type === "assistant") return assistantRows(record);
+  if (record.type === "assistant") return proseThenCallRows(record.content, record.tool_calls, callRow);
   if (record.type === "tool_result") {
     const output = readString(record.content).trim();
     return output === "" ? [] : [toolResultRow(output)];

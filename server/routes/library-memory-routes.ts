@@ -57,27 +57,23 @@ async function changeableMemory(projectsRoot: string, slug: unknown, file: unkno
   return named !== null && !(await isTheIndex(path.dirname(named), path.basename(named))) ? named : null;
 }
 
+/** A GET answering `{ projects }` read from every memory folder of the directories the Library knows. */
+function mountProjectsRead(app: Express, call: LibraryCaller, route: string, read: (cwds: string[]) => Promise<unknown>): void {
+  app.get(route, async (_req, res) => {
+    const directories = await answer(res, call, "directories", []);
+    if (directories === undefined) return;
+    const cwds = Array.isArray(directories) ? directories.filter((cwd): cwd is string => typeof cwd === "string") : [];
+    try {
+      res.json({ projects: await read(cwds) });
+    } catch {
+      res.status(500).json({ error: "the memory folders could not be read" });
+    }
+  });
+}
+
 function mountMemoryReads(app: Express, call: LibraryCaller, projectsRoot: string): void {
-  app.get("/api/library/memory", async (_req, res) => {
-    const directories = await answer(res, call, "directories", []);
-    if (directories === undefined) return;
-    const cwds = Array.isArray(directories) ? directories.filter((cwd): cwd is string => typeof cwd === "string") : [];
-    try {
-      res.json({ projects: await listMemoryProjects(projectsRoot, cwds) });
-    } catch {
-      res.status(500).json({ error: "the memory folders could not be read" });
-    }
-  });
-  app.get("/api/library/memory-health", async (_req, res) => {
-    const directories = await answer(res, call, "directories", []);
-    if (directories === undefined) return;
-    const cwds = Array.isArray(directories) ? directories.filter((cwd): cwd is string => typeof cwd === "string") : [];
-    try {
-      res.json({ projects: await readMemoryHealth(projectsRoot, cwds) });
-    } catch {
-      res.status(500).json({ error: "the memory folders could not be read" });
-    }
-  });
+  mountProjectsRead(app, call, "/api/library/memory", (cwds) => listMemoryProjects(projectsRoot, cwds));
+  mountProjectsRead(app, call, "/api/library/memory-health", (cwds) => readMemoryHealth(projectsRoot, cwds));
   app.get("/api/library/memory/:slug/:file", async (req, res) => {
     const target = memoryFileOf(projectsRoot, req.params.slug, req.params.file);
     if (target === null) {
