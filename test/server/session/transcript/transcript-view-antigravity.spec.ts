@@ -133,3 +133,21 @@ describe("renderAntigravityStep", () => {
     expect(renderAntigravityStep(record).some((row) => row.kind === "unknown")).toBe(true);
   });
 });
+
+describe("createAntigravityFold, an artifact approval", () => {
+  const approval = {
+    source: "USER_EXPLICIT",
+    type: "USER_INPUT",
+    status: "DONE",
+    created_at: "2026-05-20T22:06:29Z",
+    content: "Comments on artifact URI: file:///w/implementation_plan.md\n\nThe user has approved this document.\n\n<USER_REQUEST>\n\n</USER_REQUEST>",
+  };
+
+  it("opens its own turn, so the work after it is not folded into the turn that asked for the plan", () => {
+    const scan = fold([user("make a plan"), output("CODE_ACTION", "Created file plan"), approval, output("CODE_ACTION", "Created file impl")]);
+    expect(scan.turns.map((turn) => [turn.at, turn.rows.map((row) => row.text)])).toEqual([
+      [expect.any(String), ["make a plan", "Created file plan"]],
+      ["2026-05-20T22:06:29Z", ["Comments on artifact URI: file:///w/implementation_plan.md\n\nThe user has approved this document.", "Created file impl"]],
+    ]);
+  });
+});

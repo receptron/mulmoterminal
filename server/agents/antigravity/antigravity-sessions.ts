@@ -12,16 +12,11 @@ import path from "node:path";
 import type { AgentConversation } from "../../session/list/agent-conversations.js";
 import { antigravityConversationExists } from "./antigravity-session.js";
 import { cleanTitle, parseJsonRecord, readTranscriptHead } from "../transcript-head.js";
+import { antigravityPromptText } from "./antigravity-prompt-text.js";
 
 const HEAD_BYTES = 64 * 1024; // the first user turn is step 0, so the head is all a title needs
 const SCAN_LIMIT = 200; // newest conversations to touch the filesystem for per request
 const DEFAULT_TITLE = "Antigravity session";
-
-// agy wraps the prompt and appends its own blocks, so the raw `content` is not a title:
-// `<USER_REQUEST>\n…\n</USER_REQUEST>` then `<ADDITIONAL_METADATA>` (local time) and
-// `<USER_SETTINGS_CHANGE>` (a paragraph about the model the user picked).
-const USER_REQUEST_RE = /<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/;
-const APPENDED_BLOCK_RE = /<(ADDITIONAL_METADATA|USER_SETTINGS_CHANGE)>[\s\S]*?<\/\1>/g;
 
 export interface AntigravitySessionSummary {
   id: string;
@@ -36,14 +31,6 @@ export function antigravityTranscriptPath(root: string, id: string): string {
 // The user's first prompt. Steps that are not user input carry no `content` at all
 // (`CONVERSATION_HISTORY`), so the type check alone is not enough.
 const isUserInput = (d: Record<string, unknown>): boolean => d.type === "USER_INPUT" && typeof d.content === "string";
-
-/** What the user typed, out of the wrapper agy stores a prompt in. */
-export function antigravityPromptText(content: string): string {
-  const wrapped = USER_REQUEST_RE.exec(content);
-  // No wrapper means a shape we have not seen. Dropping the blocks we DO know keeps a usable
-  // title instead of pasting agy's metadata into the row.
-  return wrapped?.[1] ?? content.replace(APPENDED_BLOCK_RE, "");
-}
 
 /** The user's first prompt, from the head of a transcript, or null when it holds none yet.
  *
