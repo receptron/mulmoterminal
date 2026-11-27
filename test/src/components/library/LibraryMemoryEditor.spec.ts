@@ -2,17 +2,28 @@
 // refused and said, Esc stops editing without closing the Library, and a running session is warned of.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mountUnderOverlay } from "../underOverlay";
 import type { MemorySaveResult } from "../../../../src/composables/libraryApi";
 
 let result: MemorySaveResult = { kind: "saved", version: "v2" };
 const saves: [string, string, string, string][] = [];
 vi.mock("../../../../src/composables/libraryApi", () => ({
   saveLibraryMemoryFile: (slug: string, file: string, text: string, version: string) => (saves.push([slug, file, text, version]), Promise.resolve(result)),
-  loadLibraryMemoryLinks: () => Promise.resolve(null),
+  loadLibraryMemoryLinks: () => Promise.resolve(links.shift() ?? null),
 }));
 let running = false;
+let listUnreadable = false;
+/** The link counts the next merge-link reads answer with, one each. */
+const links: ({ count: number; unplaceable: string[] } | null)[] = [];
+/** When set, each running check waits on the next of these and answers with `running` as it was asked. */
+const runningGates: Promise<void>[] = [];
 vi.mock("../../../../src/composables/useDirLists", () => ({
-  readResumableList: () => Promise.resolve({ sessions: [{ id: "s", title: "", mtime: 0, runningKey: running ? "s" : null }], cwd: "/w/app" }),
+  readResumableList: async () => {
+    const asked = running;
+    await (runningGates.shift() ?? Promise.resolve());
+    if (listUnreadable) return null;
+    return { sessions: [{ id: "s", title: "", mtime: 0, runningKey: asked ? "s" : null }], cwd: "/w/app" };
+  },
 }));
 
 const LibraryMemoryEditor = (await import("../../../../src/components/library/LibraryMemoryEditor.vue")).default;
@@ -24,6 +35,7 @@ beforeEach(() => {
   result = { kind: "saved", version: "v2" };
   saves.length = 0;
   running = false;
+  listUnreadable = false;
 });
 
 const mountEditor = async () => {
@@ -254,5 +266,105 @@ describe("LibraryMemoryEditor", () => {
     await flushPromises();
     await again.find("[data-testid=memory-editor-use-stale]").trigger("click");
     expect((again.find("[data-testid=memory-editor-field]").element as HTMLTextAreaElement).value).toBe("written against v1");
+  });
+});
+
+// The editor stays open while the Library is closed: a session may have started in the meantime.
+describe("the editor shown again", () => {
+  it("checks again whether a session is running in the project", async () => {
+    const { wrapper, showAgain } = mountUnderOverlay(
+      LibraryMemoryEditor,
+      { slug: "-w-app", file: "a.md", text: "body", version: "v1", cwd: "/w/app" },
+      { attachTo: document.body },
+    );
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-editor-running]").exists()).toBe(false);
+    running = true;
+    await showAgain();
+    expect(wrapper.find("[data-testid=memory-editor-running]").exists()).toBe(true);
+    // An earlier showing's slow check must not undo a later one's.
+    let releaseSlow: () => void = () => {};
+    runningGates.push(new Promise((resolve) => (releaseSlow = resolve)));
+    running = false;
+    await showAgain();
+    running = true;
+    await showAgain();
+    releaseSlow();
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-editor-running]").exists()).toBe(true);
+    wrapper.unmount();
+  });
+});
+
+describe("the running check from opening the editor", () => {
+  it("does not undo a newer check from showing the Library again", async () => {
+    let releaseMount: () => void = () => {};
+    runningGates.push(new Promise((resolve) => (releaseMount = resolve)));
+    running = false;
+    const { wrapper, showAgain } = mountUnderOverlay(
+      LibraryMemoryEditor,
+      { slug: "-w-app", file: "a.md", text: "body", version: "v1", cwd: "/w/app" },
+      { attachTo: document.body },
+    );
+    await flushPromises();
+    running = true;
+    await showAgain();
+    releaseMount();
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-editor-running]").exists()).toBe(true);
+    wrapper.unmount();
+  });
+});
+
+describe("a merge shown again", () => {
+  it("reads the links again, keeping them through a failed read", async () => {
+    links.push({ count: 1, unplaceable: [] }, { count: 3, unplaceable: [] }, null);
+    const merging = { file: "b.md", version: "v2", title: "b", body: "added" };
+    const { wrapper, showAgain } = mountUnderOverlay(
+      LibraryMemoryEditor,
+      { slug: "-w-app", file: "a.md", text: "body", version: "v1", cwd: "/w/app", merging },
+      { attachTo: document.body },
+    );
+    await flushPromises();
+    const shown = () => wrapper.get("[data-testid=memory-editor-merge-links]").text();
+    const first = shown();
+    await showAgain();
+    expect(shown()).not.toBe(first);
+    const second = shown();
+    await showAgain();
+    expect(shown()).toBe(second);
+    wrapper.unmount();
+  });
+});
+
+describe("checks that cannot be read", () => {
+  it("keeps the running warning when the session list cannot be read again", async () => {
+    running = true;
+    const { wrapper, showAgain } = mountUnderOverlay(
+      LibraryMemoryEditor,
+      { slug: "-w-app", file: "a.md", text: "body", version: "v1", cwd: "/w/app" },
+      { attachTo: document.body },
+    );
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-editor-running]").exists()).toBe(true);
+    listUnreadable = true;
+    await showAgain();
+    expect(wrapper.find("[data-testid=memory-editor-running]").exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("drops the unplaceable notice once a later read finds nothing it would refuse", async () => {
+    links.push({ count: 0, unplaceable: ["x.md"] }, { count: 0, unplaceable: [] });
+    const merging = { file: "b.md", version: "v2", title: "b", body: "added" };
+    const { wrapper, showAgain } = mountUnderOverlay(
+      LibraryMemoryEditor,
+      { slug: "-w-app", file: "a.md", text: "body", version: "v1", cwd: "/w/app", merging },
+      { attachTo: document.body },
+    );
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-editor-notice]").exists()).toBe(true);
+    await showAgain();
+    expect(wrapper.find("[data-testid=memory-editor-notice]").exists()).toBe(false);
+    wrapper.unmount();
   });
 });

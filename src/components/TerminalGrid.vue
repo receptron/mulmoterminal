@@ -27,7 +27,8 @@ import type { Launcher, LaunchPick } from "./launchers";
 import type { CustomAgent } from "../../common/customAgents";
 import type { AgentAccount } from "../../common/agentAccounts";
 import { isCellSelfAction, isPaneAction, paneOfAction, type CellAction } from "../../common/headerActions";
-import { actionAllowedOn, onThisMachine, paneAllowed, pathOnHost } from "./remoteCell";
+import { actionAllowedOn, activityKeyOf, onThisMachine, paneAllowed, pathOnHost } from "./remoteCell";
+import { parseRemoteAskQuestion, REMOTE_ASK_QUESTION_CHANNEL, remoteSessionKey } from "../../common/remoteHosts";
 import { dirKeyOf } from "../composables/dirAddress";
 import { registerGridCellRunner } from "../composables/useGridCellAction";
 import { requestCellAction } from "../composables/useCellAction";
@@ -764,29 +765,46 @@ const questionBox = createQuestionBox(fetchOpenQuestion);
 // zoom moves, so it can only ever describe the buttons currently on screen.
 const answerFailure = ref<AnswerFailure | null>(null);
 
-const expandedQuestion = computed(() => (paneCellSessionId.value ? (questionBox.questions.value.get(paneCellSessionId.value) ?? null) : null));
+// Dialogs are keyed like activity (#3506): the bare id for this machine's session, `host/id` for a
+// remote one, whose dialog its host publishes, reads and answers.
+const questionKeyOf = (uid: number | null): string | null => {
+  const cell = cellOf(uid);
+  return cell ? activityKeyOf(cell) : null;
+};
+const paneQuestionKey = computed(() => questionKeyOf(paneCellUid.value));
+const expandedQuestionKey = computed(() => questionKeyOf(props.expandedUid));
+const expandedQuestion = computed(() => (paneQuestionKey.value ? (questionBox.questions.value.get(paneQuestionKey.value) ?? null) : null));
 
 // Answered — in the terminal, in the pane, or cancelled with Esc. The pane goes with the question
 // it was opened for: it exists to answer one, and leaving an empty panel behind is something the
 // user then has to close by hand.
 const dropQuestion = (sessionId: string): void => {
   questionBox.drop(sessionId);
-  if (sessionId === paneCellSessionId.value && rightPane.value === "question") setRightPane(null, paneUid.value);
+  if (sessionId === paneQuestionKey.value && rightPane.value === "question") setRightPane(null, paneUid.value);
 };
 
-const unsubscribeQuestion = subscribeSession(ASK_QUESTION_CHANNEL, (data) => {
+function onQuestionMessage(data: unknown): void {
   if (isAskQuestionEvent(data)) {
     questionBox.offer(data);
     answerFailure.value = null;
     // Opened for the user, not merely made available: a question nobody sees is a session that
     // sits blocked. Only for the cell already on screen — enlarging some other cell to reveal a
     // pane would take the user off whatever they were reading.
-    if (data.sessionId === expandedSessionId.value) void showQuestionPane(data.sessionId);
+    if (data.sessionId === expandedQuestionKey.value) void showQuestionPane(data.sessionId);
     return;
   }
   if (isAskQuestionDone(data) && questionBox.close(data)) dropQuestion(data.sessionId);
+}
+const unsubscribeQuestion = subscribeSession(ASK_QUESTION_CHANNEL, onQuestionMessage);
+// A remote host's dialog, re-keyed by its host so it can only be its own cell's.
+const unsubscribeRemoteQuestion = subscribeSession(REMOTE_ASK_QUESTION_CHANNEL, (data) => {
+  const relayed = parseRemoteAskQuestion(data);
+  if (relayed) onQuestionMessage({ ...relayed.question, sessionId: remoteSessionKey(relayed.host, relayed.question.sessionId) });
 });
-onBeforeUnmount(() => unsubscribeQuestion());
+onBeforeUnmount(() => {
+  unsubscribeQuestion();
+  unsubscribeRemoteQuestion();
+});
 
 // The question a session is blocked on, for a browser that was not listening when it arrived — a
 // reload or a socket reconnect between the question and its answer. The channel replays nothing,
@@ -797,7 +815,7 @@ async function revealQuestion(sessionId: string): Promise<void> {
   // Not re-opened if the user closed this very dialog: they are telling us they will answer in the
   // terminal. The next question in this cell opens as usual (questionBox tracks it per dialog).
   if (!questionBox.has(sessionId) || questionBox.isDismissed(sessionId)) return;
-  if (expandedSessionId.value === sessionId) await showQuestionPane(sessionId);
+  if (expandedQuestionKey.value === sessionId) await showQuestionPane(sessionId);
 }
 
 // The question covers Files like any pane opened over it, and the editor unmounts beneath it, so the
@@ -811,7 +829,7 @@ async function showQuestionPane(sessionId: string): Promise<void> {
   // The save awaits. A pane opened meanwhile takes the question's place, as it would over the
   // question; the zoom may have moved, or the question been answered.
   if (filesUid !== null && (!filesOpen.value || paneUid.value !== filesUid)) return;
-  if (expandedSessionId.value === sessionId && questionBox.has(sessionId)) setRightPane("question", uid);
+  if (expandedQuestionKey.value === sessionId && questionBox.has(sessionId)) setRightPane("question", uid);
 }
 
 // A question that arrived while its cell was tiled — or on another page of the grid — still has a
@@ -819,7 +837,7 @@ async function showQuestionPane(sessionId: string): Promise<void> {
 // it has no header button, because a control for the rare case would sit in every cell's chrome
 // forever, and the moment the question lands is the only other time it opens itself.
 watch(
-  expandedSessionId,
+  expandedQuestionKey,
   async (sessionId) => {
     answerFailure.value = null;
     if (sessionId) await revealQuestion(sessionId);
@@ -830,7 +848,7 @@ watch(
 // A reconnect is the other way to have missed one: pub/sub replays room membership, not the events
 // that landed while the socket was down.
 const unsubscribeQuestionReconnect = onPubSubReconnect(() => {
-  if (paneCellSessionId.value) void revealQuestion(paneCellSessionId.value);
+  if (paneQuestionKey.value) void revealQuestion(paneQuestionKey.value);
 });
 onBeforeUnmount(() => unsubscribeQuestionReconnect());
 
@@ -838,7 +856,7 @@ onBeforeUnmount(() => unsubscribeQuestionReconnect());
 // to this cell does not put it back. Answering in the terminal is always available, and a question
 // that arrives after this opens normally.
 function dismissQuestionPane(): void {
-  if (paneCellSessionId.value) questionBox.dismiss(paneCellSessionId.value);
+  if (paneQuestionKey.value) questionBox.dismiss(paneQuestionKey.value);
   setRightPane(null, paneUid.value);
 }
 

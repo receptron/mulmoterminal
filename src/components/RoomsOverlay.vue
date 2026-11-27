@@ -18,6 +18,7 @@ import { relativeTime } from "./cellDisplay";
 import type { RoomMessage } from "../../common/roomMessage";
 import { useI18n } from "vue-i18n";
 import FullScreenOverlay from "./FullScreenOverlay.vue";
+import { latestOnly } from "./blueprints/latestOnly";
 
 const { t } = useI18n();
 
@@ -69,11 +70,25 @@ async function showMessages(next: RoomMessage[]): Promise<void> {
 /** The whole room every poll, not the `?since=` tail. Two posts can share a millisecond, so a tail
  *  keyed on the newest timestamp can step over one — and a conversation somebody is reading is
  *  small and on loopback. `since` stays for followers that cannot afford the whole room. */
+// The screen outlives a close, so a read asked for before it can answer after the next opening's.
+const roomRead = latestOnly();
+const roomsRead = latestOnly();
+
+// A tick while a read is still out waits for it: each newer read outdates the older one, so reads
+// slower than the interval would otherwise never be shown at all.
+let roomReadsOut = 0;
+function pollTick(): void {
+  if (roomReadsOut === 0) void refresh();
+}
+
 async function refresh(): Promise<void> {
   const id = room.value;
-  if (!id) return;
-  const read = await loadRoom(id);
-  if (room.value !== id) return; // moved on while the request was in flight
+  // A post or a delete can answer after the screen was closed; the next opening reads anyway.
+  if (!id || !isOpen.value) return;
+  const ticket = roomRead.take();
+  roomReadsOut += 1;
+  const read = await loadRoom(id).finally(() => (roomReadsOut -= 1));
+  if (room.value !== id || !roomRead.isLatest(ticket)) return; // moved on, or a newer read was asked for
   now.value = Date.now();
   if (!read.ok) {
     readError.value = "Could not read this room.";
@@ -84,7 +99,10 @@ async function refresh(): Promise<void> {
 }
 
 async function refreshRooms(): Promise<void> {
-  rooms.value = await listRooms();
+  if (!isOpen.value) return;
+  const ticket = roomsRead.take();
+  const listed = await listRooms();
+  if (roomsRead.isLatest(ticket)) rooms.value = listed;
 }
 
 function stopPolling(): void {
@@ -114,7 +132,7 @@ watch(
     if (!open) return;
     await Promise.all([refreshRooms(), refresh()]);
     if (run !== watchRun) return; // a newer run took over while this one was in flight
-    if (room.value) pollTimer = setInterval(refresh, POLL_MS);
+    if (room.value) pollTimer = setInterval(pollTick, POLL_MS);
   },
   { immediate: true },
 );

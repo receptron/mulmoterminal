@@ -6,7 +6,7 @@ import http from "node:http";
 import type { Socket } from "node:net";
 import { createPubSub } from "../../../../server/infra/async/pubsub.js";
 import { browserOriginHostnames, createIsAllowedOrigin } from "../../../../server/infra/http/allowed-origin.js";
-import { relayMessage, relayPrompt, startRemoteSessionsRelay } from "../../../../server/backends/hostGateway/remoteSessionsRelay.js";
+import { relayMessage, relayPrompt, relayQuestion, startRemoteSessionsRelay } from "../../../../server/backends/hostGateway/remoteSessionsRelay.js";
 import { followRemoteSessionChannels } from "../../../../server/backends/hostGateway/configuredRemoteSessionsRelay.js";
 import {
   REMOTE_PROMPT_SUBMITTED_CHANNEL,
@@ -57,14 +57,16 @@ function relayTo(hosts: () => RemoteHost[], usable: () => Promise<boolean> = asy
   const published: RemoteSessionsMessage[] = [];
   const prompts: unknown[] = [];
   const others: [string, unknown][] = [];
+  const questions: unknown[] = [];
   const publish = (channel: string, data: unknown) => {
     if (channel === REMOTE_PROMPT_SUBMITTED_CHANNEL) prompts.push(data);
+    else if (channel === "remote-ask-question") questions.push(data);
     else if (channel === REMOTE_SESSIONS_CHANNEL && isSessionsMessage(data)) published.push(data);
     else others.push([channel, data]);
   };
   const relay = startRemoteSessionsRelay({ hosts, usable, publish, reconcile_ms: 60_000 });
   cleanups.push(relay.stop);
-  return { relay, published, prompts, others };
+  return { relay, published, prompts, others, questions };
 }
 
 async function until(predicate: () => boolean, label: string, budgetMs = 4000): Promise<void> {
@@ -81,7 +83,10 @@ const isResync = (message: RemoteSessionsMessage) => "resync" in message;
 // joined it to the room is sent to no one.
 const subscribed = (pubsub: ReturnType<typeof createPubSub>, count = 1) =>
   until(
-    () => pubsub.subscriberCount("sessions") === count && pubsub.subscriberCount(PROMPT_SUBMITTED_CHANNEL) === count,
+    () =>
+      pubsub.subscriberCount("sessions") === count &&
+      pubsub.subscriberCount(PROMPT_SUBMITTED_CHANNEL) === count &&
+      pubsub.subscriberCount("ask-question") === count,
     `${count} subscriber(s) on the remote`,
   );
 
@@ -112,6 +117,27 @@ describe("relayPrompt", () => {
   });
 });
 
+const DIALOG = { sessionId: SESSION, toolUseId: "tu-1", questions: [{ question: "Pick?", header: "Pick", options: [{ label: "A" }], multiSelect: false }] };
+
+describe("relayQuestion", () => {
+  it("tags a dialog opened or closed in a real session with the host", () => {
+    expect(relayQuestion("lx", DIALOG)).toEqual({ host: "lx", question: DIALOG });
+    const done = { sessionId: SESSION, toolUseId: "tu-1", done: true };
+    expect(relayQuestion("lx", done)).toEqual({ host: "lx", question: done });
+  });
+  it("drops what is not a dialog of a real session", () => {
+    [
+      undefined,
+      null,
+      {},
+      { ...DIALOG, sessionId: "nope" },
+      { ...DIALOG, sessionId: `${SESSION}/../x` },
+      { sessionId: SESSION, toolUseId: "tu-1" },
+      { ...DIALOG, questions: "x" },
+    ].forEach((data) => expect(relayQuestion("lx", data)).toBeNull());
+  });
+});
+
 describe("the session relay", () => {
   it("republishes the remote's session rows with the host, after a resync", async () => {
     const { host, pubsub } = await remote();
@@ -138,6 +164,19 @@ describe("the session relay", () => {
     expect(published.filter((message) => !isResync(message))).toEqual([{ host: "lx", row: ROW }]);
     expect(prompts).toEqual([]);
     // Nor is a fixed channel republished raw under the host's name, as a followed one would be.
+    expect(others).toEqual([]);
+  });
+
+  // A remote cell's dialog is opened and answered from this machine's grid, keyed by the host.
+  it("relays a dialog with the host, on a channel of its own", async () => {
+    const { host, pubsub } = await remote();
+    const { published, questions, others } = relayTo(() => [host]);
+    await until(() => published.some(isResync), "resync on connect");
+    await subscribed(pubsub);
+    pubsub.publish("ask-question", { ...DIALOG, sessionId: "nope" });
+    pubsub.publish("ask-question", DIALOG);
+    await until(() => questions.length > 0, "a relayed dialog");
+    expect(questions).toEqual([{ host: "lx", question: DIALOG }]);
     expect(others).toEqual([]);
   });
 

@@ -88,3 +88,19 @@ describe("skill usage in the Skills viewer", () => {
     expect(wrapper.get("[data-testid=skills-item]").classes()).toContain("bg-hover");
   });
 });
+
+describe("counts read again on the next opening", () => {
+  it("are kept when that read cannot answer", async () => {
+    const wrapper = mount(SkillsOverlay, { global: { plugins: [i18n] } });
+    pending[0](counts(3));
+    await flushPromises();
+    open.value = false;
+    await flushPromises();
+    open.value = true;
+    await flushPromises();
+    pending.at(-1)?.(null);
+    await flushPromises();
+    expect(rowTexts(wrapper)).toEqual(["3×", "unused"]);
+    wrapper.unmount();
+  });
+});

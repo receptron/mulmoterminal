@@ -27,7 +27,7 @@ const project = (slug: string): LibraryMemoryProject => ({ slug, cwd: null, inde
 
 describe("useLibraryMemory", () => {
   // The screen is kept while closed: the last list stays until the next read replaces it.
-  it("keeps the last open's list while the next one is read, and shows a failure once it answers", async () => {
+  it("keeps the last open's list while the next one is read, and through a re-read that fails", async () => {
     answer = [project("before")];
     const isOpen = ref(true);
     const memory = useLibraryMemory(isOpen);
@@ -42,6 +42,14 @@ describe("useLibraryMemory", () => {
     await flushPromises();
     expect([memory.loaded.value, memory.failed.value, memory.projects.value.map((p) => p.slug)]).toEqual([true, false, ["before"]]);
     release();
+    await flushPromises();
+    expect([memory.loaded.value, memory.failed.value, memory.projects.value.map((p) => p.slug)]).toEqual([true, false, ["before"]]);
+  });
+
+  it("shows a failure when there was never a list to keep", async () => {
+    answer = null;
+    gate = Promise.resolve();
+    const memory = useLibraryMemory(ref(true));
     await flushPromises();
     expect([memory.loaded.value, memory.failed.value, memory.projects.value]).toEqual([true, true, []]);
   });
@@ -73,5 +81,35 @@ describe("useLibraryMemory", () => {
     const memory = useLibraryMemory(ref(true));
     await flushPromises();
     expect([memory.healthFailed.value, memory.health.value.size]).toEqual([true, 0]);
+  });
+
+  it("keeps what was judged when a re-read of the health check fails", async () => {
+    answer = [project("p")];
+    healthGate = Promise.resolve();
+    healthAnswer = [{ slug: "p", issues: [{ kind: "no-index" }], files: {} }];
+    const isOpen = ref(true);
+    const memory = useLibraryMemory(isOpen);
+    await flushPromises();
+    isOpen.value = false;
+    await flushPromises();
+    healthAnswer = null;
+    isOpen.value = true;
+    await flushPromises();
+    expect([memory.healthFailed.value, memory.health.value.size]).toEqual([false, 1]);
+  });
+
+  it("reads nothing for a change that answers after the Library closed", async () => {
+    answer = [project("p")];
+    gate = Promise.resolve();
+    healthGate = Promise.resolve();
+    const isOpen = ref(true);
+    const memory = useLibraryMemory(isOpen);
+    await flushPromises();
+    isOpen.value = false;
+    await flushPromises();
+    answer = [project("p"), project("q")];
+    await memory.refresh();
+    await flushPromises();
+    expect(memory.projects.value.map((p) => p.slug)).toEqual(["p"]);
   });
 });

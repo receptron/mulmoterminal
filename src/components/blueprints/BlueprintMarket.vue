@@ -6,6 +6,8 @@ import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { installPack, loadCatalog, loadRegistryUrls, saveRegistryUrls, uninstallPack, type ApiFailure, type ApiResult } from "../../composables/blueprintsApi";
 import { failureText } from "./refusalText";
+import { latestOnly } from "./latestOnly";
+import { onOverlayShownAgain, useOverlayVisible } from "../../composables/overlayVisibility";
 import type { Catalog } from "../../../common/blueprint/registry";
 
 const emit = defineEmits<{ changed: [] }>();
@@ -26,14 +28,23 @@ const actionError = ref<string | null>(null);
 
 const hasRegistries = computed(() => urls.value.length > 0);
 
+// Kept while the screen is closed: a read from an earlier opening or action can answer after a later one.
+const reads = latestOnly();
+
+// An install or a removal can answer after the screen was closed; showing it again reads anyway.
+const visible = useOverlayVisible();
 async function refresh(): Promise<void> {
+  if (!visible.value) return;
+  const ticket = reads.take();
   const [listed, read] = await Promise.all([loadRegistryUrls(), loadCatalog()]);
+  if (!reads.isLatest(ticket)) return;
   if (listed.ok) urls.value = listed.value.urls;
   if (read.ok) catalog.value = read.value;
   loadError.value = firstError(listed, read);
 }
 
 onMounted(() => void refresh());
+onOverlayShownAgain(() => void refresh());
 
 async function saveUrls(next: string[]): Promise<void> {
   const result = await saveRegistryUrls(next);
