@@ -7,7 +7,7 @@ import type { LaunchChoice } from "./wsUrl";
 import { isLaunchAgent, type LaunchAgent } from "../../common/launchAgent";
 import { customAgentIdOf, type AgentPick } from "../../common/customAgents";
 import { asTerminalAgent } from "../../common/sessionAgent";
-import { remoteDirOf, type RemoteStart } from "./remoteLaunch";
+import { remoteDirOf, type RemoteResume, type RemoteStart } from "./remoteLaunch";
 
 // Each kind is already expressible as a cell: a shell is a shell launcher, a non-Claude agent is
 // marked with `agent`, and Claude is the plain default. The session id arrives from the server once
@@ -85,4 +85,11 @@ export const cellForPanelResume = ({ id, cwd, agent, account }: PanelResume): Om
 export function cellForRemoteStart({ host, dir, agent }: RemoteStart): Omit<Cell, "uid"> | null {
   const remoteDir = remoteDirOf(dir);
   return remoteDir === null ? null : { ...cellForAgent(remoteDir, agent), remoteHost: host };
+}
+
+/** A listed conversation on a remote host as the cell that resumes it there, or null for a directory
+ *  the remote cannot use. */
+export function cellForRemoteResume({ host, id, cwd, agent }: RemoteResume): Omit<Cell, "uid"> | null {
+  const remoteDir = remoteDirOf(cwd);
+  return remoteDir === null ? null : { ...sessionCell(id, remoteDir, agent), remoteHost: host };
 }

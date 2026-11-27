@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import { decideForward, REMOTE_PATH_MAX, staysInside } from "../../../../server/backends/hostGateway/remoteForward.js";
 import { REMOTE_ROUTES, type RemoteRoute } from "../../../../common/remoteRoutes.js";
 import { DROP_FILENAME_HEADER } from "../../../../common/dropUpload.js";
+import { AGENT_SESSION_LIST_PATHS } from "../../../../common/agentSessionList.js";
 
 const SESSION = "0b8f0a0e-7c55-4c1e-9e0a-3f1d2c4b5a69";
 // A table of its own, so the rules are pinned whatever the shipped table holds.
@@ -190,6 +191,17 @@ describe("decideForward: a path named in the body", () => {
     });
     expect(decideWith("/api/worktrees/create", { repoDir: "/srv/p" })).toMatchObject({ kind: "refuse", status: 404 });
     expect(decideWith("/api/worktrees/cleanup/remove", { repoDir: "/srv/p" })).toMatchObject({ kind: "refuse", status: 404 });
+  });
+});
+
+describe("decideForward: the launch form's conversation lists", () => {
+  it.each(Object.values(AGENT_SESSION_LIST_PATHS))("reads %s for a directory, with nothing but it", (path) => {
+    expect(decideForward("GET", path, { cwd: "/srv/p", account: "work", x: "1" })).toMatchObject({ kind: "forward", path: `${path}?cwd=%2Fsrv%2Fp` });
+    expect(decideForward("GET", path, { cwd: "/srv/p/.." })).toMatchObject({ kind: "refuse", status: 400 });
+    expect(decideForward("GET", path, {})).toMatchObject({ kind: "refuse", status: 400 });
+  });
+  it.each(["/api/sessions/live", "/api/sessions/unplaced"])("forwards no other session listing (%s)", (path) => {
+    expect(decideForward("GET", path, { cwd: "/srv/p" })).toMatchObject({ kind: "refuse", status: 404 });
   });
 });
 

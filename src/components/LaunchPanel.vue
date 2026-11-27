@@ -16,7 +16,7 @@ import CellLaunchForm from "./CellLaunchForm.vue";
 import RemoteHostPicker from "./RemoteHostPicker.vue";
 import RemoteLaunchForm from "./RemoteLaunchForm.vue";
 import { useRemoteHosts } from "../composables/useRemoteHosts";
-import type { RemoteStart } from "./remoteLaunch";
+import type { RemoteResume, RemoteStart } from "./remoteLaunch";
 import type { AgentPick, CustomAgent } from "../../common/customAgents";
 import type { AgentAccount } from "../../common/agentAccounts";
 import type { CwdPreset } from "./presets";
@@ -51,6 +51,7 @@ const emit = defineEmits<{
   (e: "run", value: RunCommand): void;
   (e: "launch", value: LaunchPick): void;
   (e: "start-remote", value: RemoteStart): void;
+  (e: "resume-remote", value: RemoteResume): void;
   (e: "remove-preset", value: string): void;
   // A directory can be deleted while the app is open, so the host re-checks the saved ones on every open.
   (e: "close" | "retry-config" | "opened"): void;
@@ -147,7 +148,14 @@ onBeforeUnmount(() => {
     :aria-label="t('tips.overlays.startTerminal')"
   >
     <RemoteHostPicker v-if="remoteHosts.length" v-model="remoteHostId" :hosts="remoteHosts" />
-    <RemoteLaunchForm v-if="remoteHost" :key="remoteHost.id" :host="remoteHost" @start="(value) => emit('start-remote', value)" @close="emit('close')" />
+    <RemoteLaunchForm
+      v-if="remoteHost"
+      :key="remoteHost.id"
+      :host="remoteHost"
+      @start="(value) => emit('start-remote', value)"
+      @resume="(value) => emit('resume-remote', value)"
+      @close="emit('close')"
+    />
     <CellLaunchForm
       v-else
       :dir="dir"

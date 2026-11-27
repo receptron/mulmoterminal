@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { canStartOn, remoteDirOf } from "../../../src/components/remoteLaunch";
-import { cellForAgent, cellForRemoteStart } from "../../../src/components/launchCell";
+import { cellForAgent, cellForRemoteResume, cellForRemoteStart } from "../../../src/components/launchCell";
+import { sessionCell } from "../../../src/components/gridTabs";
+import { TERMINAL_AGENTS } from "../../../common/sessionAgent";
 import { LAUNCH_AGENTS } from "../../../common/launchAgent";
 import type { RemoteHostSummary } from "../../../common/remoteHosts";
 
@@ -34,5 +36,16 @@ describe("cellForRemoteStart", () => {
   it("places nothing for a directory the remote cannot use", () => {
     expect(cellForRemoteStart({ host: "lx", dir: "~/p", agent: "claude" })).toBeNull();
     expect(cellForRemoteStart({ host: "lx", dir: "", agent: "shell" })).toBeNull();
+  });
+});
+
+describe("cellForRemoteResume", () => {
+  it("is the local cell resuming that conversation, with the host on it", () => {
+    TERMINAL_AGENTS.forEach((agent) => {
+      expect(cellForRemoteResume({ host: "lx", id: "s1", cwd: "/srv/p", agent })).toEqual({ ...sessionCell("s1", "/srv/p", agent), remoteHost: "lx" });
+    });
+  });
+  it("places nothing for a directory the remote cannot use", () => {
+    expect(cellForRemoteResume({ host: "lx", id: "s1", cwd: "srv/p", agent: "claude" })).toBeNull();
   });
 });

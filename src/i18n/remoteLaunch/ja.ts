@@ -11,4 +11,6 @@ export const remoteLaunchJa = {
   workspace: "ワークスペース",
   dirsFailed: "{label} の保存済みディレクトリを読めませんでした: {error}",
   chipFill: "{path} を使う",
+  resumeHeading: "または {label} の会話を再開",
+  resumeOpen: "開いています",
 };

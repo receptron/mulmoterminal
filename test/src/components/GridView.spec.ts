@@ -589,6 +589,25 @@ describe("GridView keyboard shortcuts (#829)", () => {
     w.unmount();
   });
 
+  // #3506: what the remote form emits has to become a cell on that host, which the form's own specs stop short of.
+  it("places a remote start and a remote resume from the launch panel as cells on that host", async () => {
+    const w = await mountShortcutGrid(1, {}, { "terminal-new": "F7" });
+    await press("F7");
+    w.findComponent({ name: "LaunchPanel" }).vm.$emit("start-remote", { host: "lx", dir: "/srv/new", agent: "codex" });
+    await flushPromises();
+    await press("F7");
+    w.findComponent({ name: "LaunchPanel" }).vm.$emit("resume-remote", { host: "lx", id: uuid(7), cwd: "/srv/old", agent: "codex" });
+    await flushPromises();
+    const remote = gridOf(w)
+      .props("cells")
+      .filter((c: { remoteHost?: string }) => c.remoteHost === "lx");
+    expect(remote).toMatchObject([
+      { remoteHost: "lx", cwd: "/srv/new", agent: "codex", session: null },
+      { remoteHost: "lx", cwd: "/srv/old", agent: "codex", session: uuid(7) },
+    ]);
+    w.unmount();
+  });
+
   // #2311: moving a terminal from the keyboard (and so from the palette). It moves the cursor's cell
   // one place in manual order, and does nothing in auto / priority order, where the grid decides.
   it("moves the cursor's terminal one place with terminal-move-next / -prev, in manual order only", async () => {
