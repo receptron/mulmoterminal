@@ -27,7 +27,7 @@ import type { Launcher, LaunchPick } from "./launchers";
 import type { CustomAgent } from "../../common/customAgents";
 import type { AgentAccount } from "../../common/agentAccounts";
 import { isCellSelfAction, isPaneAction, paneOfAction, type CellAction } from "../../common/headerActions";
-import { actionAllowedOn, activityKeyOf, onThisMachine, paneAllowed, pathOnHost, sessionChannelOf } from "./remoteCell";
+import { actionAllowedOn, activityKeyOf, cellDrawChannel, onThisMachine, paneAllowed, pathOnHost } from "./remoteCell";
 import { parseRemoteAskQuestion, REMOTE_ASK_QUESTION_CHANNEL, remoteSessionKey } from "../../common/remoteHosts";
 import { dirKeyOf } from "../composables/dirAddress";
 import { registerGridCellRunner } from "../composables/useGridCellAction";
@@ -739,10 +739,7 @@ const paneCellAgent = computed(() => asTerminalAgent(cellOf(paneCellUid.value)?.
 const { subscribe: subscribeSession, onReconnect: onPubSubReconnect } = usePubSub();
 let unsubscribeDrawn: (() => void) | undefined;
 // A remote cell's drawings arrive from its host through the relay (#3506).
-const expandedDrawChannel = computed(() => {
-  const cell = cellOf(props.expandedUid);
-  return cell?.session ? sessionChannelOf(cell.remoteHost, cell.session) : null;
-});
+const expandedDrawChannel = computed(() => cellDrawChannel(cellOf(props.expandedUid)));
 
 watch(
   expandedDrawChannel,

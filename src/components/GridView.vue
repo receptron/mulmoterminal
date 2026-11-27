@@ -84,7 +84,7 @@ import { isRecord } from "../../common/isRecord";
 import { isDrawnResult } from "../utils/drawnResult";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
 import { isFilesPaneAction } from "./filesPaneActions";
-import { actionAllowedOn, isRemoteHost, sessionChannelOf, sessionDetailPath } from "./remoteCell";
+import { actionAllowedOn, cellDrawChannel, isRemoteHost, sessionDetailPath } from "./remoteCell";
 
 // The multi-terminal grid view, shown at /terminals. Leaving the grid is just a
 // route push from the shared toolbar (Chat / Collections / a favorite), so there's
@@ -798,8 +798,6 @@ onBeforeUnmount(() => {
 // nothing here is being read, and rearranging the grid they left would greet them on the way back
 // with a zoom they did not ask for. That drawing keeps the chip, which is where it was already.
 const drawnUnsubscribes = new Map<string, () => void>();
-// A remote cell's drawings arrive from its host through the relay (#3506).
-const drawChannelOf = (cell: Cell): string | null => (cell.session !== null ? sessionChannelOf(cell.remoteHost, cell.session) : null);
 const { subscribe: subscribeDrawn } = usePubSub();
 function stopWatchingDrawing(): void {
   for (const off of drawnUnsubscribes.values()) off();
@@ -809,11 +807,11 @@ watch(
   // Keyed by each cell's draw channel, which names its host as well as its session: cells come and
   // go, and a cell gets its session id well after it appears (onSession), so watching the cell list
   // alone would miss the moment a fresh terminal becomes subscribable.
-  [expandedUid, () => state.value.cells.map((c) => drawChannelOf(c) ?? "").join(",")],
+  [expandedUid, () => state.value.cells.map((c) => cellDrawChannel(c) ?? "").join(",")],
   () => {
     // While something IS enlarged, TerminalGrid owns this. Nothing to watch for here.
     if (expandedUid.value !== null) return stopWatchingDrawing();
-    const live = new Set(state.value.cells.flatMap((c) => drawChannelOf(c) ?? []));
+    const live = new Set(state.value.cells.flatMap((c) => cellDrawChannel(c) ?? []));
     for (const [channel, off] of drawnUnsubscribes) {
       if (live.has(channel)) continue;
       off();
@@ -828,7 +826,7 @@ watch(
           // the two is exactly the state this must not fight.
           if (expandedUid.value !== null || !onTerminalsRoute()) return;
           if (!isDrawnResult(data)) return;
-          const uid = state.value.cells.find((cell) => drawChannelOf(cell) === channel)?.uid;
+          const uid = state.value.cells.find((cell) => cellDrawChannel(cell) === channel)?.uid;
           // Through the grid's own reveal (files-buffer flush included) rather than setting the
           // zoom and the pane from here, as placeChat does above and for the same reason.
           //

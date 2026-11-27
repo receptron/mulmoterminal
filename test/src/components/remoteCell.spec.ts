@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { CELL_ACTIONS } from "../../../common/headerActions";
-import { actionAllowedOn, cellActionAllowed, isRemoteHost, onThisMachine, pathOnHost, sessionChannelOf } from "../../../src/components/remoteCell";
+import {
+  actionAllowedOn,
+  cellActionAllowed,
+  cellDrawChannel,
+  isRemoteHost,
+  onThisMachine,
+  pathOnHost,
+  sessionChannelOf,
+} from "../../../src/components/remoteCell";
 import { connWsUrl, type ConnTargetUrlInput } from "../../../src/components/wsUrl";
 
 describe("isRemoteHost / onThisMachine", () => {
@@ -22,6 +30,16 @@ describe("sessionChannelOf", () => {
     expect(sessionChannelOf(undefined, "s1")).toBe("session:s1");
     expect(sessionChannelOf("", "s1")).toBe("session:s1");
     expect(sessionChannelOf("lx", "s1")).toBe("remote:lx:session:s1");
+  });
+});
+
+describe("cellDrawChannel", () => {
+  it("is the cell's session channel on its host, or null for a cell with no session", () => {
+    expect(cellDrawChannel({ session: "s1" })).toBe("session:s1");
+    expect(cellDrawChannel({ session: "s1", remoteHost: "lx" })).toBe("remote:lx:session:s1");
+    expect(cellDrawChannel({ session: null, remoteHost: "lx" })).toBeNull();
+    expect(cellDrawChannel({ session: "" })).toBeNull();
+    expect(cellDrawChannel(undefined)).toBeNull();
   });
 });
 

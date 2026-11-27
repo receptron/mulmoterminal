@@ -95,6 +95,10 @@ export const remoteCellSessions = (cells: readonly { session: string | null; rem
 export const sessionChannelOf = (host: string | null | undefined, sessionId: string): string =>
   isRemoteHost(host) ? remoteSessionChannel(host, "session", sessionId) : `session:${sessionId}`;
 
+/** That channel for a cell, or null for one with no session yet. */
+export const cellDrawChannel = (cell: { session: string | null; remoteHost?: string | undefined } | undefined): string | null =>
+  cell?.session ? sessionChannelOf(cell.remoteHost, cell.session) : null;
+
 /** The key a cell's activity is looked up by: its bare id when local, host and id when remote. */
 export const activityKeyOf = (cell: { session: string | null; remoteHost?: string | undefined }): string | null =>
   cell.session !== null && isRemoteHost(cell.remoteHost) ? remoteSessionKey(cell.remoteHost, cell.session) : cell.session;
