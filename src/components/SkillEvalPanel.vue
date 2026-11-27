@@ -16,6 +16,7 @@ import SkillEvalCandidate from "./SkillEvalCandidate.vue";
 import SkillEvalLadder from "./SkillEvalLadder.vue";
 import SkillEvalHistory from "./SkillEvalHistory.vue";
 import { skillEvalNext, type SkillEvalNext, type SkillEvalStep } from "./skillEvalNext";
+import { useOverlayVisible } from "../composables/overlayVisibility";
 
 const props = defineProps<{ source: SkillSource; skill: CatalogSkill }>();
 const emit = defineEmits<{ adopted: [] }>();
@@ -78,13 +79,17 @@ function stopPolling(): void {
 }
 
 async function refresh(): Promise<void> {
+  // A stop or an adoption can answer after the panel was hidden; showing it again reads anyway.
+  if (!visible.value) return;
   const asked = selection;
+  const mine = ++evalReads;
   const read = await loadSkillEval(props.source, props.skill.slug);
-  if (asked !== selection) return;
+  if (asked !== selection || mine !== evalReads) return;
   // A failed read while a run is shown keeps what is on screen and tries again on the next tick.
   if (read === null) {
     loadFailed.value = overview.value === null;
     if (overview.value === null) stopPolling();
+    else if (overview.value.activeRunId !== null) startPolling();
     return;
   }
   overview.value = read;
@@ -93,9 +98,15 @@ async function refresh(): Promise<void> {
   else startPolling();
 }
 
+const visible = useOverlayVisible();
 function startPolling(): void {
-  poll ??= setInterval(() => void refresh(), POLL_MS);
+  if (visible.value) poll ??= setInterval(() => void refresh(), POLL_MS);
 }
+// Only the newest read is applied: one from before a hide can answer after the read made on showing
+// again. One that answers while hidden is newer than what is shown, so it is kept. A start is not a
+// read (`selection` is the skill), so one that answers after showing again is followed.
+let evalReads = 0;
+watch(visible, (shown) => (shown ? void refresh() : stopPolling()));
 
 watch(
   () => [props.source, props.skill.id],
@@ -128,7 +139,8 @@ async function measure(): Promise<void> {
     // Polled from here, not only once a read has seen the run: that read may fail.
     startPolling();
   }
-  await refresh();
+  // Hidden, there is nothing to show it on; showing again reads.
+  if (visible.value) await refresh();
 }
 
 async function stop(): Promise<void> {

@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   gated: { prs: false, rooms: false, worklog: true },
   toggleSound: vi.fn(),
   reopen: vi.fn(() => true),
+  toggle: vi.fn(() => true),
 }));
 vi.mock("../../../src/composables/paletteScreenOpeners", () => ({
   SCREEN_OPENERS: new Proxy(m.openers, { get: (target, key: string) => (target[key] ??= vi.fn()) }),
@@ -15,6 +16,7 @@ vi.mock("../../../src/composables/paletteScreenOpeners", () => ({
 vi.mock("../../../src/composables/useGatedEntries", () => ({ useGatedEntries: () => ({ value: m.gated }) }));
 vi.mock("../../../src/composables/useSoundEnabled", () => ({ useSoundEnabled: () => ({ toggle: m.toggleSound }) }));
 vi.mock("../../../src/composables/reopenClosedCell", () => ({ reopenLastClosedCell: m.reopen }));
+vi.mock("../../../src/composables/screenToggle", () => ({ toggleLastScreen: m.toggle }));
 
 import { runAppAction } from "../../../src/composables/runAppAction";
 import { paletteGridView } from "../../../src/composables/commandPalette";
@@ -42,6 +44,19 @@ describe("runAppAction", () => {
     expect(m.openers.worklog).toHaveBeenCalledTimes(1);
     expect(runAppAction("screen-skills")).toBe(true);
     expect(m.openers.skills).toHaveBeenCalledTimes(1);
+    expect(runAppAction("screen-library")).toBe(true);
+    expect(m.openers.library).toHaveBeenCalledTimes(1);
+    expect(runAppAction("screen-processes")).toBe(true);
+    expect(m.openers.processes).toHaveBeenCalledTimes(1);
+    expect(runAppAction("screen-usage")).toBe(true);
+    expect(m.openers.usage).toHaveBeenCalledTimes(1);
+  });
+
+  it("toggles to and from the last screen, and passes a refusal on", () => {
+    expect(runAppAction("screen-toggle")).toBe(true);
+    m.toggle.mockReturnValueOnce(false);
+    expect(runAppAction("screen-toggle")).toBe(false);
+    expect(m.toggle).toHaveBeenCalledTimes(2);
   });
 
   it("refuses a screen whose feature is not set up, opening nothing", () => {

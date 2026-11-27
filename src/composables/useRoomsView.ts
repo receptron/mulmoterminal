@@ -7,9 +7,17 @@ import { computed, type ComputedRef } from "vue";
 import { router } from "../router";
 import { overlayOriginState, overlayReturnPath } from "./overlayOrigin";
 import { isRoomId } from "../../common/roomMessage";
+import { lastPlaceIn } from "./overlayLastPlace";
+
+const lastRoomsPlace = lastPlaceIn(new Set(["rooms", "roomView"]));
 
 /** Open the rooms overlay, on one room when given. */
 export function roomsViewOpen(room?: string): void {
+  const last = lastRoomsPlace();
+  if (room === undefined && last !== null) {
+    void router.push({ path: last, state: overlayOriginState() });
+    return;
+  }
   const to = room && isRoomId(room) ? { name: "roomView", params: { room } } : { name: "rooms" };
   void router.push({ ...to, state: overlayOriginState() });
 }

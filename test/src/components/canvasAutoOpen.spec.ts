@@ -347,3 +347,41 @@ describe("the canvas opening itself when the agent draws", () => {
     expect(canvasOpen(w)).toBe(true);
   });
 });
+
+// #3506. The Canvas button's first answer is asked before the agent's MCP client is up, so it is the
+// announcement that turns it on; a remote cell's comes from its host through the gateway's relay.
+describe("the Canvas button turned on by a tool-groups announcement", () => {
+  const SESSION = "0b8f0a0e-7c55-4c1e-9e0a-3f1d2c4b5a69";
+  const canvasAvailable = (w: ReturnType<typeof mount>) => w.findComponent({ name: "TerminalCell" }).props("canvasAvailable");
+  const noGroupsYet = () =>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => ({ groups: [], tools: [] }) })),
+    );
+
+  it("for a remote cell, from its own host only", async () => {
+    noGroupsYet();
+    const w = mountGrid([{ ...cell(1, SESSION), remoteHost: "lx" }], 1);
+    await flushPromises();
+    expect(canvasAvailable(w)).toBe(false);
+    publish("tool-groups", { sessionId: SESSION, groups: ["render"] });
+    publish("remote-tool-groups", { host: "other", announcement: { sessionId: SESSION, groups: ["render"] } });
+    await flushPromises();
+    expect(canvasAvailable(w)).toBe(false);
+    publish("remote-tool-groups", { host: "lx", announcement: { sessionId: SESSION, groups: ["render"] } });
+    await flushPromises();
+    expect(canvasAvailable(w)).toBe(true);
+  });
+
+  it("for a local cell, from this machine only", async () => {
+    noGroupsYet();
+    const w = mountGrid([cell(1, SESSION)], 1);
+    await flushPromises();
+    publish("remote-tool-groups", { host: "lx", announcement: { sessionId: SESSION, groups: ["render"] } });
+    await flushPromises();
+    expect(canvasAvailable(w)).toBe(false);
+    publish("tool-groups", { sessionId: SESSION, groups: ["render"] });
+    await flushPromises();
+    expect(canvasAvailable(w)).toBe(true);
+  });
+});

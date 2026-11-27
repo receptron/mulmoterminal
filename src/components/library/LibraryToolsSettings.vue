@@ -6,6 +6,7 @@ import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { PERMISSION_KINDS, type LibrarySettings, type SettingsSource } from "../../../common/librarySettings";
 import { loadToolSettings } from "../../composables/libraryApi";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 
 const props = defineProps<{ cwd: string }>();
 const { t } = useI18n();
@@ -26,6 +27,19 @@ watch(
   },
   { immediate: true },
 );
+// The screen is kept while closed and the settings files may have changed; a failed re-read keeps them.
+async function reread(): Promise<void> {
+  const mine = ++reads;
+  const read = await loadToolSettings(props.cwd);
+  if (mine !== reads) return;
+  if (read === null) {
+    failed.value = settings.value === null; // nothing to keep: the re-read overtook the first one
+    return;
+  }
+  settings.value = read;
+  failed.value = false;
+}
+onOverlayShownAgain(() => void reread());
 
 const sourceLabel = (source: SettingsSource): string => t(`libraryView.tools.settings.source.${source}`);
 const HEADING = "m-0 mt-4 font-sans text-[12px] font-[650] text-dim";

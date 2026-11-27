@@ -17,6 +17,7 @@ import {
 import { loadLibraryConversation, loadLibraryRepeat, loadLibraryRepeats } from "../../composables/libraryApi";
 import { whenLabel, projectName } from "./libraryRows";
 import { movedIndex } from "./libraryKeys";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 import { startRepeatPromote } from "./libraryPromoteStart";
 import LibraryBackButton from "./LibraryBackButton.vue";
 
@@ -52,14 +53,22 @@ const recentSessions = computed(() => {
   return (detail.value?.occurrences ?? []).filter((at) => !seen.has(at.sessionId) && seen.add(at.sessionId)).slice(0, RECENT_SESSIONS);
 });
 
+// Read again each time the Library is shown; a failed re-read keeps the list that was there.
+let reads = 0;
+let listed = false;
 async function load(): Promise<void> {
+  const mine = ++reads;
   const found = await loadLibraryRepeats();
-  failed.value = found === null;
-  candidates.value = found?.candidates ?? [];
-  total.value = found?.total ?? 0;
+  if (mine !== reads) return;
   loaded.value = true;
+  failed.value = found === null && !listed;
+  if (found === null) return;
+  listed = true;
+  candidates.value = found.candidates;
+  total.value = found.total;
 }
 void load();
+onOverlayShownAgain(() => void load());
 
 // The detail of the one being read; a later choice wins over an earlier one still loading.
 let details = 0;
@@ -75,6 +84,15 @@ watch(
   },
   { immediate: true },
 );
+// Shown again, the one being read is read again too; a failed re-read keeps what is shown.
+async function rereadDetail(): Promise<void> {
+  const id = selected.value?.id ?? null;
+  if (id === null) return;
+  const mine = ++details;
+  const found = await loadLibraryRepeat(id);
+  if (mine === details && found !== null) detail.value = found;
+}
+onOverlayShownAgain(() => void rereadDetail());
 
 const countLine = (candidate: RepeatCandidate): string =>
   t("libraryView.repeats.counts", { count: candidate.count, sessions: candidate.sessions, projects: candidate.projects.length });

@@ -1,6 +1,8 @@
 // The work list in the run view: a row per target with where it stands, a detail on click, the decision row marked.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mountUnderOverlay } from "../underOverlay";
+import { ref } from "vue";
 import { basePlanSchema } from "../../../../common/blueprint/plan";
 import { initialState, type BlueprintState, type StepStatus } from "../../../../common/blueprint/state";
 import type { Target } from "../../../../common/blueprint/targets";
@@ -182,5 +184,57 @@ describe("the work list in the run view", () => {
     await flushPromises();
     expect(wrapper.find('[data-testid="blueprint-targets-load-error"]').exists()).toBe(false);
     expect(wrapper.findAll('[data-testid="blueprint-target"]')).toHaveLength(targets.length);
+  });
+});
+
+// The Blueprints screen is kept while closed: the list may have been rewritten with no step moving.
+describe("the work list shown again", () => {
+  it("is read again each time the screen is shown", async () => {
+    loadTargets.mockReset();
+    loadTargets.mockResolvedValue(listed(null));
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintTargets, { runId: "run-00000001", steps, state: at("passed", "awaiting-answer", 1) });
+    await flushPromises();
+    await showAgain();
+    expect(loadTargets).toHaveBeenCalledTimes(2);
+    wrapper.unmount();
+  });
+});
+
+describe("a step moving while the screen is hidden", () => {
+  it("reads the list on showing, not while hidden", async () => {
+    loadTargets.mockReset();
+    loadTargets.mockResolvedValue(listed(null));
+    const round = ref(1);
+    const { wrapper, visible } = mountUnderOverlay(BlueprintTargets, () => ({
+      runId: "run-00000001",
+      steps,
+      state: at("passed", "awaiting-answer", round.value),
+    }));
+    await flushPromises();
+    visible.value = false;
+    await flushPromises();
+    loadTargets.mockClear();
+    round.value = 2;
+    await flushPromises();
+    expect(loadTargets).not.toHaveBeenCalled();
+    visible.value = true;
+    await flushPromises();
+    expect(loadTargets).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+  });
+});
+
+describe("the work list read again", () => {
+  it("keeps the rows shown when the re-read fails, and says nothing", async () => {
+    loadTargets.mockReset();
+    loadTargets.mockResolvedValueOnce(listed(targets)).mockResolvedValue({ ok: false, error: "the list could not be read" });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintTargets, { runId: "run-00000001", steps, state: at("passed", "awaiting-answer", 1) });
+    await flushPromises();
+    const rows = wrapper.findAll('[data-testid="blueprint-target"]').length;
+    expect(rows).toBeGreaterThan(0);
+    await showAgain();
+    expect(wrapper.findAll('[data-testid="blueprint-target"]')).toHaveLength(rows);
+    expect(wrapper.text()).not.toContain("the list could not be read");
+    wrapper.unmount();
   });
 });

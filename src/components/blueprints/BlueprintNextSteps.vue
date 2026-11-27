@@ -7,7 +7,9 @@ import { listPacks, type PackList } from "../../composables/blueprintsApi";
 import { blueprintsViewFollowUp } from "../../composables/useBlueprintsView";
 import type { PersonLanguage } from "../../../common/blueprint/personLanguage";
 import { nextOptions, usecaseTitle, type NextOption } from "./nextSteps";
+import { latestOnly } from "./latestOnly";
 import type { HearingAnswers } from "../../../common/blueprint/hearing";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 
 // `answers` and `changedFiles`: the finished build's own, for the steps that carry them over.
 // `language`: the finished build's report language, which the next one keeps.
@@ -23,12 +25,17 @@ const { t } = useI18n();
 const packs = ref<PackList>([]);
 const options = ref<NextOption[]>([]);
 
-onMounted(async () => {
+const reads = latestOnly();
+async function readPacks(): Promise<void> {
+  const ticket = reads.take();
   const result = await listPacks();
-  if (!result.ok) return;
+  if (!reads.isLatest(ticket) || !result.ok) return;
   packs.value = result.value.packs;
   options.value = nextOptions(result.value.packs, props.pair, props.answers, props.changedFiles);
-});
+}
+onMounted(() => void readPacks());
+// The screen is kept while closed; what this shows may have changed in the meantime.
+onOverlayShownAgain(() => void readPacks());
 
 function goOn(option: NextOption): void {
   blueprintsViewFollowUp({

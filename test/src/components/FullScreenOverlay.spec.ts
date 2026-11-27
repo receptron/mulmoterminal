@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { defineComponent, h, onMounted } from "vue";
 import { mount } from "@vue/test-utils";
+import { useOverlayVisible } from "../../../src/composables/overlayVisibility";
 import FullScreenOverlay from "../../../src/components/FullScreenOverlay.vue";
 import { en } from "../../../src/i18n/en";
 
@@ -8,7 +10,7 @@ const CLOSE_LABEL = "Close some region";
 
 const mountFrame = () =>
   mount(FullScreenOverlay, {
-    props: { regionLabel: REGION_LABEL, closeLabel: CLOSE_LABEL },
+    props: { open: true, regionLabel: REGION_LABEL, closeLabel: CLOSE_LABEL },
     slots: { header: '<span data-testid="title">Title</span>', default: '<p data-testid="body">Body</p>' },
   });
 
@@ -37,5 +39,32 @@ describe("FullScreenOverlay", () => {
     await w.get("header button").trigger("click");
     await w.get("header button").trigger("click");
     expect(w.emitted("close")).toEqual([[], []]);
+  });
+
+  // Created on the first open and only hidden after: what the body holds survives a close.
+  it("creates the body on the first open and keeps it, hidden, after a close", async () => {
+    let mounts = 0;
+    const seen: boolean[] = [];
+    const Body = defineComponent({
+      setup() {
+        const visible = useOverlayVisible();
+        onMounted(() => mounts++);
+        return () => {
+          seen.push(visible.value);
+          return h("p", { "data-testid": "body" }, "Body");
+        };
+      },
+    });
+    const w = mount(FullScreenOverlay, { props: { open: false, regionLabel: REGION_LABEL, closeLabel: CLOSE_LABEL }, slots: { default: () => h(Body) } });
+    expect(w.find("[data-testid=body]").exists()).toBe(false);
+    await w.setProps({ open: true });
+    expect(w.get("[role=region]").attributes("style") ?? "").not.toContain("display: none");
+    await w.setProps({ open: false });
+    expect(w.find("[data-testid=body]").exists()).toBe(true);
+    expect(w.get("[role=region]").attributes("style")).toContain("display: none");
+    await w.setProps({ open: true });
+    expect(mounts).toBe(1);
+    expect(seen.at(-1)).toBe(true);
+    expect(seen).toContain(false);
   });
 });

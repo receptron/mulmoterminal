@@ -6,6 +6,7 @@ import { commandPaletteJa } from "./commandPalette/ja";
 import { terminalCopyModeJa } from "./terminalCopyMode/ja";
 import { rowMenuJa } from "./rowMenu/ja";
 import { focusModeJa } from "./focusMode/ja";
+import { screenTabsJa } from "./screenTabs/ja";
 import { requestTimeoutJa } from "./requestTimeout/ja";
 import { gridRestoreJa } from "./gridRestore/ja";
 import { fileHistoryJa } from "./fileHistory/ja";
@@ -640,6 +641,7 @@ export const ja: Messages = {
   headerChips: headerChipsJa,
   headerButtons: headerButtonsJa,
   focusMode: focusModeJa,
+  screenTabs: screenTabsJa,
   requestTimeout: requestTimeoutJa,
   gridRestore: gridRestoreJa,
   settingsControls: settingsControlsJa,

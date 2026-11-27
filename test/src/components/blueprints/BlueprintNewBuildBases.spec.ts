@@ -3,8 +3,12 @@
 // platform.
 import { describe, it, expect, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mountUnderOverlay } from "../underOverlay";
 
-const { previewPair } = vi.hoisted(() => ({ previewPair: vi.fn(async () => ({ ok: true, value: { hearing: { questions: [] }, steps: [] } })) }));
+const packsRead = vi.hoisted(() => ({ failures: 0 }));
+const { previewPair } = vi.hoisted(() => ({
+  previewPair: vi.fn<(base: string, usecase: string) => Promise<unknown>>(async () => ({ ok: true, value: { hearing: { questions: [] }, steps: [] } })),
+}));
 vi.mock("../../../../src/composables/useBlueprintsView", () => ({ takeFormFill: () => null, keepFormFill: vi.fn() }));
 vi.mock("../../../../src/composables/useNewTerminal", () => ({ openTerminalAt: vi.fn() }));
 const base = (slug: string, title: string, order?: number) => ({
@@ -16,23 +20,26 @@ const usecase = (slug: string, title: string, bases: string[]) => ({
   manifest: { slug, kind: "usecase", title, version: "0.1.0", description: "", bases },
 });
 vi.mock("../../../../src/composables/blueprintsApi", () => ({
-  listPacks: async () => ({
-    ok: true,
-    value: {
-      packs: [
-        base("docs", "文書のフォルダ", 1),
-        base("firebase", "Firebase"),
-        base("local", "ローカル"),
-        base("repo", "既存のリポジトリ"),
-        usecase("review", "文書を読み解く", ["docs"]),
-        usecase("polish", "文書を整える", ["docs"]),
-        usecase("product", "自由に作る", ["local", "firebase", "supabase"]),
-        usecase("from-collection", "コレクションから作る", ["local", "firebase"]),
-        usecase("internal", "社内向け業務アプリ", ["firebase"]),
-        usecase("refactor", "リファクタリング", ["repo"]),
-      ],
-    },
-  }),
+  listPacks: async () =>
+    packsRead.failures-- > 0
+      ? { ok: false, error: "the packs could not be read" }
+      : {
+          ok: true,
+          value: {
+            packs: [
+              base("docs", "文書のフォルダ", 1),
+              base("firebase", "Firebase"),
+              base("local", "ローカル"),
+              base("repo", "既存のリポジトリ"),
+              usecase("review", "文書を読み解く", ["docs"]),
+              usecase("polish", "文書を整える", ["docs"]),
+              usecase("product", "自由に作る", ["local", "firebase", "supabase"]),
+              usecase("from-collection", "コレクションから作る", ["local", "firebase"]),
+              usecase("internal", "社内向け業務アプリ", ["firebase"]),
+              usecase("refactor", "リファクタリング", ["repo"]),
+            ],
+          },
+        },
   listPresets: async () => ({
     ok: true,
     value: { presets: [{ id: "library", title: "おうち図書館", description: "", base: "firebase", usecase: "product", answers: {}, samples: [] }] },
@@ -116,5 +123,53 @@ describe("choosing what to make", () => {
     expect(wrapper.get<HTMLSelectElement>('[data-testid="blueprint-usecase"]').element.value).toBe("product");
     expect(wrapper.get<HTMLSelectElement>('[data-testid="blueprint-base"]').element.value).toBe("firebase");
     expect(previewPair).toHaveBeenLastCalledWith("firebase", "product");
+  });
+});
+
+// The Blueprints screen is kept while closed: a form whose packs could not be read is set up once they can be.
+describe("a form whose first read failed", () => {
+  it("is set up, and the failure cleared, when the screen is shown again and the packs can be read", async () => {
+    packsRead.failures = 1;
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintNewBuild, {});
+    await flushPromises();
+    expect(wrapper.find('[data-testid="blueprint-new-error"]').exists()).toBe(true);
+    await showAgain();
+    expect(wrapper.find('[data-testid="blueprint-new-error"]').exists()).toBe(false);
+    expect(wrapper.get<HTMLSelectElement>('[data-testid="blueprint-usecase"]').element.value).not.toBe("");
+    wrapper.unmount();
+  });
+});
+
+describe("the questions shown again", () => {
+  it("are read again for the same pair, keeping the answers given", async () => {
+    const question = (id: string) => ({ id, label: id, why: "", kind: "text" });
+    previewPair.mockResolvedValue({ ok: true, value: { hearing: { questions: [question("goal")] }, steps: [] } });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintNewBuild, {});
+    await flushPromises();
+    await wrapper.get('[data-testid="blueprint-question"] textarea').setValue("a tidy report");
+    previewPair.mockClear();
+    previewPair.mockResolvedValue({ ok: true, value: { hearing: { questions: [question("goal"), question("audience")] }, steps: [] } });
+    await showAgain();
+    expect(previewPair).toHaveBeenCalledTimes(1);
+    const fields = wrapper.findAll('[data-testid="blueprint-question"]');
+    expect(fields.map((field) => field.get("label").text().split(" ")[0])).toEqual(["goal", "audience"]);
+    expect(fields[0]?.get<HTMLTextAreaElement>("textarea").element.value).toBe("a tidy report");
+    wrapper.unmount();
+  });
+});
+
+describe("questions whose first read failed", () => {
+  it("are read when the screen is shown again", async () => {
+    const question = { id: "goal", label: "goal", why: "", kind: "text" };
+    previewPair.mockReset();
+    previewPair
+      .mockResolvedValueOnce({ ok: false, error: "the pair could not be read" })
+      .mockResolvedValue({ ok: true, value: { hearing: { questions: [question] }, steps: [] } });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintNewBuild, {});
+    await flushPromises();
+    expect(wrapper.findAll('[data-testid="blueprint-question"]')).toHaveLength(0);
+    await showAgain();
+    expect(wrapper.findAll('[data-testid="blueprint-question"]')).toHaveLength(1);
+    wrapper.unmount();
   });
 });

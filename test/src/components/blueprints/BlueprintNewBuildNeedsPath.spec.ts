@@ -1,7 +1,8 @@
 // An option that needs a file in the folder is offered only where that file is, and a question left with one option
 // is not asked: that option is the answer, and the questions it opens are asked.
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { flushPromises, mount } from "@vue/test-utils";
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
+import { mountUnderOverlay } from "../underOverlay";
 
 const FOLDER_STYLE = "このフォルダの規約";
 const DEFAULT_STYLE = "chaff の既定のまま";
@@ -56,7 +57,7 @@ const inFolder = async (present: string[] | null) => {
   await flushPromises();
   return wrapper;
 };
-const asked = (wrapper: Awaited<ReturnType<typeof inFolder>>) =>
+const asked = (wrapper: Pick<VueWrapper, "findAll">) =>
   wrapper
     .findAll('[data-testid="blueprint-question"]')
     .map((question) => [
@@ -99,5 +100,36 @@ describe("an option that needs a file in the folder", () => {
       ["Style", [FOLDER_STYLE, DEFAULT_STYLE]],
       ["Voice (optional)", ["mine", "polite", "plain"]],
     ]);
+  });
+});
+
+// The form is kept while the Blueprints screen is closed, and the folder may change meanwhile.
+describe("the folder shown again", () => {
+  it("is asked about again, and the options follow the answer", async () => {
+    folderPresentPaths.mockResolvedValue({ ok: true, value: { present: [] } });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintNewBuild, {});
+    await flushPromises();
+    await wrapper.get('[data-testid="blueprint-project-dir"]').setValue("/home/me/notes");
+    await new Promise((resolve) => setTimeout(resolve, PRESENCE_SETTLED_MS));
+    await flushPromises();
+    expect(asked(wrapper)[0]?.[0]).toBe("Voice (optional)");
+    folderPresentPaths.mockResolvedValue({ ok: true, value: { present: ["chaff.yaml", "VOICE.md"] } });
+    await showAgain();
+    expect(asked(wrapper)[0]?.[0]).toBe("Style");
+    wrapper.unmount();
+  });
+});
+
+describe("a folder typed just before the screen closes", () => {
+  it("is not asked about while hidden", async () => {
+    const { wrapper, visible } = mountUnderOverlay(BlueprintNewBuild, {});
+    await flushPromises();
+    folderPresentPaths.mockClear();
+    await wrapper.get('[data-testid="blueprint-project-dir"]').setValue("/home/me/notes");
+    visible.value = false;
+    await new Promise((resolve) => setTimeout(resolve, PRESENCE_SETTLED_MS));
+    await flushPromises();
+    expect(folderPresentPaths).not.toHaveBeenCalled();
+    wrapper.unmount();
   });
 });

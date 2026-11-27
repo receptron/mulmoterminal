@@ -14,6 +14,7 @@ export const PALETTE_SCREENS = [
   "blueprints",
   "worklog",
   "skills",
+  "library",
   "processes",
   "usage",
 ] as const;
@@ -32,6 +33,7 @@ export const SCREEN_ICONS: Record<PaletteScreen, string> = {
   blueprints: "architecture",
   worklog: "history_edu",
   skills: "auto_stories",
+  library: "local_library",
   processes: "memory",
   usage: "data_usage",
 };
@@ -49,6 +51,7 @@ export const SCREEN_LABEL_KEYS: Record<PaletteScreen, string> = {
   blueprints: "featureMenu.items.blueprints.label",
   worklog: "featureMenu.items.worklog.label",
   skills: "featureMenu.items.skills.label",
+  library: "featureMenu.items.library.label",
   processes: "featureMenu.items.processes.label",
   usage: "featureMenu.items.usage.label",
 };

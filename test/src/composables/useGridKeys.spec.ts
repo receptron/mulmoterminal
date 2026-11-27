@@ -76,6 +76,24 @@ describe("useGridKeys", () => {
     w.unmount();
   });
 
+  // The app's off-grid handler runs `screen-toggle` and can put the grid in front before the grid's
+  // own listener sees the same keydown; taking it again would toggle straight back.
+  it("leaves a key another handler already took", () => {
+    runAppAction.mockClear();
+    const { run, keys, w } = mountKeys(true);
+    const taken = press("F8");
+    taken.preventDefault();
+    keys.onKey({ "screen-toggle": "F8", "zoom-next": "F9" }, taken);
+    const takenToo = press("F9");
+    takenToo.preventDefault();
+    keys.onKey({ "screen-toggle": "F8", "zoom-next": "F9" }, takenToo);
+    expect(runAppAction).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+    keys.onKey({ "screen-toggle": "F8" }, press("F8"));
+    expect(runAppAction).toHaveBeenCalledWith("screen-toggle");
+    w.unmount();
+  });
+
   it("runs a palette pick through the view-state gate", () => {
     const { run, w } = mountKeys(false);
     paletteHost.value?.run("files-find"); // needs an enlarged terminal
