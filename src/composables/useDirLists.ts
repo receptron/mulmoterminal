@@ -4,7 +4,7 @@ import type { PartialWorkerStatus } from "../../common/workerStatus";
 import type { PartialSessionOccupancy, SessionOccupancy } from "../../common/sessionOccupancy";
 import type { PartialSessionRunning } from "../../common/sessionRunning";
 import { isTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
-import { agentSessionListUrl } from "../../common/agentSessionList";
+import { AGENT_SESSION_LIST_PATHS, agentSessionListUrl } from "../../common/agentSessionList";
 import { isRecord, optionalBoolean } from "../../common/isRecord";
 import { isUnknownArray } from "../../common/isUnknownArray";
 import { jsonBody } from "../jsonBody";
@@ -190,8 +190,9 @@ function useDirList<T>(url: (dir: string) => string, parse: (body: ListBody, dir
 export const useResumableSessions = () => {
   let agent: TerminalAgent = "claude";
   const list = useDirList<ResumableList>(
-    (dir) => agentSessionListUrl(agent, dir),
-    (body, dir) => ({ sessions: rowsOf(body.sessions, isResumableSession), cwd: dirOf(body.cwd, dir) }),
+    (dir) => dirApiUrl(dir, AGENT_SESSION_LIST_PATHS[agent]),
+    // The plain path even for a remote directory's key: it is what the session resumes in, on its host.
+    (body, dir) => ({ sessions: rowsOf(body.sessions, isResumableSession), cwd: dirOf(body.cwd, dirAddressOf(dir).cwd) }),
     () => ({ sessions: [], cwd: null }),
   );
   return {

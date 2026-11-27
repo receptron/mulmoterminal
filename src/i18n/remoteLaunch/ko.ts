@@ -11,4 +11,6 @@ export const remoteLaunchKo = {
   workspace: "워크스페이스",
   dirsFailed: "{label}의 저장된 디렉터리를 읽지 못했습니다: {error}",
   chipFill: "{path} 사용",
+  resumeHeading: "또는 {label}의 대화 이어가기",
+  resumeOpen: "열려 있음",
 };

@@ -4,8 +4,8 @@ import TerminalGrid from "./TerminalGrid.vue";
 import AppSettingsModal from "./AppSettingsModal.vue";
 import LaunchPanel from "./LaunchPanel.vue";
 import { loadGridState, saveGridState } from "../composables/gridLayoutMirror";
-import { cellForAgent, cellForPanelResume, cellForPanelStart, cellForRemoteStart, type PanelResume, type PanelStart } from "./launchCell";
-import type { RemoteStart } from "./remoteLaunch";
+import { cellForAgent, cellForPanelResume, cellForPanelStart, cellForRemoteResume, cellForRemoteStart, type PanelResume, type PanelStart } from "./launchCell";
+import type { RemoteResume, RemoteStart } from "./remoteLaunch";
 import AppToolbar from "./AppToolbar.vue";
 import GuideLinks from "./GuideLinks.vue";
 import { startCollectionChat } from "../composables/useChatLauncher";
@@ -629,6 +629,7 @@ const onPanelResume = (resume: PanelResume) => placeFromPanel(cellForPanelResume
 const onPanelRun = (command: RunCommand) => placeFromPanel({ session: null, cwd: null, command });
 const onPanelLaunch = (pick: LaunchPick) => placeFromPanel({ session: null, cwd: pick.cwd, launcher: pick.launcher });
 const onPanelRemoteStart = (start: RemoteStart) => placeFromPanel(cellForRemoteStart(start));
+const onPanelRemoteResume = (resume: RemoteResume) => placeFromPanel(cellForRemoteResume(resume));
 useCaptureKeydown(onShortcutKey);
 
 // Launch a Settings skill in a new auto-running session and show it as a GRID CELL. The button was
@@ -941,6 +942,7 @@ onBeforeUnmount(detachSpawnedChat);
       @run="onPanelRun"
       @launch="onPanelLaunch"
       @start-remote="onPanelRemoteStart"
+      @resume-remote="onPanelRemoteResume"
       @remove-preset="removePreset"
       @retry-config="loadConfig"
       @close="closeLaunchPanel"

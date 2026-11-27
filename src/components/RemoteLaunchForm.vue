@@ -1,20 +1,23 @@
 <script setup lang="ts">
 // The launch form for a remote host (#3506): a directory, typed or picked from the remote's own saved
-// ones, and a built-in agent or the shell. CellLaunchForm is not reused with a flag: every directory
-// it lists and checks is on THIS disk.
-import { computed, ref, watch } from "vue";
+// ones, and a built-in agent or the shell — or one of that agent's past conversations there, resumed.
+// CellLaunchForm is not reused with a flag: every directory it lists and checks is on THIS disk.
+import { computed, onUnmounted, ref, watch } from "vue";
 import { useRemoteHostDirs } from "../composables/useRemoteHostDirs";
 import { useI18n } from "vue-i18n";
 import { AGENT_PICKER_OPTIONS } from "./agentPicker";
 import { isLaunchAgent, type LaunchAgent } from "../../common/launchAgent";
-import { remoteDirOf, type RemoteStart } from "./remoteLaunch";
+import { remoteDirOf, type RemoteResume, type RemoteStart } from "./remoteLaunch";
+import { useResumableSessions, type ResumableSession } from "../composables/useDirLists";
+import { dirKeyOf } from "../composables/dirAddress";
+import { isTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
 import { LAUNCH_ROW } from "./launchFormClasses";
 import type { RemoteHostSummary } from "../../common/remoteHosts";
 
 const { t } = useI18n();
 
 const props = defineProps<{ host: RemoteHostSummary }>();
-const emit = defineEmits<{ (e: "start", value: RemoteStart): void; (e: "close"): void }>();
+const emit = defineEmits<{ (e: "start", value: RemoteStart): void; (e: "resume", value: RemoteResume): void; (e: "close"): void }>();
 
 const AGENTS = AGENT_PICKER_OPTIONS.flatMap((option) => (isLaunchAgent(option.agent) ? [{ agent: option.agent, label: option.label }] : []));
 
@@ -37,6 +40,34 @@ const showDirHint = computed(() => dir.value.trim() !== "" && !startable.value);
 
 function start() {
   if (startable.value) emit("start", { host: props.host.id, dir: dir.value, agent: agent.value });
+}
+
+// The picked agent's own past conversations in the typed directory, read on the host. A shell has none.
+const listAgent = computed<TerminalAgent | null>(() => (isTerminalAgent(agent.value) ? agent.value : null));
+const { value: resumable, forget: forgetResumable, load: loadResumable } = useResumableSessions();
+const RESUME_RELOAD_DEBOUNCE_MS = 300;
+let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+// The rows go the moment the directory or the agent changes, since they are the previous one's; the
+// reload waits out the typing.
+watch([dir, listAgent], () => {
+  clearTimeout(reloadTimer);
+  forgetResumable();
+  reloadTimer = setTimeout(() => {
+    const listed = listAgent.value;
+    void loadResumable(listed === null ? null : dirKeyOf(props.host.id, remoteDirOf(dir.value)), listed ?? "claude");
+  }, RESUME_RELOAD_DEBOUNCE_MS);
+});
+onUnmounted(() => clearTimeout(reloadTimer));
+
+// Held by a terminal somewhere — this grid's own remote cells included, since the gateway's socket is
+// one the remote counts. Opening it here would take it from whoever has it.
+const heldElsewhere = (session: ResumableSession): boolean => session.attached === true;
+
+function resume(session: ResumableSession): void {
+  const cwd = resumable.value.cwd;
+  if (heldElsewhere(session) || listAgent.value === null || !cwd) return;
+  // A row still running is picked up under the key it runs under, as CellLaunchForm's resume explains.
+  emit("resume", { host: props.host.id, id: session.runningKey ?? session.id, cwd, agent: listAgent.value });
 }
 </script>
 
@@ -107,6 +138,29 @@ function start() {
       <span class="material-symbols-outlined text-[18px]" aria-hidden="true">play_arrow</span>
       {{ t("tips.launch.remote.start", { label: host.label }) }}
     </button>
+    <div v-if="resumable.sessions.length" data-testid="remote-resume" :class="LAUNCH_ROW" class="flex flex-col items-center gap-1.5">
+      <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim">{{ t("tips.launch.remote.resumeHeading", { label: host.label }) }}</span>
+      <div class="flex w-full flex-col gap-1">
+        <button
+          v-for="session in resumable.sessions"
+          :key="session.id"
+          type="button"
+          data-testid="remote-resume-item"
+          class="flex w-full min-w-0 items-baseline justify-between gap-2 rounded-md border bg-deep px-2.5 py-[5px] text-left font-sans text-[12px]"
+          :class="
+            heldElsewhere(session)
+              ? 'cursor-not-allowed border-amber text-dim'
+              : 'cursor-pointer border-border text-secondary hover:border-accent hover:bg-elevated'
+          "
+          :disabled="heldElsewhere(session)"
+          :data-tip="heldElsewhere(session) ? t('tips.launch.sessionBusy', { title: session.title }) : session.title"
+          @click="resume(session)"
+        >
+          <span class="truncate">{{ session.title }}</span>
+          <span v-if="heldElsewhere(session)" class="flex-none whitespace-nowrap text-[11px] text-amber">{{ t("tips.launch.remote.resumeOpen") }}</span>
+        </button>
+      </div>
+    </div>
     <p :class="LAUNCH_ROW" class="text-[11px] text-secondary">{{ t("tips.launch.remote.localOnly", { label: host.label }) }}</p>
   </form>
 </template>

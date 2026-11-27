@@ -15,12 +15,18 @@ const HOSTS: RemoteHostSummary[] = [
 const NO_DIRS = { status: 200, body: { cwd: null, presets: [] } };
 let requested: string[] = [];
 let dirsAnswer: { status: number; body: unknown } = NO_DIRS;
+// What the remote's conversation lists answer, through the gateway.
+let remoteSessions: unknown[] = [];
+let remoteListCwd: string | undefined = "/srv/app";
 const stubFetch = (hosts: RemoteHostSummary[]) => {
   requested = [];
   dirsAnswer = NO_DIRS;
+  remoteSessions = [];
+  remoteListCwd = "/srv/app";
   globalThis.fetch = vi.fn(async (url: string) => {
     requested.push(String(url));
     if (String(url).endsWith("/dirs")) return { ok: dirsAnswer.status === 200, status: dirsAnswer.status, json: async () => dirsAnswer.body };
+    if (String(url).startsWith("/remote/lx/api/")) return { ok: true, json: async () => ({ cwd: remoteListCwd, sessions: remoteSessions }) };
     if (String(url).includes("/api/remote-hosts")) return { ok: true, json: async () => ({ hosts, rejected: [] }) };
     if (String(url).includes("/api/worktrees")) return { ok: true, json: async () => ({ isGit: false, base: null, worktrees: [] }) };
     if (String(url).includes("/api/sessions")) return { ok: true, json: async () => ({ cwd: "/repo", sessions: [] }) };
@@ -45,6 +51,12 @@ const pickHost = async (w: VueWrapper, id: string) => {
 const typeDir = async (w: VueWrapper, dir: string) => {
   await w.find('[data-testid="remote-launch"] [data-testid="cell-dir-input"]').setValue(dir);
 };
+// The form waits out the typing before it reads the directory's conversations.
+const settle = async () => {
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  await flushPromises();
+};
+const ROW = { id: "0b8f0a0e-7c55-4c1e-9e0a-3f1d2c4b5a69", title: "fix the parser", mtime: 1 };
 
 describe("the launch panel's host picker", () => {
   it("is absent when no remote host is configured, leaving the panel as it was", async () => {
@@ -90,7 +102,84 @@ describe("the launch panel's host picker", () => {
     await pickHost(w, "lx");
     requested = [];
     await typeDir(w, "/srv/app");
+    await settle();
+    expect(requested.filter((url) => !url.startsWith("/remote/lx/"))).toEqual([]);
+  });
+
+  it("lists the picked agent's past conversations on the host, and resumes one there", async () => {
+    const w = await mountPanel();
+    await pickHost(w, "lx");
+    remoteSessions = [
+      ROW,
+      { id: "11111111-1111-4111-8111-111111111111", title: "still running", mtime: 2, runningKey: "22222222-2222-4222-8222-222222222222" },
+    ];
+    await typeDir(w, "/srv/app");
+    await settle();
+    expect(requested).toContain("/remote/lx/api/sessions?cwd=%2Fsrv%2Fapp");
+    const rows = w.findAll('[data-testid="remote-resume-item"]');
+    expect(rows.map((row) => row.text())).toEqual(["fix the parser", "still running"]);
+    await rows[0]?.trigger("click");
+    await rows[1]?.trigger("click");
+    expect(w.emitted("resume-remote")).toEqual([
+      [{ host: "lx", id: ROW.id, cwd: "/srv/app", agent: "claude" }],
+      [{ host: "lx", id: "22222222-2222-4222-8222-222222222222", cwd: "/srv/app", agent: "claude" }],
+    ]);
+    expect(w.emitted("resume")).toBeUndefined();
+  });
+
+  it("reads the list of the agent picked, and none for a shell", async () => {
+    const w = await mountPanel();
+    await pickHost(w, "lx");
+    requested = [];
+    remoteSessions = [ROW];
+    await typeDir(w, "/srv/app");
+    await w.find('[data-testid="remote-agent-codex"]').trigger("click");
+    await settle();
+    expect(requested.filter((url) => url.includes("sessions"))).toEqual(["/remote/lx/api/codex/sessions?cwd=%2Fsrv%2Fapp"]);
+    await w.findAll('[data-testid="remote-resume-item"]')[0]?.trigger("click");
+    expect(w.emitted("resume-remote")?.[0]).toEqual([{ host: "lx", id: ROW.id, cwd: "/srv/app", agent: "codex" }]);
+    requested = [];
+    await w.find('[data-testid="remote-agent-shell"]').trigger("click");
+    await settle();
+    expect(requested).toEqual([]);
+    expect(w.find('[data-testid="remote-resume"]').exists()).toBe(false);
+  });
+
+  it("resumes in the directory it read when the remote does not name one", async () => {
+    const w = await mountPanel();
+    await pickHost(w, "lx");
+    remoteSessions = [ROW];
+    remoteListCwd = undefined;
+    await typeDir(w, "/srv/other");
+    await settle();
+    await w.find('[data-testid="remote-resume-item"]').trigger("click");
+    expect(w.emitted("resume-remote")).toEqual([[{ host: "lx", id: ROW.id, cwd: "/srv/other", agent: "claude" }]]);
+  });
+
+  it("refuses a conversation a terminal is holding", async () => {
+    const w = await mountPanel();
+    await pickHost(w, "lx");
+    remoteSessions = [{ ...ROW, attached: true }];
+    await typeDir(w, "/srv/app");
+    await settle();
+    const row = w.find('[data-testid="remote-resume-item"]');
+    expect(row.attributes("disabled")).toBeDefined();
+    await row.trigger("click");
+    expect(w.emitted("resume-remote")).toBeUndefined();
+  });
+
+  it("drops the rows when the directory changes, and reads nothing for one the remote cannot use", async () => {
+    const w = await mountPanel();
+    await pickHost(w, "lx");
+    remoteSessions = [ROW];
+    await typeDir(w, "/srv/app");
+    await settle();
+    expect(w.find('[data-testid="remote-resume"]').exists()).toBe(true);
+    requested = [];
+    await typeDir(w, "~/app");
     await flushPromises();
+    expect(w.find('[data-testid="remote-resume"]').exists()).toBe(false);
+    await settle();
     expect(requested).toEqual([]);
   });
 
