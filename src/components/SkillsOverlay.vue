@@ -117,6 +117,21 @@ async function refresh(): Promise<void> {
   if (read !== catalogRead) return;
   if (answer !== null || catalog.value === null) catalog.value = answer;
   loadFailed.value = catalog.value === null;
+  if (answer !== null) dropPickGone(answer);
+}
+
+// A skill removed or moved while the screen was closed is no longer offered: its SKILL.md and its
+// evaluation go with it, rather than stay on screen to be acted on. Not under an edit, which is the
+// person's text.
+function dropPickGone(listed: SkillCatalog): void {
+  const shown = picked.value;
+  if (shown === null || editing.value) return;
+  const key = sourceKey(shown.source);
+  if (listed.sources.some((source) => sourceKey(source) === key && source.skills.some((skill) => skill.id === shown.skill.id))) return;
+  docRead += 1;
+  picked.value = null;
+  showDoc(null, null);
+  docFailed.value = false;
 }
 
 watch(

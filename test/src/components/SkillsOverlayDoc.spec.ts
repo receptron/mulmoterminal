@@ -11,11 +11,12 @@ vi.mock("../../../src/composables/useSkillsView", () => ({ useSkillsView: () => 
 
 type DocAnswer = { markdown: string; version: string } | null;
 const docs: ((answer: DocAnswer) => void)[] = [];
+const listedCatalog: { current: unknown } = { current: null };
 const catalog = {
   sources: [{ scope: "user", dir: "/h/.claude/skills", plugin: "", skills: [{ slug: "publish", id: "publish", description: "", overridesUser: false }] }],
 };
 vi.mock("../../../src/composables/useSkillCatalog", () => ({
-  loadSkillCatalog: () => Promise.resolve(catalog),
+  loadSkillCatalog: () => Promise.resolve(listedCatalog.current),
   loadSkillDoc: () => new Promise<DocAnswer>((resolve) => docs.push(resolve)),
   loadSkillUsage: () => Promise.resolve(null),
 }));
@@ -27,6 +28,7 @@ const i18n = createI18n({ legacy: false, locale: "en", messages: { en: skillsVie
 const doc = (text: string): DocAnswer => ({ markdown: text, version: text });
 
 beforeEach(() => {
+  listedCatalog.current = catalog;
   docs.length = 0;
   open.value = true;
 });
@@ -120,6 +122,24 @@ describe("an adoption answering after the screen was closed", () => {
     await flushPromises();
     expect(docs).toHaveLength(0);
     expect(wrapper.text()).toContain("as shown");
+    wrapper.unmount();
+  });
+});
+
+describe("a skill removed while the screen was closed", () => {
+  it("takes its SKILL.md and evaluation off the screen on the next opening", async () => {
+    const wrapper = mount(SkillsOverlay, { global: { plugins: [i18n] } });
+    await flushPromises();
+    await wrapper.get("[data-testid=skills-item]").trigger("click");
+    docs.shift()?.(doc("about to go"));
+    await flushPromises();
+    expect(wrapper.text()).toContain("about to go");
+    listedCatalog.current = { sources: [{ ...catalog.sources[0], skills: [] }] };
+    await reopen();
+    docs.splice(0).forEach((answer) => answer(doc("about to go")));
+    await flushPromises();
+    expect(wrapper.text()).not.toContain("about to go");
+    expect(wrapper.findComponent({ name: "SkillEvalPanel" }).exists()).toBe(false);
     wrapper.unmount();
   });
 });
