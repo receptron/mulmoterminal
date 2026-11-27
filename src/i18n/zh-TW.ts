@@ -6,6 +6,7 @@ import { commandPaletteZhTW } from "./commandPalette/zh-TW";
 import { terminalCopyModeZhTW } from "./terminalCopyMode/zh-TW";
 import { rowMenuZhTW } from "./rowMenu/zh-TW";
 import { focusModeZhTW } from "./focusMode/zh-TW";
+import { screenTabsZhTW } from "./screenTabs/zh-TW";
 import { requestTimeoutZhTW } from "./requestTimeout/zh-TW";
 import { gridRestoreZhTW } from "./gridRestore/zh-TW";
 import { fileHistoryZhTW } from "./fileHistory/zh-TW";
@@ -627,6 +628,7 @@ export const zhTW: Messages = {
   headerChips: headerChipsZhTW,
   headerButtons: headerButtonsZhTW,
   focusMode: focusModeZhTW,
+  screenTabs: screenTabsZhTW,
   requestTimeout: requestTimeoutZhTW,
   gridRestore: gridRestoreZhTW,
   settingsControls: settingsControlsZhTW,

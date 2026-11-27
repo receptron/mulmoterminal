@@ -31,7 +31,7 @@ vi.mock("../../../src/composables/useSkillCatalog", () => ({
   loadSkillUsage: () => new Promise<UsageAnswer>((resolve) => pending.push(resolve)),
 }));
 // The marks come from their own read (#3467); none here, so this spec never reaches a server.
-vi.mock("../../../src/composables/skillEvalApi", () => ({ loadSkillEvalMarks: () => Promise.resolve(null) }));
+vi.mock("../../../src/composables/skillEvalApi", () => ({ loadSkillEvalMarks: () => Promise.resolve(null), loadSkillEval: () => Promise.resolve(null) }));
 const SkillsOverlay = (await import("../../../src/components/SkillsOverlay.vue")).default;
 
 const i18n = createI18n({ legacy: false, locale: "en", messages: { en: skillsViewEn } });
@@ -69,5 +69,38 @@ describe("skill usage in the Skills viewer", () => {
     pending[0](counts(1));
     await flushPromises();
     expect(rowTexts(wrapper)).toEqual(["5×", "unused"]);
+  });
+
+  // The screen is hidden, not thrown away: the skill picked and the search typed are there on the next
+  // open, and the list stays on screen while the catalog is read again.
+  it("keeps the pick and the search across a close, with the list shown while it is read again", async () => {
+    const wrapper = mount(SkillsOverlay, { global: { plugins: [i18n] } });
+    await flushPromises();
+    await wrapper.get("[data-testid=skills-search]").setValue("pub");
+    await wrapper.get("[data-testid=skills-item]").trigger("click");
+    await flushPromises();
+    open.value = false;
+    await flushPromises();
+    open.value = true;
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findAll("[data-testid=skills-item]")).toHaveLength(1);
+    expect(wrapper.get<HTMLInputElement>("[data-testid=skills-search]").element.value).toBe("pub");
+    expect(wrapper.get("[data-testid=skills-item]").classes()).toContain("bg-hover");
+  });
+});
+
+describe("counts read again on the next opening", () => {
+  it("are kept when that read cannot answer", async () => {
+    const wrapper = mount(SkillsOverlay, { global: { plugins: [i18n] } });
+    pending[0](counts(3));
+    await flushPromises();
+    open.value = false;
+    await flushPromises();
+    open.value = true;
+    await flushPromises();
+    pending.at(-1)?.(null);
+    await flushPromises();
+    expect(rowTexts(wrapper)).toEqual(["3×", "unused"]);
+    wrapper.unmount();
   });
 });

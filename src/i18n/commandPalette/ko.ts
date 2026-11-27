@@ -84,6 +84,7 @@ export const commandPaletteKo = {
     pageNext: "그리드의 다음 페이지(페이지당 9개)를 표시합니다. 마지막 페이지에서는 아무것도 하지 않습니다.",
     pagePrev: "그리드의 이전 페이지를 표시합니다. 첫 페이지에서는 아무것도 하지 않습니다.",
     terminalReopen: "가장 최근에 닫은 터미널을 현재 터미널 옆에 다시 열고 대화를 이어갑니다. 셸은 새로 엽니다.",
+    screenToggle: "마지막으로 연 화면(라이브러리, Skills, Files 등)과 그 화면을 연 원래 화면을 오갑니다. 화면은 떠났을 때 그대로 돌아옵니다.",
     terminalTimeline: "현재 터미널의 활동 타임라인을 엽니다(Claude 세션만).",
     terminalTalk: "현재 터미널에서 질문을 넘길 다른 터미널 목록을 엽니다.",
     terminalPark: "현재 터미널을 쉬게 하거나, 이미 쉬고 있으면 깨웁니다.",

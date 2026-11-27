@@ -16,7 +16,7 @@ useEscapeToClose(isOpen, () => {
 </script>
 
 <template>
-  <div v-if="isOpen" class="fixed inset-x-0 top-10 bottom-0 z-50 flex flex-col bg-deep">
+  <div v-if="isOpen" class="fixed inset-x-0 top-(--screen-top) bottom-0 z-50 flex flex-col bg-deep">
     <GithubBoard class="min-h-0 flex-auto" @close="close" @list="githubGotoIndex" />
   </div>
 </template>

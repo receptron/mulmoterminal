@@ -3,6 +3,7 @@
 // removed (#2219). Read once when shown and on Refresh — it is a few git calls per worktree.
 // Removing is a button per candidate; nothing is removed automatically.
 import { computed, onMounted, ref, shallowRef } from "vue";
+import { onOverlayShownAgain, useOverlayVisible } from "../../composables/overlayVisibility";
 import { useI18n } from "vue-i18n";
 import { loadWorktreeCleanup, removeCleanupWorktree } from "../../composables/processesApi";
 import { cleanupBlockers, isCleanupCandidate, type WorktreeCleanupRow } from "../../../common/worktreeCleanup";
@@ -21,13 +22,17 @@ const shownRows = computed(() => (rows.value ?? []).filter((row) => !onlyCandida
 // set the list, or a slow earlier read shows a worktree that was just removed.
 let latestRead = 0;
 
+// A removal answering after the screen was closed reads nothing; showing it again reads.
+const visible = useOverlayVisible();
 async function refresh(): Promise<void> {
+  if (!visible.value) return;
   const thisRead = ++latestRead;
   loadFailed.value = false;
   const read = await loadWorktreeCleanup();
   if (thisRead !== latestRead) return;
   loadFailed.value = read === null;
-  rows.value = read;
+  // A failed re-read keeps the list shown, under the failure, rather than taking it away.
+  if (read !== null || rows.value === null) rows.value = read;
 }
 
 const ignoredNames = (row: WorktreeCleanupRow): string =>
@@ -53,6 +58,7 @@ async function remove(row: WorktreeCleanupRow): Promise<void> {
 }
 
 onMounted(() => void refresh());
+onOverlayShownAgain(() => void refresh());
 </script>
 
 <template>
@@ -73,8 +79,11 @@ onMounted(() => void refresh());
       </button>
     </div>
     <p v-if="removeError" data-testid="worktrees-remove-error" class="m-0 mb-3 font-sans text-[13px] text-err-text">{{ removeError }}</p>
+    <!-- Its own line, not the head of the chain below: a list kept through a failed re-read shows under it. -->
     <p v-if="loadFailed" class="m-0 font-sans text-[13px] text-err-text">{{ t("processesView.worktrees.loadFailed") }}</p>
-    <p v-else-if="!rows" class="m-0 font-sans text-[13px] text-dim">{{ t("processesView.worktrees.loading") }}</p>
+    <template v-if="!rows">
+      <p v-if="!loadFailed" class="m-0 font-sans text-[13px] text-dim">{{ t("processesView.worktrees.loading") }}</p>
+    </template>
     <p v-else-if="!rows.length" class="m-0 font-sans text-[13px] text-dim">{{ t("processesView.worktrees.empty") }}</p>
     <p v-else-if="!shownRows.length" class="m-0 font-sans text-[13px] text-dim">{{ t("processesView.worktrees.noCandidates") }}</p>
     <ul v-else class="m-0 list-none p-0">

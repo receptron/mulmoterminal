@@ -16,9 +16,10 @@ vi.mock("../../../src/composables/usePubSub", () => ({
   }),
 }));
 
-const announce = vi.hoisted(() => ({ listener: null as ((announcement: { sessionId: string }) => void) | null }));
+type Announcement = { host: string | null; sessionId: string };
+const announce = vi.hoisted(() => ({ listener: null as ((announcement: Announcement) => void) | null }));
 vi.mock("../../../src/composables/useToolGroupsAnnounce", () => ({
-  onToolGroupsAnnounced: (listener: (a: { sessionId: string }) => void) => {
+  onToolGroupsAnnounced: (listener: (a: Announcement) => void) => {
     announce.listener = listener;
   },
 }));
@@ -121,13 +122,17 @@ describe("a remote cell's Canvas", () => {
     expect(projectLookups.cwds).toEqual([]);
   });
 
-  it("is not re-asked by this machine's tool-groups announcement", async () => {
+  it("is re-asked on its host by that host's tool-groups announcement, and not by this machine's", async () => {
     mountPanel("lx");
     await flushPromises();
     const before = asked.length;
-    announce.listener?.({ sessionId: SESSION });
+    announce.listener?.({ host: null, sessionId: SESSION });
+    announce.listener?.({ host: "other", sessionId: SESSION });
     await flushPromises();
     expect(asked).toHaveLength(before);
+    announce.listener?.({ host: "lx", sessionId: SESSION });
+    await flushPromises();
+    expect(asked.slice(before).map((r) => r.url)).toEqual([`/remote/lx/api/tools?sessionId=${SESSION}`]);
   });
 });
 

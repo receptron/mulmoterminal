@@ -2,6 +2,8 @@
 // example's id when the build starts, and forgets the example when the pair is changed by hand.
 import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { defineComponent, h, ref } from "vue";
+import { provideOverlayVisible } from "../../../../src/composables/overlayVisibility";
 import type { FormFill } from "../../../../src/composables/useBlueprintsView";
 
 const { startRun, suggestFolder, listKnownFolders } = vi.hoisted(() => ({ startRun: vi.fn(), suggestFolder: vi.fn(), listKnownFolders: vi.fn() }));
@@ -523,5 +525,27 @@ describe("a source that carries personal data", () => {
     await wrapper.get('[data-testid="blueprint-question"] textarea').setValue("other.txt");
     await flushPromises();
     expect(wrapper.find('[data-testid="blueprint-copy-personal-data"]').exists()).toBe(false);
+  });
+});
+
+// The Blueprints screen is kept while closed, so the form is still filled in after a trip to a terminal;
+// the copy kept for a reload is spent on coming back, so it cannot fill a later new build.
+describe("the form shown again", () => {
+  it("spends the kept copy and reads the lists again each time the screen is shown again", async () => {
+    takeFormFill.mockClear();
+    listKnownFolders.mockReset();
+    listKnownFolders.mockResolvedValue({ ok: true, value: { folders: [] } });
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(BlueprintNewBuild)) });
+    const wrapper = mount(Host);
+    await flushPromises();
+    expect(takeFormFill).toHaveBeenCalledTimes(1);
+    visible.value = false;
+    await flushPromises();
+    visible.value = true;
+    await flushPromises();
+    expect(takeFormFill).toHaveBeenCalledTimes(2);
+    expect(listKnownFolders).toHaveBeenCalledTimes(2); // the lists are read again too
+    wrapper.unmount();
   });
 });

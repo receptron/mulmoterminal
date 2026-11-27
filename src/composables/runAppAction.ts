@@ -9,6 +9,7 @@ import { useGatedEntries } from "./useGatedEntries";
 import { useSoundEnabled } from "./useSoundEnabled";
 import { fireConfetti } from "./useConfetti";
 import { reopenLastClosedCell } from "./reopenClosedCell";
+import { toggleLastScreen } from "./screenToggle";
 
 // A screen for a feature that is not set up opens onto nothing, which the toolbar hides and this
 // refuses, so the caller can say so.
@@ -22,6 +23,7 @@ export function runAppAction(action: AppAction): boolean {
   else if (action === "sound-toggle") useSoundEnabled().toggle();
   else if (action === "confetti") fireConfetti();
   else if (action === "terminal-reopen") return reopenLastClosedCell();
+  else if (action === "screen-toggle") return toggleLastScreen();
   else return runGridView(action);
   return true;
 }
@@ -32,7 +34,7 @@ function openScreen(screen: PaletteScreen): boolean {
   return true;
 }
 
-function runGridView(action: Exclude<AppAction, ScreenAction | "settings-open" | "sound-toggle" | "confetti" | "terminal-reopen">): boolean {
+function runGridView(action: Exclude<AppAction, ScreenAction | "settings-open" | "sound-toggle" | "confetti" | "terminal-reopen" | "screen-toggle">): boolean {
   const grid = paletteGridView.value;
   if (grid === null) return false;
   if (action === "page-next" || action === "page-prev") return grid.stepPage(action === "page-next" ? 1 : -1);
