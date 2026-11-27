@@ -84,6 +84,15 @@ watch(
   },
   { immediate: true },
 );
+// Shown again, the one being read is read again too; a failed re-read keeps what is shown.
+async function rereadDetail(): Promise<void> {
+  const id = selected.value?.id ?? null;
+  if (id === null) return;
+  const mine = ++details;
+  const found = await loadLibraryRepeat(id);
+  if (mine === details && found !== null) detail.value = found;
+}
+onOverlayShownAgain(() => void rereadDetail());
 
 const countLine = (candidate: RepeatCandidate): string =>
   t("libraryView.repeats.counts", { count: candidate.count, sessions: candidate.sessions, projects: candidate.projects.length });

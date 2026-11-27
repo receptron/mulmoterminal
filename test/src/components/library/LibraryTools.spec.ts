@@ -188,6 +188,11 @@ describe("LibraryTools", () => {
     await showAgain();
     expect(wrapper.findAll("[data-testid=tool-row]")).toHaveLength(2);
     expect(wrapper.find("[data-testid=library-tools-directories-failed]").exists()).toBe(false);
+    // Nothing else changes now, so only a re-read of the file being read can bring its new text.
+    directoriesAnswer = ["/w/new", "/w/app", "/w/lib"];
+    textAnswer = { text: "edited while closed" };
+    await showAgain();
+    expect(wrapper.text()).toContain("edited while closed");
     wrapper.unmount();
   });
 });

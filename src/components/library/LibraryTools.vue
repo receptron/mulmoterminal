@@ -99,6 +99,17 @@ watch(
   },
 );
 
+/** The file being read, read again on showing; a failed re-read keeps the text shown. */
+async function rereadText(): Promise<void> {
+  const dir = cwd.value;
+  const file = selected.value?.path ?? null;
+  if (dir === null || file === null) return;
+  const mine = ++textReads;
+  const read = await loadInstruction(dir, file);
+  if (mine === textReads && read !== null) text.value = read;
+}
+onOverlayShownAgain(() => void rereadText());
+
 const label = (file: LibraryInstructionFile) => instructionLabel(file, cwd.value ?? "");
 const notes = (file: LibraryInstructionFile): string[] =>
   [

@@ -23,6 +23,7 @@ const candidate = (id: string, text: string, over: Partial<RepeatCandidate> = {}
   ...over,
 });
 let listed: RepeatCandidate[] | null = [];
+const detailReads: string[] = [];
 let extraTotal = 0;
 const promotes: unknown[][] = [];
 let refusal: string | null = null;
@@ -31,6 +32,7 @@ let openConversation: (() => Promise<LibraryConversation | null>) | null = null;
 vi.mock("../../../../src/composables/libraryApi", () => ({
   loadLibraryRepeats: () => Promise.resolve(listed === null ? null : { candidates: listed, total: listed.length + extraTotal }),
   loadLibraryRepeat: (id: string): Promise<RepeatDetail | null> => {
+    detailReads.push(id);
     const found = listed?.find((c) => c.id === id);
     return Promise.resolve(
       found === undefined
@@ -152,7 +154,7 @@ describe("LibraryRepeats", () => {
   });
 
   // The Library is kept while closed: shown again, the list is read again, and a failed re-read keeps it.
-  it("reads the list again each time the Library is shown, keeping it through a failed read", async () => {
+  it("reads the list and the one being read again each time the Library is shown, keeping the list through a failed read", async () => {
     listed = [candidate("a", "run the tests")];
     const visible = ref(true);
     const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(LibraryRepeats, { query: "", now: NOW })) });
@@ -165,8 +167,10 @@ describe("LibraryRepeats", () => {
       await flushPromises();
     };
     listed = [candidate("a", "run the tests"), candidate("b", "open a PR")];
+    detailReads.length = 0;
     await showAgain();
     expect(wrapper.findAll("[data-testid=repeat-row]")).toHaveLength(2);
+    expect(detailReads).toEqual(["a"]); // the one being read, read again
     listed = null;
     await showAgain();
     expect(wrapper.findAll("[data-testid=repeat-row]")).toHaveLength(2);
