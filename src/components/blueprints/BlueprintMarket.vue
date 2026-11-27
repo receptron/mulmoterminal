@@ -6,6 +6,7 @@ import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { installPack, loadCatalog, loadRegistryUrls, saveRegistryUrls, uninstallPack, type ApiFailure, type ApiResult } from "../../composables/blueprintsApi";
 import { failureText } from "./refusalText";
+import { latestOnly } from "./latestOnly";
 import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 import type { Catalog } from "../../../common/blueprint/registry";
 
@@ -27,8 +28,13 @@ const actionError = ref<string | null>(null);
 
 const hasRegistries = computed(() => urls.value.length > 0);
 
+// Kept while the screen is closed: a read from an earlier opening or action can answer after a later one.
+const reads = latestOnly();
+
 async function refresh(): Promise<void> {
+  const ticket = reads.take();
   const [listed, read] = await Promise.all([loadRegistryUrls(), loadCatalog()]);
+  if (!reads.isLatest(ticket)) return;
   if (listed.ok) urls.value = listed.value.urls;
   if (read.ok) catalog.value = read.value;
   loadError.value = firstError(listed, read);

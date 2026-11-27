@@ -106,4 +106,22 @@ describe("the market shown again", () => {
     expect(loadCatalog).toHaveBeenCalledTimes(2);
     wrapper.unmount();
   });
+
+  it("keeps what a later read found when an earlier one answers last", async () => {
+    loadCatalog.mockReset();
+    let releaseEarly: (value: unknown) => void = () => {};
+    loadCatalog.mockReturnValueOnce(new Promise((resolve) => (releaseEarly = resolve))).mockResolvedValue(catalogWith(true));
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(BlueprintMarket)) });
+    const wrapper = mount(Host);
+    await flushPromises();
+    visible.value = false;
+    await flushPromises();
+    visible.value = true;
+    await flushPromises();
+    releaseEarly(catalogWith(false));
+    await flushPromises();
+    expect(wrapper.find('[data-testid="blueprint-uninstall"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
 });

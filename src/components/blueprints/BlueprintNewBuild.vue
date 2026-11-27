@@ -108,21 +108,39 @@ const ready = computed(
     !starting.value && projectDir.value.trim() !== "" && preview.value !== null && unansweredQuestions(preview.value.hearing, formAnswers.value).length === 0,
 );
 
+// The form is kept while the screen is closed, so the lists are read again when it is shown again,
+// and only the newest read of each is applied.
+const foldersRead = latestOnly();
+const listsRead = latestOnly();
+
 async function loadKnownFolders(): Promise<void> {
+  const ticket = foldersRead.take();
   const known = await listKnownFolders();
-  if (known.ok) knownFolders.value = known.value.folders;
+  if (foldersRead.isLatest(ticket) && known.ok) knownFolders.value = known.value.folders;
 }
+
+/** The examples and the packs, read again; false when the packs could not be read (said on the first read only). */
+async function loadLists(first: boolean): Promise<boolean> {
+  const ticket = listsRead.take();
+  const [listed, result] = await Promise.all([listPresets(), listPacks()]);
+  if (!listsRead.isLatest(ticket)) return false;
+  if (listed.ok) presets.value = listed.value.presets;
+  if (!result.ok) {
+    if (first) error.value = failureText(t, result);
+    return false;
+  }
+  packs.value = result.value.packs;
+  return true;
+}
+
+onOverlayShownAgain(() => {
+  void loadKnownFolders();
+  void loadLists(false);
+});
 
 onMounted(async () => {
   void loadKnownFolders();
-  const listed = await listPresets();
-  if (listed.ok) presets.value = listed.value.presets;
-  const result = await listPacks();
-  if (!result.ok) {
-    error.value = failureText(t, result);
-    return;
-  }
-  packs.value = result.value.packs;
+  if (!(await loadLists(true))) return;
   const fill = pendingFill.value;
   if (fill && !base.value) {
     projectDir.value = fill.projectDir;
