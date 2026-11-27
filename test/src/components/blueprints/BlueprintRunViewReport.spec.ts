@@ -2,6 +2,7 @@
 // open, and rendered from Markdown with the path it came from.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mountUnderOverlay } from "../underOverlay";
 
 const { loadRun, loadReport, listPacks, filesGotoFile, filesGotoIndex, blueprintsViewFollowUp } = vi.hoisted(() => ({
   loadRun: vi.fn(),
@@ -235,6 +236,21 @@ describe("a review gate", () => {
   };
 
   // The gate stands before the step it names: without the name, the step's own title above read as work already done.
+  // The kept screen: a spec message answering after the close reads nothing; showing again reads.
+  it("reads nothing for a spec message that answers after the screen was closed", async () => {
+    loadRun.mockReset();
+    loadRun.mockResolvedValue(gated([]));
+    const { wrapper, visible } = mountUnderOverlay(BlueprintRunView, { runId: "run-00000001" });
+    await flushPromises();
+    visible.value = false;
+    await flushPromises();
+    loadRun.mockClear();
+    wrapper.findComponent({ name: "BlueprintSpecReview" }).vm.$emit("sent");
+    await flushPromises();
+    expect(loadRun).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it("says which step the approval lets start", async () => {
     loadRun.mockResolvedValue(gated([".blueprint/brief.md"]));
     const wrapper = mount(BlueprintRunView, { props: { runId: "run-00000001" } });
@@ -296,5 +312,55 @@ describe("a step stopped because Claude Code does not trust the folder", () => {
     const wrapper = mount(BlueprintRunView, { props: { runId: "run-00000001" } });
     await flushPromises();
     expect(wrapper.find('[data-testid="blueprint-run-open-trust"]').exists()).toBe(false);
+  });
+});
+
+// The Blueprints screen is kept while closed: the report is read again each time it is shown, and a
+// read that fails then keeps the one shown.
+describe("the report shown again", () => {
+  it("is read again each time the screen is shown, kept through a failed read", async () => {
+    loadRun.mockReset();
+    loadRun.mockResolvedValue(runView("passed"));
+    listPacks.mockResolvedValue({ ok: true, value: { packs: [] } });
+    const report = (markdown: string) => ({
+      ok: true,
+      value: { path: "/work/docs/.blueprint/review-report.md", markdown, changed: { files: [], more: false } },
+    });
+    loadReport.mockReset();
+    loadReport
+      .mockResolvedValueOnce({ ok: false, error: "busy" })
+      .mockResolvedValueOnce(report("## first"))
+      .mockResolvedValueOnce(report("## rewritten"))
+      .mockResolvedValue({ ok: false, error: "busy" });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintRunView, { runId: "run-00000001" });
+    await flushPromises();
+    await showAgain();
+    expect(wrapper.get('[data-testid="blueprint-report-body"]').text()).toContain("first");
+    await showAgain();
+    expect(wrapper.get('[data-testid="blueprint-report-body"]').text()).toContain("rewritten");
+    await showAgain();
+    expect(wrapper.get('[data-testid="blueprint-report-body"]').text()).toContain("rewritten");
+    wrapper.unmount();
+  });
+});
+
+describe("a build that finishes while the screen is hidden", () => {
+  it("has its report read when the screen is shown, not while hidden", async () => {
+    let answerPoll: (value: unknown) => void = () => {};
+    loadRun.mockReset();
+    loadRun.mockReturnValueOnce(new Promise((resolve) => (answerPoll = resolve))).mockResolvedValue(runView("passed"));
+    listPacks.mockResolvedValue({ ok: true, value: { packs: [] } });
+    loadReport.mockClear();
+    const { wrapper, visible } = mountUnderOverlay(BlueprintRunView, { runId: "run-00000001" });
+    await flushPromises();
+    visible.value = false;
+    await flushPromises();
+    answerPoll(runView("passed"));
+    await flushPromises();
+    expect(loadReport).not.toHaveBeenCalled();
+    visible.value = true;
+    await flushPromises();
+    expect(loadReport).toHaveBeenCalled();
+    wrapper.unmount();
   });
 });

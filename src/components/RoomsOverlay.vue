@@ -12,11 +12,13 @@
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { useRoomsView, roomsViewSelect } from "../composables/useRoomsView";
 import { useEscapeToClose } from "../composables/useEscapeToClose";
+import { heldWhileClosed } from "../composables/overlayVisibility";
 import { deleteRoom, listRooms, loadRoom, sendRoomMessage } from "../composables/useRooms";
 import { relativeTime } from "./cellDisplay";
 import type { RoomMessage } from "../../common/roomMessage";
 import { useI18n } from "vue-i18n";
 import FullScreenOverlay from "./FullScreenOverlay.vue";
+import { latestOnly } from "./blueprints/latestOnly";
 
 const { t } = useI18n();
 
@@ -25,7 +27,10 @@ const DEFAULT_SPEAKER = "human";
 /** How close to the end still counts as "reading the latest". */
 const NEAR_BOTTOM_PX = 80;
 
-const { isOpen, room, close } = useRoomsView();
+const view = useRoomsView();
+const { isOpen, close } = view;
+// Held while closed, so the hidden screen keeps the conversation it showed.
+const room = heldWhileClosed(isOpen, () => view.room.value);
 useEscapeToClose(isOpen, close);
 
 const rooms = ref<string[]>([]);
@@ -65,11 +70,25 @@ async function showMessages(next: RoomMessage[]): Promise<void> {
 /** The whole room every poll, not the `?since=` tail. Two posts can share a millisecond, so a tail
  *  keyed on the newest timestamp can step over one — and a conversation somebody is reading is
  *  small and on loopback. `since` stays for followers that cannot afford the whole room. */
+// The screen outlives a close, so a read asked for before it can answer after the next opening's.
+const roomRead = latestOnly();
+const roomsRead = latestOnly();
+
+// A tick while a read is still out waits for it: each newer read outdates the older one, so reads
+// slower than the interval would otherwise never be shown at all.
+let roomReadsOut = 0;
+function pollTick(): void {
+  if (roomReadsOut === 0) void refresh();
+}
+
 async function refresh(): Promise<void> {
   const id = room.value;
-  if (!id) return;
-  const read = await loadRoom(id);
-  if (room.value !== id) return; // moved on while the request was in flight
+  // A post or a delete can answer after the screen was closed; the next opening reads anyway.
+  if (!id || !isOpen.value) return;
+  const ticket = roomRead.take();
+  roomReadsOut += 1;
+  const read = await loadRoom(id).finally(() => (roomReadsOut -= 1));
+  if (room.value !== id || !roomRead.isLatest(ticket)) return; // moved on, or a newer read was asked for
   now.value = Date.now();
   if (!read.ok) {
     readError.value = "Could not read this room.";
@@ -80,7 +99,10 @@ async function refresh(): Promise<void> {
 }
 
 async function refreshRooms(): Promise<void> {
-  rooms.value = await listRooms();
+  if (!isOpen.value) return;
+  const ticket = roomsRead.take();
+  const listed = await listRooms();
+  if (roomsRead.isLatest(ticket)) rooms.value = listed;
 }
 
 function stopPolling(): void {
@@ -95,19 +117,22 @@ function stopPolling(): void {
 let watchRun = 0;
 
 // Poll only while the overlay is open and a room is chosen — a timer left running behind a closed
-// overlay is a request every two seconds for as long as the tab lives.
+// overlay is a request every two seconds for as long as the tab lives. Closing keeps the conversation
+// on screen for the next opening; only moving to another room clears it.
 watch(
   [isOpen, room],
-  async ([open]) => {
+  async ([open, id], previous) => {
     const run = ++watchRun;
     stopPolling();
-    messages.value = [];
-    readError.value = null;
-    sendError.value = null;
+    if (id !== previous?.[1]) {
+      messages.value = [];
+      readError.value = null;
+      sendError.value = null;
+    }
     if (!open) return;
     await Promise.all([refreshRooms(), refresh()]);
     if (run !== watchRun) return; // a newer run took over while this one was in flight
-    if (room.value) pollTimer = setInterval(refresh, POLL_MS);
+    if (room.value) pollTimer = setInterval(pollTick, POLL_MS);
   },
   { immediate: true },
 );
@@ -138,7 +163,7 @@ async function forget(id: string): Promise<void> {
 </script>
 
 <template>
-  <FullScreenOverlay v-if="isOpen" :region-label="t('tips.overlays.roomsRegion')" :close-label="t('tips.overlays.closeRooms')" @close="close">
+  <FullScreenOverlay :open="isOpen" :region-label="t('tips.overlays.roomsRegion')" :close-label="t('tips.overlays.closeRooms')" @close="close">
     <template #header>
       <span class="text-[14px] font-[650] text-fg">Rooms</span>
       <span v-if="room" class="truncate font-mono text-[12px] text-dim">{{ room }}</span>

@@ -42,6 +42,7 @@ const OVERLAY_ROUTES = new Set([
   "skills",
   "library",
   "processes",
+  "usage",
 ]);
 
 /** The route an open overlay should return to. */
