@@ -76,7 +76,8 @@ const roomsRead = latestOnly();
 
 async function refresh(): Promise<void> {
   const id = room.value;
-  if (!id) return;
+  // A post or a delete can answer after the screen was closed; the next opening reads anyway.
+  if (!id || !isOpen.value) return;
   const ticket = roomRead.take();
   const read = await loadRoom(id);
   if (room.value !== id || !roomRead.isLatest(ticket)) return; // moved on, or a newer read was asked for
@@ -90,6 +91,7 @@ async function refresh(): Promise<void> {
 }
 
 async function refreshRooms(): Promise<void> {
+  if (!isOpen.value) return;
   const ticket = roomsRead.take();
   const listed = await listRooms();
   if (roomsRead.isLatest(ticket)) rooms.value = listed;

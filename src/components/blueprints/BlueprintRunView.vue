@@ -53,12 +53,21 @@ const reviewing = computed(() => current.value?.gates.includes("review") ?? fals
 // because it sits in the hidden .blueprint/ folder a person would not open.
 const finished = computed(() => view.value !== null && current.value === null);
 const report = ref<ReportView | null>(null);
+// Read when the build finishes, and again each time the kept screen is shown; a failed read keeps the one shown.
+const reportReads = latestOnly();
 async function readReport(): Promise<void> {
-  if (!finished.value || report.value !== null) return;
+  if (!finished.value) return;
+  const ticket = reportReads.take();
   const result = await loadReport(props.runId);
-  if (result.ok) report.value = result.value;
+  if (reportReads.isLatest(ticket) && result.ok) report.value = result.value;
 }
-watch(finished, () => void readReport(), { immediate: true });
+watch(
+  finished,
+  (done) => {
+    if (done && report.value === null) void readReport();
+  },
+  { immediate: true },
+);
 
 // The session working on the step right now, if one is: what the live panel and the clock follow.
 const activeSession = computed(() => {
@@ -114,7 +123,7 @@ watch(
   },
   { immediate: true },
 );
-// A report that could not be read is asked for again, and the source checked again.
+// The report is read again (it may be rewritten), and the source checked again.
 onOverlayShownAgain(() => {
   void readReport();
   void readSource(props.runId);

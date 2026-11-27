@@ -300,22 +300,31 @@ describe("a step stopped because Claude Code does not trust the folder", () => {
   });
 });
 
-// The Blueprints screen is kept while closed: a report that could not be read is asked for again when shown.
+// The Blueprints screen is kept while closed: the report is read again each time it is shown, and a
+// read that fails then keeps the one shown.
 describe("the report shown again", () => {
-  it("is asked for again when it could not be read, and not once it was", async () => {
+  it("is read again each time the screen is shown, kept through a failed read", async () => {
     loadRun.mockReset();
     loadRun.mockResolvedValue(runView("passed"));
     listPacks.mockResolvedValue({ ok: true, value: { packs: [] } });
-    const good = { ok: true, value: { path: "/work/docs/.blueprint/review-report.md", markdown: "## found", changed: { files: [], more: false } } };
+    const report = (markdown: string) => ({
+      ok: true,
+      value: { path: "/work/docs/.blueprint/review-report.md", markdown, changed: { files: [], more: false } },
+    });
     loadReport.mockReset();
-    loadReport.mockResolvedValueOnce({ ok: false, error: "busy" }).mockResolvedValue(good);
+    loadReport
+      .mockResolvedValueOnce({ ok: false, error: "busy" })
+      .mockResolvedValueOnce(report("## first"))
+      .mockResolvedValueOnce(report("## rewritten"))
+      .mockResolvedValue({ ok: false, error: "busy" });
     const { wrapper, showAgain } = mountUnderOverlay(BlueprintRunView, { runId: "run-00000001" });
     await flushPromises();
     await showAgain();
-    expect(loadReport).toHaveBeenCalledTimes(2);
-    expect(wrapper.text()).toContain("found");
+    expect(wrapper.get('[data-testid="blueprint-report-body"]').text()).toContain("first");
     await showAgain();
-    expect(loadReport).toHaveBeenCalledTimes(2);
+    expect(wrapper.get('[data-testid="blueprint-report-body"]').text()).toContain("rewritten");
+    await showAgain();
+    expect(wrapper.get('[data-testid="blueprint-report-body"]').text()).toContain("rewritten");
     wrapper.unmount();
   });
 });

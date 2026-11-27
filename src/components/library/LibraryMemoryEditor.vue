@@ -125,8 +125,11 @@ onMounted(async () => {
   if ((links?.unplaceable.length ?? 0) > 0) notice.value = "unplaceable";
 });
 // The editor stays open while the Library is closed; a session may have started or ended in the meantime.
+let runningChecks = 0;
 async function recheckRunning(): Promise<void> {
-  sessionRunning.value = await sessionRunningIn(props.cwd);
+  const mine = ++runningChecks;
+  const running = await sessionRunningIn(props.cwd);
+  if (mine === runningChecks) sessionRunning.value = running;
 }
 onOverlayShownAgain(() => void recheckRunning());
 

@@ -25,6 +25,7 @@ const suspend = () => Promise.resolve().then(() => undefined);
 let reads = 0;
 /** What a room read waits on; each read answers with the messages as they were when it was asked. */
 let roomGate: Promise<void> = Promise.resolve();
+let postGate: Promise<void> = Promise.resolve();
 
 vi.mock("../../../src/composables/useRooms", () => ({
   loadRoom: async () => {
@@ -40,6 +41,7 @@ vi.mock("../../../src/composables/useRooms", () => ({
     return ["standup", "design-review"];
   },
   sendRoomMessage: async (room: string, from: string, text: string) => {
+    await postGate;
     if (postOk) posted.push({ room, from, text });
     return postOk;
   },
@@ -61,6 +63,7 @@ beforeEach(() => {
   deleted = [];
   reads = 0;
   roomGate = Promise.resolve();
+  postGate = Promise.resolve();
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -111,6 +114,22 @@ describe("RoomsOverlay", () => {
     release();
     await flushPromises();
     expect(w.findAll('[data-testid="room-message"]').map((row) => row.text().includes("fresh"))).toEqual([true]);
+    w.unmount();
+  });
+
+  // The screen outlives a close, so a post can answer after it: nothing is read for a hidden screen.
+  it("reads nothing when a post answers after the screen was closed", async () => {
+    const w = await open();
+    let release: () => void = () => {};
+    postGate = new Promise((resolve) => (release = resolve));
+    await w.find('[data-testid="room-draft"]').setValue("late");
+    await w.find("form").trigger("submit");
+    isOpen.value = false;
+    await flushPromises();
+    const before = reads;
+    release();
+    await flushPromises();
+    expect(reads).toBe(before);
     w.unmount();
   });
 

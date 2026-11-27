@@ -12,8 +12,14 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
   loadLibraryMemoryLinks: () => Promise.resolve(null),
 }));
 let running = false;
+/** When set, each running check waits on the next of these and answers with `running` as it was asked. */
+const runningGates: Promise<void>[] = [];
 vi.mock("../../../../src/composables/useDirLists", () => ({
-  readResumableList: () => Promise.resolve({ sessions: [{ id: "s", title: "", mtime: 0, runningKey: running ? "s" : null }], cwd: "/w/app" }),
+  readResumableList: async () => {
+    const asked = running;
+    await (runningGates.shift() ?? Promise.resolve());
+    return { sessions: [{ id: "s", title: "", mtime: 0, runningKey: asked ? "s" : null }], cwd: "/w/app" };
+  },
 }));
 
 const LibraryMemoryEditor = (await import("../../../../src/components/library/LibraryMemoryEditor.vue")).default;
@@ -270,6 +276,16 @@ describe("the editor shown again", () => {
     expect(wrapper.find("[data-testid=memory-editor-running]").exists()).toBe(false);
     running = true;
     await showAgain();
+    expect(wrapper.find("[data-testid=memory-editor-running]").exists()).toBe(true);
+    // An earlier showing's slow check must not undo a later one's.
+    let releaseSlow: () => void = () => {};
+    runningGates.push(new Promise((resolve) => (releaseSlow = resolve)));
+    running = false;
+    await showAgain();
+    running = true;
+    await showAgain();
+    releaseSlow();
+    await flushPromises();
     expect(wrapper.find("[data-testid=memory-editor-running]").exists()).toBe(true);
     wrapper.unmount();
   });
