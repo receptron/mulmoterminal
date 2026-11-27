@@ -22,8 +22,20 @@ const isApiRoute = (signature: string): boolean => {
   return path.startsWith("/api/") || path.startsWith("/^\\/api\\/");
 };
 
-// As JSON or as bytes (the Files pane's Preview): either way, decided.
-const forwarded = [...Object.values(REMOTE_ROUTES), ...Object.values(REMOTE_BYTE_ROUTES)].map((route) => shapeOf(routeSignature(route.method, route.path)));
+// As JSON or as bytes (the Files pane's Preview): either way, decided. An HTML card's page is served
+// outside /api, which this census does not count.
+const forwarded = [...Object.values(REMOTE_ROUTES), ...Object.values(REMOTE_BYTE_ROUTES)]
+  .map((route) => routeSignature(route.method, route.path))
+  .filter(isApiRoute)
+  .map(shapeOf);
+
+// A forwarded route may name one tool of a route mounted with a parameter: `/api/plugin/presentDocument`
+// is served by `/api/plugin/:toolName`, which stays undecided for every other tool.
+const servedBy = (route: string, mountedRoute: string): boolean => {
+  const want = route.split(/[ /]/);
+  const got = mountedRoute.split(/[ /]/);
+  return want.length === got.length && got.every((segment, i) => segment === ":param" || segment === want[i]);
+};
 const never = Object.values(NEVER_FORWARDED).flat().map(shapeOf);
 const undecided = UNDECIDED.map(shapeOf);
 
@@ -52,7 +64,8 @@ describe("the remote route census", () => {
 
   it("lists nothing the server does not mount", () => {
     const live = new Set(mounted);
-    expect([...forwarded, ...never, ...undecided].filter((route) => !live.has(route))).toEqual([]);
+    expect([...never, ...undecided].filter((route) => !live.has(route))).toEqual([]);
+    expect(forwarded.filter((route) => !live.has(route) && !mounted.some((mountedRoute) => servedBy(route, mountedRoute)))).toEqual([]);
   });
 
   it("decides each route once", () => {

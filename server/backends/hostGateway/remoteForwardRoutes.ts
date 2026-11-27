@@ -50,7 +50,8 @@ function requestInit(req: Request, route: RemoteRoute, host: RemoteHost, signal:
     if (value !== undefined) headers[name] = value;
   });
   const init: RequestInit = { method: req.method, headers, signal, redirect: "manual" };
-  if (route.access !== "write") return init;
+  // By method, not access: a plugin view's reads are POSTs whose body says what to read.
+  if (route.method === "GET") return init;
   if (route.body === "raw") {
     if (Buffer.isBuffer(req.body)) init.body = new Uint8Array(req.body);
   } else if (isRecord(req.body)) {

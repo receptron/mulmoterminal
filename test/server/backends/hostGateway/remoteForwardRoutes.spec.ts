@@ -17,7 +17,7 @@ import {
   timeoutFor,
 } from "../../../../server/backends/hostGateway/remoteForwardRoutes.js";
 import type { RemoteHost } from "../../../../server/backends/hostGateway/remoteHostsConfig.js";
-import type { RemoteRoute } from "../../../../common/remoteRoutes.js";
+import { REMOTE_ROUTES, type RemoteRoute } from "../../../../common/remoteRoutes.js";
 
 const SESSION = "0b8f0a0e-7c55-4c1e-9e0a-3f1d2c4b5a69";
 const ROUTES: Record<string, RemoteRoute> = {
@@ -28,6 +28,7 @@ const ROUTES: Record<string, RemoteRoute> = {
   hang: { method: "GET", path: "/api/hang", key: "none", access: "read", query: [] },
   push: { method: "POST", path: "/api/worktrees/push", key: "cwd", access: "write", query: ["cwd"], bodyWithin: ["cwd"] },
   memo: { method: "POST", path: "/api/session/:sid/memo", key: "session", access: "write", query: [] },
+  documentReads: REMOTE_ROUTES.documentReads,
   drop: {
     method: "POST",
     path: "/api/session/:sid/drop",
@@ -166,6 +167,16 @@ describe("/remote/<id>/api/…", () => {
     expect(reached).toEqual([]);
     expect((await post("/srv/p")).status).toBe(200);
     expect(reached.map((r) => [r.url, r.body])).toEqual([["/api/worktrees/push?cwd=%2Fsrv%2Fp", '{"cwd":"/srv/p"}']]);
+  });
+
+  // A plugin view's read is a POST whose body says what to read; one naming a write never leaves.
+  it("carries a Canvas card's read with its body, and refuses its save before anything reaches the remote", async () => {
+    const post = (body: unknown) =>
+      call("POST", "/remote/lx/api/plugin/presentDocument", { ...pageOrigin(), "content-type": "application/json" }, JSON.stringify(body));
+    expect((await post({ kind: "saveDoc", path: "/srv/p/a.md", markdown: "x" })).status).toBe(400);
+    expect(reached).toEqual([]);
+    expect((await post({ kind: "loadDoc", path: "/srv/p/a.md" })).status).toBe(200);
+    expect(reached.map((r) => [r.method, r.url, r.body])).toEqual([["POST", "/api/plugin/presentDocument", '{"kind":"loadDoc","path":"/srv/p/a.md"}']]);
   });
 
   it("carries no body on a read, whatever the browser sent", async () => {

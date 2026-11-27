@@ -3,7 +3,7 @@
 // gui-chat-protocol's useRuntime() — dispatch / pubsub / locale / openUrl — which
 // requires a host to provide() one under PLUGIN_RUNTIME_KEY. MulmoTerminal had no
 // such provider; this is it, wired to MulmoTerminal's own transport:
-//   - dispatch  → POST /api/plugin/<toolName> (the same route the MCP broker uses;
+//   - dispatch  → POST /api/plugin/<toolName> on the card's host (the same route the MCP broker uses;
 //                 execute() routes by args.kind, so the View's dispatch and the
 //                 LLM tool-call share one endpoint).
 //   - pubsub    → the existing socket.io usePubSub, on `plugin:<scope>:<event>`
@@ -11,7 +11,7 @@
 //                 plugin:markdown:file:<path> — see server/backends/plugins/markdown.js).
 //   - locale    → the display language, as the plugins' table key (pluginLocale.ts).
 //   - openUrl   → scheme-allowlisted window.open.
-import { computed, defineComponent, h, markRaw, provide, type Component, type Ref } from "vue";
+import { computed, defineComponent, h, inject, markRaw, provide, type Component, type InjectionKey, type Ref } from "vue";
 import { PLUGIN_RUNTIME_KEY, type BrowserPluginRuntime, type SubscribeOptions } from "gui-chat-protocol/vue";
 import { usePubSub } from "./usePubSub";
 import { i18n } from "../i18n";
@@ -19,6 +19,12 @@ import { pluginLocaleFor } from "../utils/pluginLocale";
 import { isOpenablePluginUrl } from "./pluginUrlPolicy";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import { PLUGIN_DISPATCH_TIMEOUT_MS, pluginDispatchError } from "./pluginDispatchDeadline";
+import { isRemoteHost, pathOnHost } from "../components/remoteCell";
+
+/** The host a card's session runs on (#3506), read at each call: null for this machine. Provided by
+ *  the Canvas, so a view mounted anywhere else talks to this machine as before. */
+export const PLUGIN_HOST_KEY: InjectionKey<() => string | null> = Symbol("pluginHost");
+const ON_THIS_MACHINE = (): string | null => null;
 
 function pluginChannelName(scope: string, eventName: string): string {
   return `plugin:${scope}:${eventName}`;
@@ -35,12 +41,12 @@ function makeOpenUrl(scope: string): BrowserPluginRuntime["openUrl"] {
   };
 }
 
-function makeDispatch(toolName: string): BrowserPluginRuntime["dispatch"] {
-  const url = `/api/plugin/${encodeURIComponent(toolName)}`;
+function makeDispatch(toolName: string, host: () => string | null): BrowserPluginRuntime["dispatch"] {
+  const route = `/api/plugin/${encodeURIComponent(toolName)}`;
 
   async function request(args: object): Promise<unknown> {
     const res = await fetchWithTimeout(
-      url,
+      pathOnHost(host(), route),
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -117,14 +123,21 @@ interface MakeRuntimeDeps {
   scope: string;
   /** Tool name the dispatch route resolves (e.g. "presentDocument"). */
   toolName: string;
+  /** The card's host; this machine when absent. */
+  host?: () => string | null;
 }
 
+// A remote host's file changes are announced on its own server, which this machine does not relay:
+// this machine's channel of the same name is about another file.
+const NO_CHANNEL = (): (() => void) => () => {};
+
 export function makeBrowserPluginRuntime(deps: MakeRuntimeDeps): BrowserPluginRuntime {
-  const { scope, toolName } = deps;
+  const { scope, toolName, host = ON_THIS_MACHINE } = deps;
   const { subscribe } = usePubSub();
+  const onChannel = (channel: string, handler: (data: unknown) => void): (() => void) => (isRemoteHost(host()) ? NO_CHANNEL() : subscribe(channel, handler));
   const tag = `[plugin/${scope}]`;
   return {
-    pubsub: { subscribe: makeSubscribe(scope, subscribe) },
+    pubsub: { subscribe: makeSubscribe(scope, onChannel) },
     locale: sharedLocale,
     log: {
       debug: (msg, data) => console.debug(tag, msg, data),
@@ -133,7 +146,7 @@ export function makeBrowserPluginRuntime(deps: MakeRuntimeDeps): BrowserPluginRu
       error: (msg, data) => console.error(tag, msg, data),
     },
     openUrl: makeOpenUrl(scope),
-    dispatch: makeDispatch(toolName),
+    dispatch: makeDispatch(toolName, host),
     // `endpoints` is left OFF rather than set to undefined: the protocol spells it exact, so
     // the key holding undefined is a different type from no key. Every plugin here is the
     // single-dispatch shape, so there is no URL map to expose (MulmoClaude passes one through
@@ -151,7 +164,7 @@ export function wrapWithPluginRuntime(scope: string, toolName: string, inner: Co
       name: `PluginRuntimeScope:${scope}`,
       inheritAttrs: false,
       setup(_props, { attrs, slots }) {
-        const runtime = makeBrowserPluginRuntime({ scope, toolName });
+        const runtime = makeBrowserPluginRuntime({ scope, toolName, host: inject(PLUGIN_HOST_KEY, ON_THIS_MACHINE) });
         provide(PLUGIN_RUNTIME_KEY, runtime);
         return () => h(inner, attrs, slots);
       },

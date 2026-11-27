@@ -23,6 +23,7 @@ import CollectionCardView from "./components/CollectionCardView.vue";
 import { documentIdentity, filePathIdentity, collectionIdentity } from "./utils/canvasIdentity";
 import type { StoryRootDirs } from "./utils/canvasCardPath";
 import { CANVAS_CARD_HEIGHT_VAR } from "./composables/useCanvasCardHeight";
+import { drawnAsIs, htmlPageOnHost, inlineChartsOnly, type RemoteCardRule } from "./components/remoteCanvasCards";
 // Import each package's compiled stylesheet as a STRING (?inline), not as a global
 // side-effect. GuiPanel injects it into a per-view Shadow DOM (see PluginFrame),
 // which encapsulates the plugin's Tailwind preflight so it can't clobber
@@ -131,9 +132,9 @@ interface Registration {
   // The View draws its own surface for `data-appearance` on <html>, so PluginFrame must not
   // force its light one under it. See PluginFrame's `followsAppearance` prop.
   followsAppearance?: boolean;
-  // The View draws from the result alone: no runtime, no dispatch, no file route, no fetch. Only
-  // such a card is drawn for a remote cell (#3506), whose files and plugin routes are on its host.
-  selfContained?: true;
+  // How the card draws for a remote cell (#3506), whose files and plugin routes are on its host: the
+  // result to draw, or null to list the card by name. A tool without one is listed by name there.
+  onRemote?: RemoteCardRule;
 }
 
 // Statically-known packages, keyed by package name; the config gates which load.
@@ -155,12 +156,14 @@ const PACKAGES: Record<string, Registration> = {
     // Re-presenting one document supersedes the card showing its older state; inline markdown has
     // no path and stands alone. See canvasIdentity.ts.
     identityOf: documentIdentity,
+    // Its dispatch reads the document on the host; a picture it links stays this machine's.
+    onRemote: drawnAsIs,
   },
   "@mulmoclaude/form-plugin": {
     toolName: formPlugin.toolDefinition.name,
     viewComponent: viewOf("@mulmoclaude/form-plugin", formPlugin.viewComponent),
     css: formCss,
-    selfContained: true,
+    onRemote: drawnAsIs,
   },
   "@mulmoclaude/html-plugin": {
     toolName: htmlPlugin.toolDefinition.name,
@@ -175,13 +178,14 @@ const PACKAGES: Record<string, Registration> = {
     height: CANVAS_CARD_HEIGHT,
     // The page on disk, so only re-presenting the SAME page collapses. See canvasIdentity.ts.
     identityOf: filePathIdentity,
+    onRemote: htmlPageOnHost,
   },
   "@mulmochat-plugin/generate-image": {
     toolName: GenerateImagePlugin.plugin.toolDefinition.name,
     viewComponent: viewOf("@mulmochat-plugin/generate-image", GenerateImagePlugin.plugin.viewComponent),
     css: mulmochatPluginCss,
     // The picture travels in the result, base64 (`imageData`).
-    selfContained: true,
+    onRemote: drawnAsIs,
   },
   "@mulmoclaude/chart-plugin": {
     toolName: chartPlugin.toolDefinition.name,
@@ -194,6 +198,7 @@ const PACKAGES: Record<string, Registration> = {
     css: chartCss,
     // From 4.4.0 its cards turn dark under a dark theme.
     followsAppearance: true,
+    onRemote: inlineChartsOnly,
   },
   "@gui-chat-plugin/shapescript": {
     toolName: shapeScriptPlugin.toolDefinition.name,
@@ -237,7 +242,7 @@ const PACKAGES: Record<string, Registration> = {
     // The View is the model at a height the user drags, over a part that scrolls, inside a
     // `height: 100%` column: without a definite frame it has nothing to divide.
     height: CANVAS_CARD_HEIGHT,
-    selfContained: true,
+    onRemote: drawnAsIs,
   },
   "@mulmoclaude/mulmoscript-plugin": {
     toolName: mulmoScriptPlugin.toolDefinition.name,
@@ -267,7 +272,7 @@ const PACKAGES: Record<string, Registration> = {
     // therefore no card.
     viewComponent: viewOf("@gui-chat-plugin/jinglescript", jingleScriptPlugin.viewComponent),
     css: jingleScriptCss,
-    selfContained: true,
+    onRemote: drawnAsIs,
   },
   "@gui-chat-plugin/spreadsheet": {
     toolName: spreadsheetPlugin.toolDefinition.name,

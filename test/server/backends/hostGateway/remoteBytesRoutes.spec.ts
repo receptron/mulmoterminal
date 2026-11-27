@@ -11,6 +11,7 @@ import type { RemoteHost } from "../../../../server/backends/hostGateway/remoteH
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 const SANDBOXED = { "content-security-policy": "sandbox", "x-content-type-options": "nosniff" };
+const PAGE_POLICY = { "content-security-policy": "sandbox allow-scripts; default-src 'none'; connect-src 'none'", "x-content-type-options": "nosniff" };
 
 let reached: { url: string; headers: IncomingHttpHeaders }[] = [];
 let hangAbandoned: Promise<void> = Promise.resolve();
@@ -37,6 +38,17 @@ const remote = createServer((req, res) => {
         "x-content-type-options": "nosniff",
       })
       .end(`<img src="/api/files/raw?cwd=%2Fsrv%2Fp&amp;path=pic.png">`);
+  // An HTML card's page, as the remote's /artifacts/html and /htmlfile mounts serve one.
+  if (url.pathname === "/artifacts/html/2026/a%20b.html" || url.pathname === "/htmlfile/abs/srv/p/page.html")
+    return void res.writeHead(200, { "content-type": "text/html; charset=utf-8", ...PAGE_POLICY }).end("<p>page</p>");
+  if (url.pathname === "/htmlfile/abs/srv/p/loose.html")
+    return void res
+      .writeHead(200, {
+        "content-type": "text/html",
+        "content-security-policy": "sandbox allow-scripts allow-same-origin",
+        "x-content-type-options": "nosniff",
+      })
+      .end("<script>1</script>");
   res.writeHead(404, { "content-type": "application/json" }).end(JSON.stringify({ error: "not found" }));
 });
 
@@ -136,5 +148,37 @@ describe("/remote/<id>/bytes/api/…", () => {
 
   it("answers the remote's own refusal with its status", async () => {
     expect((await get(`${RAW}&path=missing.png`)).status).toBe(404);
+  });
+});
+
+// #3506. An HTML card's page, outside /api: the remote's own sandbox passes through, a page loosened
+// past it is refused, and a path the byte table does not hold never reaches the remote.
+describe("/remote/<id>/bytes/ for an HTML card's page", () => {
+  it.each([
+    ["/remote/lx/bytes/artifacts/html/2026/a%20b.html?v=2&x=1", "/artifacts/html/2026/a%20b.html?v=2"],
+    ["/remote/lx/bytes/htmlfile/abs/srv/p/page.html", "/htmlfile/abs/srv/p/page.html"],
+  ])("serves %s from the host with its policy", async (path, asked) => {
+    const answer = await get(path);
+    expect(answer.status).toBe(200);
+    expect(answer.headers["content-security-policy"]).toBe(PAGE_POLICY["content-security-policy"]);
+    expect(answer.headers["x-content-type-options"]).toBe("nosniff");
+    expect(answer.body.toString("utf8")).toBe("<p>page</p>");
+    expect(reached.map((r) => r.url)).toEqual([asked]);
+  });
+
+  it("refuses a page whose sandbox keeps this origin", async () => {
+    const answer = await get("/remote/lx/bytes/htmlfile/abs/srv/p/loose.html");
+    expect(answer.status).toBe(502);
+    expect(answer.body.toString("utf8")).not.toContain("<script>");
+  });
+
+  it.each([
+    ["a parent segment", "/remote/lx/bytes/artifacts/html/../secret.html"],
+    ["an empty segment", "/remote/lx/bytes/htmlfile/abs//etc/x.html"],
+    ["another static mount", "/remote/lx/bytes/artifacts/images/a.png"],
+    ["a JSON route under bytes", "/remote/lx/bytes/api/git-status?cwd=%2Fsrv%2Fp"],
+  ])("refuses %s before anything reaches the remote", async (_name, path) => {
+    expect((await get(path)).status).toBe(404);
+    expect(reached).toEqual([]);
   });
 });
