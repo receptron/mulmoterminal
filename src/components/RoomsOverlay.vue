@@ -18,6 +18,7 @@ import { relativeTime } from "./cellDisplay";
 import type { RoomMessage } from "../../common/roomMessage";
 import { useI18n } from "vue-i18n";
 import FullScreenOverlay from "./FullScreenOverlay.vue";
+import { latestOnly } from "./blueprints/latestOnly";
 
 const { t } = useI18n();
 
@@ -69,11 +70,16 @@ async function showMessages(next: RoomMessage[]): Promise<void> {
 /** The whole room every poll, not the `?since=` tail. Two posts can share a millisecond, so a tail
  *  keyed on the newest timestamp can step over one — and a conversation somebody is reading is
  *  small and on loopback. `since` stays for followers that cannot afford the whole room. */
+// The screen outlives a close, so a read asked for before it can answer after the next opening's.
+const roomRead = latestOnly();
+const roomsRead = latestOnly();
+
 async function refresh(): Promise<void> {
   const id = room.value;
   if (!id) return;
+  const ticket = roomRead.take();
   const read = await loadRoom(id);
-  if (room.value !== id) return; // moved on while the request was in flight
+  if (room.value !== id || !roomRead.isLatest(ticket)) return; // moved on, or a newer read was asked for
   now.value = Date.now();
   if (!read.ok) {
     readError.value = "Could not read this room.";
@@ -84,7 +90,9 @@ async function refresh(): Promise<void> {
 }
 
 async function refreshRooms(): Promise<void> {
-  rooms.value = await listRooms();
+  const ticket = roomsRead.take();
+  const listed = await listRooms();
+  if (roomsRead.isLatest(ticket)) rooms.value = listed;
 }
 
 function stopPolling(): void {

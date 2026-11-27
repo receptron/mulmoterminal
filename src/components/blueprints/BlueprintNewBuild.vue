@@ -34,6 +34,7 @@ import { basePacks, basesFor, firstOfEachUsecase, presetGroups, usecaseGroups, u
 import { latestOnly } from "./latestOnly";
 import { failureText } from "./refusalText";
 import { keepFormFill, takeFormFill, type FormFill } from "../../composables/useBlueprintsView";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 import { openTerminalAt } from "../../composables/useNewTerminal";
 import BlueprintHearingField from "./BlueprintHearingField.vue";
 
@@ -275,6 +276,12 @@ async function start(personalDataConfirmed = false): Promise<void> {
   error.value = null;
   emit("started", result.value.runId);
 }
+
+// The screen is kept while closed, so the form is still filled in when the person comes back from the
+// terminal: the copy kept for a reload is spent then, or it would fill a later, unrelated new build.
+onOverlayShownAgain(() => {
+  takeFormFill();
+});
 
 // The prompt is the person's to answer, in a terminal of their own; the form waits for them with everything in it.
 function openToTrust(): void {

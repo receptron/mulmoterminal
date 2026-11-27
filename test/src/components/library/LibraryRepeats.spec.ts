@@ -2,6 +2,8 @@
 // one being read with where it was typed lately, and "Make a rule" / "Make a skill" asking for it.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
+import { defineComponent, h, ref } from "vue";
+import { provideOverlayVisible } from "../../../../src/composables/overlayVisibility";
 import type { RepeatCandidate, RepeatDetail } from "../../../../common/libraryRepeats";
 import type { LibraryConversation } from "../../../../common/library";
 
@@ -147,5 +149,28 @@ describe("LibraryRepeats", () => {
     expect((await mountWith()).find('[data-testid="repeats-empty"]').exists()).toBe(true);
     listed = null;
     expect((await mountWith()).find('[data-testid="repeats-failed"]').exists()).toBe(true);
+  });
+
+  // The Library is kept while closed: shown again, the list is read again, and a failed re-read keeps it.
+  it("reads the list again each time the Library is shown, keeping it through a failed read", async () => {
+    listed = [candidate("a", "run the tests")];
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(LibraryRepeats, { query: "", now: NOW })) });
+    const wrapper = mount(Host);
+    await flushPromises();
+    const showAgain = async () => {
+      visible.value = false;
+      await flushPromises();
+      visible.value = true;
+      await flushPromises();
+    };
+    listed = [candidate("a", "run the tests"), candidate("b", "open a PR")];
+    await showAgain();
+    expect(wrapper.findAll("[data-testid=repeat-row]")).toHaveLength(2);
+    listed = null;
+    await showAgain();
+    expect(wrapper.findAll("[data-testid=repeat-row]")).toHaveLength(2);
+    expect(wrapper.find("[data-testid=repeats-failed]").exists()).toBe(false);
+    wrapper.unmount();
   });
 });

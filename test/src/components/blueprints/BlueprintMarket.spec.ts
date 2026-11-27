@@ -2,6 +2,8 @@
 // person's language when the server said why as data.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { defineComponent, h, ref } from "vue";
+import { provideOverlayVisible } from "../../../../src/composables/overlayVisibility";
 import { en } from "../../../../src/i18n/en";
 
 const { installPack, uninstallPack, loadCatalog } = vi.hoisted(() => ({ installPack: vi.fn(), uninstallPack: vi.fn(), loadCatalog: vi.fn() }));
@@ -84,5 +86,24 @@ describe("a refused market action", () => {
     await flushPromises();
     expect(wrapper.get('[data-testid="blueprint-market-error"]').text()).toBe("refused in English");
     expect(wrapper.get('[data-testid="blueprint-market-load-error"]').text()).toBe("catalog unreachable");
+  });
+});
+
+// The Blueprints screen is kept while closed, so the market stays mounted: it reads again when shown.
+describe("the market shown again", () => {
+  it("reads the catalog again each time the screen is shown", async () => {
+    loadCatalog.mockReset();
+    loadCatalog.mockResolvedValue(catalogWith(false));
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(BlueprintMarket)) });
+    const wrapper = mount(Host);
+    await flushPromises();
+    expect(loadCatalog).toHaveBeenCalledTimes(1);
+    visible.value = false;
+    await flushPromises();
+    visible.value = true;
+    await flushPromises();
+    expect(loadCatalog).toHaveBeenCalledTimes(2);
+    wrapper.unmount();
   });
 });

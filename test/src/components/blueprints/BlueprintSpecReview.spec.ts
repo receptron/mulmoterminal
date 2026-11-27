@@ -2,6 +2,8 @@
 // read instead, and keeps only the conversation, where what the person sends changes those files.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { defineComponent, h, ref } from "vue";
+import { provideOverlayVisible } from "../../../../src/composables/overlayVisibility";
 
 const { loadSpec, sendSpecMessage } = vi.hoisted(() => ({ loadSpec: vi.fn(), sendSpecMessage: vi.fn() }));
 vi.mock("../../../../src/composables/blueprintsApi", () => ({ loadSpec, sendSpecMessage }));
@@ -97,5 +99,24 @@ describe("the specification panel", () => {
     await flushPromises();
     expect(wrapper.get('[data-testid="blueprint-revision-check-failed"]').text()).toContain("The check after the change did not pass");
     expect(wrapper.text()).toContain("outline.json: part 2 has no file");
+  });
+});
+
+// The Blueprints screen is kept while closed; the spec may have been edited in the meantime.
+describe("the spec shown again", () => {
+  it("reads the spec again each time the screen is shown", async () => {
+    loadSpec.mockReset();
+    loadSpec.mockResolvedValue(specView("# spec"));
+    const visible = ref(true);
+    const props = { runId: "run-00000001", revisionSessionId: null, chatCount: 0, projectDir: "/work/app", expectsSpec: true };
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(BlueprintSpecReview, props)) });
+    const wrapper = mount(Host);
+    await flushPromises();
+    visible.value = false;
+    await flushPromises();
+    visible.value = true;
+    await flushPromises();
+    expect(loadSpec).toHaveBeenCalledTimes(2);
+    wrapper.unmount();
   });
 });

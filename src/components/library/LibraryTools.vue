@@ -7,6 +7,7 @@ import type { LibraryInstructionFile, LibraryInstructions } from "../../../commo
 import type { LibraryFileText } from "../../../common/libraryFiles";
 import { loadInstruction, loadInstructions, loadToolDirectories } from "../../composables/libraryApi";
 import { movedIndex } from "./libraryKeys";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 import { instructionLabel } from "./toolRows";
 import LibraryToolsSettings from "./LibraryToolsSettings.vue";
 
@@ -36,13 +37,19 @@ watch(
 /** The directories could not be listed (the index is unavailable): said, not shown as "none yet". */
 const directoriesFailed = ref(false);
 
-void (async () => {
+let directoryReads = 0;
+async function readDirectories(): Promise<void> {
+  const mine = ++directoryReads;
   const listed = await loadToolDirectories();
+  if (mine !== directoryReads) return;
+  if (listed === null && directories.value !== null) return; // a failed re-read keeps the list shown
   directoriesFailed.value = listed === null;
   directories.value = listed ?? [];
+  if (cwd.value !== null && directories.value.includes(cwd.value)) return;
   const wanted = props.initialCwd;
   cwd.value = wanted !== null && directories.value.includes(wanted) ? wanted : (directories.value[0] ?? null);
-})();
+}
+void readDirectories();
 
 let reads = 0;
 watch(cwd, async (dir) => {
@@ -55,6 +62,19 @@ watch(cwd, async (dir) => {
   if (mine !== reads) return;
   instructions.value = read;
   failed.value = read === null;
+});
+
+/** The open directory's files read again, keeping what is shown until (and unless) the answer comes. */
+async function rereadInstructions(dir: string): Promise<void> {
+  const mine = ++reads;
+  const read = await loadInstructions(dir);
+  if (mine !== reads || read === null) return;
+  instructions.value = read;
+  failed.value = false;
+}
+onOverlayShownAgain(() => {
+  void readDirectories();
+  if (cwd.value !== null) void rereadInstructions(cwd.value);
 });
 
 const shown = computed(() => {

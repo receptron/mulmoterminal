@@ -6,6 +6,7 @@ import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { installPack, loadCatalog, loadRegistryUrls, saveRegistryUrls, uninstallPack, type ApiFailure, type ApiResult } from "../../composables/blueprintsApi";
 import { failureText } from "./refusalText";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 import type { Catalog } from "../../../common/blueprint/registry";
 
 const emit = defineEmits<{ changed: [] }>();
@@ -34,6 +35,7 @@ async function refresh(): Promise<void> {
 }
 
 onMounted(() => void refresh());
+onOverlayShownAgain(() => void refresh());
 
 async function saveUrls(next: string[]): Promise<void> {
   const result = await saveRegistryUrls(next);

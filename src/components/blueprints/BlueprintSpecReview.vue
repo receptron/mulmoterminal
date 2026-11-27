@@ -6,6 +6,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { loadSpec, sendSpecMessage, type SpecView } from "../../composables/blueprintsApi";
 import { latestOnly } from "./latestOnly";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 import { failureText } from "./refusalText";
 import MarkdownProse from "../MarkdownProse.vue";
 import BlueprintLiveActivity from "./BlueprintLiveActivity.vue";
@@ -31,6 +32,8 @@ async function refresh(): Promise<void> {
 }
 
 onMounted(() => void refresh());
+// The screen is kept while closed; the spec may have been edited in the meantime.
+onOverlayShownAgain(() => void refresh());
 // The parent's poll sees a reply land (the chat grows, the revision ends); the spec is re-read then.
 watch(
   () => [props.revisionSessionId, props.chatCount],

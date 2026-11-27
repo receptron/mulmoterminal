@@ -202,6 +202,28 @@ describe("SkillEvalPanel", () => {
     wrapper.unmount();
   });
 
+  it("believes the read made on showing again over one still out from before the hide", async () => {
+    vi.useFakeTimers();
+    const running = { ...base, set, runs: [run(true, false, { status: "running", attempts: [] })], activeRunId: "1795000000000-aaaaaaaa" };
+    overview = running;
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(SkillEvalPanel, { source, skill })) });
+    const wrapper = mount(Host, { global: { plugins: [i18n] } });
+    await flushPromises();
+    let release: (value: SkillEvalOverview) => void = () => {};
+    loads.push(new Promise((resolve) => (release = resolve)));
+    await vi.advanceTimersByTimeAsync(3000); // a poll read goes out and waits
+    visible.value = false;
+    await flushPromises();
+    overview = { ...base, set, runs: [run(true, false)] };
+    visible.value = true;
+    await flushPromises();
+    release(running);
+    await flushPromises();
+    expect(wrapper.find("[data-testid=skill-eval-verdict]").text()).toBe("It helps");
+    wrapper.unmount();
+  });
+
   it("opens one drafting cell however often the button is pressed while it opens", async () => {
     let answer: (id: string | null) => void = () => {};
     authoring = new Promise((resolve) => (answer = resolve));

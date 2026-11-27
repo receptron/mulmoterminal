@@ -2,6 +2,8 @@
 // each read beside the list.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { defineComponent, h, ref } from "vue";
+import { provideOverlayVisible } from "../../../../src/composables/overlayVisibility";
 import type { LibraryInstructionFile, LibraryInstructionScope, LibraryInstructions } from "../../../../common/libraryTools";
 
 const file = (scope: LibraryInstructionScope, filePath: string, over: Partial<LibraryInstructionFile> = {}): LibraryInstructionFile => ({
@@ -155,5 +157,37 @@ describe("LibraryTools", () => {
     textAnswer = { text: "See `docs/gone.md`.", missing: ["docs/gone.md"] };
     const wrapper = await mountTools("/w/app");
     expect(wrapper.find("[data-testid=tool-missing]").text()).toBe("It names docs/gone.md, which is not there.");
+  });
+
+  // The Library is kept while closed: shown again, the directories and the open one's files are read
+  // again on the same directory, and a failed re-read keeps what was there.
+  it("reads the directories and files again each time the Library is shown, staying on the directory", async () => {
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(LibraryTools, { query: "", initialCwd: "/w/lib" })) });
+    const wrapper = mount(Host, { attachTo: document.body });
+    await flushPromises();
+    const showAgain = async () => {
+      visible.value = false;
+      await flushPromises();
+      visible.value = true;
+      await flushPromises();
+    };
+    directoriesAnswer = ["/w/new", "/w/app", "/w/lib"];
+    listing["/w/lib"] = {
+      cwd: "/w/lib",
+      agentsMd: true,
+      truncated: false,
+      files: [file("agents", "/w/lib/AGENTS.md"), file("rule", "/w/lib/.claude/rules/x.md")],
+    };
+    await showAgain();
+    expect(wrapper.findAll("option").map((option) => option.text())).toEqual(["/w/new", "/w/app", "/w/lib"]);
+    expect(wrapper.get<HTMLSelectElement>("[data-testid=library-tools-cwd]").element.value).toBe("/w/lib");
+    expect(wrapper.findAll("[data-testid=tool-row]")).toHaveLength(2);
+    directoriesAnswer = null;
+    listing = {};
+    await showAgain();
+    expect(wrapper.findAll("[data-testid=tool-row]")).toHaveLength(2);
+    expect(wrapper.find("[data-testid=library-tools-directories-failed]").exists()).toBe(false);
+    wrapper.unmount();
   });
 });

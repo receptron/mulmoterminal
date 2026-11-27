@@ -99,7 +99,12 @@ const visible = useOverlayVisible();
 function startPolling(): void {
   if (visible.value) poll ??= setInterval(() => void refresh(), POLL_MS);
 }
-watch(visible, (shown) => (shown ? void refresh() : stopPolling()));
+// Hiding outdates whatever is in flight: the read on showing again is the one to believe.
+watch(visible, (shown) => {
+  if (shown) return void refresh();
+  selection += 1;
+  stopPolling();
+});
 
 watch(
   () => [props.source, props.skill.id],
