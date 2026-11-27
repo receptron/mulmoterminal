@@ -12,8 +12,8 @@ export function lastPlaceIn(routeNames: ReadonlySet<string>): () => string | nul
 }
 
 /** Goes back to a place recorded as a full path, remembering where the screen was opened from. */
-export function returnToPlace(fullPath: string): void {
+export async function returnToPlace(fullPath: string): Promise<void> {
   // A `path` holding a query would be pushed without it, and the Library keeps its conversation there.
   const { path, query, hash } = router.resolve(fullPath);
-  void router.push({ path, query, hash, state: overlayOriginState() });
+  await router.push({ path, query, hash, state: overlayOriginState() });
 }

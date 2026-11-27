@@ -23,8 +23,14 @@ describe("screenOfRoute", () => {
 
   // Every full-screen route is some screen's: a route added to the screens without a tab would open
   // a screen with no tab in front.
-  it("maps every full-screen route to a screen", () => {
-    expect([...OVERLAY_ROUTES].filter((name) => screenOfRoute(name) === null)).toEqual([]);
+  it("maps every full-screen route to its screen", () => {
+    const expected: Record<string, string> = {
+      ...{ collections: "collections", collectionDetail: "collections", feeds: "feeds", feedDetail: "feeds", accounting: "accounting", files: "files" },
+      ...{ wiki: "wiki", wikiPage: "wiki", wikiGraph: "wiki", wikiLint: "wiki", github: "prs", githubBoard: "prs" },
+      ...{ rooms: "rooms", roomView: "rooms", blueprints: "blueprints", blueprintRun: "blueprints", blueprintMarket: "blueprints" },
+      ...{ skills: "skills", library: "library", processes: "processes", usage: "usage" },
+    };
+    expect(Object.fromEntries([...OVERLAY_ROUTES].map((name) => [name, screenOfRoute(name)]))).toEqual(expected);
   });
 
   // Every screen but the terminals has a route the tabs know, and every route they know exists.

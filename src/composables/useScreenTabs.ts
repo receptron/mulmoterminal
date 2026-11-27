@@ -18,17 +18,17 @@ export const frontScreen: ComputedRef<PaletteScreen | null> = computed(() => scr
 
 export function showScreenTab(screen: PaletteScreen): void {
   const tab = tabs.value.find((candidate) => candidate.screen === screen);
-  if (tab && screen !== frontScreen.value) returnToPlace(tab.path);
+  if (tab && screen !== frontScreen.value) void returnToPlace(tab.path);
 }
 
-export function showTerminals(): void {
-  void router.push(overlayReturnPath());
+export async function showTerminals(): Promise<void> {
+  await router.push(overlayReturnPath());
 }
 
-export function closeScreenTab(screen: PaletteScreen): void {
+/** Resolves once the screen in front has changed, if it had to. */
+export async function closeScreenTab(screen: PaletteScreen): Promise<void> {
   const { tabs: rest, next } = closeTab(tabs.value, screen);
   tabs.value = rest;
   if (screen !== frontScreen.value) return;
-  if (next) returnToPlace(next.path);
-  else showTerminals();
+  await (next ? returnToPlace(next.path) : showTerminals());
 }

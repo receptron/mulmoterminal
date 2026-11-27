@@ -1,18 +1,30 @@
 <script setup lang="ts">
 // The screens opened so far, as tabs under the toolbar while one of them is in front, with the
 // terminals first. The screens move down while it is up (`--screen-top` in style.css).
+import { nextTick, useTemplateRef } from "vue";
 import { useI18n } from "vue-i18n";
 import IconGlyph from "./IconGlyph.vue";
-import { SCREEN_ICONS, SCREEN_LABEL_KEYS } from "../composables/paletteScreens";
+import { SCREEN_ICONS, SCREEN_LABEL_KEYS, type PaletteScreen } from "../composables/paletteScreens";
 import { closeScreenTab, frontScreen, screenTabs, showScreenTab, showTerminals } from "../composables/useScreenTabs";
 
 const { t } = useI18n();
+const strip = useTemplateRef<HTMLElement>("strip");
+
+// The closed tab had the keyboard; it goes to the tab now in front (still in the strip after its own
+// close button went), or nowhere when the strip went with the last screen.
+async function close(screen: PaletteScreen): Promise<void> {
+  await closeScreenTab(screen);
+  await nextTick();
+  strip.value?.querySelector<HTMLElement>("[aria-current=page]")?.focus();
+}
+
 const TAB = "flex h-full min-w-0 cursor-pointer items-center gap-1.5 border-0 bg-transparent px-2.5 text-[12px]";
 </script>
 
 <template>
   <nav
     v-if="frontScreen !== null"
+    ref="strip"
     data-screen-tabs
     class="fixed inset-x-0 top-10 z-50 flex h-8 items-stretch overflow-x-auto border-b border-border bg-panel"
     :aria-label="t('screenTabs.label')"
@@ -42,7 +54,7 @@ const TAB = "flex h-full min-w-0 cursor-pointer items-center gap-1.5 border-0 bg
         class="mr-1 flex w-5 cursor-pointer items-center justify-center self-center rounded border-0 bg-transparent text-[14px] text-secondary hover:bg-hover hover:text-fg"
         :aria-label="t('screenTabs.close', { screen: t(SCREEN_LABEL_KEYS[tab.screen]) })"
         :data-tip="t('screenTabs.close', { screen: t(SCREEN_LABEL_KEYS[tab.screen]) })"
-        @click="closeScreenTab(tab.screen)"
+        @click="close(tab.screen)"
       >
         <span class="material-symbols-outlined text-[14px]" aria-hidden="true">close</span>
       </button>

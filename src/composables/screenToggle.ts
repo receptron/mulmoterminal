@@ -14,6 +14,6 @@ export function toggleLastScreen(): boolean {
   }
   const last = lastScreen();
   if (last === null) return false;
-  returnToPlace(last);
+  void returnToPlace(last);
   return true;
 }

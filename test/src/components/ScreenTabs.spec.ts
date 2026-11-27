@@ -38,13 +38,14 @@ describe("ScreenTabs", () => {
 
   it("goes to a tab's screen where it was left, and back to the terminals", async () => {
     const w = mount(ScreenTabs);
-    libraryViewOpen({ session: "s1", cwd: null });
+    await router.push({ name: "library", query: { session: "s1" }, hash: "#turn-3", state: overlayOriginState() });
     await flushPromises();
     await open("usage");
     await w.findAll("[data-testid=screen-tab]")[0]?.trigger("click");
     await flushPromises();
     expect(here().name).toBe("library");
     expect(here().query).toEqual({ session: "s1" });
+    expect(here().hash).toBe("#turn-3");
     await w.get("nav > button").trigger("click");
     await flushPromises();
     expect(here().name).toBe("terminals");
@@ -80,5 +81,20 @@ describe("ScreenTabs", () => {
       { screen: "blueprints", path: "/blueprints/market" },
       { screen: "wiki", path: "/wiki/graph" },
     ]);
+  });
+});
+
+describe("closing a tab from the keyboard", () => {
+  it("hands the keyboard to the tab now in front", async () => {
+    const w = mount(ScreenTabs, { attachTo: document.body });
+    await open("rooms");
+    await open("skills");
+    const closeSkills = w.get(`[aria-label="${en.screenTabs.close.replace("{screen}", en.featureMenu.items.skills.label)}"]`);
+    (closeSkills.element as HTMLElement).focus();
+    await closeSkills.trigger("click");
+    await flushPromises();
+    expect(document.activeElement?.getAttribute("aria-current")).toBe("page");
+    expect(document.activeElement?.textContent).toContain(en.featureMenu.items.rooms.label);
+    w.unmount();
   });
 });
