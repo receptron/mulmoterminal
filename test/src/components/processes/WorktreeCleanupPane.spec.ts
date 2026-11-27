@@ -5,10 +5,10 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { mountUnderOverlay } from "../underOverlay";
 import type { WorktreeCleanupRow } from "../../../../common/worktreeCleanup";
 
-const api = vi.hoisted(() => ({ reads: [] as ((rows: WorktreeCleanupRow[] | null) => void)[] }));
+const api = vi.hoisted(() => ({ reads: [] as ((rows: WorktreeCleanupRow[] | null) => void)[], removing: Promise.resolve(true) }));
 vi.mock("../../../../src/composables/processesApi", () => ({
   loadWorktreeCleanup: () => new Promise((resolve) => api.reads.push(resolve)),
-  removeCleanupWorktree: async () => true,
+  removeCleanupWorktree: () => api.removing,
 }));
 
 const WorktreeCleanupPane = (await import("../../../../src/components/processes/WorktreeCleanupPane.vue")).default;
@@ -30,6 +30,7 @@ const row = (name: string, extra: Partial<WorktreeCleanupRow> = {}): WorktreeCle
 
 beforeEach(() => {
   api.reads = [];
+  api.removing = Promise.resolve(true);
 });
 
 describe("WorktreeCleanupPane", () => {
@@ -93,6 +94,25 @@ describe("the worktree list shown again", () => {
     await shown;
     await flushPromises();
     expect(wrapper.findAll("[data-testid=worktrees-row]")).toHaveLength(1);
+    wrapper.unmount();
+  });
+});
+
+describe("a removal answering after the screen closed", () => {
+  it("reads nothing while hidden", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { wrapper, visible } = mountUnderOverlay(WorktreeCleanupPane, {});
+    api.reads[0]?.([row("gone")]);
+    await flushPromises();
+    let answerRemove: (value: boolean) => void = () => {};
+    api.removing = new Promise((resolve) => (answerRemove = resolve));
+    await wrapper.get("[data-testid=worktrees-remove]").trigger("click");
+    visible.value = false;
+    await flushPromises();
+    const readsBefore = api.reads.length;
+    answerRemove(true);
+    await flushPromises();
+    expect(api.reads).toHaveLength(readsBefore);
     wrapper.unmount();
   });
 });

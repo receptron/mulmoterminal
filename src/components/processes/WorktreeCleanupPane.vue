@@ -3,7 +3,7 @@
 // removed (#2219). Read once when shown and on Refresh — it is a few git calls per worktree.
 // Removing is a button per candidate; nothing is removed automatically.
 import { computed, onMounted, ref, shallowRef } from "vue";
-import { onOverlayShownAgain } from "../../composables/overlayVisibility";
+import { onOverlayShownAgain, useOverlayVisible } from "../../composables/overlayVisibility";
 import { useI18n } from "vue-i18n";
 import { loadWorktreeCleanup, removeCleanupWorktree } from "../../composables/processesApi";
 import { cleanupBlockers, isCleanupCandidate, type WorktreeCleanupRow } from "../../../common/worktreeCleanup";
@@ -22,7 +22,10 @@ const shownRows = computed(() => (rows.value ?? []).filter((row) => !onlyCandida
 // set the list, or a slow earlier read shows a worktree that was just removed.
 let latestRead = 0;
 
+// A removal answering after the screen was closed reads nothing; showing it again reads.
+const visible = useOverlayVisible();
 async function refresh(): Promise<void> {
+  if (!visible.value) return;
   const thisRead = ++latestRead;
   loadFailed.value = false;
   const read = await loadWorktreeCleanup();
