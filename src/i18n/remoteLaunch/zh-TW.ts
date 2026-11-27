@@ -11,4 +11,6 @@ export const remoteLaunchZhTW = {
   workspace: "工作區",
   dirsFailed: "無法讀取 {label} 上已儲存的目錄: {error}",
   chipFill: "使用 {path}",
+  resumeHeading: "或在 {label} 上繼續一個對話",
+  resumeOpen: "已開啟",
 };

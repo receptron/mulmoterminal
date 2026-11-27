@@ -85,7 +85,7 @@ export const NEVER_FORWARDED: Record<string, readonly string[]> = {
 // decides into the table or into NEVER_FORWARDED, and a route added to the server must go into one
 // of those rather than here.
 // Lower it as the list shrinks; raising it is the visible edit that adding a route here takes.
-export const UNDECIDED_CEILING = 221;
+export const UNDECIDED_CEILING = 214;
 export const UNDECIDED: readonly string[] = [
   "DELETE /api/collections/:slug",
   "DELETE /api/collections/:slug/items/:itemId",
@@ -95,7 +95,6 @@ export const UNDECIDED: readonly string[] = [
   "GET /^\\/api\\/files\\/page\\/(.+)/",
   "GET /api/activity",
   "GET /api/agents/availability",
-  "GET /api/antigravity/sessions",
   "GET /api/blueprints/collections",
   "GET /api/blueprints/folder-files",
   "GET /api/blueprints/folder-present",
@@ -113,7 +112,6 @@ export const UNDECIDED: readonly string[] = [
   "GET /api/blueprints/runs/:id/source",
   "GET /api/blueprints/runs/:id/spec",
   "GET /api/blueprints/runs/:id/targets",
-  "GET /api/codex/sessions",
   "GET /api/collection-projects",
   "GET /api/collections/:slug/detail",
   "GET /api/collections/:slug/remote-view",
@@ -130,9 +128,7 @@ export const UNDECIDED: readonly string[] = [
   "GET /api/config",
   "GET /api/config/keymap-preset",
   "GET /api/config/terminal-widths",
-  "GET /api/copilot/sessions",
   "GET /api/cost",
-  "GET /api/cursor/sessions",
   "GET /api/decisions",
   "GET /api/decisions/digest",
   "GET /api/dir-background",
@@ -152,7 +148,6 @@ export const UNDECIDED: readonly string[] = [
   "GET /api/github/board/detail",
   "GET /api/github/star",
   "GET /api/grid-layout",
-  "GET /api/grok/sessions",
   "GET /api/gui-mcp-groups",
   "GET /api/help/sources",
   "GET /api/issues",
@@ -182,7 +177,6 @@ export const UNDECIDED: readonly string[] = [
   "GET /api/load",
   "GET /api/mulmo/decks",
   "GET /api/mulmoscript/media",
-  "GET /api/muse/sessions",
   "GET /api/notifications",
   "GET /api/notifications/history",
   "GET /api/pane/check/:sessionId",
@@ -198,7 +192,6 @@ export const UNDECIDED: readonly string[] = [
   "GET /api/scheduler/logs",
   "GET /api/scheduler/tasks",
   "GET /api/session/:id",
-  "GET /api/sessions",
   "GET /api/sessions/live",
   "GET /api/sessions/unplaced",
   "GET /api/shared-app/access",
