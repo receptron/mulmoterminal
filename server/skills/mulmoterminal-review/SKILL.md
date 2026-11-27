@@ -87,13 +87,19 @@ that makes the loop longer.
 4. **The smallest change** that resolves it, concrete enough to apply.
 5. **What would change your mind** — the fact that, if true, makes it a non-issue.
 6. **Evidence** that it is real — one of:
-   - the command you ran and what it printed (the failing line, the wrong value);
-   - the call chain from a real entry point to the line, naming the caller that supplies the input.
+   - **a run**: the command and what it printed — the failing line, the wrong value, a mutation the
+     tests let through;
+   - **a static proof**: the real entry point and the caller that supplies the input, AND the code
+     fact that makes the result wrong there — the ordering that is not held, the invariant broken,
+     the value produced;
+   - **a rule or a claim**: the sentence quoted (the repository's instructions, the PR body, a
+     comment, the docs) beside the line that contradicts it.
 
 **Only a finding with evidence holds the verdict.** One without it — "this could break if…" — may
-still be reported, marked **UNVERIFIED** and as **N**, whatever severity it would otherwise have. An
-unproved worry costs the author a whole round, and a real problem you cannot run (a race, a path only
-another platform takes) still qualifies through its call chain.
+still be reported, marked **UNVERIFIED** and as **N**, whatever severity it would otherwise have. A
+path that merely reaches the line is not evidence: it shows the code runs, not that it is wrong. An
+unproved worry costs the author a whole round; a real problem you cannot run (a race, a path only
+another platform takes) still qualifies through a static proof.
 
 ## 6. Later rounds
 
