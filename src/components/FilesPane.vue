@@ -124,7 +124,10 @@ const { openPath, openName, dirty, editSeq, saving, fileError, unpreviewable, co
 const outsideFile = computed(() => openPath.value !== null && isOutsidePath(openPath.value));
 const pathUnderRoot = computed(() => (outsideFile.value ? null : openPath.value));
 // The open file's Preview as a tab of its own, with the toolbar the pane has no need of (#3238).
-const previewTab = computed(() => (openPath.value && previewKind.value ? previewTabUrl(previewKind.value, props.cwd, openPath.value) : null));
+// A tab of its own is this server's page: a remote file's Preview stays in the pane (#3506).
+const previewTab = computed(() =>
+  openPath.value && previewKind.value && !onRemote.value ? previewTabUrl(previewKind.value, props.cwd, openPath.value) : null,
+);
 const openPreviewTab = (): void => {
   if (previewTab.value) window.open(previewTab.value, "_blank", "noopener,noreferrer");
 };

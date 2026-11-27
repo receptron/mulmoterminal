@@ -30,6 +30,8 @@ const ENTRIES = [
   { name: "README.md", dir: false, size: 7 },
   { name: "notes.txt", dir: false, size: 5 },
   { name: "pic.png", dir: false, size: 9 },
+  { name: "page.html", dir: false, size: 9 },
+  { name: "linked.png", dir: false, size: 9 },
 ];
 
 interface Asked {
@@ -43,6 +45,7 @@ function answer(route: string, path: string): Response {
   if (route === "list") return json({ entries: path === "" ? ENTRIES : [] });
   if (route === "text" && path.endsWith(".png")) return json({ error: "this file cannot be edited as text", kind: "binary" }, 415);
   if (route === "text") return json({ text: `text of ${path}`, version: "v1" });
+  if (route === "version" && path === "linked.png") return json({ error: "outside", escape: "symlink", absolutePath: "/elsewhere/linked.png" }, 403);
   if (route === "index") return json({ paths: ["README.md", "src/a.ts"] });
   if (route === "search") return json({ matches: [{ path: "README.md", line: 1, text: "hello" }] });
   if (route === "lines") return json({ start: 1, lines: ["hello"] });
@@ -169,26 +172,46 @@ describe("the Files pane on a remote cell's host (#3506)", () => {
     expect(routesAsked()).toContain("PUT /api/files/browse/write");
   });
 
-  // What this machine would do with the file: its file manager, its OS, its gallery and Canvas, and
-  // a Preview or picture served as bytes, which the gateway does not carry.
-  it("offers nothing that acts on this machine or needs the host's bytes", async () => {
+  // What this machine would do with the file: its file manager, its OS, its gallery and Canvas. A
+  // Preview or a picture is the host's, through the byte proxy, and never this server's route.
+  it("offers nothing that acts on this machine, and draws the host's bytes through the proxy", async () => {
     const w = await mountPane("lx");
     expect(await rowMenu(w, "notes.txt")).not.toContain("reveal");
     expect(await rowMenu(w, "src")).not.toContain("open-gallery");
 
     await openRow(w, "README.md");
-    expect(w.find("iframe").attributes("src") ?? "").toBe("");
-    expect(w.findAll("button").some((b) => b.text() === "Preview")).toBe(false);
+    expect(w.find("iframe").attributes("src")).toMatch(/^\/remote\/lx\/bytes\/api\/files\/browse\/md\?/);
+    expect(w.findAll("button").some((b) => b.text() === "Preview")).toBe(true);
 
     await openRow(w, "pic.png");
-    expect(w.find('[data-testid="files-unpreviewable"]').exists()).toBe(true);
+    expect(w.html()).toMatch(/src="\/remote\/lx\/bytes\/api\/files\/raw\?/);
     expect(w.find('[data-testid="files-open-in-os"]').exists()).toBe(false);
     expect(w.html()).not.toMatch(/src="\/api\//);
     expect(await rowMenu(w, "README.md")).not.toContain("open-canvas");
   });
 
+  // A one-file grant and a tab of its own are this server's: a remote file gets neither.
+  it("asks this server for no grant and offers no tab of a remote file", async () => {
+    const w = await mountPane("lx");
+    await openRow(w, "README.md");
+    expect(w.find('[data-testid="files-preview-tab"]').exists()).toBe(false);
+    await openRow(w, "linked.png");
+    expect(asked.some((request) => request.url.startsWith("/api/files/grant"))).toBe(false);
+    expect(w.html()).not.toMatch(/src="\/api\//);
+  });
+
+  // A page is served by path beside the files it links to, which the proxy does not carry.
+  it("has no Preview of an HTML page on the host", async () => {
+    const w = await mountPane("lx");
+    await openRow(w, "page.html");
+    expect(w.find("iframe").attributes("src") ?? "").toBe("");
+    expect(w.findAll("button").some((b) => b.text() === "Preview")).toBe(false);
+  });
+
   it("offers the same on this machine (control)", async () => {
     const w = await mountPane(null);
+    await openRow(w, "README.md");
+    expect(w.find('[data-testid="files-preview-tab"]').exists()).toBe(true);
     expect(await rowMenu(w, "notes.txt")).toContain("reveal");
     expect(await rowMenu(w, "src")).toContain("open-gallery");
     expect(await rowMenu(w, "README.md")).toContain("open-canvas");
