@@ -26,30 +26,30 @@ const ON_REMOTE_CELL: Record<CellAction, boolean> = {
   "terminal-new-here": false,
   "terminal-new-adjacent": false,
   "terminal-restart": true,
-  "terminal-timeline": false,
-  "terminal-talk": false,
-  "terminal-copy-code": false,
+  "terminal-timeline": true,
+  "terminal-talk": true,
+  "terminal-copy-code": true,
   "terminal-insert-path": false,
   "terminal-reveal": false,
-  "terminal-diff": false,
+  "terminal-diff": true,
   "terminal-note": true,
-  "terminal-send-turn": false,
-  "terminal-send-since": false,
-  "terminal-bring-turn": false,
-  "terminal-bring-since": false,
+  "terminal-send-turn": true,
+  "terminal-send-since": true,
+  "terminal-bring-turn": true,
+  "terminal-bring-since": true,
   "pane-files": true,
-  "pane-prompts": false,
-  "pane-transcript": false,
-  "pane-tools": false,
-  "pane-canvas": false,
+  "pane-prompts": true,
+  "pane-transcript": true,
+  "pane-tools": true,
+  "pane-canvas": true,
   "pane-collections": false,
 };
 
 export const cellActionAllowed = (host: string | null | undefined, action: CellAction): boolean => !isRemoteHost(host) || ON_REMOTE_CELL[action];
 
-// The panes a remote cell opens: its files, read and written on its host. Every other pane reads
-// this machine's copy of a session or its tools.
-const REMOTE_CELL_PANES: readonly RightPane[] = ["files"];
+// The panes a remote cell opens: its files, read and written on its host, and its session's prompts,
+// conversation, tool calls and cards, read there. Collections read this machine's.
+const REMOTE_CELL_PANES: readonly RightPane[] = ["files", "prompts", "transcript", "tools", "canvas"];
 
 export const paneAllowed = (host: string | null | undefined, pane: RightPane): boolean => !isRemoteHost(host) || REMOTE_CELL_PANES.includes(pane);
 
@@ -61,6 +61,18 @@ export const actionAllowedOn = (cells: readonly { uid: number; remoteHost?: stri
 export const pathOnHost = (host: string | null | undefined, path: string): string => (isRemoteHost(host) ? remotePath(host, path) : path);
 
 export const REMOTE_CELL_DECLINE_EN = "This terminal runs on another machine, so that is not available here yet.";
+
+/** A read of one session's own record: this server's route, or the gateway's for a remote cell. */
+export const transcriptPath = (
+  host: string | null | undefined,
+  route: "prompts" | "view" | "timeline" | "last-turn" | "relay" | "relay-mark",
+  params: URLSearchParams,
+): string => pathOnHost(host, `/api/transcript/${route}?${params.toString()}`);
+
+/** A write to the cell's repo, which names its directory in the body: this server's route, or the
+ *  gateway's with that directory in the query too, which the gateway holds the body's paths to. */
+export const repoWritePath = (host: string | null | undefined, route: string, cwd: string): string =>
+  isRemoteHost(host) ? `${remotePath(host, route)}?cwd=${encodeURIComponent(cwd)}` : route;
 
 /** A write to one session: this server's route, or the gateway's for a remote cell. */
 export const sessionWritePath = (host: string | null | undefined, sessionId: string, action: "memo" | "terminate" | "drop"): string =>

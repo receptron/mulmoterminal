@@ -28,7 +28,8 @@ const { t } = useI18n();
 // rather than left to inheritance, which also means a second root can be added back safely.
 defineOptions({ inheritAttrs: false });
 
-const props = defineProps<{ sessionId: string; cwd: string | null; agent: TerminalAgent }>();
+// `host`: the remote host the session runs on (#3506), null or absent for this machine.
+const props = defineProps<{ sessionId: string; cwd: string | null; agent: TerminalAgent; host?: string | null }>();
 
 const busy = ref(false);
 const note = ref<string | null>(null);
@@ -61,7 +62,7 @@ async function copyLastBlock(): Promise<void> {
   if (busy.value) return;
   busy.value = true;
   try {
-    const turn = await fetchLastTurn({ sessionId: props.sessionId, cwd: props.cwd, agent: props.agent }, "reply");
+    const turn = await fetchLastTurn({ sessionId: props.sessionId, cwd: props.cwd, agent: props.agent, host: props.host ?? null }, "reply");
     const outcome = copyOutcomeFor(turn);
     if (outcome.kind !== "ok") return flash(copyOutcomeMessage(outcome));
     if (!clipboardAvailable()) return showForManualCopy(outcome.text);

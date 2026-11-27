@@ -10,10 +10,17 @@ const readable = (over: Partial<SlotCandidate> = {}): SlotCandidate => ({
   sessionId: "sess-2",
   cwd: "/w/proj",
   agent: "claude" as const,
+  host: null,
   ...over,
 });
 
 describe("readableSlot", () => {
+  // #3506. A remote cell's conversation is read on its host, so the slot says which.
+  it("names the host of a remote slot, and none for this machine's", () => {
+    expect(readableSlot(readable({ host: "lx" }))).toEqual({ key: "cell-2", sessionId: "sess-2", cwd: "/w/proj", agent: "claude", host: "lx" });
+    expect(readableSlot(readable())).toEqual({ key: "cell-2", sessionId: "sess-2", cwd: "/w/proj", agent: "claude" });
+  });
+
   it("reads a connected agent cell", () => {
     expect(readableSlot(readable())).toEqual({ key: "cell-2", sessionId: "sess-2", cwd: "/w/proj", agent: "claude" });
   });

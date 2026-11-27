@@ -133,7 +133,7 @@ describe("usePaletteTerminals", () => {
   it("names the acting agent terminal as the source of prompts, and no other kind", () => {
     const w = mountGrid(() => {});
     actingCell = { uid: 4, session: "s-4", cwd: "/home/me/app", agent: "codex" };
-    expect(paletteTerminals.value?.promptSource()).toEqual({ uid: 4, slotKey: "cell-4", session: "s-4", agent: "codex", cwd: "/home/me/app" });
+    expect(paletteTerminals.value?.promptSource()).toEqual({ uid: 4, slotKey: "cell-4", session: "s-4", agent: "codex", cwd: "/home/me/app", host: null });
     actingCell = { uid: 5, session: null, cwd: "/home/me/app" };
     expect(paletteTerminals.value?.promptSource()).toBeNull();
     actingCell = null;

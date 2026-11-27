@@ -912,12 +912,11 @@ const slotCandidate = (c: Conn): SlotCandidate => ({
   sessionId: c.knownSessionId,
   cwd: c.knownCwd ?? c.target.cwd,
   agent: c.target.agent ?? "claude",
+  host: isRemoteHost(c.target.remoteHost) ? c.target.remoteHost : null,
 });
 
-export function listSlots(): SlotInfo[] {
-  // A remote cell's conversation is on another machine; this server cannot read it for a handoff.
-  return [...conns.values()].flatMap((c) => (isRemoteHost(c.target.remoteHost) ? [] : (readableSlot(slotCandidate(c)) ?? [])));
-}
+// A remote cell's conversation is read on its host, so its slot is listed with that host (#3506).
+export const listSlots = (): SlotInfo[] => [...conns.values()].flatMap((c) => readableSlot(slotCandidate(c)) ?? []);
 
 /** Whether the slot still exists at all. What a close path asks before cleaning up: a cell whose
  *  own teardown already ran (TerminalCell's close button) has no slot left, and cleaning up again

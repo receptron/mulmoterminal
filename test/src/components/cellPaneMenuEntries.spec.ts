@@ -129,4 +129,11 @@ describe("actionsOnly", () => {
   it("leaves nothing to choose when there is no action", () => {
     expect(hasChoice(actionsOnly(toolEntries(state(), t)))).toBe(false);
   });
+  // #3506. A remote agent cell still opens its tool calls, read on its host.
+  it("keeps the panes asked for, above the actions with the divider between", () => {
+    const entries = actionsOnly(toolEntries(state({ talkAvailable: true, restartAvailable: true }), t), ["tools"]);
+    expect(ids(entries)).toEqual(["tools", "talk", "restart"]);
+    expect(entries.map((entry) => entry.separated)).toEqual([false, true, false]);
+    expect(ids(actionsOnly(toolEntries(state(), t), ["tools"]))).toEqual(["tools"]);
+  });
 });

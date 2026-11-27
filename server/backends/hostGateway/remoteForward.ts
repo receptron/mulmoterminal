@@ -49,6 +49,7 @@ function forwardedQuery(route: RemoteRoute, query: Record<string, unknown>): Que
     const value = query[name];
     if (typeof value === "string") params.set(name, value);
   });
+  if (route.key === "session") return sessionQuery(route, params);
   if (route.key !== "cwd") return { params };
   const cwd = params.get("cwd");
   if (cwd === null || !isCleanAbsolute(cwd)) return { reason: "cwd must be a clean absolute path" };
@@ -59,17 +60,45 @@ function forwardedQuery(route: RemoteRoute, query: Record<string, unknown>): Que
   return escaping ? { reason: `${escaping} leaves ${cwd}` } : { params };
 }
 
-/** The forward for `method` on `pathname` (the remote's own `/api/…` path), or why not. */
+const SESSION_PARAMS = ["session", "sessionId"] as const;
+
+// A session named by the query rather than the path is held to the same id rule.
+function sessionQuery(route: RemoteRoute, params: URLSearchParams): QueryResult {
+  const named = SESSION_PARAMS.find((name) => route.query.includes(name));
+  const session = named === undefined ? null : params.get(named);
+  if (named !== undefined && (session === null || !SESSION_ID_RE.test(session))) return { reason: `${named} must be a session id` };
+  const cwd = params.get("cwd");
+  return cwd !== null && !isCleanAbsolute(cwd) ? { reason: "cwd must be a clean absolute path" } : { params };
+}
+
+// A path the body names is held to the query's `cwd` like one in the query, and written absolute: the
+// remote expands a `~` the gateway cannot see the meaning of.
+function bodyEscape(route: RemoteRoute, cwd: string | null, body: unknown): string | null {
+  const fields = route.bodyWithin ?? [];
+  if (fields.length === 0) return null;
+  const given = isRecord(body) ? body : {};
+  const bad = fields.find((name) => {
+    const value = given[name];
+    return value !== undefined && (typeof value !== "string" || cwd === null || !isCleanAbsolute(value) || !staysInside(cwd, value));
+  });
+  return bad === undefined ? null : `${bad} must be an absolute path inside ${cwd ?? "the cwd"}`;
+}
+
+/** The forward for `method` on `pathname` (the remote's own `/api/…` path), or why not. `body` is the
+ *  parsed JSON body, for a route whose body names a path. */
 export function decideForward(
   method: string,
   pathname: string,
   query: unknown,
   routes: Readonly<Record<string, RemoteRoute>> = REMOTE_ROUTES,
+  body: unknown = undefined,
 ): ForwardDecision {
   const matched = Object.values(routes).find((route) => route.method === method.toUpperCase() && filledPath(route, pathname) !== null);
   if (!matched) return refuse(404, `${method.toUpperCase()} ${pathname} is not forwarded to a remote host`);
   const result = forwardedQuery(matched, isRecord(query) ? query : {});
   if ("reason" in result) return refuse(400, result.reason);
+  const escape = bodyEscape(matched, result.params.get("cwd"), body);
+  if (escape !== null) return refuse(400, escape);
   const search = result.params.toString();
   return { kind: "forward", route: matched, path: search ? `${pathname}?${search}` : pathname };
 }

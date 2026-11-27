@@ -27,7 +27,7 @@ import type { Launcher, LaunchPick } from "./launchers";
 import type { CustomAgent } from "../../common/customAgents";
 import type { AgentAccount } from "../../common/agentAccounts";
 import { isCellSelfAction, isPaneAction, paneOfAction, type CellAction } from "../../common/headerActions";
-import { actionAllowedOn, onThisMachine, paneAllowed } from "./remoteCell";
+import { actionAllowedOn, onThisMachine, paneAllowed, pathOnHost } from "./remoteCell";
 import { dirKeyOf } from "../composables/dirAddress";
 import { registerGridCellRunner } from "../composables/useGridCellAction";
 import { requestCellAction } from "../composables/useCellAction";
@@ -703,6 +703,10 @@ const localSessionOf = (uid: number | null): string | null => {
   return onThisMachine(cell?.remoteHost, cell?.session ?? null);
 };
 const paneCellSessionId = computed(() => localSessionOf(paneCellUid.value));
+// The prompts, the conversation and the tool calls are read where the session runs, a remote cell's
+// on its host (#3506).
+const paneCellSessionOnHost = computed(() => cellOf(paneCellUid.value)?.session ?? null);
+const paneCellHost = computed(() => cellOf(paneCellUid.value)?.remoteHost ?? null);
 // The ENLARGED cell's session, which is not the same thing on the tiled grid: what opens the pane by
 // itself — a drawing, a question, an agent's showInPane — answers to this one only, so a cell whose
 // pane was closed long ago does not put one beside the tiles unasked.
@@ -1016,9 +1020,10 @@ const canvasOpenable = computed(() => canvasAvailable.value || canvasHasCard.val
 // one request, two groups — so the two buttons can never disagree about what a session has.
 const collectionsAvailable = ref(false);
 
+// Asked of the host a remote cell runs on (#3506), where its session's groups and cards are.
 watch(
-  [paneCellSessionId, paneCellUid],
-  async ([sessionId]) => {
+  [paneCellSessionOnHost, paneCellHost, paneCellUid],
+  async ([sessionId, host]) => {
     canvasAvailable.value = false;
     canvasChecked.value = false;
     canvasHasCard.value = false;
@@ -1029,11 +1034,11 @@ watch(
     // Asked beside the tools question rather than folded into it: `/api/tools` answers what the
     // session CAN draw, this answers what it already HAS. A failure here leaves the flag false —
     // the tools answer still decides, exactly as before this existed.
-    void hasStoredCard(sessionId).then((has) => {
-      if (sessionId === paneCellSessionId.value) canvasHasCard.value = has;
+    void hasStoredCard(sessionId, host).then((has) => {
+      if (sessionId === paneCellSessionOnHost.value) canvasHasCard.value = has;
     });
     try {
-      const res = await fetchWithTimeout(`/api/tools?sessionId=${encodeURIComponent(sessionId)}`);
+      const res = await fetchWithTimeout(pathOnHost(host, `/api/tools?sessionId=${encodeURIComponent(sessionId)}`));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const body = await jsonBody(res);
       // THROWN rather than read as "no groups": jsonBody answers {} for a body that is truncated
@@ -1041,7 +1046,7 @@ watch(
       // ASK is not recorded as an answer. Defaulting here would record one.
       if (!isUnknownArray(body.groups)) throw new Error("GET /api/tools → body has no groups array");
       // Late reply for a cell we have since walked away from would show the wrong button.
-      if (sessionId !== paneCellSessionId.value) return;
+      if (sessionId !== paneCellSessionOnHost.value) return;
       // The GROUPS, not the tool names. Every cell here is a grid cell, so "has a canvas group"
       // is the whole question — and matching on a `present*` prefix would count
       // presentCollection, which belongs to `data` and draws nothing without the collection
@@ -1052,7 +1057,7 @@ watch(
     } catch {
       // Unreachable server: no button rather than one that opens an empty panel. Left unchecked
       // so the panel does not blame the session for what is our own failure to ask.
-      if (sessionId === paneCellSessionId.value) {
+      if (sessionId === paneCellSessionOnHost.value) {
         canvasAvailable.value = false;
         collectionsAvailable.value = false;
       }
@@ -1145,7 +1150,7 @@ const gridCellEvents = (cell: Cell) => ({
 // outlives the cell it was opened on, so walking the zoom lands it on cells that can never fill
 // it — a launcher or a command cell (no session), or a directory with no render MCP.
 const canvasUnavailable = computed<"no-session" | "no-canvas-mcp" | null>(() => {
-  if (!paneCellSessionId.value) return "no-session";
+  if (!paneCellSessionOnHost.value) return "no-session";
   // `canvasOpenable`, not `canvasAvailable`: a card the user opened themselves is a thing to
   // render, and telling them the session cannot draw while their own document sits in the store
   // is both wrong and unactionable. The button and this message have to agree about that — they
@@ -2045,8 +2050,9 @@ function onRosterDragLeave(event: DragEvent) {
              need none of its decline-a-re-root machinery. -->
         <GuiPanel
           v-else-if="rightPane === 'canvas'"
-          :session-id="paneCellSessionId"
+          :session-id="paneCellSessionOnHost"
           :cwd="paneCellCwd"
+          :host="paneCellHost"
           :send-text-message="sendToPaneCell"
           :unavailable="canvasUnavailable"
           :expanded="paneFull"
@@ -2056,7 +2062,8 @@ function onRosterDragLeave(event: DragEvent) {
         />
         <ToolsPane
           v-else-if="rightPane === 'tools'"
-          :session-id="paneCellSessionId"
+          :session-id="paneCellSessionOnHost"
+          :host="paneCellHost"
           :expanded="paneFull"
           :style="rightPaneStyle(paneFull, paneWidth)"
           class="border-l border-border"
@@ -2069,8 +2076,9 @@ function onRosterDragLeave(event: DragEvent) {
              which (#1748). -->
         <PromptsPane
           v-else-if="rightPane === 'prompts'"
-          :session-id="paneCellSessionId"
+          :session-id="paneCellSessionOnHost"
           :cwd="paneCellCwd"
+          :host="paneCellHost"
           :agent="paneCellAgent"
           :expanded="paneFull"
           :style="rightPaneStyle(paneFull, paneWidth)"
@@ -2085,8 +2093,9 @@ function onRosterDragLeave(event: DragEvent) {
              (server/session/transcript/transcript-view-read.ts). -->
         <TranscriptPane
           v-else-if="rightPane === 'transcript'"
-          :session-id="paneCellSessionId"
+          :session-id="paneCellSessionOnHost"
           :cwd="paneCellCwd"
+          :host="paneCellHost"
           :agent="paneCellAgent"
           :expanded="paneFull"
           :style="rightPaneStyle(paneFull, paneWidth)"

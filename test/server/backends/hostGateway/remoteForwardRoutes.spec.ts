@@ -26,6 +26,7 @@ const ROUTES: Record<string, RemoteRoute> = {
   big: { method: "GET", path: "/api/big", key: "none", access: "read", query: [] },
   moved: { method: "GET", path: "/api/moved", key: "none", access: "read", query: [] },
   hang: { method: "GET", path: "/api/hang", key: "none", access: "read", query: [] },
+  push: { method: "POST", path: "/api/worktrees/push", key: "cwd", access: "write", query: ["cwd"], bodyWithin: ["cwd"] },
   memo: { method: "POST", path: "/api/session/:sid/memo", key: "session", access: "write", query: [] },
   drop: {
     method: "POST",
@@ -155,6 +156,16 @@ describe("/remote/<id>/api/…", () => {
     );
     expect(answer.status).toBe(201);
     expect(reached.map((r) => [r.method, r.url, r.body])).toEqual([["POST", `/api/session/${SESSION}/memo`, '{"memo":"hi"}']]);
+  });
+
+  // The body is read by the JSON parser before the decision, so a path in it is held to the query's cwd.
+  it("refuses a body naming a path outside the cell before anything reaches the remote, and carries one inside", async () => {
+    const post = (cwd: string) =>
+      call("POST", "/remote/lx/api/worktrees/push?cwd=%2Fsrv%2Fp", { ...pageOrigin(), "content-type": "application/json" }, JSON.stringify({ cwd }));
+    expect((await post("/srv/other")).status).toBe(400);
+    expect(reached).toEqual([]);
+    expect((await post("/srv/p")).status).toBe(200);
+    expect(reached.map((r) => [r.url, r.body])).toEqual([["/api/worktrees/push?cwd=%2Fsrv%2Fp", '{"cwd":"/srv/p"}']]);
   });
 
   it("carries no body on a read, whatever the browser sent", async () => {
