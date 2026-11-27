@@ -15,7 +15,7 @@ const everOpened = useEverOpened(open);
 </script>
 
 <template>
-  <div v-if="everOpened" v-show="open" class="fixed inset-x-0 top-10 bottom-0 z-50 flex flex-col bg-deep" role="region" :aria-label="regionLabel">
+  <div v-if="everOpened" v-show="open" class="fixed inset-x-0 top-(--screen-top) bottom-0 z-50 flex flex-col bg-deep" role="region" :aria-label="regionLabel">
     <header class="flex flex-none items-center gap-2.5 border-b border-border bg-panel px-4 py-2">
       <slot name="header" />
       <span class="flex-1"></span>

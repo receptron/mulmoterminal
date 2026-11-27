@@ -19,6 +19,7 @@ import { commandPaletteEn } from "./commandPalette/en";
 import { terminalCopyModeEn } from "./terminalCopyMode/en";
 import { rowMenuEn } from "./rowMenu/en";
 import { focusModeEn } from "./focusMode/en";
+import { screenTabsEn } from "./screenTabs/en";
 import { requestTimeoutEn } from "./requestTimeout/en";
 import { gridRestoreEn } from "./gridRestore/en";
 import { fileHistoryEn } from "./fileHistory/en";
@@ -657,6 +658,7 @@ export const en = {
   headerChips: headerChipsEn,
   headerButtons: headerButtonsEn,
   focusMode: focusModeEn,
+  screenTabs: screenTabsEn,
   requestTimeout: requestTimeoutEn,
   gridRestore: gridRestoreEn,
   settingsControls: settingsControlsEn,
