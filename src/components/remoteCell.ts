@@ -31,7 +31,7 @@ const ON_REMOTE_CELL: Record<CellAction, boolean> = {
   "terminal-copy-code": true,
   "terminal-insert-path": false,
   "terminal-reveal": false,
-  "terminal-diff": false,
+  "terminal-diff": true,
   "terminal-note": true,
   "terminal-send-turn": true,
   "terminal-send-since": true,
@@ -40,16 +40,16 @@ const ON_REMOTE_CELL: Record<CellAction, boolean> = {
   "pane-files": true,
   "pane-prompts": true,
   "pane-transcript": true,
-  "pane-tools": false,
-  "pane-canvas": false,
+  "pane-tools": true,
+  "pane-canvas": true,
   "pane-collections": false,
 };
 
 export const cellActionAllowed = (host: string | null | undefined, action: CellAction): boolean => !isRemoteHost(host) || ON_REMOTE_CELL[action];
 
-// The panes a remote cell opens: its files, read and written on its host, and its session's prompts
-// and conversation, read there. Every other pane reads this machine's copy of a session or its tools.
-const REMOTE_CELL_PANES: readonly RightPane[] = ["files", "prompts", "transcript"];
+// The panes a remote cell opens: its files, read and written on its host, and its session's prompts,
+// conversation, tool calls and cards, read there. Collections read this machine's.
+const REMOTE_CELL_PANES: readonly RightPane[] = ["files", "prompts", "transcript", "tools", "canvas"];
 
 export const paneAllowed = (host: string | null | undefined, pane: RightPane): boolean => !isRemoteHost(host) || REMOTE_CELL_PANES.includes(pane);
 
@@ -68,6 +68,11 @@ export const transcriptPath = (
   route: "prompts" | "view" | "timeline" | "last-turn" | "relay" | "relay-mark",
   params: URLSearchParams,
 ): string => pathOnHost(host, `/api/transcript/${route}?${params.toString()}`);
+
+/** A write to the cell's repo, which names its directory in the body: this server's route, or the
+ *  gateway's with that directory in the query too, which the gateway holds the body's paths to. */
+export const repoWritePath = (host: string | null | undefined, route: string, cwd: string): string =>
+  isRemoteHost(host) ? `${remotePath(host, route)}?cwd=${encodeURIComponent(cwd)}` : route;
 
 /** A write to one session: this server's route, or the gateway's for a remote cell. */
 export const sessionWritePath = (host: string | null | undefined, sessionId: string, action: "memo" | "terminate" | "drop"): string =>

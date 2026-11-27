@@ -15,8 +15,8 @@ export interface RemoteRoute {
   /** The remote's own path. A `:sid` segment is a session id. */
   path: string;
   /** cwd: the request names a directory, `query.cwd`, which the other paths stay inside.
-   *  session: it names one session, by a `:sid` segment or else by `query.session`; a `query.cwd`
-   *  beside it must be a clean absolute path. none: neither. */
+   *  session: it names one session, by a `:sid` segment or else by `query.session` (or `sessionId`);
+   *  a `query.cwd` beside it must be a clean absolute path. none: neither. */
   key: "cwd" | "session" | "none";
   access: "read" | "write";
   /** The query parameters forwarded; any other is dropped. */
@@ -29,6 +29,9 @@ export interface RemoteRoute {
   headers?: readonly string[];
   /** slow: the remote may take as long as the browser waits for it (a search, a whole file index). */
   wait?: "slow";
+  /** The JSON body's fields naming a path, each an absolute path inside `cwd` when present. For a
+   *  route that reads its directory from the body: the query's `cwd` is what the gateway pins it to. */
+  bodyWithin?: readonly string[];
 }
 
 // The Files pane's routes: rooted at the cell's directory, and a `path` never leaves it.
@@ -48,6 +51,16 @@ const transcript = (route: string, query: readonly string[], method: RemoteRoute
   key: "session",
   access,
   query: ["session", "cwd", ...query],
+});
+
+// A write to the cell's repo, which names its directory in the body; the query carries it too.
+const repoWrite = (path: string, bodyWithin: readonly string[]): RemoteRoute => ({
+  method: "POST",
+  path,
+  key: "cwd",
+  access: "write",
+  query: ["cwd"],
+  bodyWithin,
 });
 
 export const REMOTE_ROUTES = {
@@ -91,6 +104,17 @@ export const REMOTE_ROUTES = {
   // A relay's `dest` is only ever a key on the remote, never a path it reads.
   transcriptRelay: transcript("relay", ["agent", "dest"]),
   transcriptRelayMark: transcript("relay-mark", ["agent", "dest"], "POST", "write"),
+  // The Tools pane: a session's tool calls, and the tools its groups give it.
+  toolCalls: { method: "GET", path: "/api/tool-calls/:sid", key: "session", access: "read", query: [] },
+  // The Canvas: a session's cards. A view's change of state is not written back: that route is the
+  // agent's own, and forwarding it would let a page put a card in the remote session.
+  toolResults: { method: "GET", path: "/api/agent/toolResults/:sid", key: "session", access: "read", query: [] },
+  tools: { method: "GET", path: "/api/tools", key: "session", access: "read", query: ["sessionId"] },
+  worktreeDiff: { method: "GET", path: "/api/worktrees/diff", key: "cwd", access: "read", query: ["cwd"] },
+  worktreePush: repoWrite("/api/worktrees/push", ["cwd"]),
+  worktreePr: repoWrite("/api/worktrees/pr", ["cwd"]),
+  worktreeRemove: repoWrite("/api/worktrees/remove", ["repoDir", "path"]),
+  workComment: repoWrite("/api/work-comment", ["cwd"]),
 } as const satisfies Record<string, RemoteRoute>;
 
 export type RemoteRouteName = keyof typeof REMOTE_ROUTES;

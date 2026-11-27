@@ -11,8 +11,15 @@ import { invalidateDirConfig } from "../../../src/composables/useDirConfig";
 import { dirKeyOf } from "../../../src/composables/dirAddress";
 import { requestCellAction } from "../../../src/composables/useCellAction";
 
+const subscribedTo = vi.hoisted(() => ({ channels: [] as string[] }));
 vi.mock("../../../src/composables/usePubSub", () => ({
-  usePubSub: () => ({ subscribe: () => () => {}, onReconnect: () => () => {} }),
+  usePubSub: () => ({
+    subscribe: (channel: string) => {
+      subscribedTo.channels.push(channel);
+      return () => {};
+    },
+    onReconnect: () => () => {},
+  }),
 }));
 
 // One partner always open, so the send button shows wherever the cell lets it; and the cwd and host
@@ -82,6 +89,9 @@ beforeEach(() => {
       if (ids === null) return new Promise(() => {});
       return { ok: true, json: async () => ({ ids }) };
     }
+    if (String(url).includes("/worktrees/diff"))
+      return { ok: true, json: async () => ({ isWorktree: true, base: "main", ahead: 1, dirty: 0, files: [], patch: "", truncated: false }) };
+    if (String(url).includes("/worktrees/")) return { ok: true, json: async () => ({ ok: true, branch: "fix-x" }) };
     // A reap that confirms, so a restart goes on to reconnect.
     if (String(url).endsWith("/terminate")) return { ok: true, json: async () => ({ ended: true }) };
     return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
@@ -278,6 +288,64 @@ describe("a remote cell", () => {
     expect(requested.filter((url) => url.includes("/transcript/last-turn")).every((url) => url.startsWith("/remote/lx/"))).toBe(true);
     expect(requested.some((url) => url.includes("/transcript/last-turn"))).toBe(true);
     remote.unmount();
+  });
+
+  // #3506. A remote worktree's diff, push, pull request and removal are its host's: each goes through
+  // the gateway, with the directory in the query that the gateway holds the body to.
+  it("reads its worktree's diff and pushes, opens a PR and removes it on its host", async () => {
+    const WT = "/srv/.mulmoterminal/worktrees/app-0123abcd/fix-x";
+    vi.spyOn(window, "open").mockReturnValue(null);
+    const remote = mount(TerminalCell, { props: { ...mountCell("lx").props(), initialCwd: WT } });
+    await flushPromises();
+    const query = `?cwd=${encodeURIComponent(WT)}`;
+    expect(requested).toContain(`/remote/lx/api/worktrees/diff${query}`);
+    expect(remote.findAll('[data-testid="cell-diff-btn"]')).toHaveLength(0);
+    requested = [];
+    expect(requestCellAction("cell-1", "terminal-diff")).toBe(true);
+    await flushPromises();
+    const [, push, pr] = remote.findAll('[data-testid="cell-diff-btn"]');
+    await push?.trigger("click");
+    await flushPromises();
+    await pr?.trigger("click");
+    await flushPromises();
+    await remote.vm.close();
+    await flushPromises();
+    await remote.find('[data-testid="ccx-remove"]').trigger("click");
+    await flushPromises();
+    const body = JSON.stringify({ cwd: WT });
+    expect(requested.filter((url) => /worktrees\/(push|pr|remove)/.test(url))).toEqual([
+      `/remote/lx/api/worktrees/push${query} ${body}`,
+      `/remote/lx/api/worktrees/pr${query} ${body}`,
+      `/remote/lx/api/worktrees/remove${query} ${JSON.stringify({ repoDir: WT, path: WT, deleteBranch: true, force: true })}`,
+    ]);
+    // Nothing about the remote worktree reaches this server (the launch form it closes to lists this machine's own).
+    expect(requested.filter((url) => !url.startsWith("/remote/lx/") && (url.includes(WT) || url.includes(encodeURIComponent(WT))))).toEqual([]);
+    remote.unmount();
+  });
+
+  // #3506. Its tools menu opens its tool calls and cards, read on its host, beside its actions.
+  it("offers its Tools and Canvas panes beside its actions, and no collections", async () => {
+    const remote = mountCell("lx");
+    await flushPromises();
+    await remote.find('[data-testid="cell-tools-btn"]').trigger("click");
+    await flushPromises();
+    const entries = [...document.body.querySelectorAll<HTMLElement>('[data-testid^="cell-pane-menu-"]')].map((entry) => entry.dataset.testid);
+    expect(entries).toContain("cell-pane-menu-tools");
+    expect(entries).toContain("cell-pane-menu-canvas");
+    expect(entries).not.toContain("cell-pane-menu-collections");
+    remote.unmount();
+  });
+
+  // This machine's session channel names this machine's sessions; a remote cell's is on its host.
+  it("joins no session channel of this machine, while a local cell does", async () => {
+    subscribedTo.channels = [];
+    mountCell(null);
+    await flushPromises();
+    expect(subscribedTo.channels).toContain(`session:${SESSION}`);
+    subscribedTo.channels = [];
+    mountCell("lx");
+    await flushPromises();
+    expect(subscribedTo.channels.filter((channel) => channel.includes(SESSION))).toEqual([]);
   });
 
   // #3506. The last code block is read from the session's own log, on its host.

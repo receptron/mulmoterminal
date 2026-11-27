@@ -176,15 +176,28 @@ describe("useWorkItem reports why the issue was not updated", () => {
   });
 });
 
-// A remote directory's work item is read through the gateway, but its comment is a write this
-// server would post for its own repository, so it is not posted (#3506).
+// A remote directory's work item is read, and its issue commented on, by its host, which reads the
+// repository there (#3506); the directory rides in the query for the gateway to hold the body to.
 describe("useWorkItem on a remote directory", () => {
-  it("reads the phase from the host and posts no comment", async () => {
-    stubFetch({ posted: true, closed: false });
-    const { item, refresh } = useWorkItem(ref(dirKeyOf("lx", "/srv/p")));
+  it("reads the phase from the host and posts the comment there", async () => {
+    stubFetch({ posted: false, reason: "gh-failed", failure: "permission" });
+    const { item, refresh, commentFailure } = useWorkItem(ref(dirKeyOf("lx", "/srv/p")));
     await refresh();
     await vi.waitFor(() => expect(item.value.issue).toBe(1234));
-    const urls = vi.mocked(globalThis.fetch).mock.calls.map(([url]) => String(url));
-    expect(urls).toEqual(["/remote/lx/api/pr-phase?cwd=%2Fsrv%2Fp"]);
+    await settle();
+    const calls = vi.mocked(globalThis.fetch).mock.calls.map(([url, init]) => [String(url), typeof init?.body === "string" ? JSON.parse(init.body) : null]);
+    expect(calls).toEqual([
+      ["/remote/lx/api/pr-phase?cwd=%2Fsrv%2Fp", null],
+      ["/remote/lx/api/work-comment?cwd=%2Fsrv%2Fp", { cwd: "/srv/p", issue: 1234, pr: null, kind: "start" }],
+    ]);
+    await vi.waitFor(() => expect(commentFailure.value).toBe("permission"));
+  });
+
+  it("posts a local directory's to this server, as before (control)", async () => {
+    stubFetch({ posted: true, closed: false });
+    const { refresh } = useWorkItem(ref("/srv/p"));
+    await refresh();
+    await settle();
+    expect(vi.mocked(globalThis.fetch).mock.calls.map(([url]) => String(url))).toEqual(["/api/pr-phase?cwd=%2Fsrv%2Fp", "/api/work-comment"]);
   });
 });

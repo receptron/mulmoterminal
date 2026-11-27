@@ -14,7 +14,8 @@ import { isIssueWorkCommentsEnabled } from "./issueWorkComments";
 import type { WorkCommentKind } from "../../common/workComment";
 import { isWorkCommentFailure, type WorkCommentFailure } from "../../common/workCommentFailure";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
-import { dirApiUrl, isRemoteDirKey } from "./dirAddress";
+import { dirAddressOf, dirApiUrl } from "./dirAddress";
+import { repoWritePath } from "../components/remoteCell";
 import { fireConfettiForEvent } from "./useConfetti";
 
 const POLL_MS = 30_000;
@@ -88,10 +89,12 @@ export function workCommentToPost(before: WorkItem, now: WorkItem): WorkCommentK
 /** Why the issue could not be updated, or null — including when it WAS updated, when the server
  *  had nothing to add, and when the setting is off. Only a cause the server actually named makes
  *  a notice (#1369). */
-async function postWorkComment(cwd: string, item: WorkItem, kind: WorkCommentKind): Promise<WorkCommentFailure | null> {
+async function postWorkComment(dir: string, item: WorkItem, kind: WorkCommentKind): Promise<WorkCommentFailure | null> {
+  // A remote directory's issue is commented on by its host, which reads the repo there (#3506).
+  const { host, cwd } = dirAddressOf(dir);
   try {
     const res = await fetchWithTimeout(
-      "/api/work-comment",
+      repoWritePath(host, "/api/work-comment", cwd),
       {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -154,8 +157,7 @@ export function useWorkItem(cwd: Ref<string | null>) {
       // token as the item above: this call outlives the fetch, and a cell that moved to another
       // directory meanwhile must not be told about the repository it left — `permission` is a
       // per-repository answer.
-      // Not on a remote directory yet: the comment is a write, and this server would post it for its own repo.
-      if (kind && !isRemoteDirKey(dir)) {
+      if (kind) {
         void postWorkComment(dir, next, kind).then((failure) => {
           if (my === req) commentFailure.value = failure;
         });
