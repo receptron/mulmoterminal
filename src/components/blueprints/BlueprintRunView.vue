@@ -42,6 +42,16 @@ const reads = latestOnly();
 
 const current = computed(() => (view.value ? currentStep(view.value.run.steps, view.value.state) : null));
 const currentState = computed(() => (view.value && current.value ? view.value.state.steps[current.value.id] : undefined));
+// What was typed answers the step it was typed for: once the build moves on (a poll, or the screen
+// shown again later), it would be sent to a different question.
+watch(
+  () => `${current.value?.id ?? ""}:${currentState.value?.status ?? ""}`,
+  () => {
+    answer.value = "";
+    rejectReason.value = "";
+    actionError.value = null;
+  },
+);
 // Only a person can trust a folder; the step says where, and a terminal opened there asks them.
 // The build tried to fix the step by itself this many times before stopping; said in the person's language above the check's own output.
 const gaveUpAttempts = computed(() =>

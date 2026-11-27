@@ -89,3 +89,24 @@ describe("answering a question that offers choices", () => {
     wrapper.unmount();
   });
 });
+
+// What was typed answers the step it was typed for, so it goes when the build moves on.
+describe("an answer typed before the build moved on", () => {
+  it("is cleared when the step's state changes, and kept while it does not", async () => {
+    vi.useFakeTimers();
+    loadRun.mockReset();
+    loadRun.mockResolvedValue(runView(asking()));
+    const wrapper = mount(BlueprintRunView, { props: { runId: "run-00000001" } });
+    await flushPromises();
+    await wrapper.get('[data-testid="blueprint-answer"]').setValue("yes, fix it");
+    await vi.advanceTimersByTimeAsync(2000); // the same question again
+    expect(wrapper.get<HTMLTextAreaElement>('[data-testid="blueprint-answer"]').element.value).toBe("yes, fix it");
+    loadRun.mockResolvedValue(runView({ status: "running", approved: false, answers: [] }));
+    await vi.advanceTimersByTimeAsync(2000);
+    loadRun.mockResolvedValue(runView(asking()));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(wrapper.get<HTMLTextAreaElement>('[data-testid="blueprint-answer"]').element.value).toBe("");
+    vi.useRealTimers();
+    wrapper.unmount();
+  });
+});
