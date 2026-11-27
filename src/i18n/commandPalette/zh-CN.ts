@@ -84,6 +84,7 @@ export const commandPaletteZhCN = {
     pageNext: "显示网格的下一页（每页 9 个终端）；最后一页时不操作。",
     pagePrev: "显示网格的上一页；第一页时不操作。",
     terminalReopen: "在当前终端旁重新打开最近关闭的终端并恢复其会话；shell 会重新启动。",
+    screenToggle: "在最后打开的画面（资料库、Skills、Files 等）和打开它的原画面之间来回切换；画面保持离开时的样子。",
     terminalTimeline: "打开当前终端的活动时间线（仅限 Claude 会话）。",
     terminalTalk: "从当前终端打开可转交问题的其他终端列表。",
     terminalPark: "让当前终端休息；已在休息则唤醒。",
