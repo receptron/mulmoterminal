@@ -21,7 +21,8 @@ import { takeScratchHome } from "../../support/scratchHome.js";
 // worker a home that does not exist, so it is put back — the module registry is per file, so the
 // next file's imports read the restored value.
 const scratchHome = takeScratchHome("mt-mcp-announce-");
-const { mountMcpRoutes, TOOL_GROUPS_CHANNEL } = await import("../../../server/routes/mcp-routes.js");
+const { mountMcpRoutes } = await import("../../../server/routes/mcp-routes.js");
+const { TOOL_GROUPS_CHANNEL } = await import("../../../common/toolGroupsAnnouncement.js");
 const { TOOL_GROUPS } = await import("../../../common/toolGroups.js");
 const { hasAllGuiTools, whenToolGroupsPersisted } = await import("../../../server/session/registry.js");
 

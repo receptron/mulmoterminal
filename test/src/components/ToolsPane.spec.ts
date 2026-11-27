@@ -7,10 +7,13 @@ import ToolsPane from "../../../src/components/ToolsPane.vue";
 // the tool-groups announcement that tells it to re-ask what tools this session has.
 let captured: ((data: unknown) => void) | null = null;
 let capturedGroups: ((data: unknown) => void) | null = null;
+// A remote host's announcements, as the gateway's relay republishes them.
+let capturedRemoteGroups: ((data: unknown) => void) | null = null;
 vi.mock("../../../src/composables/usePubSub", () => ({
   usePubSub: () => ({
     subscribe: (channel: string, cb: (data: unknown) => void) => {
       if (channel === "tool-groups") capturedGroups = cb;
+      else if (channel === "remote-tool-groups") capturedRemoteGroups = cb;
       else captured = cb;
       return () => {};
     },
@@ -42,6 +45,7 @@ describe("ToolsPane", () => {
   beforeEach(() => {
     captured = null;
     capturedGroups = null;
+    capturedRemoteGroups = null;
   });
 
   it("lists available tools and renders history rows with running/completed/failed badges", async () => {
@@ -370,8 +374,8 @@ describe("ToolsPane", () => {
   });
 
   // #3506. This machine's announcement names this machine's session: a remote session with the same
-  // id is another one, read on its host.
-  it("is not re-asked by this machine's announcement for a remote session", async () => {
+  // id is another one, read on its host and re-asked by that host's announcement.
+  it("is re-asked on its host by that host's announcement, and not by this machine's", async () => {
     const asked: string[] = [];
     mockFetch((url) => {
       asked.push(url);
@@ -381,8 +385,26 @@ describe("ToolsPane", () => {
     await flushPromises();
     expect(asked.sort()).toEqual(["/remote/lx/api/tool-calls/a", "/remote/lx/api/tools?sessionId=a"]);
     capturedGroups?.({ sessionId: "a", groups: ["render"] });
+    capturedRemoteGroups?.({ host: "other", announcement: { sessionId: "a", groups: ["render"] } });
     await flushPromises();
     expect(asked).toHaveLength(2);
+    capturedRemoteGroups?.({ host: "lx", announcement: { sessionId: "a", groups: ["render"] } });
+    await flushPromises();
+    expect(asked.slice(2)).toEqual(["/remote/lx/api/tools?sessionId=a"]);
+  });
+
+  it("is not re-asked by a remote host's announcement for a local session", async () => {
+    const asked: string[] = [];
+    mockFetch((url) => {
+      asked.push(url);
+      return Promise.resolve(jsonRes(url.includes("/api/tools") ? { tools: [] } : { toolCalls: [] }));
+    });
+    mount(ToolsPane, { props: { sessionId: "a" } });
+    await flushPromises();
+    const before = asked.length;
+    capturedRemoteGroups?.({ host: "lx", announcement: { sessionId: "a", groups: ["render"] } });
+    await flushPromises();
+    expect(asked).toHaveLength(before);
   });
 
   // Since the re-ask there are routinely two /api/tools loads in flight for the SAME session — the
