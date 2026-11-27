@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { closeTab, screenOfRoute, visitTab, type ScreenTab } from "../../../src/composables/screenTabsModel";
 import { PALETTE_SCREENS } from "../../../src/composables/paletteScreens";
 import { router } from "../../../src/router/index";
+import { OVERLAY_ROUTES } from "../../../src/composables/overlayOrigin";
 
 const tab = (screen: ScreenTab["screen"], path = `/${screen}`): ScreenTab => ({ screen, path });
 
@@ -18,6 +19,12 @@ describe("screenOfRoute", () => {
     ["terminals", "single", "", "toString", "__proto__", null, undefined, 7, Symbol("library")].forEach((name) =>
       expect(screenOfRoute(name), String(name)).toBeNull(),
     );
+  });
+
+  // Every full-screen route is some screen's: a route added to the screens without a tab would open
+  // a screen with no tab in front.
+  it("maps every full-screen route to a screen", () => {
+    expect([...OVERLAY_ROUTES].filter((name) => screenOfRoute(name) === null)).toEqual([]);
   });
 
   // Every screen but the terminals has a route the tabs know, and every route they know exists.

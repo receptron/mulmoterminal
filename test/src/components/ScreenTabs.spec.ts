@@ -57,7 +57,7 @@ describe("ScreenTabs", () => {
     await open("skills");
     await open("usage");
     await open("skills");
-    closeScreenTab("skills");
+    await w.get(`[aria-label="${en.screenTabs.close.replace("{screen}", en.featureMenu.items.skills.label)}"]`).trigger("click");
     await flushPromises();
     expect(here().name).toBe("usage");
     expect(screenTabs.value.map((tab) => tab.screen)).toEqual(["rooms", "usage"]);
