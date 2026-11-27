@@ -36,6 +36,7 @@ watch(
   () => [props.conversation.id, props.conversation.cwd] as const,
   async ([id, cwd]) => {
     const mine = ++reads;
+    sideReads += 1; // sides still being read are the last conversation's
     files.value = null;
     chosenPath.value = null;
     const found = await loadLibraryFiles(id, cwd);
@@ -72,6 +73,7 @@ async function loadSides(file: LibraryTrackedFile, shown: DiffStep, kept = false
   const mine = ++sideReads;
   if (!kept) sides.value = null;
   const { id, cwd } = props.conversation;
+  const key = sidesKey(file, shown); // taken now: the conversation can change while the sides are read
   const [original, current] = await Promise.all([
     loadLibraryFileText(id, cwd, file.trackingPath, shown.from),
     loadLibraryFileText(id, cwd, file.trackingPath, shown.to),
@@ -80,7 +82,7 @@ async function loadSides(file: LibraryTrackedFile, shown: DiffStep, kept = false
   if (kept && sides.value !== null && (original === null || current === null)) return;
   const failed: LibraryFileText = { text: null, reason: "unreadable" };
   sides.value = { original: original ?? failed, current: current ?? failed };
-  sidesFor = sidesKey(file, shown);
+  sidesFor = key;
 }
 
 watch([chosen, step, open], ([file, shown, isOpen]) => {
