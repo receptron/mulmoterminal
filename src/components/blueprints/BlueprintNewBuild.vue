@@ -2,7 +2,7 @@
 // Starting a build: where it goes, which template, and the template's interview. Nothing starts until
 // every question that applies is answered — the first step writes the spec from these answers, and a
 // gap here is a guess there.
-import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { isPersonLanguage, PERSON_LANGUAGE_NAMES, type PersonLanguage } from "../../../common/blueprint/personLanguage";
 import {
@@ -231,6 +231,8 @@ watch([base, usecase], ([baseSlug, usecaseSlug]) => loadPreview(baseSlug, usecas
 const PRESENCE_WAIT_MS = 300;
 let presenceTimer: ReturnType<typeof setTimeout> | undefined;
 const shownForm = useOverlayVisible();
+// A pause in typing that ends after the form is gone has no folder to ask about.
+onBeforeUnmount(() => clearTimeout(presenceTimer));
 watch([projectDir, preview], () => {
   clearTimeout(presenceTimer);
   const ticket = presence.take();

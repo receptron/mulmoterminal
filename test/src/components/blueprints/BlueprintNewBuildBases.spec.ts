@@ -6,7 +6,9 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { mountUnderOverlay } from "../underOverlay";
 
 const packsRead = vi.hoisted(() => ({ failures: 0 }));
-const { previewPair } = vi.hoisted(() => ({ previewPair: vi.fn(async () => ({ ok: true, value: { hearing: { questions: [] }, steps: [] } })) }));
+const { previewPair } = vi.hoisted(() => ({
+  previewPair: vi.fn<(base: string, usecase: string) => Promise<unknown>>(async () => ({ ok: true, value: { hearing: { questions: [] }, steps: [] } })),
+}));
 vi.mock("../../../../src/composables/useBlueprintsView", () => ({ takeFormFill: () => null, keepFormFill: vi.fn() }));
 vi.mock("../../../../src/composables/useNewTerminal", () => ({ openTerminalAt: vi.fn() }));
 const base = (slug: string, title: string, order?: number) => ({
