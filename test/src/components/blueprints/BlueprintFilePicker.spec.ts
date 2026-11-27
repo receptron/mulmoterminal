@@ -96,3 +96,20 @@ describe("the file list shown again", () => {
     wrapper.unmount();
   });
 });
+
+describe("a file list that failed, shown again", () => {
+  it("drops the old failure once the list can be read", async () => {
+    listFolderFiles.mockReset();
+    listFolderFiles
+      .mockResolvedValueOnce({ ok: false, error: "the folder could not be read" })
+      .mockResolvedValue({ ok: true, value: { files: ["contract.txt"], more: false } });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintFilePicker, { projectDir: "/work/docs", answer: "" });
+    await wrapper.get('[data-testid="blueprint-pick-files"]').trigger("click");
+    await flushPromises();
+    expect(wrapper.text()).toContain("the folder could not be read");
+    await showAgain();
+    expect(wrapper.text()).not.toContain("the folder could not be read");
+    expect(wrapper.findAll('[data-testid="blueprint-pick-file"]').map((file) => file.text())).toEqual(["contract.txt"]);
+    wrapper.unmount();
+  });
+});

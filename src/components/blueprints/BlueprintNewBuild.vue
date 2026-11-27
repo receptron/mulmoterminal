@@ -138,6 +138,7 @@ async function loadLists(first: boolean): Promise<boolean> {
 let setUp = false;
 onOverlayShownAgain(() => {
   void loadKnownFolders();
+  recheckPresence();
   void (setUp ? loadLists(false) : setUpForm());
 });
 
@@ -241,6 +242,14 @@ watch([projectDir, preview], () => {
 async function askPresence(dir: string, paths: string[], ticket: number): Promise<void> {
   const result = await folderPresentPaths(dir, paths);
   if (presence.isLatest(ticket)) presentPaths.value = result.ok ? new Set(result.value.present) : null;
+}
+// The folder may have changed while the screen was closed: its paths are asked about again, keeping
+// what was known until the answer comes.
+function recheckPresence(): void {
+  const paths = preview.value ? neededPaths(preview.value.hearing) : [];
+  const dir = projectDir.value.trim();
+  if (paths.length === 0 || dir === "") return;
+  void askPresence(dir, paths, presence.take());
 }
 // A refusal names the folder it was about; another folder typed since is not the one to trust.
 watch(projectDir, () => {

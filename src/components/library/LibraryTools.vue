@@ -93,16 +93,15 @@ const settingsShown = computed(() => chosen.value === SETTINGS_ROW);
 const selected = computed(() => (settingsShown.value ? null : (shown.value.find((file) => file.path === chosen.value) ?? shown.value[0] ?? null)));
 
 let textReads = 0;
-watch(
-  () => [cwd.value, selected.value?.path ?? null] as const,
-  async ([dir, file]) => {
-    const mine = ++textReads;
-    text.value = null;
-    if (dir === null || file === null) return;
-    const read = await loadInstruction(dir, file);
-    if (mine === textReads) text.value = read ?? { text: null, reason: "unreadable" };
-  },
-);
+// Two sources, not one getter returning a pair: a fresh pair on every run would read as a change each
+// time the list is read again, clearing the text of a file that is still the one shown.
+watch([() => cwd.value, () => selected.value?.path ?? null], async ([dir, file]) => {
+  const mine = ++textReads;
+  text.value = null;
+  if (dir === null || file === null) return;
+  const read = await loadInstruction(dir, file);
+  if (mine === textReads) text.value = read ?? { text: null, reason: "unreadable" };
+});
 
 /** The file being read, read again on showing; a failed re-read keeps the text shown. */
 async function rereadText(): Promise<void> {

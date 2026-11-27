@@ -46,6 +46,7 @@ async function reread(): Promise<void> {
   const mine = ++reads;
   const result = await listFolderFiles(dir);
   if (mine !== reads || !result.ok) return;
+  error.value = null;
   files.value = result.value.files.filter(fitsOnALine);
   more.value = result.value.more;
 }

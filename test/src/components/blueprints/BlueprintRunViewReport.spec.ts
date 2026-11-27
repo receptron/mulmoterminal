@@ -328,3 +328,24 @@ describe("the report shown again", () => {
     wrapper.unmount();
   });
 });
+
+describe("a build that finishes while the screen is hidden", () => {
+  it("has its report read when the screen is shown, not while hidden", async () => {
+    let answerPoll: (value: unknown) => void = () => {};
+    loadRun.mockReset();
+    loadRun.mockReturnValueOnce(new Promise((resolve) => (answerPoll = resolve))).mockResolvedValue(runView("passed"));
+    listPacks.mockResolvedValue({ ok: true, value: { packs: [] } });
+    loadReport.mockClear();
+    const { wrapper, visible } = mountUnderOverlay(BlueprintRunView, { runId: "run-00000001" });
+    await flushPromises();
+    visible.value = false;
+    await flushPromises();
+    answerPoll(runView("passed"));
+    await flushPromises();
+    expect(loadReport).not.toHaveBeenCalled();
+    visible.value = true;
+    await flushPromises();
+    expect(loadReport).toHaveBeenCalled();
+    wrapper.unmount();
+  });
+});

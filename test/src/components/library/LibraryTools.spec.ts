@@ -23,6 +23,7 @@ let listing: Record<string, LibraryInstructions> = {};
 const instructionsHeld: Promise<LibraryInstructions | null>[] = [];
 const reads: string[] = [];
 let directoriesAnswer: string[] | null = ["/w/app", "/w/lib"];
+let textFails = false;
 let textAnswer: { text: string | null; reason?: string; missing?: string[] } | null = null;
 vi.mock("../../../../src/composables/libraryApi", () => ({
   loadToolDirectories: () => Promise.resolve(directoriesAnswer),
@@ -39,7 +40,10 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
       other: [{ key: "model", value: '"opus"', source: "user" }],
     }),
   loadInstructions: (cwd: string) => instructionsHeld.shift() ?? Promise.resolve(listing[cwd] ?? null),
-  loadInstruction: (_cwd: string, filePath: string) => (reads.push(filePath), Promise.resolve(textAnswer ?? { text: `text of ${filePath}` })),
+  loadInstruction: (_cwd: string, filePath: string) => (
+    reads.push(filePath),
+    Promise.resolve(textFails ? null : (textAnswer ?? { text: `text of ${filePath}` }))
+  ),
 }));
 
 const LibraryTools = (await import("../../../../src/components/library/LibraryTools.vue")).default;
@@ -48,6 +52,7 @@ beforeEach(() => {
   reads.length = 0;
   directoriesAnswer = ["/w/app", "/w/lib"];
   textAnswer = null;
+  textFails = false;
   listing = {
     "/w/app": {
       cwd: "/w/app",
@@ -209,6 +214,19 @@ describe("a first read overtaken by the Library shown again", () => {
     listing = {};
     await showAgain();
     expect(wrapper.text()).toContain(en.libraryView.tools.failed);
+    wrapper.unmount();
+  });
+});
+
+describe("the file being read, with its list read again", () => {
+  it("keeps its text when the list comes back with the same file and the text read fails", async () => {
+    const { wrapper, showAgain } = mountUnderOverlay(LibraryTools, { query: "", initialCwd: "/w/lib" }, { attachTo: document.body });
+    await flushPromises();
+    expect(wrapper.text()).toContain("text of /w/lib/AGENTS.md");
+    listing["/w/lib"] = { cwd: "/w/lib", agentsMd: true, truncated: false, files: [file("agents", "/w/lib/AGENTS.md")] };
+    textFails = true;
+    await showAgain();
+    expect(wrapper.text()).toContain("text of /w/lib/AGENTS.md");
     wrapper.unmount();
   });
 });

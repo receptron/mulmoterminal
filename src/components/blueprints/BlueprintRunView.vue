@@ -20,7 +20,7 @@ import BlueprintOriginalsDiff from "./BlueprintOriginalsDiff.vue";
 import BlueprintNextSteps from "./BlueprintNextSteps.vue";
 import BlueprintTargets from "./BlueprintTargets.vue";
 import { filesGotoFile } from "../../composables/useFilesView";
-import { onOverlayShownAgain, whileOverlayVisible } from "../../composables/overlayVisibility";
+import { onOverlayShownAgain, useOverlayVisible, whileOverlayVisible } from "../../composables/overlayVisibility";
 import { openTerminalAt } from "../../composables/useNewTerminal";
 import MarkdownProse from "../MarkdownProse.vue";
 
@@ -55,8 +55,10 @@ const finished = computed(() => view.value !== null && current.value === null);
 const report = ref<ReportView | null>(null);
 // Read when the build finishes, and again each time the kept screen is shown; a failed read keeps the one shown.
 const reportReads = latestOnly();
+const shownNow = useOverlayVisible();
 async function readReport(): Promise<void> {
-  if (!finished.value) return;
+  // A poll answered after the close can finish the build while hidden; showing again reads the report.
+  if (!finished.value || !shownNow.value) return;
   const ticket = reportReads.take();
   const result = await loadReport(props.runId);
   if (reportReads.isLatest(ticket) && result.ok) report.value = result.value;

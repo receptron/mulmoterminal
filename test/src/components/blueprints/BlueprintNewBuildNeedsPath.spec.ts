@@ -2,6 +2,7 @@
 // is not asked: that option is the answer, and the questions it opens are asked.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mountUnderOverlay } from "../underOverlay";
 
 const FOLDER_STYLE = "このフォルダの規約";
 const DEFAULT_STYLE = "chaff の既定のまま";
@@ -99,5 +100,22 @@ describe("an option that needs a file in the folder", () => {
       ["Style", [FOLDER_STYLE, DEFAULT_STYLE]],
       ["Voice (optional)", ["mine", "polite", "plain"]],
     ]);
+  });
+});
+
+// The form is kept while the Blueprints screen is closed, and the folder may change meanwhile.
+describe("the folder shown again", () => {
+  it("is asked about again, and the options follow the answer", async () => {
+    folderPresentPaths.mockResolvedValue({ ok: true, value: { present: [] } });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintNewBuild, {});
+    await flushPromises();
+    await wrapper.get('[data-testid="blueprint-project-dir"]').setValue("/home/me/notes");
+    await new Promise((resolve) => setTimeout(resolve, PRESENCE_SETTLED_MS));
+    await flushPromises();
+    expect(asked(wrapper)[0]?.[0]).toBe("Voice (optional)");
+    folderPresentPaths.mockResolvedValue({ ok: true, value: { present: ["chaff.yaml", "VOICE.md"] } });
+    await showAgain();
+    expect(asked(wrapper)[0]?.[0]).toBe("Style");
+    wrapper.unmount();
   });
 });
