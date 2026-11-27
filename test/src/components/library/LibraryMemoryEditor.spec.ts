@@ -9,9 +9,11 @@ let result: MemorySaveResult = { kind: "saved", version: "v2" };
 const saves: [string, string, string, string][] = [];
 vi.mock("../../../../src/composables/libraryApi", () => ({
   saveLibraryMemoryFile: (slug: string, file: string, text: string, version: string) => (saves.push([slug, file, text, version]), Promise.resolve(result)),
-  loadLibraryMemoryLinks: () => Promise.resolve(null),
+  loadLibraryMemoryLinks: () => Promise.resolve(links.shift() ?? null),
 }));
 let running = false;
+/** The link counts the next merge-link reads answer with, one each. */
+const links: ({ count: number; unplaceable: string[] } | null)[] = [];
 /** When set, each running check waits on the next of these and answers with `running` as it was asked. */
 const runningGates: Promise<void>[] = [];
 vi.mock("../../../../src/composables/useDirLists", () => ({
@@ -307,6 +309,27 @@ describe("the running check from opening the editor", () => {
     releaseMount();
     await flushPromises();
     expect(wrapper.find("[data-testid=memory-editor-running]").exists()).toBe(true);
+    wrapper.unmount();
+  });
+});
+
+describe("a merge shown again", () => {
+  it("reads the links again, keeping them through a failed read", async () => {
+    links.push({ count: 1, unplaceable: [] }, { count: 3, unplaceable: [] }, null);
+    const merging = { file: "b.md", version: "v2", title: "b", body: "added" };
+    const { wrapper, showAgain } = mountUnderOverlay(
+      LibraryMemoryEditor,
+      { slug: "-w-app", file: "a.md", text: "body", version: "v1", cwd: "/w/app", merging },
+      { attachTo: document.body },
+    );
+    await flushPromises();
+    const shown = () => wrapper.get("[data-testid=memory-editor-merge-links]").text();
+    const first = shown();
+    await showAgain();
+    expect(shown()).not.toBe(first);
+    const second = shown();
+    await showAgain();
+    expect(shown()).toBe(second);
     wrapper.unmount();
   });
 });

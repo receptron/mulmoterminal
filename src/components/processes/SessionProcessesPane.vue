@@ -30,6 +30,8 @@ let reading = false;
 let readAgain = false;
 // Reads only while the pane is on screen: one still in flight when it is hidden must not queue another.
 let polling = false;
+// Each hiding starts a new showing: an answer asked for in an earlier one is not shown in this one.
+let showings = 0;
 
 async function refresh(): Promise<void> {
   if (!polling) return;
@@ -38,11 +40,14 @@ async function refresh(): Promise<void> {
     return;
   }
   reading = true;
+  const showing = showings;
   const read = await loadSessionProcesses();
   reading = false;
-  now.value = Date.now();
-  loadFailed.value = read === null;
-  if (read !== null) sessions.value = read;
+  if (showing === showings) {
+    now.value = Date.now();
+    loadFailed.value = read === null;
+    if (read !== null) sessions.value = read;
+  }
   if (readAgain) {
     readAgain = false;
     await refresh();
@@ -68,6 +73,7 @@ whileOverlayVisible(
   },
   () => {
     polling = false;
+    showings += 1;
     readAgain = false;
     if (timer !== null) clearInterval(timer);
     timer = null;

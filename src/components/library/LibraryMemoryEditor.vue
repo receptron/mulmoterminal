@@ -121,19 +121,34 @@ async function recheckRunning(): Promise<void> {
   const running = await sessionRunningIn(props.cwd);
   if (mine === runningChecks) sessionRunning.value = running;
 }
-onOverlayShownAgain(() => void recheckRunning());
+
+// The links a merge would rewrite, read on opening and again when the Library is shown again (the
+// files may have changed meanwhile); a failed re-read keeps what is shown.
+let linkReads = 0;
+async function readLinks(): Promise<void> {
+  const merging = props.merging;
+  if (!merging) return;
+  const mine = ++linkReads;
+  const links = await loadLibraryMemoryLinks(props.slug, props.file, merging.file);
+  if (mine !== linkReads || (links === null && mergeLinks.value !== null)) return;
+  mergeLinks.value = links;
+  // Said before saving, as the merge would be refused for it.
+  if ((links?.unplaceable.length ?? 0) > 0) notice.value = "unplaceable";
+}
+
+// The editor stays open while the Library is closed; a session may have started or ended, and the
+// files changed, in the meantime.
+onOverlayShownAgain(() => {
+  void recheckRunning();
+  void readLinks();
+});
 
 onMounted(async () => {
   await nextTick();
   field.value?.focus();
-  const merging = props.merging;
   void recheckRunning();
-  const links = merging ? await loadLibraryMemoryLinks(props.slug, props.file, merging.file) : null;
-  mergeLinks.value = links;
-  // Said before saving, as the merge would be refused for it.
-  if ((links?.unplaceable.length ?? 0) > 0) notice.value = "unplaceable";
+  await readLinks();
 });
-// The editor stays open while the Library is closed; a session may have started or ended in the meantime.
 
 async function save(): Promise<void> {
   if (saving.value) return;
