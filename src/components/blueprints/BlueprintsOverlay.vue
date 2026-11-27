@@ -56,7 +56,8 @@ onUnmounted(stopPolling);
 
 function onStarted(id: string): void {
   void refresh();
-  blueprintsViewSelect(id);
+  // A start that answers after the screen was closed must not open it again.
+  if (isOpen.value) blueprintsViewSelect(id);
 }
 
 const groups = computed(() => runGroups(runs.value));

@@ -43,7 +43,7 @@ export function useLibraryData(isOpen: Ref<boolean>) {
     (open) => {
       poll.stop();
       // The query and its results stay for the next opening; both are read again then.
-      if (!open) return;
+      if (!open) return search.cancel();
       void reload();
       search.refresh();
       poll.start();
@@ -164,6 +164,8 @@ export function usePolledStatus(
 function useDebouncedSearch(query: Ref<string>, hits: Ref<LibrarySearchHit[] | null>, searching: Ref<boolean>, failed: Ref<boolean>) {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let inFlight: AbortController | null = null;
+  /** The query the shown hits answer, so a failed re-read of it can keep them. */
+  let hitsFor: string | null = null;
   const cancel = (): void => {
     if (timer !== null) clearTimeout(timer);
     inFlight?.abort();
@@ -176,6 +178,7 @@ function useDebouncedSearch(query: Ref<string>, hits: Ref<LibrarySearchHit[] | n
     const text = typed.trim();
     if (text === "") {
       hits.value = null;
+      hitsFor = null;
       searching.value = false;
       return;
     }
@@ -198,9 +201,11 @@ function useDebouncedSearch(query: Ref<string>, hits: Ref<LibrarySearchHit[] | n
     inFlight = controller;
     const found = await searchLibrary(text, controller.signal);
     if (controller.signal.aborted) return;
-    hits.value = found ?? [];
-    failed.value = found === null;
     searching.value = false;
+    if (found === null && hitsFor === text) return;
+    hits.value = found ?? [];
+    hitsFor = found === null ? null : text;
+    failed.value = found === null;
   }
   return { cancel, refresh };
 }

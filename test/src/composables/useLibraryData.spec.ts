@@ -7,7 +7,7 @@ import type { LibraryConversation, LibraryIndexStatus, LibrarySearchHit } from "
 
 let status: LibraryIndexStatus | null = null;
 let statusGate: Promise<void> = Promise.resolve();
-let hits: LibrarySearchHit[] = [];
+let hits: LibrarySearchHit[] | null = [];
 let firstHasMore = false;
 vi.mock("../../../src/composables/libraryApi", () => ({
   LIBRARY_PAGE: 50,
@@ -81,6 +81,52 @@ describe("useLibraryData", () => {
     await flushPromises();
     expect(state.query.value).toBe("kept");
     expect(state.hits.value?.map((hit) => hit.conversation.id)).toEqual(["kept"]);
+    host.unmount();
+  });
+
+  // A re-read on reopen that fails keeps what the same query found; a new query that fails says so.
+  it("keeps a query's results through a failed re-read, and reports a failed new query", async () => {
+    const { useLibraryData } = await import("../../../src/composables/useLibraryData");
+    hits = [{ conversation: conversation("kept", "Kept"), snippet: "kept", role: "user" }];
+    const open = ref(true);
+    let data: ReturnType<typeof useLibraryData> | null = null;
+    const host = mount({ setup: () => (data = useLibraryData(open)), template: "<div />" });
+    await flushPromises();
+    if (data === null) throw new Error("not mounted");
+    const state: ReturnType<typeof useLibraryData> = data;
+    state.query.value = "kept";
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await flushPromises();
+    open.value = false;
+    await flushPromises();
+    hits = null;
+    open.value = true;
+    await flushPromises();
+    expect([state.searchFailed.value, state.searching.value]).toEqual([false, false]);
+    expect(state.hits.value?.map((hit) => hit.conversation.id)).toEqual(["kept"]);
+    state.query.value = "other";
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await flushPromises();
+    expect([state.searchFailed.value, state.hits.value]).toEqual([true, []]);
+    host.unmount();
+  });
+
+  it("sends nothing for a query typed just before the Library closed", async () => {
+    const { useLibraryData } = await import("../../../src/composables/useLibraryData");
+    const api = await import("../../../src/composables/libraryApi");
+    const open = ref(true);
+    let data: ReturnType<typeof useLibraryData> | null = null;
+    const host = mount({ setup: () => (data = useLibraryData(open)), template: "<div />" });
+    await flushPromises();
+    if (data === null) throw new Error("not mounted");
+    const state: ReturnType<typeof useLibraryData> = data;
+    const searches = vi.spyOn(api, "searchLibrary");
+    state.query.value = "late";
+    await flushPromises();
+    open.value = false;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(searches).not.toHaveBeenCalled();
+    searches.mockRestore();
     host.unmount();
   });
 

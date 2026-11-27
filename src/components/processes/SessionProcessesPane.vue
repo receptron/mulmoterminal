@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // Each running session and the process tree under its panes (#2219). Read only while this pane is
-// mounted — every few seconds, one `ps` and one tmux listing on the server — so a closed page costs
+// on screen — every few seconds, one `ps` and one tmux listing on the server — so a closed page costs
 // nothing. CPU is measured between reads, so it is blank until the second one.
-import { onBeforeUnmount, ref, shallowRef } from "vue";
+import { ref, shallowRef } from "vue";
 import { whileOverlayVisible } from "../../composables/overlayVisibility";
 import { useI18n } from "vue-i18n";
 import { killProcess, loadSessionProcesses, type KillOutcome } from "../../composables/processesApi";
@@ -28,12 +28,11 @@ let reading = false;
 // A refresh asked for during a read — End's, above all — must see a list read AFTER it, so it is
 // run once the current read finishes rather than dropped.
 let readAgain = false;
-// Polls stop with the pane: a read still in flight when it closes must not queue another.
-
-let unmounted = false;
+// Reads only while the pane is on screen: one still in flight when it is hidden must not queue another.
+let polling = false;
 
 async function refresh(): Promise<void> {
-  if (unmounted) return;
+  if (!polling) return;
   if (reading) {
     readAgain = true;
     return;
@@ -63,19 +62,17 @@ async function end(process: SessionProcess): Promise<void> {
 
 whileOverlayVisible(
   () => {
+    polling = true;
     void refresh();
     timer = setInterval(() => void refresh(), POLL_INTERVAL_MS);
   },
   () => {
+    polling = false;
+    readAgain = false;
     if (timer !== null) clearInterval(timer);
     timer = null;
   },
 );
-onBeforeUnmount(() => {
-  unmounted = true;
-  readAgain = false;
-  if (timer !== null) clearInterval(timer);
-});
 
 const rowTone = (process: SessionProcess): string => (isHot(process) ? "text-err-text" : "text-fg");
 </script>

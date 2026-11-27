@@ -86,6 +86,7 @@ async function refresh(): Promise<void> {
   if (read === null) {
     loadFailed.value = overview.value === null;
     if (overview.value === null) stopPolling();
+    else if (overview.value.activeRunId !== null) startPolling();
     return;
   }
   overview.value = read;

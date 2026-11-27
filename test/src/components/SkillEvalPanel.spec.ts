@@ -2,6 +2,8 @@
 // a run in progress, and a finished run's verdict.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { defineComponent, h, ref } from "vue";
+import { provideOverlayVisible } from "../../../src/composables/overlayVisibility";
 import { createI18n } from "vue-i18n";
 import type { SkillEvalOverview, SkillEvalRun } from "../../../common/skillEval";
 import { skillsViewEn } from "../../../src/i18n/skillsView/en";
@@ -172,6 +174,27 @@ describe("SkillEvalPanel", () => {
     const wrapper = await mountPanel();
     loads.push(Promise.resolve(null));
     await vi.advanceTimersByTimeAsync(3000);
+    expect(wrapper.find("[data-testid=skill-eval-progress]").exists()).toBe(true);
+    overview = { ...base, set, runs: [run(true, false)] };
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(wrapper.find("[data-testid=skill-eval-verdict]").text()).toBe("It helps");
+    wrapper.unmount();
+  });
+
+  // The Skills screen is kept while closed: polling stops then, and a run still going when it is
+  // shown again keeps being followed even if the read on showing fails.
+  it("follows a running run again after a hide and a failed read on showing", async () => {
+    vi.useFakeTimers();
+    overview = { ...base, set, runs: [run(true, false, { status: "running", attempts: [] })], activeRunId: "1795000000000-aaaaaaaa" };
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(SkillEvalPanel, { source, skill })) });
+    const wrapper = mount(Host, { global: { plugins: [i18n] } });
+    await flushPromises();
+    visible.value = false;
+    await flushPromises();
+    loads.push(Promise.resolve(null));
+    visible.value = true;
+    await flushPromises();
     expect(wrapper.find("[data-testid=skill-eval-progress]").exists()).toBe(true);
     overview = { ...base, set, runs: [run(true, false)] };
     await vi.advanceTimersByTimeAsync(3000);

@@ -1,5 +1,5 @@
 // The Library's memory list (#3331), read again each time the Library opens: memory changes while the
-// agent works. The last open's list stays on screen until the answer replaces it.
+// agent works. The last open's list stays on screen until the answer replaces it, and through a failed one.
 import { ref, watch, type Ref } from "vue";
 import type { LibraryMemoryHealth, LibraryMemoryProject } from "../../common/libraryMemory";
 import { loadLibraryMemory, loadLibraryMemoryHealth } from "./libraryApi";
@@ -13,6 +13,8 @@ export function useLibraryMemory(isOpen: Ref<boolean>) {
   /** The health check could not be read: not the same as nothing to tidy. */
   const healthFailed = ref(false);
   let reads = 0;
+  /** A list was read at least once: a failed re-read keeps it rather than replacing it with an error. */
+  let listed = false;
 
   /** The list and its health, read again; the last answer to a newer read wins. */
   async function read(mine: number): Promise<void> {
@@ -24,9 +26,11 @@ export function useLibraryMemory(isOpen: Ref<boolean>) {
     })();
     const found = await loadLibraryMemory();
     if (mine !== reads) return;
-    failed.value = found === null;
-    projects.value = found ?? [];
     loaded.value = true;
+    failed.value = found === null && !listed;
+    if (found === null) return;
+    listed = true;
+    projects.value = found;
   }
 
   watch(
