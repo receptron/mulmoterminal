@@ -91,6 +91,8 @@ const text = ref<(LibraryFileText & { version?: string }) | null>(null);
 /** Bumped to read the memory again (after a conflict). */
 const rereads = ref(0);
 let reads = 0;
+/** The memory whose text is shown. */
+let textFor: string | null = null;
 
 // Read again when another memory is chosen, when it changed on disk, and when the list is read again
 // (each time the Library opens), so a memory written while it was closed never shows its old text.
@@ -99,10 +101,14 @@ watch(
   async () => {
     const row = selected.value;
     const mine = ++reads;
-    text.value = null;
+    // The same memory read again keeps its text until the answer, and through a failed one.
+    const again = row !== null && row.key === textFor;
+    if (!again) text.value = null;
     if (row === null) return;
     const read = await loadLibraryMemoryFile(row.project.slug, row.memory.file);
-    if (mine === reads) text.value = read ?? { text: null, reason: "unreadable" };
+    if (mine !== reads || (read === null && again && text.value !== null)) return;
+    text.value = read ?? { text: null, reason: "unreadable" };
+    textFor = row.key;
   },
   { immediate: true },
 );
@@ -111,15 +117,19 @@ watch(
  *  is chosen, and as the list is read again (a memory may have been written since). */
 const source = ref<LibraryConversation | null>(null);
 let sourceReads = 0;
+let sourceFor: string | null = null;
 watch(
   () => [selected.value?.key ?? null, props.projects] as const,
   async () => {
     const row = selected.value;
     const mine = ++sourceReads;
-    source.value = null;
+    const again = row !== null && row.key === sourceFor;
+    if (!again) source.value = null;
     if (row === null) return;
     const found = await loadLibraryMemorySource(row.project.slug, row.memory.file);
-    if (mine === sourceReads) source.value = found;
+    if (mine !== sourceReads || (found === null && again)) return;
+    source.value = found;
+    sourceFor = row.key;
   },
   { immediate: true },
 );

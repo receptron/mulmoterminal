@@ -11,6 +11,7 @@ import { listRuns, type RunList } from "../../composables/blueprintsApi";
 import { runGroups } from "./blueprintView";
 import BlueprintRunItem from "./BlueprintRunItem.vue";
 import BlueprintNewBuild from "./BlueprintNewBuild.vue";
+import { latestOnly } from "./latestOnly";
 import BlueprintRunView from "./BlueprintRunView.vue";
 import BlueprintMarket from "./BlueprintMarket.vue";
 
@@ -31,10 +32,14 @@ useEscapeToClose(isOpen, close);
 
 const runs = ref<RunList>([]);
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+// The screen outlives a close, so a list asked for before it can answer after the next opening's.
+const runsRead = latestOnly();
 
 async function refresh(): Promise<void> {
+  if (!isOpen.value) return; // a start or an archive answering after the close; the next opening reads
+  const ticket = runsRead.take();
   const result = await listRuns();
-  if (result.ok) runs.value = result.value.runs;
+  if (runsRead.isLatest(ticket) && result.ok) runs.value = result.value.runs;
 }
 
 function stopPolling(): void {
@@ -56,7 +61,8 @@ onUnmounted(stopPolling);
 
 function onStarted(id: string): void {
   void refresh();
-  blueprintsViewSelect(id);
+  // A start that answers after the screen was closed must not open it again.
+  if (isOpen.value) blueprintsViewSelect(id);
 }
 
 const groups = computed(() => runGroups(runs.value));

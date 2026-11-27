@@ -11,6 +11,7 @@ import { createDiffView } from "../cmDiffView";
 import { latestOnly } from "./latestOnly";
 import { activeThemeVars } from "../../composables/useTheme";
 import { isLightTheme } from "../../../common/themeVars";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 
 const props = defineProps<{ runId: string }>();
 const { t } = useI18n();
@@ -24,30 +25,44 @@ const clearViews = (): void => {
   views = [];
 };
 
-async function load(runId: string): Promise<void> {
+async function load(runId: string, kept = false): Promise<void> {
   const ticket = reads.take();
   const result = await loadOriginals(runId);
   if (!reads.isLatest(ticket)) return;
-  originals.value = result.ok ? result.value : null;
+  if (result.ok) originals.value = result.value;
+  else if (!kept) originals.value = null;
 }
 
 const dark = computed(() => activeThemeVars.value === null || !isLightTheme(activeThemeVars.value));
 
 // The views are built once the hosts are in the page, and again when the theme turns light or dark; the gone files
 // have no host.
-watch([hosts, dark], ([elements, isDark]) => {
-  clearViews();
-  const shown = (originals.value?.files ?? []).filter((file) => file.current !== null);
-  // CodeMirror fills `$` with the count; the translation keeps it where its own language wants the number.
-  const phrases = { "$ unchanged lines": t("blueprints.run.originalsFolded", { count: "$" }) };
-  views = (elements ?? []).map((host, index) => createDiffView(host, shown[index]?.original ?? "", shown[index]?.current ?? "", { phrases, dark: isDark }));
-});
+// And again when the originals are read again (the kept screen shown again): the same files keep the same
+// hosts, so the hosts alone would not say the texts changed. After the render, so new hosts are in place.
+watch(
+  [hosts, dark, originals],
+  ([elements, isDark]) => {
+    clearViews();
+    const files = originals.value?.files ?? [];
+    // CodeMirror fills `$` with the count; the translation keeps it where its own language wants the number.
+    const phrases = { "$ unchanged lines": t("blueprints.run.originalsFolded", { count: "$" }) };
+    // Each host says which file it is for: Vue keeps a ref array's existing hosts and appends new ones, so
+    // after a file comes back the array's order is not the files' order.
+    views = (elements ?? []).flatMap((host) => {
+      const file = files.find((candidate) => candidate.path === host.dataset.path && candidate.current !== null);
+      return file ? [createDiffView(host, file.original, file.current ?? "", { phrases, dark: isDark })] : [];
+    });
+  },
+  { flush: "post" },
+);
 
 watch(
   () => props.runId,
   (runId) => void load(runId),
   { immediate: true },
 );
+// The screen is kept while closed; what this shows may have changed in the meantime.
+onOverlayShownAgain(() => void load(props.runId, true));
 onBeforeUnmount(clearViews);
 </script>
 
@@ -68,7 +83,13 @@ onBeforeUnmount(clearViews);
       <p v-if="file.current === null" class="m-0 font-sans text-[12px] text-secondary" data-testid="blueprint-original-gone">
         {{ t("blueprints.run.originalsGone") }}
       </p>
-      <div v-else ref="diffHost" class="max-h-[60vh] overflow-y-auto rounded-md border border-border text-[13px]" data-testid="blueprint-original-diff" />
+      <div
+        v-else
+        ref="diffHost"
+        :data-path="file.path"
+        class="max-h-[60vh] overflow-y-auto rounded-md border border-border text-[13px]"
+        data-testid="blueprint-original-diff"
+      />
     </div>
     <p v-if="originals.more" class="m-0 font-sans text-[12px] text-secondary">{{ t("blueprints.run.originalsMore") }}</p>
   </section>

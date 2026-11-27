@@ -23,18 +23,25 @@ let deleted: string[] = [];
 // which is the race the generation token below is about.
 const suspend = () => Promise.resolve().then(() => undefined);
 let reads = 0;
+/** What a room read waits on; each read answers with the messages as they were when it was asked. */
+let roomGate: Promise<void> = Promise.resolve();
+let postGate: Promise<void> = Promise.resolve();
 
 vi.mock("../../../src/composables/useRooms", () => ({
   loadRoom: async () => {
     reads++;
+    const asked = messages;
+    const gate = roomGate;
     await suspend();
-    return readOk ? { ok: true, messages } : { ok: false };
+    await gate;
+    return readOk ? { ok: true, messages: asked } : { ok: false };
   },
   listRooms: async () => {
     await suspend();
     return ["standup", "design-review"];
   },
   sendRoomMessage: async (room: string, from: string, text: string) => {
+    await postGate;
     if (postOk) posted.push({ room, from, text });
     return postOk;
   },
@@ -55,6 +62,8 @@ beforeEach(() => {
   posted = [];
   deleted = [];
   reads = 0;
+  roomGate = Promise.resolve();
+  postGate = Promise.resolve();
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -82,6 +91,61 @@ describe("RoomsOverlay", () => {
     await flushPromises();
     expect(w.findAll('[data-testid="room-message"]')).toHaveLength(1);
     expect(reads).toBe(readsWhileClosed + 1);
+    w.unmount();
+  });
+
+  // The screen outlives a close, so a read from an earlier opening can answer after a later one's.
+  it("does not let an earlier opening's late read replace a later one's", async () => {
+    messages = [{ at: 1, from: "human", text: "first" }];
+    const w = await open();
+    const reopen = async () => {
+      isOpen.value = false;
+      await flushPromises();
+      isOpen.value = true;
+      await flushPromises();
+    };
+    let release: () => void = () => {};
+    roomGate = new Promise((resolve) => (release = resolve));
+    messages = [{ at: 2, from: "human", text: "stale" }];
+    await reopen();
+    roomGate = Promise.resolve();
+    messages = [{ at: 3, from: "human", text: "fresh" }];
+    await reopen();
+    release();
+    await flushPromises();
+    expect(w.findAll('[data-testid="room-message"]').map((row) => row.text().includes("fresh"))).toEqual([true]);
+    w.unmount();
+  });
+
+  // The screen outlives a close, so a post can answer after it: nothing is read for a hidden screen.
+  it("reads nothing when a post answers after the screen was closed", async () => {
+    const w = await open();
+    let release: () => void = () => {};
+    postGate = new Promise((resolve) => (release = resolve));
+    await w.find('[data-testid="room-draft"]').setValue("late");
+    await w.find("form").trigger("submit");
+    isOpen.value = false;
+    await flushPromises();
+    const before = reads;
+    release();
+    await flushPromises();
+    expect(reads).toBe(before);
+    w.unmount();
+  });
+
+  it("lets a slow read finish instead of overtaking it on every tick", async () => {
+    vi.useFakeTimers();
+    const w = await open();
+    let release: () => void = () => {};
+    roomGate = new Promise((resolve) => (release = resolve));
+    const before = reads;
+    await vi.advanceTimersByTimeAsync(POLL_MS); // a read goes out and stays out
+    await vi.advanceTimersByTimeAsync(POLL_MS * 3);
+    expect(reads).toBe(before + 1);
+    messages = [{ at: 9, from: "human", text: "slow but shown" }];
+    release();
+    await flushPromises();
+    vi.useRealTimers();
     w.unmount();
   });
 

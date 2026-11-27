@@ -15,12 +15,12 @@ describe("toggleLastScreen", () => {
   });
 
   it("leaves a screen for where it was opened from, and goes back to it, query and all", async () => {
-    await router.push("/terminals");
+    await router.push("/terminals?page=2#cells");
     libraryViewOpen({ session: "s1", cwd: "/work" });
     await flushPromises();
     expect(toggleLastScreen()).toBe(true);
     await flushPromises();
-    expect(here().name).toBe("terminals");
+    expect(here().fullPath).toBe("/terminals?page=2#cells");
     expect(toggleLastScreen()).toBe(true);
     await flushPromises();
     expect(here().name).toBe("library");
@@ -34,11 +34,12 @@ describe("toggleLastScreen", () => {
   it("goes back to the most recent of several screens", async () => {
     await router.push("/terminals");
     await router.push({ name: "skills", state: overlayOriginState() });
-    await router.push({ name: "usage", state: overlayOriginState() });
+    await router.push({ name: "usage", hash: "#weeks", state: overlayOriginState() });
     await router.push("/terminals");
     expect(toggleLastScreen()).toBe(true);
     await flushPromises();
     expect(here().name).toBe("usage");
+    expect(here().hash).toBe("#weeks");
     toggleLastScreen();
     await flushPromises();
   });

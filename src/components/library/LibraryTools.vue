@@ -7,6 +7,7 @@ import type { LibraryInstructionFile, LibraryInstructions } from "../../../commo
 import type { LibraryFileText } from "../../../common/libraryFiles";
 import { loadInstruction, loadInstructions, loadToolDirectories } from "../../composables/libraryApi";
 import { movedIndex } from "./libraryKeys";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 import { instructionLabel } from "./toolRows";
 import LibraryToolsSettings from "./LibraryToolsSettings.vue";
 
@@ -36,13 +37,19 @@ watch(
 /** The directories could not be listed (the index is unavailable): said, not shown as "none yet". */
 const directoriesFailed = ref(false);
 
-void (async () => {
+let directoryReads = 0;
+async function readDirectories(): Promise<void> {
+  const mine = ++directoryReads;
   const listed = await loadToolDirectories();
+  if (mine !== directoryReads) return;
+  if (listed === null && directories.value !== null) return; // a failed re-read keeps the list shown
   directoriesFailed.value = listed === null;
   directories.value = listed ?? [];
+  if (cwd.value !== null && directories.value.includes(cwd.value)) return;
   const wanted = props.initialCwd;
   cwd.value = wanted !== null && directories.value.includes(wanted) ? wanted : (directories.value[0] ?? null);
-})();
+}
+void readDirectories();
 
 let reads = 0;
 watch(cwd, async (dir) => {
@@ -57,6 +64,24 @@ watch(cwd, async (dir) => {
   failed.value = read === null;
 });
 
+/** The open directory's files read again, keeping what is shown until (and unless) the answer comes. */
+async function rereadInstructions(dir: string): Promise<void> {
+  const mine = ++reads;
+  const read = await loadInstructions(dir);
+  if (mine !== reads) return;
+  // A failed re-read keeps what is shown; with nothing shown (it overtook the first read) it says so.
+  if (read === null) {
+    failed.value = instructions.value === null;
+    return;
+  }
+  instructions.value = read;
+  failed.value = false;
+}
+onOverlayShownAgain(() => {
+  void readDirectories();
+  if (cwd.value !== null) void rereadInstructions(cwd.value);
+});
+
 const shown = computed(() => {
   const needle = props.query.trim().toLowerCase();
   const files = instructions.value?.files ?? [];
@@ -68,16 +93,28 @@ const settingsShown = computed(() => chosen.value === SETTINGS_ROW);
 const selected = computed(() => (settingsShown.value ? null : (shown.value.find((file) => file.path === chosen.value) ?? shown.value[0] ?? null)));
 
 let textReads = 0;
-watch(
-  () => [cwd.value, selected.value?.path ?? null] as const,
-  async ([dir, file]) => {
-    const mine = ++textReads;
-    text.value = null;
-    if (dir === null || file === null) return;
-    const read = await loadInstruction(dir, file);
-    if (mine === textReads) text.value = read ?? { text: null, reason: "unreadable" };
-  },
-);
+// Two sources, not one getter returning a pair: a fresh pair on every run would read as a change each
+// time the list is read again, clearing the text of a file that is still the one shown.
+watch([() => cwd.value, () => selected.value?.path ?? null], async ([dir, file]) => {
+  const mine = ++textReads;
+  text.value = null;
+  if (dir === null || file === null) return;
+  const read = await loadInstruction(dir, file);
+  if (mine === textReads) text.value = read ?? { text: null, reason: "unreadable" };
+});
+
+/** The file being read, read again on showing; a failed re-read keeps the text shown. */
+async function rereadText(): Promise<void> {
+  const dir = cwd.value;
+  const file = selected.value?.path ?? null;
+  if (dir === null || file === null) return;
+  const mine = ++textReads;
+  const read = await loadInstruction(dir, file);
+  if (mine !== textReads) return;
+  if (read !== null) text.value = read;
+  else text.value ??= { text: null, reason: "unreadable" };
+}
+onOverlayShownAgain(() => void rereadText());
 
 const label = (file: LibraryInstructionFile) => instructionLabel(file, cwd.value ?? "");
 const notes = (file: LibraryInstructionFile): string[] =>

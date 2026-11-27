@@ -2,6 +2,8 @@
 // a run in progress, and a finished run's verdict.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { defineComponent, h, ref } from "vue";
+import { provideOverlayVisible } from "../../../src/composables/overlayVisibility";
 import { createI18n } from "vue-i18n";
 import type { SkillEvalOverview, SkillEvalRun } from "../../../common/skillEval";
 import { skillsViewEn } from "../../../src/i18n/skillsView/en";
@@ -10,18 +12,21 @@ let overview: SkillEvalOverview | null = null;
 /** When set, each load takes the next answer from here instead of `overview`. */
 const loads: Promise<SkillEvalOverview | null>[] = [];
 const calls: string[] = [];
+const loadCalls = { count: 0 };
+const loadCount = (): number => loadCalls.count;
 const placed: unknown[] = [];
 const authorLanguages: (string | undefined)[] = [];
 let authoring: Promise<string | null> = Promise.resolve("chat-1");
+let stopping: Promise<boolean> = Promise.resolve(true);
 let starting: Promise<{ kind: "started"; id: string }> = Promise.resolve({ kind: "started", id: "r" });
 vi.mock("../../../src/composables/skillEvalApi", () => ({
-  loadSkillEval: () => loads.shift() ?? Promise.resolve(overview),
+  loadSkillEval: () => (loadCalls.count++, loads.shift() ?? Promise.resolve(overview)),
   startSkillEvalRun: (_source: unknown, _slug: string, mode?: string) => (calls.push(mode === undefined || mode === "measure" ? "start" : mode), starting),
   adoptSkillEvalCandidate: (_source: unknown, _slug: string, runId: string) => (
     calls.push(`adopt ${runId}`),
     Promise.resolve({ kind: "adopted", backup: "/b/1.md" })
   ),
-  stopSkillEvalRun: () => (calls.push("stop"), Promise.resolve(true)),
+  stopSkillEvalRun: () => (calls.push("stop"), stopping),
   startSkillEvalAuthoring: (_source: unknown, _slug: string, language?: string) => (calls.push("author"), authorLanguages.push(language), authoring),
 }));
 vi.mock("../../../src/composables/useSpawnedChat", () => ({ placeSpawnedChat: (request: unknown) => placed.push(request) }));
@@ -91,6 +96,7 @@ beforeEach(() => {
   authorLanguages.length = 0;
   loads.length = 0;
   authoring = Promise.resolve("chat-1");
+  stopping = Promise.resolve(true);
   starting = Promise.resolve({ kind: "started", id: "r" });
   vi.useRealTimers();
 });
@@ -175,6 +181,106 @@ describe("SkillEvalPanel", () => {
     expect(wrapper.find("[data-testid=skill-eval-progress]").exists()).toBe(true);
     overview = { ...base, set, runs: [run(true, false)] };
     await vi.advanceTimersByTimeAsync(3000);
+    expect(wrapper.find("[data-testid=skill-eval-verdict]").text()).toBe("It helps");
+    wrapper.unmount();
+  });
+
+  // The Skills screen is kept while closed: polling stops then, and a run still going when it is
+  // shown again keeps being followed even if the read on showing fails.
+  it("follows a running run again after a hide and a failed read on showing", async () => {
+    vi.useFakeTimers();
+    overview = { ...base, set, runs: [run(true, false, { status: "running", attempts: [] })], activeRunId: "1795000000000-aaaaaaaa" };
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(SkillEvalPanel, { source, skill })) });
+    const wrapper = mount(Host, { global: { plugins: [i18n] } });
+    await flushPromises();
+    visible.value = false;
+    await flushPromises();
+    loads.push(Promise.resolve(null));
+    visible.value = true;
+    await flushPromises();
+    expect(wrapper.find("[data-testid=skill-eval-progress]").exists()).toBe(true);
+    overview = { ...base, set, runs: [run(true, false)] };
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(wrapper.find("[data-testid=skill-eval-verdict]").text()).toBe("It helps");
+    wrapper.unmount();
+  });
+
+  it("believes the read made on showing again over one still out from before the hide", async () => {
+    vi.useFakeTimers();
+    const running = { ...base, set, runs: [run(true, false, { status: "running", attempts: [] })], activeRunId: "1795000000000-aaaaaaaa" };
+    overview = running;
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(SkillEvalPanel, { source, skill })) });
+    const wrapper = mount(Host, { global: { plugins: [i18n] } });
+    await flushPromises();
+    let release: (value: SkillEvalOverview) => void = () => {};
+    loads.push(new Promise((resolve) => (release = resolve)));
+    await vi.advanceTimersByTimeAsync(3000); // a poll read goes out and waits
+    visible.value = false;
+    await flushPromises();
+    overview = { ...base, set, runs: [run(true, false)] };
+    visible.value = true;
+    await flushPromises();
+    release(running);
+    await flushPromises();
+    expect(wrapper.find("[data-testid=skill-eval-verdict]").text()).toBe("It helps");
+    wrapper.unmount();
+  });
+
+  it("follows a run whose start answers after the panel was hidden and shown again", async () => {
+    overview = { ...base, set, runs: [] };
+    let answerStart: (value: { kind: "started"; id: string }) => void = () => {};
+    starting = new Promise((resolve) => (answerStart = resolve));
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(SkillEvalPanel, { source, skill })) });
+    const wrapper = mount(Host, { global: { plugins: [i18n] } });
+    await flushPromises();
+    await wrapper.find("[data-testid=skill-eval-measure]").trigger("click");
+    await wrapper.find("[data-testid=skill-eval-go]").trigger("click");
+    visible.value = false;
+    await flushPromises();
+    visible.value = true;
+    await flushPromises(); // the read on showing again found no run yet
+    overview = { ...base, set, runs: [run(true, false, { status: "running", attempts: [] })], activeRunId: "1795000000000-aaaaaaaa" };
+    answerStart({ kind: "started", id: "r" });
+    await flushPromises();
+    expect(wrapper.find("[data-testid=skill-eval-progress]").exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("reads nothing for a stop that answers after the panel was hidden", async () => {
+    overview = { ...base, set, runs: [run(true, false, { status: "running", attempts: [] })], activeRunId: "1795000000000-aaaaaaaa" };
+    let answerStop: (value: boolean) => void = () => {};
+    stopping = new Promise((resolve) => (answerStop = resolve));
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(SkillEvalPanel, { source, skill })) });
+    const wrapper = mount(Host, { global: { plugins: [i18n] } });
+    await flushPromises();
+    await wrapper.find("[data-testid=skill-eval-stop]").trigger("click");
+    visible.value = false;
+    await flushPromises();
+    const readsBefore = loadCount();
+    answerStop(true);
+    await flushPromises();
+    expect(loadCount()).toBe(readsBefore);
+    wrapper.unmount();
+  });
+
+  it("keeps a read that answers while the panel is hidden: it is newer than what is shown", async () => {
+    vi.useFakeTimers();
+    overview = { ...base, set, runs: [run(true, false, { status: "running", attempts: [] })], activeRunId: "1795000000000-aaaaaaaa" };
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(SkillEvalPanel, { source, skill })) });
+    const wrapper = mount(Host, { global: { plugins: [i18n] } });
+    await flushPromises();
+    let release: (value: SkillEvalOverview) => void = () => {};
+    loads.push(new Promise((resolve) => (release = resolve)));
+    await vi.advanceTimersByTimeAsync(3000); // a poll read goes out
+    visible.value = false;
+    await flushPromises();
+    release({ ...base, set, runs: [run(true, false)] });
+    await flushPromises();
     expect(wrapper.find("[data-testid=skill-eval-verdict]").text()).toBe("It helps");
     wrapper.unmount();
   });

@@ -2,6 +2,10 @@
 // each read beside the list.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { defineComponent, h, ref } from "vue";
+import { provideOverlayVisible } from "../../../../src/composables/overlayVisibility";
+import { mountUnderOverlay } from "../underOverlay";
+import { en } from "../../../../src/i18n/en";
 import type { LibraryInstructionFile, LibraryInstructionScope, LibraryInstructions } from "../../../../common/libraryTools";
 
 const file = (scope: LibraryInstructionScope, filePath: string, over: Partial<LibraryInstructionFile> = {}): LibraryInstructionFile => ({
@@ -15,8 +19,11 @@ const file = (scope: LibraryInstructionScope, filePath: string, over: Partial<Li
   ...over,
 });
 let listing: Record<string, LibraryInstructions> = {};
+/** Answers the next instruction reads take instead of `listing`, one each. */
+const instructionsHeld: Promise<LibraryInstructions | null>[] = [];
 const reads: string[] = [];
 let directoriesAnswer: string[] | null = ["/w/app", "/w/lib"];
+let textFails = false;
 let textAnswer: { text: string | null; reason?: string; missing?: string[] } | null = null;
 vi.mock("../../../../src/composables/libraryApi", () => ({
   loadToolDirectories: () => Promise.resolve(directoriesAnswer),
@@ -32,8 +39,11 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
       hooks: [{ event: "Stop", value: "say done", source: "user" }],
       other: [{ key: "model", value: '"opus"', source: "user" }],
     }),
-  loadInstructions: (cwd: string) => Promise.resolve(listing[cwd] ?? null),
-  loadInstruction: (_cwd: string, filePath: string) => (reads.push(filePath), Promise.resolve(textAnswer ?? { text: `text of ${filePath}` })),
+  loadInstructions: (cwd: string) => instructionsHeld.shift() ?? Promise.resolve(listing[cwd] ?? null),
+  loadInstruction: (_cwd: string, filePath: string) => (
+    reads.push(filePath),
+    Promise.resolve(textFails ? null : (textAnswer ?? { text: `text of ${filePath}` }))
+  ),
 }));
 
 const LibraryTools = (await import("../../../../src/components/library/LibraryTools.vue")).default;
@@ -42,6 +52,7 @@ beforeEach(() => {
   reads.length = 0;
   directoriesAnswer = ["/w/app", "/w/lib"];
   textAnswer = null;
+  textFails = false;
   listing = {
     "/w/app": {
       cwd: "/w/app",
@@ -155,5 +166,67 @@ describe("LibraryTools", () => {
     textAnswer = { text: "See `docs/gone.md`.", missing: ["docs/gone.md"] };
     const wrapper = await mountTools("/w/app");
     expect(wrapper.find("[data-testid=tool-missing]").text()).toBe("It names docs/gone.md, which is not there.");
+  });
+
+  // The Library is kept while closed: shown again, the directories and the open one's files are read
+  // again on the same directory, and a failed re-read keeps what was there.
+  it("reads the directories and files again each time the Library is shown, staying on the directory", async () => {
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(LibraryTools, { query: "", initialCwd: "/w/lib" })) });
+    const wrapper = mount(Host, { attachTo: document.body });
+    await flushPromises();
+    const showAgain = async () => {
+      visible.value = false;
+      await flushPromises();
+      visible.value = true;
+      await flushPromises();
+    };
+    directoriesAnswer = ["/w/new", "/w/app", "/w/lib"];
+    listing["/w/lib"] = {
+      cwd: "/w/lib",
+      agentsMd: true,
+      truncated: false,
+      files: [file("agents", "/w/lib/AGENTS.md"), file("rule", "/w/lib/.claude/rules/x.md")],
+    };
+    await showAgain();
+    expect(wrapper.findAll("option").map((option) => option.text())).toEqual(["/w/new", "/w/app", "/w/lib"]);
+    expect(wrapper.get<HTMLSelectElement>("[data-testid=library-tools-cwd]").element.value).toBe("/w/lib");
+    expect(wrapper.findAll("[data-testid=tool-row]")).toHaveLength(2);
+    directoriesAnswer = null;
+    listing = {};
+    await showAgain();
+    expect(wrapper.findAll("[data-testid=tool-row]")).toHaveLength(2);
+    expect(wrapper.find("[data-testid=library-tools-directories-failed]").exists()).toBe(false);
+    // Nothing else changes now, so only a re-read of the file being read can bring its new text.
+    directoriesAnswer = ["/w/new", "/w/app", "/w/lib"];
+    textAnswer = { text: "edited while closed" };
+    await showAgain();
+    expect(wrapper.text()).toContain("edited while closed");
+    wrapper.unmount();
+  });
+});
+
+describe("a first read overtaken by the Library shown again", () => {
+  it("says the files could not be read when the re-read fails too", async () => {
+    instructionsHeld.push(new Promise(() => {}));
+    const { wrapper, showAgain } = mountUnderOverlay(LibraryTools, { query: "", initialCwd: "/w/app" }, { attachTo: document.body });
+    await flushPromises();
+    listing = {};
+    await showAgain();
+    expect(wrapper.text()).toContain(en.libraryView.tools.failed);
+    wrapper.unmount();
+  });
+});
+
+describe("the file being read, with its list read again", () => {
+  it("keeps its text when the list comes back with the same file and the text read fails", async () => {
+    const { wrapper, showAgain } = mountUnderOverlay(LibraryTools, { query: "", initialCwd: "/w/lib" }, { attachTo: document.body });
+    await flushPromises();
+    expect(wrapper.text()).toContain("text of /w/lib/AGENTS.md");
+    listing["/w/lib"] = { cwd: "/w/lib", agentsMd: true, truncated: false, files: [file("agents", "/w/lib/AGENTS.md")] };
+    textFails = true;
+    await showAgain();
+    expect(wrapper.text()).toContain("text of /w/lib/AGENTS.md");
+    wrapper.unmount();
   });
 });

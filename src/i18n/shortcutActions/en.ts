@@ -57,7 +57,7 @@ export const shortcutActionsEn = {
   screenLibrary: "Go to the Library",
   screenProcesses: "Go to Processes",
   screenUsage: "Go to Usage",
-  screenToggle: "Go back and forth between the last screen and the terminals",
+  screenToggle: "Go back and forth between the last screen and where it was opened from",
   settingsOpen: "Open Settings",
   soundToggle: "Turn the notification sound on / off",
   confetti: "Throw confetti (a random mix from your list)",

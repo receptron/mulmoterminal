@@ -110,6 +110,9 @@ export const REMOTE_ROUTES = {
   // agent's own, and forwarding it would let a page put a card in the remote session.
   toolResults: { method: "GET", path: "/api/agent/toolResults/:sid", key: "session", access: "read", query: [] },
   tools: { method: "GET", path: "/api/tools", key: "session", access: "read", query: ["sessionId"] },
+  // An AskUserQuestion dialog: the one a session is blocked on, and an answer, typed by the host.
+  question: { method: "GET", path: "/api/question/:sid", key: "session", access: "read", query: [] },
+  questionAnswer: { method: "POST", path: "/api/question/:sid/answer", key: "session", access: "write", query: [] },
   worktreeDiff: { method: "GET", path: "/api/worktrees/diff", key: "cwd", access: "read", query: ["cwd"] },
   worktreePush: repoWrite("/api/worktrees/push", ["cwd"]),
   worktreePr: repoWrite("/api/worktrees/pr", ["cwd"]),

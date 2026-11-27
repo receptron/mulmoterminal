@@ -57,7 +57,7 @@ export const shortcutActionsJa = {
   screenLibrary: "ライブラリへ",
   screenProcesses: "プロセスへ",
   screenUsage: "使用量へ",
-  screenToggle: "直前の画面とターミナルを行き来する",
+  screenToggle: "直前の画面と、それを開いた元の画面を行き来する",
   settingsOpen: "設定を開く",
   soundToggle: "通知音のオン / オフ",
   confetti: "紙吹雪を散らす（設定したスタイルからランダムに混ぜる）",

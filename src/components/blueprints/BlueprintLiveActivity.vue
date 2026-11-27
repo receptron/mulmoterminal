@@ -4,6 +4,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useToolCallFeed } from "../../composables/useToolCallFeed";
+import { useOverlayVisible } from "../../composables/overlayVisibility";
 import type { ToolCall } from "../toolCall";
 import { toolCallSummary } from "./blueprintView";
 
@@ -14,7 +15,10 @@ const { t } = useI18n();
 const SHOWN_CALLS = 8;
 
 const calls = ref<ToolCall[]>([]);
-useToolCallFeed(calls, () => props.sessionId);
+// The Blueprints screen is kept while closed: hidden, the feed lets go of the channel, and shown again
+// it reads the history afresh.
+const visible = useOverlayVisible();
+useToolCallFeed(calls, () => (visible.value ? props.sessionId : null));
 
 const recent = computed(() => [...calls.value].sort((a, b) => b.at - a.at).slice(0, SHOWN_CALLS));
 </script>

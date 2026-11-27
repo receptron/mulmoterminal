@@ -2,6 +2,7 @@
 // and an empty workspace says so rather than showing an empty list.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mountUnderOverlay } from "../underOverlay";
 
 const { listSourceCollections } = vi.hoisted(() => ({ listSourceCollections: vi.fn() }));
 vi.mock("../../../../src/composables/blueprintsApi", () => ({ listSourceCollections }));
@@ -78,5 +79,48 @@ describe("picking the source collection", () => {
     await flushPromises();
     expect(wrapper.text()).toContain("the server is down");
     expect(wrapper.find('[data-testid="blueprint-collection-none"]').exists()).toBe(false);
+  });
+});
+
+// The Blueprints screen is kept while closed, and the form with this picker in it: shown again, the
+// collections are read again, and a read that fails then keeps the ones offered.
+describe("the collections shown again", () => {
+  it("are read again each time the screen is shown, and kept through a failed read", async () => {
+    listSourceCollections.mockReset();
+    listSourceCollections.mockResolvedValueOnce({ ok: true, value: { collections: [{ slug: "books", title: "Books", kind: "collection" }] } });
+    listSourceCollections.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        collections: [
+          { slug: "books", title: "Books", kind: "collection" },
+          { slug: "films", title: "Films", kind: "collection" },
+        ],
+      },
+    });
+    listSourceCollections.mockResolvedValue({ ok: false, error: "down" });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintCollectionPicker, { fieldId: "blueprint-q-source", answer: "" });
+    await flushPromises();
+    await showAgain();
+    const slugs = () =>
+      wrapper
+        .findAll("option")
+        .map((option) => option.attributes("value"))
+        .filter((value) => value !== "");
+    expect(slugs()).toEqual(["books", "films"]);
+    await showAgain();
+    expect(slugs()).toEqual(["books", "films"]);
+    wrapper.unmount();
+  });
+});
+
+describe("a first read overtaken by the screen shown again", () => {
+  it("says why when the re-read fails too", async () => {
+    listSourceCollections.mockReset();
+    listSourceCollections.mockReturnValueOnce(new Promise(() => {})).mockResolvedValue({ ok: false, error: "the collections could not be read" });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintCollectionPicker, { fieldId: "blueprint-q-source", answer: "" });
+    await flushPromises();
+    await showAgain();
+    expect(wrapper.text()).toContain("the collections could not be read");
+    wrapper.unmount();
   });
 });
