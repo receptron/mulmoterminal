@@ -79,6 +79,17 @@ describe("decideForward: which requests cross", () => {
   });
 });
 
+// An AskUserQuestion dialog (#3506): read and answered by the path's session.
+describe("decideForward: a question", () => {
+  it("forwards the open dialog and an answer for a session id, and nothing else under it", () => {
+    expect(decideForward("GET", `/api/question/${SESSION}`, { x: 1 })).toMatchObject({ kind: "forward", path: `/api/question/${SESSION}` });
+    expect(decideForward("POST", `/api/question/${SESSION}/answer`, {})).toMatchObject({ kind: "forward", path: `/api/question/${SESSION}/answer` });
+    expect(decideForward("GET", "/api/question/nope", {})).toMatchObject({ kind: "refuse", status: 404 });
+    expect(decideForward("POST", `/api/question/${SESSION}`, {})).toMatchObject({ kind: "refuse", status: 404 });
+    expect(decideForward("GET", `/api/question/${SESSION}/answer`, {})).toMatchObject({ kind: "refuse", status: 404 });
+  });
+});
+
 // The Tools pane (#3506): the tool calls by the path's session, the tools by `?sessionId=`.
 describe("decideForward: the Tools pane", () => {
   it("forwards a session's tool calls and tools", () => {

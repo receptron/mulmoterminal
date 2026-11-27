@@ -1,6 +1,7 @@
 // Remote hosts (#3506): other MulmoTerminal servers this one forwards to, each reached through a
 // user-run `ssh -L`. Shared because the UI builds the `/remote/<id>/…` paths the server routes.
 
+import { isAskQuestionDone, isAskQuestionEvent, type AskQuestionDone, type AskQuestionEvent } from "./askQuestion.js";
 import { isRecord } from "./isRecord.js";
 import { isUnknownArray } from "./isUnknownArray.js";
 
@@ -172,6 +173,30 @@ export function parseRemoteSessionChannel(room: string, isValidId: (id: string) 
 
 /** The one key a client map uses for a remote session: ids are unique per host, not across hosts. */
 export const remoteSessionKey = (host: string, id: string): string => `${host}/${id}`;
+
+/** The host and id a remoteSessionKey names, or null for a bare id (this machine's session). */
+export function remoteSessionAddressOf(key: string): { host: string; id: string } | null {
+  const slash = key.indexOf("/");
+  if (slash < 0) return null;
+  const host = key.slice(0, slash);
+  const id = key.slice(slash + 1);
+  return isRemoteHostId(host) && id !== "" ? { host, id } : null;
+}
+
+/** The Mac's channel for a remote host's AskUserQuestion dialogs (common/askQuestion.ts), opened and
+ *  closed, each as the remote published it with its host beside it. Separate from `ask-question`,
+ *  whose listeners take the session id to be this machine's. */
+export const REMOTE_ASK_QUESTION_CHANNEL = "remote-ask-question";
+
+export interface RemoteAskQuestion {
+  host: string;
+  question: AskQuestionEvent | AskQuestionDone;
+}
+
+export const parseRemoteAskQuestion = (data: unknown): RemoteAskQuestion | null =>
+  isRecord(data) && isRemoteHostId(data.host) && (isAskQuestionEvent(data.question) || isAskQuestionDone(data.question))
+    ? { host: data.host, question: data.question }
+    : null;
 
 const OPTIONAL_TEXT_FIELDS = ["cwd", "lastPrompt", "aiTitle", "lastResponse", "memo"] as const;
 
