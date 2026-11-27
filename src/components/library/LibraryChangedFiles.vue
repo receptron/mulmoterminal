@@ -61,19 +61,21 @@ async function reread(): Promise<void> {
   if (!found.some((file) => file.trackingPath === chosenPath.value)) chosenPath.value = found[0]?.trackingPath ?? null;
   const file = chosen.value;
   const shown = step.value;
-  if (file && shown && open.value) void loadSides(file, shown);
+  if (file && shown && open.value) void loadSides(file, shown, true);
 }
 onOverlayShownAgain(() => void reread());
 
-async function loadSides(file: LibraryTrackedFile, shown: DiffStep): Promise<void> {
+/** `kept`: a re-read of the diff shown, which keeps it until both sides come back. */
+async function loadSides(file: LibraryTrackedFile, shown: DiffStep, kept = false): Promise<void> {
   const mine = ++sideReads;
-  sides.value = null;
+  if (!kept) sides.value = null;
   const { id, cwd } = props.conversation;
   const [original, current] = await Promise.all([
     loadLibraryFileText(id, cwd, file.trackingPath, shown.from),
     loadLibraryFileText(id, cwd, file.trackingPath, shown.to),
   ]);
   if (mine !== sideReads) return;
+  if (kept && sides.value !== null && (original === null || current === null)) return;
   const failed: LibraryFileText = { text: null, reason: "unreadable" };
   sides.value = { original: original ?? failed, current: current ?? failed };
 }

@@ -138,3 +138,20 @@ describe("a diff being read when the Library is shown again", () => {
     wrapper.unmount();
   });
 });
+
+describe("an open diff shown again", () => {
+  it("keeps the diff when its sides cannot be read again", async () => {
+    files = [tracked("a.md", [[1, true]])];
+    texts = { "a.md@1": { text: "one" }, "a.md@now": { text: "two" } };
+    const { wrapper, showAgain } = mountUnderOverlay(LibraryChangedFiles, { conversation }, { attachTo: document.body });
+    await flushPromises();
+    await wrapper.find("[data-testid=library-files-toggle]").trigger("click");
+    await flushPromises();
+    expect(drawn.at(-1)).toEqual(["one", "two"]);
+    texts = {};
+    await showAgain();
+    expect(wrapper.find("[data-testid=library-file-blocked]").exists()).toBe(false);
+    expect(drawn.at(-1)).toEqual(["one", "two"]);
+    wrapper.unmount();
+  });
+});

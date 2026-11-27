@@ -296,7 +296,9 @@ async function loadPreview(baseSlug: string, usecaseSlug: string): Promise<void>
 async function rereadPreview(): Promise<void> {
   const baseSlug = base.value;
   const usecaseSlug = usecase.value;
-  if (!baseSlug || !usecaseSlug || preview.value === null) return;
+  if (!baseSlug || !usecaseSlug) return;
+  // Never read (the first read failed): there are no answers to keep, so read it as a fresh pair.
+  if (preview.value === null) return loadPreview(baseSlug, usecaseSlug);
   const ticket = previews.take();
   const result = await previewPair(baseSlug, usecaseSlug);
   if (!previews.isLatest(ticket) || !result.ok) return;

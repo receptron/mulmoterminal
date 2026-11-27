@@ -157,3 +157,19 @@ describe("the questions shown again", () => {
     wrapper.unmount();
   });
 });
+
+describe("questions whose first read failed", () => {
+  it("are read when the screen is shown again", async () => {
+    const question = { id: "goal", label: "goal", why: "", kind: "text" };
+    previewPair.mockReset();
+    previewPair
+      .mockResolvedValueOnce({ ok: false, error: "the pair could not be read" })
+      .mockResolvedValue({ ok: true, value: { hearing: { questions: [question] }, steps: [] } });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintNewBuild, {});
+    await flushPromises();
+    expect(wrapper.findAll('[data-testid="blueprint-question"]')).toHaveLength(0);
+    await showAgain();
+    expect(wrapper.findAll('[data-testid="blueprint-question"]')).toHaveLength(1);
+    wrapper.unmount();
+  });
+});
