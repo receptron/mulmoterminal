@@ -13,12 +13,13 @@ import { locationQuery, type FileLocation } from "./filePathLocation";
 import type { HoveredLink, LinkMenuRequest } from "./terminalLinkMenu";
 
 export interface LinkActionDeps extends LinkRouteDeps {
-  openInPane: (filePath: string, cwd: string, location: FileLocation | undefined, newTab: boolean, session: string | null) => boolean;
+  openInPane: (filePath: string, cwd: string, location: FileLocation | undefined, newTab: boolean, session: string | null, host: string | null) => boolean;
 }
 
 export function openLinkInPane(link: LinkMenuRequest, deps: LinkActionDeps): void {
-  if (deps.openInPane(link.text, link.cwd, link.location, false, link.session)) return;
-  openLinkByRoute(link.text, link.cwd, link.location, deps);
+  if (deps.openInPane(link.text, link.cwd, link.location, false, link.session, link.host)) return;
+  // The routes read this machine's disk; a remote cell's path names a file on its host (#3506).
+  if (link.host === null) openLinkByRoute(link.text, link.cwd, link.location, deps);
 }
 
 /** The Files view's own URL for a file, the way `filesGotoFile` addresses it — by query, so a name

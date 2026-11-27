@@ -13,9 +13,10 @@ const deps = (over: Partial<LinkActionDeps> = {}): LinkActionDeps => ({
 const link = (text: string, cwd = "/proj", location: HoveredLink["location"] = undefined): HoveredLink => ({ text, cwd, location });
 // The pane action alone takes the menu's whole request: the cell the click came from decides where
 // the pane opens on the tiled grid (#3238).
-const request = (text: string, cwd = "/proj", location: HoveredLink["location"] = undefined): LinkMenuRequest => ({
+const request = (text: string, cwd = "/proj", location: HoveredLink["location"] = undefined, host: string | null = null): LinkMenuRequest => ({
   ...link(text, cwd, location),
   session: "s1",
+  host,
   point: { top: 1, left: 1 },
 });
 
@@ -23,7 +24,7 @@ describe("openLinkInPane", () => {
   it("stops at the pane when it takes the link, with the line printed after it", () => {
     const d = deps({ openInPane: vi.fn(() => true) });
     openLinkInPane(request("docs/a.md", "/proj", { line: 4, col: 2 }), d);
-    expect(d.openInPane).toHaveBeenCalledWith("docs/a.md", "/proj", { line: 4, col: 2 }, false, "s1");
+    expect(d.openInPane).toHaveBeenCalledWith("docs/a.md", "/proj", { line: 4, col: 2 }, false, "s1", null);
     expect(d.openUrl).not.toHaveBeenCalled();
     expect(d.openInFiles).not.toHaveBeenCalled();
   });
@@ -34,6 +35,16 @@ describe("openLinkInPane", () => {
     expect(d.openUrl).toHaveBeenCalledWith("/api/files/browse/md?cwd=%2Fproj&path=docs%2Fa.md");
     openLinkInPane(request("src/a.ts"), d);
     expect(d.openInFiles).toHaveBeenCalledWith("src/a.ts", "/proj", undefined);
+  });
+
+  // #3506. The routes read this machine's disk; a remote cell's path is its host's.
+  it("hands a remote cell's path to the pane with its host, and to no route when the pane declines", () => {
+    const d = deps();
+    ["docs/a.md", "src/a.ts", "out/shot.png", "/elsewhere/shot.png"].forEach((text) => openLinkInPane(request(text, "/proj", undefined, "lx"), d));
+    expect(d.openInPane).toHaveBeenCalledWith("docs/a.md", "/proj", undefined, false, "s1", "lx");
+    expect(d.openUrl).not.toHaveBeenCalled();
+    expect(d.openInFiles).not.toHaveBeenCalled();
+    expect(d.openOutside).not.toHaveBeenCalled();
   });
 });
 
