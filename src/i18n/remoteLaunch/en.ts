@@ -11,4 +11,6 @@ export const remoteLaunchEn = {
   workspace: "Workspace",
   dirsFailed: "Could not read the saved directories on {label}: {error}",
   chipFill: "Use {path}",
+  resumeHeading: "or resume a conversation on {label}",
+  resumeOpen: "open",
 };

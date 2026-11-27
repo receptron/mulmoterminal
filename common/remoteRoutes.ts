@@ -6,6 +6,7 @@
 // A forwarded request reaches the remote with the power of the remote's own UI, so adding a row is
 // a decision about what a page on this machine may do there, not plumbing.
 
+import { AGENT_SESSION_LIST_PATHS } from "./agentSessionList.js";
 import { DROP_FILENAME_HEADER } from "./dropUpload.js";
 import { MD_PREVIEW_EMBED_PARAM, MD_PREVIEW_TOKEN_PARAM } from "./mdPreviewMessage.js";
 import { PREVIEW_THEME_PARAMS } from "./previewTheme.js";
@@ -65,6 +66,9 @@ const repoWrite = (path: string, bodyWithin: readonly string[]): RemoteRoute => 
   bodyWithin,
 });
 
+// The launch form's resume list: one agent's past conversations in a directory, read on its host.
+const sessionList = (path: string): RemoteRoute => ({ method: "GET", path, key: "cwd", access: "read", query: ["cwd"] });
+
 export const REMOTE_ROUTES = {
   gitStatus: { method: "GET", path: "/api/git-status", key: "cwd", access: "read", query: ["cwd", "fresh"] },
   dirConfig: { method: "GET", path: "/api/dir-config", key: "cwd", access: "read", query: ["cwd"] },
@@ -120,6 +124,13 @@ export const REMOTE_ROUTES = {
   worktreePr: repoWrite("/api/worktrees/pr", ["cwd"]),
   worktreeRemove: repoWrite("/api/worktrees/remove", ["repoDir", "path"]),
   workComment: repoWrite("/api/work-comment", ["cwd"]),
+  claudeSessions: sessionList(AGENT_SESSION_LIST_PATHS.claude),
+  codexSessions: sessionList(AGENT_SESSION_LIST_PATHS.codex),
+  antigravitySessions: sessionList(AGENT_SESSION_LIST_PATHS.antigravity),
+  grokSessions: sessionList(AGENT_SESSION_LIST_PATHS.grok),
+  museSessions: sessionList(AGENT_SESSION_LIST_PATHS.muse),
+  copilotSessions: sessionList(AGENT_SESSION_LIST_PATHS.copilot),
+  cursorSessions: sessionList(AGENT_SESSION_LIST_PATHS.cursor),
 } as const satisfies Record<string, RemoteRoute>;
 
 export type RemoteRouteName = keyof typeof REMOTE_ROUTES;

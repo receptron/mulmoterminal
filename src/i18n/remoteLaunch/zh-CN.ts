@@ -11,4 +11,6 @@ export const remoteLaunchZhCN = {
   workspace: "工作区",
   dirsFailed: "无法读取 {label} 上已保存的目录: {error}",
   chipFill: "使用 {path}",
+  resumeHeading: "或在 {label} 上继续一个对话",
+  resumeOpen: "已打开",
 };

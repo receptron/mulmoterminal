@@ -2,12 +2,21 @@
 // shell are offered: a custom agent, an account and a launcher chip are entries in THIS machine's
 // config, and the remote would resolve them against its own (or not at all).
 import type { LaunchAgent } from "../../common/launchAgent";
+import type { TerminalAgent } from "../../common/sessionAgent";
 import type { RemoteHostSummary } from "../../common/remoteHosts";
 
 export interface RemoteStart {
   host: string;
   dir: string;
   agent: LaunchAgent;
+}
+
+/** A past conversation on a remote host the launch panel resumes, in the directory its list was read for. */
+export interface RemoteResume {
+  host: string;
+  id: string;
+  cwd: string;
+  agent: TerminalAgent;
 }
 
 export const canStartOn = (host: RemoteHostSummary): boolean => host.state === "reachable";
