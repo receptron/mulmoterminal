@@ -183,6 +183,10 @@ describe("reviewPrompt", () => {
     ]);
   });
 
+  it("offers N, the severity that does not hold the verdict, beside the blocking ones", () => {
+    expect(reviewPrompt(facts)).toContain("P3 optional, N a note that does not block");
+  });
+
   it("asks a later round to check the fixes and flag repeats", () => {
     expect(reviewPrompt(facts)).not.toMatch(/repeats/);
     expect(reviewPrompt({ ...facts, round: 2 })).toMatch(/repeats one you raised before/);
