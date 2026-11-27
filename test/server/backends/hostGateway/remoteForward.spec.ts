@@ -12,7 +12,7 @@ const ROUTES: Record<string, RemoteRoute> = {
   memo: { method: "POST", path: "/api/session/:sid/memo", key: "session", access: "write", query: [] },
 };
 const decide = (method: string, path: string, query: unknown = {}) => decideForward(method, path, query, ROUTES);
-const namesSession = (query: readonly string[]): boolean => query.includes("session");
+const namesSession = (query: readonly string[]): boolean => query.includes("session") || query.includes("sessionId");
 
 describe("decideForward: which requests cross", () => {
   it("forwards a table route with its method", () => {
@@ -73,9 +73,23 @@ describe("decideForward: which requests cross", () => {
   });
   it("ships a table whose every route decides to forward itself", () => {
     Object.values(REMOTE_ROUTES).forEach((route) => {
-      const query = { ...(route.key === "cwd" ? { cwd: "/srv/p" } : {}), ...(namesSession(route.query) ? { session: SESSION } : {}) };
+      const query = { ...(route.key === "cwd" ? { cwd: "/srv/p" } : {}), ...(namesSession(route.query) ? { session: SESSION, sessionId: SESSION } : {}) };
       expect(decideForward(route.method, route.path.replace(":sid", SESSION), query)).toMatchObject({ kind: "forward", route });
     });
+  });
+});
+
+// The Tools pane (#3506): the tool calls by the path's session, the tools by `?sessionId=`.
+describe("decideForward: the Tools pane", () => {
+  it("forwards a session's tool calls and tools", () => {
+    expect(decideForward("GET", `/api/tool-calls/${SESSION}`, { cwd: "/x" })).toMatchObject({ kind: "forward", path: `/api/tool-calls/${SESSION}` });
+    expect(decideForward("GET", "/api/tools", { sessionId: SESSION, cwd: "/x" })).toMatchObject({ kind: "forward", path: `/api/tools?sessionId=${SESSION}` });
+  });
+  it.each([{}, { sessionId: "" }, { sessionId: "nope" }, { sessionId: [SESSION, SESSION] }, { session: SESSION }])("refuses the tools of %j", (query) => {
+    expect(decideForward("GET", "/api/tools", query)).toMatchObject({ kind: "refuse", status: 400 });
+  });
+  it("refuses a tool-call history whose path names no session", () => {
+    expect(decideForward("GET", "/api/tool-calls/not-a-session", {})).toMatchObject({ kind: "refuse", status: 404 });
   });
 });
 

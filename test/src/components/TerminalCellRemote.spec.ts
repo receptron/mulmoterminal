@@ -11,8 +11,15 @@ import { invalidateDirConfig } from "../../../src/composables/useDirConfig";
 import { dirKeyOf } from "../../../src/composables/dirAddress";
 import { requestCellAction } from "../../../src/composables/useCellAction";
 
+const subscribedTo = vi.hoisted(() => ({ channels: [] as string[] }));
 vi.mock("../../../src/composables/usePubSub", () => ({
-  usePubSub: () => ({ subscribe: () => () => {}, onReconnect: () => () => {} }),
+  usePubSub: () => ({
+    subscribe: (channel: string) => {
+      subscribedTo.channels.push(channel);
+      return () => {};
+    },
+    onReconnect: () => () => {},
+  }),
 }));
 
 // One partner always open, so the send button shows wherever the cell lets it; and the cwd and host
@@ -314,6 +321,31 @@ describe("a remote cell", () => {
     // Nothing about the remote worktree reaches this server (the launch form it closes to lists this machine's own).
     expect(requested.filter((url) => !url.startsWith("/remote/lx/") && (url.includes(WT) || url.includes(encodeURIComponent(WT))))).toEqual([]);
     remote.unmount();
+  });
+
+  // #3506. Its tools menu opens its tool calls and cards, read on its host, beside its actions.
+  it("offers its Tools and Canvas panes beside its actions, and no collections", async () => {
+    const remote = mountCell("lx");
+    await flushPromises();
+    await remote.find('[data-testid="cell-tools-btn"]').trigger("click");
+    await flushPromises();
+    const entries = [...document.body.querySelectorAll<HTMLElement>('[data-testid^="cell-pane-menu-"]')].map((entry) => entry.dataset.testid);
+    expect(entries).toContain("cell-pane-menu-tools");
+    expect(entries).toContain("cell-pane-menu-canvas");
+    expect(entries).not.toContain("cell-pane-menu-collections");
+    remote.unmount();
+  });
+
+  // This machine's session channel names this machine's sessions; a remote cell's is on its host.
+  it("joins no session channel of this machine, while a local cell does", async () => {
+    subscribedTo.channels = [];
+    mountCell(null);
+    await flushPromises();
+    expect(subscribedTo.channels).toContain(`session:${SESSION}`);
+    subscribedTo.channels = [];
+    mountCell("lx");
+    await flushPromises();
+    expect(subscribedTo.channels.filter((channel) => channel.includes(SESSION))).toEqual([]);
   });
 
   // #3506. The last code block is read from the session's own log, on its host.

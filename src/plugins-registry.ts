@@ -131,6 +131,9 @@ interface Registration {
   // The View draws its own surface for `data-appearance` on <html>, so PluginFrame must not
   // force its light one under it. See PluginFrame's `followsAppearance` prop.
   followsAppearance?: boolean;
+  // The View draws from the result alone: no runtime, no dispatch, no file route, no fetch. Only
+  // such a card is drawn for a remote cell (#3506), whose files and plugin routes are on its host.
+  selfContained?: true;
 }
 
 // Statically-known packages, keyed by package name; the config gates which load.
@@ -157,6 +160,7 @@ const PACKAGES: Record<string, Registration> = {
     toolName: formPlugin.toolDefinition.name,
     viewComponent: viewOf("@mulmoclaude/form-plugin", formPlugin.viewComponent),
     css: formCss,
+    selfContained: true,
   },
   "@mulmoclaude/html-plugin": {
     toolName: htmlPlugin.toolDefinition.name,
@@ -176,6 +180,8 @@ const PACKAGES: Record<string, Registration> = {
     toolName: GenerateImagePlugin.plugin.toolDefinition.name,
     viewComponent: viewOf("@mulmochat-plugin/generate-image", GenerateImagePlugin.plugin.viewComponent),
     css: mulmochatPluginCss,
+    // The picture travels in the result, base64 (`imageData`).
+    selfContained: true,
   },
   "@mulmoclaude/chart-plugin": {
     toolName: chartPlugin.toolDefinition.name,
@@ -231,6 +237,7 @@ const PACKAGES: Record<string, Registration> = {
     // The View is the model at a height the user drags, over a part that scrolls, inside a
     // `height: 100%` column: without a definite frame it has nothing to divide.
     height: CANVAS_CARD_HEIGHT,
+    selfContained: true,
   },
   "@mulmoclaude/mulmoscript-plugin": {
     toolName: mulmoScriptPlugin.toolDefinition.name,
@@ -260,6 +267,7 @@ const PACKAGES: Record<string, Registration> = {
     // therefore no card.
     viewComponent: viewOf("@gui-chat-plugin/jinglescript", jingleScriptPlugin.viewComponent),
     css: jingleScriptCss,
+    selfContained: true,
   },
   "@gui-chat-plugin/spreadsheet": {
     toolName: spreadsheetPlugin.toolDefinition.name,

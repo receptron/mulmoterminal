@@ -577,7 +577,8 @@ function watchCanvasOutput(id: string | null) {
     unseenCanvas.value += 1;
   });
 }
-watch(sessionId, watchCanvasOutput, { immediate: true });
+// This machine's channel names this machine's sessions: a remote cell's drawings are on its host (#3506).
+watch(localSession, watchCanvasOutput, { immediate: true });
 // Opening the pane on this cell clears the count — that IS having looked.
 watch(
   () => props.paneShown && props.rightPane === "canvas",
@@ -1812,7 +1813,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
               :can-park="true"
               :parked="parked"
               :panes-hidden="isRemote"
-              :history-on-host="isRemote"
+              :session-on-host="isRemote"
               :timeline-available="!!sessionId && agent === 'claude'"
               :library-available="!!localSession && agent === 'claude'"
               :restart-available="launched && !!sessionId"
