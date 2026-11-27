@@ -5,7 +5,9 @@
 // from running here is the remote's own policy, so it is passed on unchanged and required: every
 // response says `nosniff`, and every one but a PDF or media says `sandbox` too — the same split the
 // remote's raw route makes (server/backends/files/files.ts), because a browser will not open those
-// sandboxed. A response that does not say so is refused rather than served without it.
+// sandboxed. A response that does not say so is refused rather than served without it, and so is a
+// sandbox loosened past what the remote ever sends: `allow-same-origin` beside `allow-scripts` would
+// run the remote's document as THIS origin.
 
 export const BYTES_SEGMENT = "/bytes";
 
@@ -25,8 +27,22 @@ const UNSANDBOXED_TYPES = [/^application\/pdf\b/i, /^audio\//i, /^video\//i];
 
 export type BytesPlan = { ok: true; headers: Record<string, string>; rendered: boolean } | { ok: false; reason: string };
 
-/** Whether a policy sandboxes the document: a `sandbox` directive, with or without its allowances. */
-export const sandboxes = (policy: string): boolean => policy.split(";").some((directive) => directive.trim().split(/\s+/)[0]?.toLowerCase() === "sandbox");
+// The only allowance the remote's sandboxes carry (server/files/mdPreviewEmbed.ts). Listed rather than
+// banned one by one, so a token nobody thought of is refused instead of passed.
+const PERMITTED_SANDBOX_ALLOWANCES: ReadonlySet<string> = new Set(["allow-scripts"]);
+
+const sandboxDirectives = (policy: string): string[][] =>
+  policy
+    .split(";")
+    .map((directive) => directive.trim().toLowerCase().split(/\s+/))
+    .filter((tokens) => tokens[0] === "sandbox");
+
+/** Whether a policy keeps the document in an opaque origin: a `sandbox` directive, and none that
+ *  allows more than scripts. */
+export const sandboxes = (policy: string): boolean => {
+  const directives = sandboxDirectives(policy);
+  return directives.length > 0 && directives.every((tokens) => tokens.slice(1).every((token) => PERMITTED_SANDBOX_ALLOWANCES.has(token)));
+};
 
 /** What to send back for a remote response with these headers, or why not to send it at all. */
 export function bytesPlan(header: (name: string) => string | null): BytesPlan {

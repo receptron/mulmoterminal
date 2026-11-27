@@ -13,13 +13,25 @@ const headersOf =
 const NOSNIFF = { "x-content-type-options": "nosniff" };
 
 describe("sandboxes", () => {
-  it.each(["sandbox", "SANDBOX", "sandbox allow-scripts; script-src 'nonce-x'", "default-src 'none'; sandbox", " sandbox "])(
+  it.each(["sandbox", "SANDBOX", "sandbox allow-scripts; script-src 'nonce-x'", "default-src 'none'; sandbox", " sandbox ", "sandbox ALLOW-SCRIPTS"])(
     "reads %j as sandboxing",
     (policy) => {
       expect(sandboxes(policy)).toBe(true);
     },
   );
   it.each(["", "default-src 'self'", "sandboxed", "script-src sandbox", "frame-ancestors 'none'"])("reads %j as not sandboxing", (policy) => {
+    expect(sandboxes(policy)).toBe(false);
+  });
+  // Scripts plus the same origin is this origin. Anything past scripts is refused, named or not.
+  it.each([
+    "sandbox allow-scripts allow-same-origin",
+    "sandbox allow-same-origin",
+    "SANDBOX ALLOW-SAME-ORIGIN ALLOW-SCRIPTS",
+    "sandbox allow-top-navigation",
+    "sandbox allow-popups",
+    "sandbox allow-something-new",
+    "sandbox; sandbox allow-scripts allow-same-origin",
+  ])("reads %j as loosened past what the remote sends", (policy) => {
     expect(sandboxes(policy)).toBe(false);
   });
 });
@@ -66,6 +78,10 @@ describe("bytesPlan", () => {
     ["a document without a sandbox", { "content-type": "text/html", ...NOSNIFF }],
     ["a document under a policy that does not sandbox", { "content-type": "text/html", "content-security-policy": "default-src 'self'", ...NOSNIFF }],
     ["an SVG without a sandbox", { "content-type": "image/svg+xml", ...NOSNIFF }],
+    [
+      "a document whose sandbox keeps this origin",
+      { "content-type": "text/html", "content-security-policy": "sandbox allow-scripts allow-same-origin", ...NOSNIFF },
+    ],
     ["a PDF without nosniff", { "content-type": "application/pdf" }],
   ])("refuses %s", (_name, given) => {
     expect(bytesPlan(headersOf(given))).toMatchObject({ ok: false });
