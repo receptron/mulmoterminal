@@ -4,6 +4,7 @@
 import { isAskQuestionDone, isAskQuestionEvent, type AskQuestionDone, type AskQuestionEvent } from "./askQuestion.js";
 import { isRecord } from "./isRecord.js";
 import { isUnknownArray } from "./isUnknownArray.js";
+import { toolGroupsAnnouncementOf, type ToolGroupsAnnouncement } from "./toolGroupsAnnouncement.js";
 
 /** It sits unescaped in a URL path segment, so it is limited to what needs no escaping. */
 export const REMOTE_HOST_ID_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
@@ -197,6 +198,21 @@ export const parseRemoteAskQuestion = (data: unknown): RemoteAskQuestion | null 
   isRecord(data) && isRemoteHostId(data.host) && (isAskQuestionEvent(data.question) || isAskQuestionDone(data.question))
     ? { host: data.host, question: data.question }
     : null;
+
+/** The Mac's channel for a remote host's tool-group announcements (common/toolGroupsAnnouncement.ts), so
+ *  a remote cell re-asks what its session can draw once its MCP client is up. Separate from
+ *  `tool-groups`, whose listeners take the session id to be this machine's. */
+export const REMOTE_TOOL_GROUPS_CHANNEL = "remote-tool-groups";
+
+export interface RemoteToolGroups {
+  host: string;
+  announcement: ToolGroupsAnnouncement;
+}
+
+export function parseRemoteToolGroups(data: unknown): RemoteToolGroups | null {
+  const announcement = isRecord(data) ? toolGroupsAnnouncementOf(data.announcement) : null;
+  return isRecord(data) && isRemoteHostId(data.host) && announcement ? { host: data.host, announcement } : null;
+}
 
 const OPTIONAL_TEXT_FIELDS = ["cwd", "lastPrompt", "aiTitle", "lastResponse", "memo"] as const;
 

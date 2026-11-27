@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   parseRemoteAskQuestion,
+  parseRemoteToolGroups,
   remoteSessionAddressOf,
   parseRemoteSessionChannel,
   remoteSessionChannel,
@@ -207,5 +208,23 @@ describe("parseRemoteAskQuestion", () => {
     [null, {}, { host: "lx" }, { host: "lx", question: { a: 1 } }, { host: "LX", question: dialog }, { question: dialog }].forEach((data) =>
       expect(parseRemoteAskQuestion(data)).toBeNull(),
     );
+  });
+});
+
+describe("parseRemoteToolGroups", () => {
+  it("reads a relayed announcement with its host, keeping an absent groups absent", () => {
+    expect(parseRemoteToolGroups({ host: "lx", announcement: { sessionId: "s1", groups: ["render"] } })).toEqual({
+      host: "lx",
+      announcement: { sessionId: "s1", groups: ["render"] },
+    });
+    expect(parseRemoteToolGroups({ host: "lx", announcement: { sessionId: "s1" } })).toEqual({ host: "lx", announcement: { sessionId: "s1" } });
+    [
+      null,
+      {},
+      { host: "lx" },
+      { host: "lx", announcement: { sessionId: "" } },
+      { host: "LX", announcement: { sessionId: "s1" } },
+      { announcement: { sessionId: "s1" } },
+    ].forEach((data) => expect(parseRemoteToolGroups(data)).toBeNull());
   });
 });

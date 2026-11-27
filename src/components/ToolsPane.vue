@@ -148,9 +148,9 @@ watch(
 // pushed `groups`: the reply also carries the tool DESCRIPTIONS and `guiOnlyHistory`, which the push
 // does not, and the announcement for a single-view session carries no groups at all (see
 // mcp-routes.ts).
-// This machine's announcements name this machine's sessions: a remote one is not re-asked by them.
+// An announcement names a session on one host: this machine's, or a remote one's through the relay.
 onToolGroupsAnnounced((announcement) => {
-  if (!props.host && announcement.sessionId === props.sessionId) void loadAvailableTools(props.sessionId, "refreshed");
+  if (announcement.host === (props.host ?? null) && announcement.sessionId === props.sessionId) void loadAvailableTools(props.sessionId, "refreshed");
 });
 
 function callKey(c: ToolCall, i: number): string {
