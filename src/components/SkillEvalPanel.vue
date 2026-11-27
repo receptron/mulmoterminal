@@ -83,7 +83,8 @@ async function refresh(): Promise<void> {
   if (!visible.value) return;
   const asked = selection;
   const mine = ++evalReads;
-  const read = await loadSkillEval(props.source, props.skill.slug);
+  evalReadsOut += 1;
+  const read = await loadSkillEval(props.source, props.skill.slug).finally(() => (evalReadsOut -= 1));
   if (asked !== selection || mine !== evalReads) return;
   // A failed read while a run is shown keeps what is on screen and tries again on the next tick.
   if (read === null) {
@@ -100,12 +101,17 @@ async function refresh(): Promise<void> {
 
 const visible = useOverlayVisible();
 function startPolling(): void {
-  if (visible.value) poll ??= setInterval(() => void refresh(), POLL_MS);
+  // A tick waits for a read still out: a newer one would outdate it, and with slow reads none would land.
+  if (visible.value)
+    poll ??= setInterval(() => {
+      if (evalReadsOut === 0) void refresh();
+    }, POLL_MS);
 }
 // Only the newest read is applied: one from before a hide can answer after the read made on showing
 // again. One that answers while hidden is newer than what is shown, so it is kept. A start is not a
 // read (`selection` is the skill), so one that answers after showing again is followed.
 let evalReads = 0;
+let evalReadsOut = 0;
 watch(visible, (shown) => (shown ? void refresh() : stopPolling()));
 
 watch(

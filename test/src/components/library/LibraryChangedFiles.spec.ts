@@ -1,6 +1,7 @@
 // The changed-files strip in the reader (#3330): hidden with nothing to show, a diff of the chosen
 // step once opened, and a reason in place of a diff it cannot draw.
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 import { mountUnderOverlay } from "../underOverlay";
 import type { LibraryConversation } from "../../../../common/library";
@@ -10,8 +11,12 @@ let files: LibraryTrackedFile[] | null = [];
 let texts: Record<string, LibraryFileText> = {};
 const asked: string[] = [];
 let textGate: Promise<void> = Promise.resolve();
+let filesGate: Promise<void> = Promise.resolve();
 vi.mock("../../../../src/composables/libraryApi", () => ({
-  loadLibraryFiles: () => Promise.resolve(files),
+  loadLibraryFiles: async () => {
+    await filesGate;
+    return files;
+  },
   loadLibraryFileText: async (_id: string, _cwd: string | null, file: string, version: number | "now") => {
     asked.push(`${file}@${String(version)}`);
     await textGate;
@@ -41,6 +46,7 @@ beforeEach(() => {
   asked.length = 0;
   drawn.length = 0;
   textGate = Promise.resolve();
+  filesGate = Promise.resolve();
 });
 
 async function opened() {
@@ -152,6 +158,51 @@ describe("an open diff shown again", () => {
     await showAgain();
     expect(wrapper.find("[data-testid=library-file-blocked]").exists()).toBe(false);
     expect(drawn.at(-1)).toEqual(["one", "two"]);
+    wrapper.unmount();
+  });
+});
+
+describe("an open diff whose list comes back as new objects", () => {
+  it("keeps the diff when the same file's sides then cannot be read, and reads them once", async () => {
+    files = [tracked("a.md", [[1, true]])];
+    texts = { "a.md@1": { text: "one" }, "a.md@now": { text: "two" } };
+    const { wrapper, showAgain } = mountUnderOverlay(LibraryChangedFiles, { conversation }, { attachTo: document.body });
+    await flushPromises();
+    await wrapper.find("[data-testid=library-files-toggle]").trigger("click");
+    await flushPromises();
+    expect(drawn.at(-1)).toEqual(["one", "two"]);
+    files = [tracked("a.md", [[1, true]])]; // the same file, read again: a new object
+    texts = {};
+    asked.length = 0;
+    await showAgain();
+    expect(wrapper.find("[data-testid=library-file-blocked]").exists()).toBe(false);
+    expect(drawn.at(-1)).toEqual(["one", "two"]);
+    expect(asked).toEqual(["a.md@1", "a.md@now"]);
+    wrapper.unmount();
+  });
+});
+
+describe("a diff being read when the conversation changes", () => {
+  it("is not taken for the next conversation's diff of the same file", async () => {
+    files = [tracked("a.md", [[1, true]])];
+    texts = { "a.md@1": { text: "one" }, "a.md@now": { text: "two" } };
+    const shownConversation = ref(conversation);
+    const { wrapper } = mountUnderOverlay(LibraryChangedFiles, () => ({ conversation: shownConversation.value }), { attachTo: document.body });
+    await flushPromises();
+    let releaseText: () => void = () => {};
+    textGate = new Promise((resolve) => (releaseText = resolve));
+    await wrapper.find("[data-testid=library-files-toggle]").trigger("click");
+    await flushPromises();
+    let releaseFiles: () => void = () => {};
+    filesGate = new Promise((resolve) => (releaseFiles = resolve));
+    shownConversation.value = { ...conversation, id: "s2" };
+    await flushPromises();
+    releaseText();
+    await flushPromises();
+    texts = {};
+    releaseFiles();
+    await flushPromises();
+    expect(wrapper.find("[data-testid=library-file-blocked]").exists()).toBe(true);
     wrapper.unmount();
   });
 });

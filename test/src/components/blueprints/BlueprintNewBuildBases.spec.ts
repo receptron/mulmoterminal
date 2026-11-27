@@ -158,6 +158,45 @@ describe("the questions shown again", () => {
   });
 });
 
+describe("the answers when the questions are read again", () => {
+  it("keep a cleared answer clear, drop one no longer offered, and start only a new question from its default", async () => {
+    const text = (id: string, fallback?: string) => ({ id, label: id, why: "", kind: "text", ...(fallback ? { default: fallback } : {}) });
+    const select = (id: string, options: string[]) => ({ id, label: id, why: "", kind: "select", options });
+    previewPair.mockReset();
+    previewPair.mockResolvedValue({
+      ok: true,
+      value: { hearing: { questions: [text("tone", "plain"), select("format", ["pdf", "html"]), text("goal")] }, steps: [] },
+    });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintNewBuild, {});
+    await flushPromises();
+    const fields = () => wrapper.findAllComponents({ name: "BlueprintHearingField" });
+    const answerTo = (id: string) =>
+      fields()
+        .find((field) => field.props("question").id === id)
+        ?.props("answer");
+    expect(answerTo("tone")).toBe("plain");
+    const emitTo = async (id: string, answer: string | undefined) => {
+      fields()
+        .find((field) => field.props("question").id === id)
+        ?.vm.$emit("update", answer);
+      await flushPromises();
+    };
+    await emitTo("tone", undefined); // the person cleared the default
+    await emitTo("format", "pdf");
+    await emitTo("goal", "a tidy report");
+    previewPair.mockResolvedValue({
+      ok: true,
+      value: { hearing: { questions: [text("tone", "plain"), select("format", ["html", "doc"]), text("goal"), text("audience", "everyone")] }, steps: [] },
+    });
+    await showAgain();
+    expect(answerTo("tone")).toBeUndefined();
+    expect(answerTo("format")).toBeUndefined();
+    expect(answerTo("goal")).toBe("a tidy report");
+    expect(answerTo("audience")).toBe("everyone");
+    wrapper.unmount();
+  });
+});
+
 describe("questions whose first read failed", () => {
   it("are read when the screen is shown again", async () => {
     const question = { id: "goal", label: "goal", why: "", kind: "text" };

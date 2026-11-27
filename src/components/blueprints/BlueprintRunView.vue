@@ -45,7 +45,8 @@ const currentState = computed(() => (view.value && current.value ? view.value.st
 // What was typed answers the step it was typed for: once the build moves on (a poll, or the screen
 // shown again later), it would be sent to a different question.
 watch(
-  () => `${current.value?.id ?? ""}:${currentState.value?.status ?? ""}`,
+  // The question and round too: asking again, or the next round, keeps the status.
+  () => [current.value?.id, currentState.value?.status, currentState.value?.round, currentState.value?.question].join("\u0000"),
   () => {
     answer.value = "";
     rejectReason.value = "";

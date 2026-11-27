@@ -36,6 +36,7 @@ watch(
   () => [props.conversation.id, props.conversation.cwd] as const,
   async ([id, cwd]) => {
     const mine = ++reads;
+    sideReads += 1; // sides still being read are the last conversation's
     files.value = null;
     chosenPath.value = null;
     const found = await loadLibraryFiles(id, cwd);
@@ -58,18 +59,21 @@ async function reread(): Promise<void> {
     return;
   }
   files.value = found;
+  // The sides follow from the watcher below: the new list is a new file object, so it fires.
   if (!found.some((file) => file.trackingPath === chosenPath.value)) chosenPath.value = found[0]?.trackingPath ?? null;
-  const file = chosen.value;
-  const shown = step.value;
-  if (file && shown && open.value) void loadSides(file, shown, true);
 }
 onOverlayShownAgain(() => void reread());
+
+/** Which diff `sides` holds, so reading the same one again (a list re-read) keeps it until the answer. */
+let sidesFor: string | null = null;
+const sidesKey = (file: LibraryTrackedFile, shown: DiffStep): string => [props.conversation.id, file.trackingPath, shown.from, shown.to].join("\u0000");
 
 /** `kept`: a re-read of the diff shown, which keeps it until both sides come back. */
 async function loadSides(file: LibraryTrackedFile, shown: DiffStep, kept = false): Promise<void> {
   const mine = ++sideReads;
   if (!kept) sides.value = null;
   const { id, cwd } = props.conversation;
+  const key = sidesKey(file, shown); // taken now: the conversation can change while the sides are read
   const [original, current] = await Promise.all([
     loadLibraryFileText(id, cwd, file.trackingPath, shown.from),
     loadLibraryFileText(id, cwd, file.trackingPath, shown.to),
@@ -78,10 +82,11 @@ async function loadSides(file: LibraryTrackedFile, shown: DiffStep, kept = false
   if (kept && sides.value !== null && (original === null || current === null)) return;
   const failed: LibraryFileText = { text: null, reason: "unreadable" };
   sides.value = { original: original ?? failed, current: current ?? failed };
+  sidesFor = key;
 }
 
 watch([chosen, step, open], ([file, shown, isOpen]) => {
-  if (file && shown && isOpen) void loadSides(file, shown);
+  if (file && shown && isOpen) void loadSides(file, shown, sidesKey(file, shown) === sidesFor);
 });
 
 /** Why the diff cannot be drawn, or null when both sides can: an absent side is drawn as empty. */

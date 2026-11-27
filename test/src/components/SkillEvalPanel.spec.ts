@@ -285,6 +285,22 @@ describe("SkillEvalPanel", () => {
     wrapper.unmount();
   });
 
+  it("waits for a slow read before polling again, so its answer is shown", async () => {
+    vi.useFakeTimers();
+    overview = { ...base, set, runs: [run(true, false, { status: "running", attempts: [] })], activeRunId: "1795000000000-aaaaaaaa" };
+    const wrapper = await mountPanel();
+    let release: (value: SkillEvalOverview) => void = () => {};
+    loads.push(new Promise((resolve) => (release = resolve)));
+    await vi.advanceTimersByTimeAsync(3000); // a poll read goes out, and takes longer than the poll
+    const readsOut = loadCount();
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(loadCount()).toBe(readsOut);
+    release({ ...base, set, runs: [run(true, false)] });
+    await flushPromises();
+    expect(wrapper.find("[data-testid=skill-eval-verdict]").text()).toBe("It helps");
+    wrapper.unmount();
+  });
+
   it("opens one drafting cell however often the button is pressed while it opens", async () => {
     let answer: (id: string | null) => void = () => {};
     authoring = new Promise((resolve) => (answer = resolve));

@@ -237,4 +237,23 @@ describe("the work list read again", () => {
     expect(wrapper.text()).not.toContain("the list could not be read");
     wrapper.unmount();
   });
+
+  it("says the re-read failed when an empty list left nothing on screen, but not over a problem shown in its place", async () => {
+    const props = { runId: "run-00000001", steps, state: at("passed", "awaiting-answer", 1) };
+    loadTargets.mockReset();
+    loadTargets.mockResolvedValueOnce(listed([])).mockResolvedValue({ ok: false, error: "the list could not be read" });
+    const empty = mountUnderOverlay(BlueprintTargets, props);
+    await flushPromises();
+    await empty.showAgain();
+    expect(empty.wrapper.get('[data-testid="blueprint-targets-load-error"]').text()).toContain("the list could not be read");
+    empty.wrapper.unmount();
+    loadTargets.mockReset();
+    loadTargets.mockResolvedValueOnce(listed([], "the list is malformed")).mockResolvedValue({ ok: false, error: "the list could not be read" });
+    const problem = mountUnderOverlay(BlueprintTargets, props);
+    await flushPromises();
+    await problem.showAgain();
+    expect(problem.wrapper.find('[data-testid="blueprint-targets-load-error"]').exists()).toBe(false);
+    expect(problem.wrapper.get('[data-testid="blueprint-targets-problem"]').text()).toContain("the list is malformed");
+    problem.wrapper.unmount();
+  });
 });

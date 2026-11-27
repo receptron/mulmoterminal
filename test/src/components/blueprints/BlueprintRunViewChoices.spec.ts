@@ -109,4 +109,23 @@ describe("an answer typed before the build moved on", () => {
     vi.useRealTimers();
     wrapper.unmount();
   });
+
+  it("is cleared when the question is asked again in other words, or the next round asks, with the status unchanged", async () => {
+    vi.useFakeTimers();
+    loadRun.mockReset();
+    loadRun.mockResolvedValue(runView(asking()));
+    const wrapper = mount(BlueprintRunView, { props: { runId: "run-00000001" } });
+    await flushPromises();
+    const typed = () => wrapper.get<HTMLTextAreaElement>('[data-testid="blueprint-answer"]').element.value;
+    await wrapper.get('[data-testid="blueprint-answer"]').setValue("yes, fix it");
+    loadRun.mockResolvedValue(runView({ ...asking(), question: "Fix the type, or rename it?" }));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(typed()).toBe("");
+    await wrapper.get('[data-testid="blueprint-answer"]').setValue("rename it");
+    loadRun.mockResolvedValue(runView({ ...asking(), question: "Fix the type, or rename it?", round: 2 }));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(typed()).toBe("");
+    vi.useRealTimers();
+    wrapper.unmount();
+  });
 });
