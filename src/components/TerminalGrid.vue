@@ -1094,7 +1094,7 @@ watch(
 // server to say so is what stops that first "no" from standing until the user collapses and
 // re-expands the cell.
 onToolGroupsAnnounced((announcement) => {
-  if (announcement.sessionId !== paneCellSessionId.value) return;
+  if (announcement.host !== paneCellHost.value || announcement.sessionId !== paneCellSessionOnHost.value) return;
   // Only the announcement that actually carries groups says anything about them; the bare
   // "my MCP client is up" one is a cue to ask again, not an empty answer.
   if (!announcement.groups) return;

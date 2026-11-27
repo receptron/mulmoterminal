@@ -11,6 +11,7 @@
 // Module-level rather than per-consumer: the two consumers must agree about one composition, and it
 // belongs to the document, not to either of them.
 import { useImeAwareEnter } from "./useImeAwareEnter";
+import { isMetaDuringComposition } from "./composingMeta";
 
 // The Enter callback is unused — this consumer wants only the composition tracking and the
 // predicate. Reusing the composable rather than restating the rule keeps ONE definition of "is this
@@ -35,6 +36,12 @@ if (typeof window !== "undefined") {
 
 /** True while an IME candidate is open, and for a moment after Safari closes one. */
 export const isImeConfirming = (event: KeyboardEvent): boolean => shared.isImeConfirmation(event);
+
+/** What xterm's custom key handler must return for a key the IME owns, or undefined when it owns none. */
+export const xtermImeKeyVerdict = (event: KeyboardEvent): boolean | undefined => {
+  if (isMetaDuringComposition(event)) return false;
+  return isImeConfirming(event) ? true : undefined;
+};
 
 /** Drop any composition state, as losing focus does. Exported for specs, which share this module's
  *  state and would otherwise carry a composition from one test into the next. */

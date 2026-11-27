@@ -67,7 +67,9 @@ export function useGridKeys(
     cancel: prefix.cancel,
     onKey: (keymap, e) => {
       // In the order the grid always checked: the grid, then the target, then an IME confirmation.
-      if (!available() || keyYieldsToPage(e)) return prefix.cancel();
+      // A key another handler already took is not the grid's too: an app key run off the grid can
+      // put the grid in front before this listener sees it, and a toggle run twice undoes itself.
+      if (e.defaultPrevented || !available() || keyYieldsToPage(e)) return prefix.cancel();
       const shortcut = prefix.claim(keymap, e, keyState());
       if (shortcut) runAction(shortcut);
     },

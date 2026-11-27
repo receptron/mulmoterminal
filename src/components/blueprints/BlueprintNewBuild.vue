@@ -2,7 +2,7 @@
 // Starting a build: where it goes, which template, and the template's interview. Nothing starts until
 // every question that applies is answered — the first step writes the spec from these answers, and a
 // gap here is a guess there.
-import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { isPersonLanguage, PERSON_LANGUAGE_NAMES, type PersonLanguage } from "../../../common/blueprint/personLanguage";
 import {
@@ -34,6 +34,7 @@ import { basePacks, basesFor, firstOfEachUsecase, presetGroups, usecaseGroups, u
 import { latestOnly } from "./latestOnly";
 import { failureText } from "./refusalText";
 import { keepFormFill, takeFormFill, type FormFill } from "../../composables/useBlueprintsView";
+import { onOverlayShownAgain, useOverlayVisible } from "../../composables/overlayVisibility";
 import { openTerminalAt } from "../../composables/useNewTerminal";
 import BlueprintHearingField from "./BlueprintHearingField.vue";
 
@@ -107,21 +108,49 @@ const ready = computed(
     !starting.value && projectDir.value.trim() !== "" && preview.value !== null && unansweredQuestions(preview.value.hearing, formAnswers.value).length === 0,
 );
 
+// The form is kept while the screen is closed, so the lists are read again when it is shown again,
+// and only the newest read of each is applied.
+const foldersRead = latestOnly();
+const listsRead = latestOnly();
+
 async function loadKnownFolders(): Promise<void> {
+  const ticket = foldersRead.take();
   const known = await listKnownFolders();
-  if (known.ok) knownFolders.value = known.value.folders;
+  if (foldersRead.isLatest(ticket) && known.ok) knownFolders.value = known.value.folders;
 }
 
-onMounted(async () => {
-  void loadKnownFolders();
-  const listed = await listPresets();
+/** The examples and the packs, read again; false when the packs could not be read (said on the first read only). */
+async function loadLists(first: boolean): Promise<boolean> {
+  const ticket = listsRead.take();
+  const [listed, result] = await Promise.all([listPresets(), listPacks()]);
+  if (!listsRead.isLatest(ticket)) return false;
   if (listed.ok) presets.value = listed.value.presets;
-  const result = await listPacks();
   if (!result.ok) {
-    error.value = failureText(t, result);
-    return;
+    if (first) error.value = failureText(t, result);
+    return false;
   }
+  if (first) error.value = null;
   packs.value = result.value.packs;
+  return true;
+}
+
+/** The form set up from the packs, once they could be read; until then each showing tries again. */
+let setUp = false;
+onOverlayShownAgain(() => {
+  void loadKnownFolders();
+  void rereadPreview();
+  recheckPresence();
+  void (setUp ? loadLists(false) : setUpForm());
+});
+
+onMounted(() => {
+  void loadKnownFolders();
+  void setUpForm();
+});
+
+async function setUpForm(): Promise<void> {
+  if (!(await loadLists(true))) return;
+  setUp = true;
   const fill = pendingFill.value;
   if (fill && !base.value) {
     projectDir.value = fill.projectDir;
@@ -129,7 +158,7 @@ onMounted(async () => {
   }
   // Only when nothing was chosen yet: an example picked while this loaded must not be overwritten.
   if (!base.value) base.value = bases.value[0]?.slug ?? "";
-});
+}
 
 // Each follows the other only when the pair would not fit: an example, a follow-up or a kept form sets both at once.
 watch(base, (baseSlug) => {
@@ -201,6 +230,9 @@ watch([base, usecase], ([baseSlug, usecaseSlug]) => loadPreview(baseSlug, usecas
 // Asked once typing pauses, not per keystroke.
 const PRESENCE_WAIT_MS = 300;
 let presenceTimer: ReturnType<typeof setTimeout> | undefined;
+const shownForm = useOverlayVisible();
+// A pause in typing that ends after the form is gone has no folder to ask about.
+onBeforeUnmount(() => clearTimeout(presenceTimer));
 watch([projectDir, preview], () => {
   clearTimeout(presenceTimer);
   const ticket = presence.take();
@@ -208,12 +240,23 @@ watch([projectDir, preview], () => {
   const paths = preview.value ? neededPaths(preview.value.hearing) : [];
   const dir = projectDir.value.trim();
   if (paths.length === 0 || dir === "") return;
-  presenceTimer = setTimeout(() => void askPresence(dir, paths, ticket), PRESENCE_WAIT_MS);
+  // Typing just before a close: nothing is asked while hidden, and showing again asks.
+  presenceTimer = setTimeout(() => {
+    if (shownForm.value) void askPresence(dir, paths, ticket);
+  }, PRESENCE_WAIT_MS);
 });
 
 async function askPresence(dir: string, paths: string[], ticket: number): Promise<void> {
   const result = await folderPresentPaths(dir, paths);
   if (presence.isLatest(ticket)) presentPaths.value = result.ok ? new Set(result.value.present) : null;
+}
+// The folder may have changed while the screen was closed: its paths are asked about again, keeping
+// what was known until the answer comes.
+function recheckPresence(): void {
+  const paths = preview.value ? neededPaths(preview.value.hearing) : [];
+  const dir = projectDir.value.trim();
+  if (paths.length === 0 || dir === "") return;
+  void askPresence(dir, paths, presence.take());
 }
 // A refusal names the folder it was about; another folder typed since is not the one to trust.
 watch(projectDir, () => {
@@ -247,6 +290,22 @@ async function loadPreview(baseSlug: string, usecaseSlug: string): Promise<void>
   fillFromPending();
 }
 
+// The pair's packs may have changed while the screen was closed: the questions are read again, keeping
+// every answer given (a question that is new starts from its default) and, on a failed read, the
+// questions shown.
+async function rereadPreview(): Promise<void> {
+  const baseSlug = base.value;
+  const usecaseSlug = usecase.value;
+  if (!baseSlug || !usecaseSlug) return;
+  // Never read (the first read failed): there are no answers to keep, so read it as a fresh pair.
+  if (preview.value === null) return loadPreview(baseSlug, usecaseSlug);
+  const ticket = previews.take();
+  const result = await previewPair(baseSlug, usecaseSlug);
+  if (!previews.isLatest(ticket) || !result.ok) return;
+  preview.value = result.value;
+  answers.value = { ...defaultAnswers(result.value.hearing), ...answers.value };
+}
+
 function setAnswer(id: string, answer: HearingAnswer | undefined): void {
   const others = Object.fromEntries(Object.entries(answers.value).filter(([key]) => key !== id));
   answers.value = answer === undefined ? others : { ...others, [id]: answer };
@@ -275,6 +334,12 @@ async function start(personalDataConfirmed = false): Promise<void> {
   error.value = null;
   emit("started", result.value.runId);
 }
+
+// The screen is kept while closed, so the form is still filled in when the person comes back from the
+// terminal: the copy kept for a reload is spent then, or it would fill a later, unrelated new build.
+onOverlayShownAgain(() => {
+  takeFormFill();
+});
 
 // The prompt is the person's to answer, in a terminal of their own; the form waits for them with everything in it.
 function openToTrust(): void {

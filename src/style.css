@@ -193,6 +193,16 @@
   --focus-zoom: 1.03;
 }
 
+/* Where the full-screen screens start: under the toolbar (h-10), and under the screen tabs (h-8)
+   too while those are up. Read from the DOM rather than set from script, so no screen has to know
+   the strip exists. */
+:root {
+  --screen-top: 2.5rem;
+}
+:root:has([data-screen-tabs]) {
+  --screen-top: 4.5rem;
+}
+
 /* Light themes: status pills become light-tinted with dark, saturated text so
    they stay legible on a bright background.
    Keyed on data-appearance, NOT on a list of theme ids (#996): a user-defined light theme has

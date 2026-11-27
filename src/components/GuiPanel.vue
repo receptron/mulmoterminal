@@ -341,9 +341,9 @@ watch(
 // The answer above is normally asked BEFORE it can be true: the browser is handed a session id
 // while claude is still being spawned, so its MCP client has not connected to the group URLs yet
 // and the server has not learned which tools this cell got.
-// This machine's announcements name this machine's sessions.
+// An announcement names a session on one host: this machine's, or a remote one's through the relay.
 onToolGroupsAnnounced((announcement) => {
-  if (!props.host && announcement.sessionId === props.sessionId) void loadAvailableTools(props.sessionId);
+  if (announcement.host === (props.host ?? null) && announcement.sessionId === props.sessionId) void loadAvailableTools(props.sessionId);
 });
 
 // What this session can be asked for, grouped. Ordered by TOOL_GROUPS (blast radius, least

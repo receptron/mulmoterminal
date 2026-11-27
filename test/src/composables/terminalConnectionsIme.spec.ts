@@ -94,4 +94,19 @@ describe("terminal keys during an IME composition", () => {
     expect(mockKeyState.handler(bareEnter(false))).toBe(true);
     expect(ws.sent).toEqual([]);
   });
+
+  // xtermjs/xterm.js#6244: xterm would commit the text on this keydown AND on compositionend.
+  // `false` is what stops xterm before its composition helper ever sees the key.
+  it("withholds a bare Meta keydown during a composition from xterm", () => {
+    const ws = connectEscCr();
+
+    expect(mockKeyState.handler({ ...bareEnter(true), key: "Meta", metaKey: true })).toBe(false);
+    expect(ws.sent).toEqual([]);
+  });
+
+  it("still hands a Meta keydown outside a composition to xterm", () => {
+    connectEscCr();
+
+    expect(mockKeyState.handler({ ...bareEnter(false), key: "Meta", metaKey: true })).toBe(true);
+  });
 });

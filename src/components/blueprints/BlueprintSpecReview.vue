@@ -6,6 +6,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { loadSpec, sendSpecMessage, type SpecView } from "../../composables/blueprintsApi";
 import { latestOnly } from "./latestOnly";
+import { onOverlayShownAgain, useOverlayVisible } from "../../composables/overlayVisibility";
 import { failureText } from "./refusalText";
 import MarkdownProse from "../MarkdownProse.vue";
 import BlueprintLiveActivity from "./BlueprintLiveActivity.vue";
@@ -22,7 +23,10 @@ const sending = ref(false);
 const error = ref<string | null>(null);
 const reads = latestOnly();
 
+// The run's poll can answer after the screen was closed and move what this follows; showing it again reads.
+const visible = useOverlayVisible();
 async function refresh(): Promise<void> {
+  if (!visible.value) return;
   const ticket = reads.take();
   const result = await loadSpec(props.runId);
   if (!reads.isLatest(ticket)) return;
@@ -31,6 +35,8 @@ async function refresh(): Promise<void> {
 }
 
 onMounted(() => void refresh());
+// The screen is kept while closed; the spec may have been edited in the meantime.
+onOverlayShownAgain(() => void refresh());
 // The parent's poll sees a reply land (the chat grows, the revision ends); the spec is re-read then.
 watch(
   () => [props.revisionSessionId, props.chatCount],

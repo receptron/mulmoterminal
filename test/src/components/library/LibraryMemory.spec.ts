@@ -176,6 +176,15 @@ describe("LibraryMemory", () => {
     expect(wrapper.find("[data-testid=memory-body]").text()).toBe("Rewritten while the Library was closed.");
   });
 
+  it("keeps the chosen memory's text when reading it again fails", async () => {
+    const wrapper = await mountMemory();
+    expect(wrapper.find("[data-testid=memory-body]").text()).toContain("Always Japanese.");
+    delete texts["-w-app/reply.md"]; // the read itself fails
+    await wrapper.setProps({ projects: projects.map((project) => ({ ...project })) });
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-body]").text()).toContain("Always Japanese.");
+  });
+
   it("says a memory could not be read rather than showing it empty", async () => {
     texts["-w-app/reply.md"] = null;
     const wrapper = await mountMemory();

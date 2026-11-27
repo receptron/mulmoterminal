@@ -1,24 +1,11 @@
 import { onBeforeUnmount } from "vue";
-import { isRecord } from "../../common/isRecord";
-import { TOOL_GROUPS_CHANNEL } from "../toolGroupsChannel";
+import { TOOL_GROUPS_CHANNEL, toolGroupsAnnouncementOf, type ToolGroupsAnnouncement } from "../../common/toolGroupsAnnouncement";
+import { REMOTE_TOOL_GROUPS_CHANNEL, parseRemoteToolGroups } from "../../common/remoteHosts";
 import { usePubSub } from "./usePubSub";
 
-// What the server announces once a session's MCP client has connected.
-//
-// `groups` is absent on the bare "my client is up" announcement, which is sent for EVERY session —
-// including an all-tools one, which has no groups to report — so a missing `groups` must never be
-// read as an empty list: that would tell a cell that can draw that it cannot. Undefined and `[]`
-// are different answers here, which is why this parses rather than defaults.
-export interface ToolGroupsAnnouncement {
-  sessionId: string;
-  groups?: string[] | undefined;
-}
-
-const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === "string");
-
-function toAnnouncement(data: unknown): ToolGroupsAnnouncement | null {
-  if (!isRecord(data) || typeof data.sessionId !== "string" || !data.sessionId) return null;
-  return isStringArray(data.groups) ? { sessionId: data.sessionId, groups: data.groups } : { sessionId: data.sessionId };
+/** An announcement and the host whose session it names: null for this machine. */
+export interface HostedToolGroupsAnnouncement extends ToolGroupsAnnouncement {
+  host: string | null;
 }
 
 // Subscribe for as long as the calling component lives.
@@ -27,12 +14,20 @@ function toAnnouncement(data: unknown): ToolGroupsAnnouncement | null {
 // panel's tool hint, the tools pane — and all three ask BEFORE the agent's MCP client has connected,
 // because the browser is handed a session id while the agent is still being spawned. That first
 // "nothing" then stood until something happened to remount the pane. This announcement is the one
-// signal that says to ask again; each caller decides what re-asking means for it.
-export function onToolGroupsAnnounced(handler: (announcement: ToolGroupsAnnouncement) => void): void {
+// signal that says to ask again; each caller decides what re-asking means for it. A remote host's
+// arrive through the gateway's relay (#3506), with the host beside them.
+export function onToolGroupsAnnounced(handler: (announcement: HostedToolGroupsAnnouncement) => void): void {
   const { subscribe } = usePubSub();
-  const off = subscribe(TOOL_GROUPS_CHANNEL, (data) => {
-    const announcement = toAnnouncement(data);
-    if (announcement) handler(announcement);
+  const offLocal = subscribe(TOOL_GROUPS_CHANNEL, (data) => {
+    const announcement = toolGroupsAnnouncementOf(data);
+    if (announcement) handler({ ...announcement, host: null });
   });
-  onBeforeUnmount(off);
+  const offRemote = subscribe(REMOTE_TOOL_GROUPS_CHANNEL, (data) => {
+    const relayed = parseRemoteToolGroups(data);
+    if (relayed) handler({ ...relayed.announcement, host: relayed.host });
+  });
+  onBeforeUnmount(() => {
+    offLocal();
+    offRemote();
+  });
 }

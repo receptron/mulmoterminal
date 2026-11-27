@@ -2,6 +2,7 @@
 // every poll, and said only when it changed.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mountUnderOverlay } from "../underOverlay";
 
 const { loadRun, loadReport, loadRunSource } = vi.hoisted(() => ({ loadRun: vi.fn(), loadReport: vi.fn(), loadRunSource: vi.fn() }));
 vi.mock("../../../../src/composables/useBlueprintsView", () => ({ blueprintsViewFollowUp: vi.fn() }));
@@ -75,6 +76,25 @@ describe("the run view and a source that changed", () => {
     await flushPromises();
     expect(loadRunSource).toHaveBeenLastCalledWith("run-00000002");
     expect(wrapper.find('[data-testid="blueprint-source-changed"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+});
+
+// The Blueprints screen is kept while closed; showing it again shows the build again, which asks again.
+describe("the source shown again", () => {
+  it("is asked about again each time the screen is shown, and the notice follows the answer", async () => {
+    loadRun.mockReset();
+    loadRun.mockResolvedValue(runView);
+    loadRunSource.mockReset();
+    loadRunSource
+      .mockResolvedValueOnce({ ok: true, value: { status: "same" } })
+      .mockResolvedValue({ ok: true, value: { status: "changed", takenAt: "2026-09-29T00:00:00.000Z" } });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintRunView, { runId: "run-00000001" });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="blueprint-source-changed"]').exists()).toBe(false);
+    await showAgain();
+    expect(loadRunSource).toHaveBeenCalledTimes(2);
+    expect(wrapper.find('[data-testid="blueprint-source-changed"]').exists()).toBe(true);
     wrapper.unmount();
   });
 });

@@ -1,5 +1,6 @@
 // What the Library screen shows (#3329): the newest conversations a page at a time, the search
-// results for what is typed, and how far the index has got. Read while the screen is open only.
+// results for what is typed, and how far the index has got. Read while the screen is open only; kept
+// while it is closed.
 import { onBeforeUnmount, ref, shallowRef, watch, type Ref } from "vue";
 import type { LibraryConversation, LibraryIndexStatus, LibrarySearchHit } from "../../common/library";
 import { loadLibraryPage, loadLibraryStatus, searchLibrary } from "./libraryApi";
@@ -10,7 +11,7 @@ export const LIBRARY_SEARCH_DEBOUNCE_MS = 200;
 export const LIBRARY_STATUS_POLL_MS = 2_000;
 
 export function useLibraryData(isOpen: Ref<boolean>) {
-  const { conversations, hasMore, loaded, loadFailed, reflects, reload, loadMore } = usePagedConversations();
+  const { conversations, hasMore, loaded, loadFailed, reloadFailed, reflects, reload, loadMore } = usePagedConversations();
   const status = shallowRef<LibraryIndexStatus | null>(null);
   const query = ref("");
   /** Null while nothing is typed; the list shows instead. */
@@ -26,11 +27,12 @@ export function useLibraryData(isOpen: Ref<boolean>) {
       void reload();
       search.refresh(); // a search that found nothing mid-build may find it now
     },
-    () => loadFailed.value,
+    () => reloadFailed.value,
   );
   const search = useDebouncedSearch(query, hits, searching, searchFailed);
-  // A list read can fail after the poll has already gone quiet (the index idle): wake it to retry.
-  watch(loadFailed, (failed) => {
+  // A list read can fail after the poll has already gone quiet (the index idle): wake it to retry. Any
+  // failed read, a kept list's re-read included, not only the first (which is all `loadFailed` shows).
+  watch(reloadFailed, (failed) => {
     if (failed) poll.wake();
   });
   // Any read can start a pass on the server (the index catches up when asked), so every answer wakes
@@ -41,16 +43,10 @@ export function useLibraryData(isOpen: Ref<boolean>) {
     isOpen,
     (open) => {
       poll.stop();
-      if (!open) {
-        // A search typed before closing must not answer into the next opening.
-        search.cancel();
-        query.value = "";
-        hits.value = null;
-        searching.value = false;
-        searchFailed.value = false;
-        return;
-      }
+      // The query and its results stay for the next opening; both are read again then.
+      if (!open) return search.cancel();
       void reload();
+      search.refresh();
       poll.start();
     },
     { immediate: true },
@@ -69,6 +65,8 @@ function usePagedConversations() {
   const hasMore = ref(false);
   const loaded = ref(false);
   const loadFailed = ref(false);
+  /** The last read of the first page failed, whether or not a kept list hides that from the screen. */
+  const reloadFailed = ref(false);
   /** The finished index pass the list shows; undefined before the first page arrives. */
   const reflects = ref<number | null | undefined>(undefined);
   let pageRequest = 0;
@@ -76,17 +74,27 @@ function usePagedConversations() {
   /** Reloads in flight. "Show more" waits for them: a page counted from the old list's length would
    *  repeat or skip rows once the reload replaces it. */
   let reloading = 0;
+  /** A page was read at least once: a failed re-read keeps it on screen instead of an error. */
+  let listed = false;
+  /** Whether more pages followed, as the last answer said: a "Show more" still out has cleared it. */
+  let settledHasMore = false;
   async function reload(): Promise<void> {
     const mine = ++pageRequest;
     reloading++;
     const page = await loadLibraryPage(0).finally(() => reloading--);
     if (mine !== pageRequest) return;
     loaded.value = true;
-    loadFailed.value = page === null;
     // A failed read reflects no pass, so the next status answer reads the list again.
     reflects.value = page === null ? undefined : page.indexFinishedAt;
-    conversations.value = page?.conversations ?? [];
-    hasMore.value = page?.hasMore ?? false;
+    loadFailed.value = page === null && !listed;
+    reloadFailed.value = page === null;
+    if (page === null) {
+      hasMore.value = settledHasMore;
+      return;
+    }
+    listed = true;
+    conversations.value = page.conversations;
+    hasMore.value = settledHasMore = page.hasMore;
   }
 
   async function loadMore(): Promise<void> {
@@ -100,10 +108,10 @@ function usePagedConversations() {
       return;
     }
     conversations.value = [...conversations.value, ...page.conversations];
-    hasMore.value = page.hasMore;
+    hasMore.value = settledHasMore = page.hasMore;
   }
 
-  return { conversations, hasMore, loaded, loadFailed, reflects, reload, loadMore };
+  return { conversations, hasMore, loaded, loadFailed, reloadFailed, reflects, reload, loadMore };
 }
 
 /** Polls progress while the index is being built, and reloads the list whenever a pass has finished
@@ -169,6 +177,8 @@ export function usePolledStatus(
 function useDebouncedSearch(query: Ref<string>, hits: Ref<LibrarySearchHit[] | null>, searching: Ref<boolean>, failed: Ref<boolean>) {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let inFlight: AbortController | null = null;
+  /** The query the shown hits answer, so a failed re-read of it can keep them. */
+  let hitsFor: string | null = null;
   const cancel = (): void => {
     if (timer !== null) clearTimeout(timer);
     inFlight?.abort();
@@ -181,6 +191,7 @@ function useDebouncedSearch(query: Ref<string>, hits: Ref<LibrarySearchHit[] | n
     const text = typed.trim();
     if (text === "") {
       hits.value = null;
+      hitsFor = null;
       searching.value = false;
       return;
     }
@@ -203,9 +214,11 @@ function useDebouncedSearch(query: Ref<string>, hits: Ref<LibrarySearchHit[] | n
     inFlight = controller;
     const found = await searchLibrary(text, controller.signal);
     if (controller.signal.aborted) return;
-    hits.value = found ?? [];
-    failed.value = found === null;
     searching.value = false;
+    if (found === null && hitsFor === text) return;
+    hits.value = found ?? [];
+    hitsFor = found === null ? null : text;
+    failed.value = found === null;
   }
   return { cancel, refresh };
 }

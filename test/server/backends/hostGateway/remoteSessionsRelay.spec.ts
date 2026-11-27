@@ -6,15 +6,23 @@ import http from "node:http";
 import type { Socket } from "node:net";
 import { createPubSub } from "../../../../server/infra/async/pubsub.js";
 import { browserOriginHostnames, createIsAllowedOrigin } from "../../../../server/infra/http/allowed-origin.js";
-import { relayMessage, relayPrompt, relayQuestion, startRemoteSessionsRelay } from "../../../../server/backends/hostGateway/remoteSessionsRelay.js";
+import {
+  relayMessage,
+  relayPrompt,
+  relayQuestion,
+  relayToolGroups,
+  startRemoteSessionsRelay,
+} from "../../../../server/backends/hostGateway/remoteSessionsRelay.js";
 import { followRemoteSessionChannels } from "../../../../server/backends/hostGateway/configuredRemoteSessionsRelay.js";
 import {
   REMOTE_PROMPT_SUBMITTED_CHANNEL,
   REMOTE_SESSIONS_CHANNEL,
+  REMOTE_TOOL_GROUPS_CHANNEL,
   parseRemoteSessionsMessage,
   type RemoteSessionsMessage,
 } from "../../../../common/remoteHosts.js";
 import { PROMPT_SUBMITTED_CHANNEL } from "../../../../common/promptChannel.js";
+import { TOOL_GROUPS_CHANNEL } from "../../../../common/toolGroupsAnnouncement.js";
 
 const isSessionsMessage = (data: unknown): data is RemoteSessionsMessage => parseRemoteSessionsMessage(data) !== null;
 import type { RemoteHost } from "../../../../server/backends/hostGateway/remoteHostsConfig.js";
@@ -58,15 +66,17 @@ function relayTo(hosts: () => RemoteHost[], usable: () => Promise<boolean> = asy
   const prompts: unknown[] = [];
   const others: [string, unknown][] = [];
   const questions: unknown[] = [];
+  const toolGroups: unknown[] = [];
   const publish = (channel: string, data: unknown) => {
     if (channel === REMOTE_PROMPT_SUBMITTED_CHANNEL) prompts.push(data);
+    else if (channel === REMOTE_TOOL_GROUPS_CHANNEL) toolGroups.push(data);
     else if (channel === "remote-ask-question") questions.push(data);
     else if (channel === REMOTE_SESSIONS_CHANNEL && isSessionsMessage(data)) published.push(data);
     else others.push([channel, data]);
   };
   const relay = startRemoteSessionsRelay({ hosts, usable, publish, reconcile_ms: 60_000 });
   cleanups.push(relay.stop);
-  return { relay, published, prompts, others, questions };
+  return { relay, published, prompts, others, questions, toolGroups };
 }
 
 async function until(predicate: () => boolean, label: string, budgetMs = 4000): Promise<void> {
@@ -86,7 +96,8 @@ const subscribed = (pubsub: ReturnType<typeof createPubSub>, count = 1) =>
     () =>
       pubsub.subscriberCount("sessions") === count &&
       pubsub.subscriberCount(PROMPT_SUBMITTED_CHANNEL) === count &&
-      pubsub.subscriberCount("ask-question") === count,
+      pubsub.subscriberCount("ask-question") === count &&
+      pubsub.subscriberCount(TOOL_GROUPS_CHANNEL) === count,
     `${count} subscriber(s) on the remote`,
   );
 
@@ -138,7 +149,37 @@ describe("relayQuestion", () => {
   });
 });
 
+describe("relayToolGroups", () => {
+  it("copies an announcement of a real session with the host, its groups only when they are a list", () => {
+    expect(relayToolGroups("lx", { sessionId: SESSION, groups: ["render"], extra: 1 })).toEqual({
+      host: "lx",
+      announcement: { sessionId: SESSION, groups: ["render"] },
+    });
+    expect(relayToolGroups("lx", { sessionId: SESSION })).toEqual({ host: "lx", announcement: { sessionId: SESSION } });
+    expect(relayToolGroups("lx", { sessionId: SESSION, groups: "render" })).toEqual({ host: "lx", announcement: { sessionId: SESSION } });
+    expect(relayToolGroups("lx", { sessionId: SESSION, groups: [] })).toEqual({ host: "lx", announcement: { sessionId: SESSION, groups: [] } });
+  });
+  it("drops what does not name a real session", () => {
+    [undefined, null, "x", {}, { sessionId: 3 }, { sessionId: "" }, { sessionId: "not-a-uuid" }, { sessionId: `${SESSION}/../x` }].forEach((data) =>
+      expect(relayToolGroups("lx", data)).toBeNull(),
+    );
+  });
+});
+
 describe("the session relay", () => {
+  // A remote cell re-asks what its session can draw off this, as a local one does off `tool-groups`.
+  it("relays a tool-group announcement with the host, on a channel of its own", async () => {
+    const { host, pubsub } = await remote();
+    const { published, toolGroups, others } = relayTo(() => [host]);
+    await until(() => published.some(isResync), "resync on connect");
+    await subscribed(pubsub);
+    pubsub.publish(TOOL_GROUPS_CHANNEL, { sessionId: "not-a-uuid", groups: ["render"] });
+    pubsub.publish(TOOL_GROUPS_CHANNEL, { sessionId: SESSION, groups: ["render"] });
+    await until(() => toolGroups.length > 0, "a relayed announcement");
+    expect(toolGroups).toEqual([{ host: "lx", announcement: { sessionId: SESSION, groups: ["render"] } }]);
+    expect(others).toEqual([]);
+  });
+
   it("republishes the remote's session rows with the host, after a resync", async () => {
     const { host, pubsub } = await remote();
     const { published } = relayTo(() => [host]);
