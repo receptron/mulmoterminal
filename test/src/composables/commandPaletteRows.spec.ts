@@ -229,6 +229,7 @@ describe("screen rows", () => {
       "screen:blueprints",
       "screen:worklog",
       "screen:skills",
+      "screen:library",
       "screen:processes",
       "screen:usage",
     ]);

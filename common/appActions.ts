@@ -15,12 +15,16 @@ export const SCREEN_ACTIONS = [
   "screen-blueprints",
   "screen-worklog",
   "screen-skills",
+  "screen-library",
+  "screen-processes",
+  "screen-usage",
 ] as const satisfies readonly KeymapAction[];
 
 export const ORDER_ACTIONS = ["order-auto", "order-manual", "order-priority"] as const satisfies readonly KeymapAction[];
 
 export const APP_ACTIONS = [
   ...SCREEN_ACTIONS,
+  "screen-toggle",
   "settings-open",
   "sound-toggle",
   "confetti",
@@ -55,6 +59,9 @@ const SCREEN_OF = {
   "screen-blueprints": "blueprints",
   "screen-worklog": "worklog",
   "screen-skills": "skills",
+  "screen-library": "library",
+  "screen-processes": "processes",
+  "screen-usage": "usage",
 } as const satisfies Record<ScreenAction, string>;
 
 /** The screen a screen action goes to. */

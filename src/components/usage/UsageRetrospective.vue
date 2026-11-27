@@ -6,6 +6,7 @@ import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import type { LibraryRetrospective } from "../../../common/libraryRetrospective";
 import { loadRetrospective } from "../../composables/libraryApi";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 
 const { t, locale } = useI18n();
 const totals = ref<LibraryRetrospective | null>(null);
@@ -14,11 +15,17 @@ const failed = ref(false);
 const PROJECTS_SHOWN = 8;
 const PERCENT = 100;
 
-void (async () => {
-  const read = await loadRetrospective();
-  totals.value = read;
-  failed.value = read === null;
-})();
+let reads = 0;
+async function read(): Promise<void> {
+  const mine = ++reads;
+  const answer = await loadRetrospective();
+  if (mine !== reads) return;
+  // A failed re-read keeps the numbers already on screen rather than replacing them with an error.
+  if (answer !== null || totals.value === null) totals.value = answer;
+  failed.value = answer === null && totals.value === null;
+}
+void read();
+onOverlayShownAgain(() => void read());
 
 const tokenCount = (tokens: number): string =>
   new Intl.NumberFormat(locale.value, { notation: "compact", maximumFractionDigits: 1 }).format(Math.round(tokens));

@@ -2,7 +2,7 @@
 // One build: every step with where it stands, and — for the step it is on — the one thing the person
 // can do there. Approving, answering and retrying are the only moves the executor waits for; while
 // an agent is working this only says so.
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { archiveRun, loadReport, loadRun, loadRunSource, sendEvent, type PersonEvent, type ReportView } from "../../composables/blueprintsApi";
 import { currentStep } from "../../../common/blueprint/state";
@@ -20,6 +20,7 @@ import BlueprintOriginalsDiff from "./BlueprintOriginalsDiff.vue";
 import BlueprintNextSteps from "./BlueprintNextSteps.vue";
 import BlueprintTargets from "./BlueprintTargets.vue";
 import { filesGotoFile } from "../../composables/useFilesView";
+import { onOverlayShownAgain, useOverlayVisible, whileOverlayVisible } from "../../composables/overlayVisibility";
 import { openTerminalAt } from "../../composables/useNewTerminal";
 import MarkdownProse from "../MarkdownProse.vue";
 
@@ -41,6 +42,16 @@ const reads = latestOnly();
 
 const current = computed(() => (view.value ? currentStep(view.value.run.steps, view.value.state) : null));
 const currentState = computed(() => (view.value && current.value ? view.value.state.steps[current.value.id] : undefined));
+// What was typed answers the step it was typed for: once the build moves on (a poll, or the screen
+// shown again later), it would be sent to a different question.
+watch(
+  () => `${current.value?.id ?? ""}:${currentState.value?.status ?? ""}`,
+  () => {
+    answer.value = "";
+    rejectReason.value = "";
+    actionError.value = null;
+  },
+);
 // Only a person can trust a folder; the step says where, and a terminal opened there asks them.
 // The build tried to fix the step by itself this many times before stopping; said in the person's language above the check's own output.
 const gaveUpAttempts = computed(() =>
@@ -52,12 +63,20 @@ const reviewing = computed(() => current.value?.gates.includes("review") ?? fals
 // because it sits in the hidden .blueprint/ folder a person would not open.
 const finished = computed(() => view.value !== null && current.value === null);
 const report = ref<ReportView | null>(null);
+// Read when the build finishes, and again each time the kept screen is shown; a failed read keeps the one shown.
+const reportReads = latestOnly();
+const shownNow = useOverlayVisible();
+async function readReport(): Promise<void> {
+  // A poll answered after the close can finish the build while hidden; showing again reads the report.
+  if (!finished.value || !shownNow.value) return;
+  const ticket = reportReads.take();
+  const result = await loadReport(props.runId);
+  if (reportReads.isLatest(ticket) && result.ok) report.value = result.value;
+}
 watch(
   finished,
-  async (done) => {
-    if (!done || report.value !== null) return;
-    const result = await loadReport(props.runId);
-    if (result.ok) report.value = result.value;
+  (done) => {
+    if (done && report.value === null) void readReport();
   },
   { immediate: true },
 );
@@ -72,11 +91,22 @@ const activeSession = computed(() => {
 // Ticks once a second so the elapsed time moves between polls.
 const CLOCK_TICK_MS = 1000;
 const now = ref(Date.now());
-const clockTimer = setInterval(() => (now.value = Date.now()), CLOCK_TICK_MS);
-onUnmounted(() => clearInterval(clockTimer));
+let clockTimer: ReturnType<typeof setInterval> | null = null;
+whileOverlayVisible(
+  () => {
+    now.value = Date.now();
+    clockTimer = setInterval(() => (now.value = Date.now()), CLOCK_TICK_MS);
+  },
+  () => {
+    if (clockTimer !== null) clearInterval(clockTimer);
+    clockTimer = null;
+  },
+);
 const elapsed = computed(() => (activeSession.value ? elapsedParts(activeSession.value.atMs, now.value) : null));
 
 async function refresh(): Promise<void> {
+  // An action answering after the screen was closed reads nothing; showing it again reads.
+  if (!shownNow.value) return;
   // The server does not queue reads behind a person's action, so a read sent mid-action can see
   // the state from before it — and, being newer, would win. The action's own answer is the read.
   if (sending.value) return;
@@ -90,21 +120,40 @@ async function refresh(): Promise<void> {
 }
 
 // Asked once per build shown, not on every poll: taking a shared app's copy again reads its records from Firestore.
+// Showing the kept screen again counts as showing the build, as reopening it always did.
 const sourceChangedAt = ref<string | null>(null);
+let sourceReads = 0;
+async function readSource(runId: string): Promise<void> {
+  const mine = ++sourceReads;
+  const result = await loadRunSource(runId);
+  if (mine !== sourceReads || runId !== props.runId || !result.ok) return;
+  sourceChangedAt.value = result.value.status === "changed" ? new Date(result.value.takenAt).toLocaleString(locale.value) : null;
+}
 watch(
   () => props.runId,
-  async (runId) => {
+  (runId) => {
     sourceChangedAt.value = null;
-    const result = await loadRunSource(runId);
-    if (runId !== props.runId || !result.ok || result.value.status !== "changed") return;
-    sourceChangedAt.value = new Date(result.value.takenAt).toLocaleString(locale.value);
+    void readSource(runId);
   },
   { immediate: true },
 );
+// The report is read again (it may be rewritten), and the source checked again.
+onOverlayShownAgain(() => {
+  void readReport();
+  void readSource(props.runId);
+});
 
-void refresh();
-const pollTimer = setInterval(() => void refresh(), RUN_POLL_MS);
-onUnmounted(() => clearInterval(pollTimer));
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+whileOverlayVisible(
+  () => {
+    void refresh();
+    pollTimer = setInterval(() => void refresh(), RUN_POLL_MS);
+  },
+  () => {
+    if (pollTimer !== null) clearInterval(pollTimer);
+    pollTimer = null;
+  },
+);
 
 async function act(event: PersonEvent): Promise<void> {
   const step = current.value;

@@ -9,6 +9,7 @@ import { failureText } from "./refusalText";
 import { isPullRequestUrl, targetRows, type Target, type TargetPhase } from "../../../common/blueprint/targets";
 import type { BlueprintState } from "../../../common/blueprint/state";
 import type { PlanStep } from "../../../common/blueprint/plan";
+import { onOverlayShownAgain, useOverlayVisible } from "../../composables/overlayVisibility";
 
 const props = defineProps<{ runId: string; steps: readonly PlanStep[]; state: BlueprintState }>();
 const { t } = useI18n();
@@ -39,17 +40,26 @@ watch(
 // A failed read is said, not shown as "no list yet": the two look the same otherwise.
 const loadError = ref<string | null>(null);
 
+// The run's poll can answer after the screen was closed and move what this follows; showing it again reads.
+const visible = useOverlayVisible();
 async function load(): Promise<void> {
+  if (!visible.value) return;
   const ticket = reads.take();
   const result = await loadTargets(props.runId);
   if (!reads.isLatest(ticket)) return;
-  loadError.value = result.ok ? null : failureText(t, result);
-  if (!result.ok) return;
+  // A failed re-read keeps the list shown; the failure is said only with no list to show.
+  if (!result.ok) {
+    if (targets.value === null) loadError.value = failureText(t, result);
+    return;
+  }
+  loadError.value = null;
   targets.value = result.value.targets;
   problem.value = result.value.problem;
 }
 
 watch([() => props.runId, progressKey], () => void load(), { immediate: true });
+// The screen is kept while closed; what this shows may have changed in the meantime.
+onOverlayShownAgain(() => void load());
 
 const rows = computed(() => (targets.value ? targetRows(targets.value, props.steps, props.state) : []));
 

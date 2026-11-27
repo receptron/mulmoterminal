@@ -2,6 +2,7 @@
 // a line, and a list read for another folder is not offered.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mountUnderOverlay } from "../underOverlay";
 
 const { listFolderFiles } = vi.hoisted(() => ({ listFolderFiles: vi.fn() }));
 vi.mock("../../../../src/composables/blueprintsApi", () => ({ listFolderFiles }));
@@ -73,5 +74,42 @@ describe("picking files from the folder", () => {
     await wrapper.get('[data-testid="blueprint-pick-files"]').trigger("click");
     await flushPromises();
     expect(wrapper.text()).toContain(en.blueprints.refusals.notAbsolute);
+  });
+});
+
+// The form is kept while the Blueprints screen is closed: an open list is read again when it is shown.
+describe("the file list shown again", () => {
+  it("is read again, and kept through a failed read", async () => {
+    listFolderFiles.mockReset();
+    listFolderFiles
+      .mockResolvedValueOnce({ ok: true, value: { files: ["contract.txt"], more: false } })
+      .mockResolvedValueOnce({ ok: true, value: { files: ["contract.txt", "added.md"], more: false } })
+      .mockResolvedValue({ ok: false, error: "gone" });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintFilePicker, { projectDir: "/work/docs", answer: "" });
+    await wrapper.get('[data-testid="blueprint-pick-files"]').trigger("click");
+    await flushPromises();
+    const names = () => wrapper.findAll('[data-testid="blueprint-pick-file"]').map((file) => file.text());
+    await showAgain();
+    expect(names()).toEqual(["contract.txt", "added.md"]);
+    await showAgain();
+    expect(names()).toEqual(["contract.txt", "added.md"]);
+    wrapper.unmount();
+  });
+});
+
+describe("a file list that failed, shown again", () => {
+  it("drops the old failure once the list can be read", async () => {
+    listFolderFiles.mockReset();
+    listFolderFiles
+      .mockResolvedValueOnce({ ok: false, error: "the folder could not be read" })
+      .mockResolvedValue({ ok: true, value: { files: ["contract.txt"], more: false } });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintFilePicker, { projectDir: "/work/docs", answer: "" });
+    await wrapper.get('[data-testid="blueprint-pick-files"]').trigger("click");
+    await flushPromises();
+    expect(wrapper.text()).toContain("the folder could not be read");
+    await showAgain();
+    expect(wrapper.text()).not.toContain("the folder could not be read");
+    expect(wrapper.findAll('[data-testid="blueprint-pick-file"]').map((file) => file.text())).toEqual(["contract.txt"]);
+    wrapper.unmount();
   });
 });

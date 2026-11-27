@@ -21,6 +21,7 @@ import SkillsOverlay from "./components/SkillsOverlay.vue";
 import LibraryOverlay from "./components/library/LibraryOverlay.vue";
 import ProcessesOverlay from "./components/processes/ProcessesOverlay.vue";
 import UsageOverlay from "./components/usage/UsageOverlay.vue";
+import ScreenTabs from "./components/ScreenTabs.vue";
 import FilesOverlay from "./components/FilesOverlay.vue";
 import ConfettiOverlay from "./components/ConfettiOverlay.vue";
 import TerminalLinkMenu from "./components/TerminalLinkMenu.vue";
@@ -95,7 +96,7 @@ const { whatsNew, dismiss: dismissWhatsNew } = useWhatsNew(useI18n().locale.valu
   <!-- The last layout, offered back when this browser came up without one (#3427). -->
   <RestoreLayoutBar />
   <!-- The full-screen overlays, on TOP of the grid rather than instead of it. Each is route-driven
-       and starts below the header (`top-10`), so the toolbar stays on screen and the view beneath
+       and starts below the header (`--screen-top`), so the toolbar stays on screen and the view beneath
        one does not change while it is open (#1193). -->
   <!-- Full-screen collection / feed browser; shown when the toolbar's Collections door, an index
        card or a ref hop opens it (driven by useCollectionBrowse). -->
@@ -123,6 +124,8 @@ const { whatsNew, dismiss: dismissWhatsNew } = useWhatsNew(useI18n().locale.valu
   <!-- Full-screen file explorer + editor; opened by the toolbar's Files button, or by a terminal
        header's Files button rooted at that terminal's own directory. -->
   <FilesOverlay />
+  <!-- The screens opened so far, as tabs under the toolbar while one is in front. -->
+  <ScreenTabs />
   <!-- The one hover tip every cell-header chip opens (#1235). Mounted here, and only here, so the
        document can never hold two — it teleports to <body> and positions itself against whichever
        chip the pointer is on. -->

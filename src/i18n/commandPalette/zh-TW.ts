@@ -84,6 +84,7 @@ export const commandPaletteZhTW = {
     pageNext: "顯示格狀的下一頁（每頁 9 個終端機）；最後一頁時不動作。",
     pagePrev: "顯示格狀的上一頁；第一頁時不動作。",
     terminalReopen: "在目前終端機旁重新開啟最近關閉的終端機並恢復其對話；shell 會重新啟動。",
+    screenToggle: "在最後開啟的畫面（資料庫、Skills、Files 等）和開啟它的原畫面之間來回切換；畫面保持離開時的樣子。",
     terminalTimeline: "開啟目前終端機的活動時間軸（僅限 Claude 工作階段）。",
     terminalTalk: "從目前終端機開啟可轉交問題的其他終端機清單。",
     terminalPark: "讓目前終端機休息；已在休息則喚醒。",

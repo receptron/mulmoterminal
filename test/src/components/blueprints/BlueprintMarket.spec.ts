@@ -2,6 +2,9 @@
 // person's language when the server said why as data.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mountUnderOverlay } from "../underOverlay";
+import { defineComponent, h, ref } from "vue";
+import { provideOverlayVisible } from "../../../../src/composables/overlayVisibility";
 import { en } from "../../../../src/i18n/en";
 
 const { installPack, uninstallPack, loadCatalog } = vi.hoisted(() => ({ installPack: vi.fn(), uninstallPack: vi.fn(), loadCatalog: vi.fn() }));
@@ -84,5 +87,63 @@ describe("a refused market action", () => {
     await flushPromises();
     expect(wrapper.get('[data-testid="blueprint-market-error"]').text()).toBe("refused in English");
     expect(wrapper.get('[data-testid="blueprint-market-load-error"]').text()).toBe("catalog unreachable");
+  });
+});
+
+// The Blueprints screen is kept while closed, so the market stays mounted: it reads again when shown.
+describe("the market shown again", () => {
+  it("reads the catalog again each time the screen is shown", async () => {
+    loadCatalog.mockReset();
+    loadCatalog.mockResolvedValue(catalogWith(false));
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(BlueprintMarket)) });
+    const wrapper = mount(Host);
+    await flushPromises();
+    expect(loadCatalog).toHaveBeenCalledTimes(1);
+    visible.value = false;
+    await flushPromises();
+    visible.value = true;
+    await flushPromises();
+    expect(loadCatalog).toHaveBeenCalledTimes(2);
+    wrapper.unmount();
+  });
+
+  it("keeps what a later read found when an earlier one answers last", async () => {
+    loadCatalog.mockReset();
+    let releaseEarly: (value: unknown) => void = () => {};
+    loadCatalog.mockReturnValueOnce(new Promise((resolve) => (releaseEarly = resolve))).mockResolvedValue(catalogWith(true));
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(BlueprintMarket)) });
+    const wrapper = mount(Host);
+    await flushPromises();
+    visible.value = false;
+    await flushPromises();
+    visible.value = true;
+    await flushPromises();
+    releaseEarly(catalogWith(false));
+    await flushPromises();
+    expect(wrapper.find('[data-testid="blueprint-uninstall"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+});
+
+describe("an install answering after the screen closed", () => {
+  it("reads nothing while hidden", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    loadCatalog.mockReset();
+    loadCatalog.mockResolvedValue(catalogWith(false));
+    let answerInstall: (value: unknown) => void = () => {};
+    installPack.mockReset();
+    installPack.mockReturnValue(new Promise((resolve) => (answerInstall = resolve)));
+    const { wrapper, visible } = mountUnderOverlay(BlueprintMarket, {});
+    await flushPromises();
+    await wrapper.get('[data-testid="blueprint-install"]').trigger("click");
+    visible.value = false;
+    await flushPromises();
+    loadCatalog.mockClear();
+    answerInstall({ ok: true, value: { ok: true } });
+    await flushPromises();
+    expect(loadCatalog).not.toHaveBeenCalled();
+    wrapper.unmount();
   });
 });

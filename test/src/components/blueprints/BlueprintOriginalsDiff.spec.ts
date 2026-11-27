@@ -2,6 +2,7 @@
 // and nothing at all for a build that kept no originals.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mountUnderOverlay } from "../underOverlay";
 
 const { loadOriginals, createDiffView } = vi.hoisted(() => ({
   loadOriginals: vi.fn<(runId: string) => Promise<unknown>>(),
@@ -88,5 +89,77 @@ describe("BlueprintOriginalsDiff", () => {
     expect(createDiffView.mock.calls.map((call) => call[3])).toEqual([expect.objectContaining({ dark: true }), expect.objectContaining({ dark: false })]);
     expect(first?.destroy).toHaveBeenCalled();
     themeVars.value = { "--bg-base": "#0d1117" };
+  });
+});
+
+// The Blueprints screen is kept while closed: shown again, the originals are read again, and a read
+// that fails then keeps the ones shown.
+describe("the originals shown again", () => {
+  it("are read again each time the screen is shown, and kept through a failed read", async () => {
+    loadOriginals.mockReset();
+    loadOriginals.mockResolvedValueOnce({ ok: true, value: { files: [{ path: "a.md", original: "old a", current: "new a" }], more: false } });
+    loadOriginals.mockResolvedValue({ ok: false, error: "gone" });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintOriginalsDiff, { runId: "r1" });
+    await flushPromises();
+    await showAgain();
+    expect(loadOriginals).toHaveBeenCalledTimes(2);
+    expect(wrapper.findAll('[data-testid="blueprint-original"]')).toHaveLength(1);
+    wrapper.unmount();
+  });
+});
+
+describe("the diff editors shown again", () => {
+  it("draw the texts read again, on the same files", async () => {
+    loadOriginals.mockReset();
+    createDiffView.mockClear();
+    loadOriginals
+      .mockResolvedValueOnce({ ok: true, value: { files: [{ path: "a.md", original: "old a", current: "new a" }], more: false } })
+      .mockResolvedValue({ ok: true, value: { files: [{ path: "a.md", original: "old a", current: "newer a" }], more: false } });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintOriginalsDiff, { runId: "r1" });
+    await flushPromises();
+    await showAgain();
+    expect(createDiffView.mock.calls.at(-1)?.[2]).toBe("newer a");
+    wrapper.unmount();
+  });
+});
+
+describe("a file that comes back while the screen is hidden", () => {
+  it("draws each file's own texts under its own name", async () => {
+    loadOriginals.mockReset();
+    createDiffView.mockClear();
+    loadOriginals
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          files: [
+            { path: "a.md", original: "old a", current: null },
+            { path: "b.md", original: "old b", current: "new b" },
+          ],
+          more: false,
+        },
+      })
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          files: [
+            { path: "a.md", original: "old a", current: "new a" },
+            { path: "b.md", original: "old b", current: "new b" },
+          ],
+          more: false,
+        },
+      });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintOriginalsDiff, { runId: "r1" });
+    await flushPromises();
+    createDiffView.mockClear();
+    await showAgain();
+    const drawn = createDiffView.mock.calls.map(([host, original]) => [host.dataset.path, original]);
+    expect(drawn).toEqual(
+      expect.arrayContaining([
+        ["a.md", "old a"],
+        ["b.md", "old b"],
+      ]),
+    );
+    expect(drawn).toHaveLength(2);
+    wrapper.unmount();
   });
 });

@@ -96,34 +96,52 @@ let marksRead = 0;
 async function refreshMarks(): Promise<void> {
   const read = ++marksRead;
   const answer = await loadSkillEvalMarks();
-  if (read === marksRead) marks.value = answer;
+  // A failed re-read keeps the marks shown, as the catalog does.
+  if (read === marksRead && (answer !== null || marks.value === null)) marks.value = answer;
 }
 
 async function refreshUsage(): Promise<void> {
   const read = ++usageRead;
   const answer = await loadSkillUsage();
-  if (read === usageRead) usage.value = answer;
+  if (read === usageRead && (answer !== null || usage.value === null)) usage.value = answer;
 }
 
+// Read again on every opening, with the last catalog left on screen until the answer replaces it: the
+// screen is kept while closed, so what was chosen and read stays where it was.
+let catalogRead = 0;
 async function refresh(): Promise<void> {
-  catalog.value = null;
-  usage.value = null;
-  marks.value = null;
-  loadFailed.value = false;
+  const read = ++catalogRead;
   void refreshUsage();
   void refreshMarks();
-  const read = await loadSkillCatalog();
-  catalog.value = read;
-  loadFailed.value = read === null;
+  const answer = await loadSkillCatalog();
+  if (read !== catalogRead) return;
+  if (answer !== null || catalog.value === null) catalog.value = answer;
+  loadFailed.value = catalog.value === null;
+  if (answer !== null) dropPickGone(answer);
+}
+
+// A skill removed or moved while the screen was closed is no longer offered: its SKILL.md and its
+// evaluation go with it, rather than stay on screen to be acted on. Not under an edit, which is the
+// person's text.
+function dropPickGone(listed: SkillCatalog): void {
+  const shown = picked.value;
+  if (shown === null || editing.value) return;
+  const key = sourceKey(shown.source);
+  if (listed.sources.some((source) => sourceKey(source) === key && source.skills.some((skill) => skill.id === shown.skill.id))) return;
+  docRead += 1;
+  picked.value = null;
+  showDoc(null, null);
+  docFailed.value = false;
 }
 
 watch(
   isOpen,
   (open) => {
-    picked.value = null;
-    doc.value = null;
-    mode.value = "local";
-    if (open) void refresh();
+    if (!open) return;
+    void refresh();
+    // The picked skill's SKILL.md may have changed while the screen was closed; not under an edit.
+    const shown = picked.value;
+    if (shown && !editing.value) void readDoc(shown.source, shown.skill, false);
   },
   { immediate: true },
 );
@@ -135,8 +153,17 @@ async function pick(source: SkillSource, skill: CatalogSkill): Promise<void> {
   docVersion.value = null;
   editing.value = false;
   docFailed.value = false;
+  await readDoc(source, skill, true);
+}
+
+// The screen outlives a close, so a read from before it can answer after a newer one for the same skill.
+let docRead = 0;
+/** Reads the skill's SKILL.md; a re-read (`first` false) that fails keeps what is shown. */
+async function readDoc(source: SkillSource, skill: CatalogSkill, first: boolean): Promise<void> {
+  const mine = ++docRead;
   const read = await loadSkillDoc(source, skill.slug);
-  if (!isPicked(source, skill)) return; // moved on while the request was in flight
+  if (mine !== docRead || !isPicked(source, skill)) return; // moved on while the request was in flight
+  if (read === null && !first && raw.value !== null) return; // keep what is shown; with nothing shown, say so
   showDoc(read?.markdown ?? null, read?.version ?? null);
   docFailed.value = read === null;
 }
@@ -147,12 +174,21 @@ function showDoc(markdown: string | null, version: string | null): void {
   docVersion.value = version;
 }
 
+function startEditing(): void {
+  docRead += 1; // a read still out must not replace the text being edited
+  editing.value = true;
+}
+
 function onSaved(text: string, version: string): void {
+  docRead += 1; // a read from before the save must not put the old text back
   showDoc(text, version);
   editing.value = false;
 }
 
 async function reload(): Promise<void> {
+  // An adoption answering after the screen was closed: the next opening reads the marks and the
+  // document, and picking again now would also end an edit nobody can see.
+  if (!isOpen.value) return;
   void refreshMarks();
   const current = picked.value;
   if (current !== null) await pick(current.source, current.skill);
@@ -160,7 +196,7 @@ async function reload(): Promise<void> {
 </script>
 
 <template>
-  <FullScreenOverlay v-if="isOpen" :region-label="t('skillsView.region')" :close-label="t('skillsView.close')" @close="close">
+  <FullScreenOverlay :open="isOpen" :region-label="t('skillsView.region')" :close-label="t('skillsView.close')" @close="close">
     <template #header>
       <span class="font-sans text-[14px] font-[650] text-fg">{{ t("skillsView.title") }}</span>
       <div class="flex rounded-[4px] border border-border" role="group" :aria-label="t('skillsView.modes')">
@@ -271,7 +307,7 @@ async function reload(): Promise<void> {
               type="button"
               data-testid="skills-edit"
               class="ml-auto flex flex-none cursor-pointer items-center gap-1 rounded border border-border bg-transparent px-2 py-1 font-sans text-[12px] text-secondary hover:text-fg"
-              @click="editing = true"
+              @click="startEditing"
             >
               <span class="material-symbols-outlined text-[14px]">edit</span>{{ t("skillsView.edit.edit") }}
             </button>
