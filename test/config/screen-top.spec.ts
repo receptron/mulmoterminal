@@ -1,3 +1,4 @@
+// @vitest-environment node
 // The full-screen screens start at --screen-top, which style.css lowers while the screen tabs are up,
 // so the strip never covers a screen's top. A root left at top-10 would sit under the strip.
 import { describe, it, expect } from "vitest";

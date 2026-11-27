@@ -72,6 +72,15 @@ describe("ScreenTabs", () => {
     w.unmount();
   });
 
+  it("closing the first tab while it is in front shows the one after it", async () => {
+    await open("rooms");
+    await open("skills");
+    await open("rooms");
+    await closeScreenTab("rooms");
+    await flushPromises();
+    expect(here().name).toBe("skills");
+  });
+
   it("keeps one tab per screen, however many places inside it were visited", async () => {
     await open("blueprints");
     await open("blueprintMarket");
