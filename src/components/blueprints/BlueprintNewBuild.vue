@@ -138,6 +138,7 @@ async function loadLists(first: boolean): Promise<boolean> {
 let setUp = false;
 onOverlayShownAgain(() => {
   void loadKnownFolders();
+  void rereadPreview();
   recheckPresence();
   void (setUp ? loadLists(false) : setUpForm());
 });
@@ -285,6 +286,20 @@ async function loadPreview(baseSlug: string, usecaseSlug: string): Promise<void>
   error.value = result.ok ? null : failureText(t, result);
   fillFromPreset();
   fillFromPending();
+}
+
+// The pair's packs may have changed while the screen was closed: the questions are read again, keeping
+// every answer given (a question that is new starts from its default) and, on a failed read, the
+// questions shown.
+async function rereadPreview(): Promise<void> {
+  const baseSlug = base.value;
+  const usecaseSlug = usecase.value;
+  if (!baseSlug || !usecaseSlug || preview.value === null) return;
+  const ticket = previews.take();
+  const result = await previewPair(baseSlug, usecaseSlug);
+  if (!previews.isLatest(ticket) || !result.ok) return;
+  preview.value = result.value;
+  answers.value = { ...defaultAnswers(result.value.hearing), ...answers.value };
 }
 
 function setAnswer(id: string, answer: HearingAnswer | undefined): void {

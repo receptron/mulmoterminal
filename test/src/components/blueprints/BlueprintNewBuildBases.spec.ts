@@ -137,3 +137,21 @@ describe("a form whose first read failed", () => {
     wrapper.unmount();
   });
 });
+
+describe("the questions shown again", () => {
+  it("are read again for the same pair, keeping the answers given", async () => {
+    const question = (id: string) => ({ id, label: id, why: "", kind: "text" });
+    previewPair.mockResolvedValue({ ok: true, value: { hearing: { questions: [question("goal")] }, steps: [] } });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintNewBuild, {});
+    await flushPromises();
+    await wrapper.get('[data-testid="blueprint-question"] textarea').setValue("a tidy report");
+    previewPair.mockClear();
+    previewPair.mockResolvedValue({ ok: true, value: { hearing: { questions: [question("goal"), question("audience")] }, steps: [] } });
+    await showAgain();
+    expect(previewPair).toHaveBeenCalledTimes(1);
+    const fields = wrapper.findAll('[data-testid="blueprint-question"]');
+    expect(fields.map((field) => field.get("label").text().split(" ")[0])).toEqual(["goal", "audience"]);
+    expect(fields[0]?.get<HTMLTextAreaElement>("textarea").element.value).toBe("a tidy report");
+    wrapper.unmount();
+  });
+});
