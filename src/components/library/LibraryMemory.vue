@@ -225,8 +225,15 @@ function startEdit(): void {
   if (selected.value !== null && typeof text.value?.version === "string") editing.value = true;
 }
 
-function onSaved(saved: string, version: string): void {
+/** The text as saved; a read begun before the save is older, and must not put the old text back. */
+function showSaved(saved: string, version: string): void {
+  reads += 1;
   text.value = { text: saved, version };
+  textFor = selected.value?.key ?? null;
+}
+
+function onSaved(saved: string, version: string): void {
+  showSaved(saved, version);
   stopEditing();
   emit("changed");
 }
@@ -287,7 +294,7 @@ watch(text, (read) => {
 
 function onMerged(saved: string, version: string, undoId: string, links: number): void {
   const done = merging.value;
-  text.value = { text: saved, version };
+  showSaved(saved, version);
   stopEditing();
   if (done !== null && selected.value !== null) mergedNotice(done, memoryTitle(selected.value.memory), undoId, links);
 }

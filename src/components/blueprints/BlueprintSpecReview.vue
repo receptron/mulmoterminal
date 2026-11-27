@@ -21,6 +21,8 @@ const view = ref<SpecView | null>(null);
 const draft = ref("");
 const sending = ref(false);
 const error = ref<string | null>(null);
+// Apart from `error`: a later read that works clears its own failure, not a failed send.
+const readError = ref<string | null>(null);
 const reads = latestOnly();
 
 // The run's poll can answer after the screen was closed and move what this follows; showing it again reads.
@@ -30,8 +32,8 @@ async function refresh(): Promise<void> {
   const ticket = reads.take();
   const result = await loadSpec(props.runId);
   if (!reads.isLatest(ticket)) return;
+  readError.value = result.ok ? null : failureText(t, result);
   if (result.ok) view.value = result.value;
-  else error.value = failureText(t, result);
 }
 
 onMounted(() => void refresh());
@@ -140,7 +142,7 @@ const outcomeKey = (outcome: string | undefined): string | null => {
             </button>
             <span class="font-sans text-[11px] text-dim">{{ t("blueprints.spec.sendHint") }}</span>
           </div>
-          <p v-if="error" class="m-0 font-sans text-[12px] text-err-text" data-testid="blueprint-spec-error">{{ error }}</p>
+          <p v-if="error ?? readError" class="m-0 font-sans text-[12px] text-err-text" data-testid="blueprint-spec-error">{{ error ?? readError }}</p>
         </form>
       </section>
     </div>

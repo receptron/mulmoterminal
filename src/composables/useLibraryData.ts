@@ -11,7 +11,7 @@ export const LIBRARY_SEARCH_DEBOUNCE_MS = 200;
 export const LIBRARY_STATUS_POLL_MS = 2_000;
 
 export function useLibraryData(isOpen: Ref<boolean>) {
-  const { conversations, hasMore, loaded, loadFailed, reloadFailed, reflects, reload, loadMore } = usePagedConversations();
+  const { conversations, hasMore, loaded, loadFailed, reloadFailed, reflects, reload, reloadPending, loadMore } = usePagedConversations();
   const status = shallowRef<LibraryIndexStatus | null>(null);
   const query = ref("");
   /** Null while nothing is typed; the list shows instead. */
@@ -24,7 +24,8 @@ export function useLibraryData(isOpen: Ref<boolean>) {
     status,
     () => reflects.value,
     () => {
-      void reload();
+      // A tick waits for a reload still out: a newer one would outdate it, and with slow reads none would land.
+      if (!reloadPending()) void reload();
       search.refresh(); // a search that found nothing mid-build may find it now
     },
     () => reloadFailed.value,
@@ -111,7 +112,7 @@ function usePagedConversations() {
     hasMore.value = settledHasMore = page.hasMore;
   }
 
-  return { conversations, hasMore, loaded, loadFailed, reloadFailed, reflects, reload, loadMore };
+  return { conversations, hasMore, loaded, loadFailed, reloadFailed, reflects, reload, reloadPending: () => reloading > 0, loadMore };
 }
 
 /** Polls progress while the index is being built, and reloads the list whenever a pass has finished

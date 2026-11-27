@@ -302,8 +302,12 @@ async function rereadPreview(): Promise<void> {
   const ticket = previews.take();
   const result = await previewPair(baseSlug, usecaseSlug);
   if (!previews.isLatest(ticket) || !result.ok) return;
+  const asked = new Set(preview.value.hearing.questions.map((question) => question.id));
+  const fresh = result.value.hearing;
   preview.value = result.value;
-  answers.value = { ...defaultAnswers(result.value.hearing), ...answers.value };
+  // A default is only for a question not asked before: one the person cleared stays clear.
+  const newDefaults = defaultAnswers({ questions: fresh.questions.filter((question) => !asked.has(question.id)) });
+  answers.value = { ...newDefaults, ...acceptedAnswers(fresh, answers.value) };
 }
 
 function setAnswer(id: string, answer: HearingAnswer | undefined): void {

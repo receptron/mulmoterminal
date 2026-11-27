@@ -147,3 +147,35 @@ describe("a reply landing while the screen is hidden", () => {
     wrapper.unmount();
   });
 });
+
+describe("a failure shown under the spec", () => {
+  const props = (chatCount: number) => ({ runId: "run-00000001", revisionSessionId: null, chatCount, projectDir: "/work/app", expectsSpec: true });
+
+  it("goes once a later read works, when it was the read that failed", async () => {
+    loadSpec.mockReset();
+    loadSpec.mockResolvedValueOnce({ ok: false, error: "the spec could not be read" }).mockResolvedValue(specView("# spec"));
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintSpecReview, props(1));
+    await flushPromises();
+    expect(wrapper.get('[data-testid="blueprint-spec-error"]').text()).toContain("the spec could not be read");
+    await showAgain();
+    expect(wrapper.find('[data-testid="blueprint-spec-error"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("stays through a later read, when it was a send that failed", async () => {
+    loadSpec.mockReset();
+    loadSpec.mockResolvedValue(specView("# spec"));
+    sendSpecMessage.mockReset();
+    sendSpecMessage.mockResolvedValue({ ok: false, error: "the message could not be sent" });
+    const chat = ref(1);
+    const { wrapper } = mountUnderOverlay(BlueprintSpecReview, () => props(chat.value));
+    await flushPromises();
+    await wrapper.get('[data-testid="blueprint-spec-input"]').setValue("本の削除も");
+    await wrapper.get('[data-testid="blueprint-spec-send"]').trigger("submit");
+    await flushPromises();
+    chat.value = 2; // the run's poll sees the chat move, and the spec is read again
+    await flushPromises();
+    expect(wrapper.get('[data-testid="blueprint-spec-error"]').text()).toContain("the message could not be sent");
+    wrapper.unmount();
+  });
+});

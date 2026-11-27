@@ -49,7 +49,7 @@ async function load(): Promise<void> {
   if (!reads.isLatest(ticket)) return;
   // A failed re-read keeps the list shown; the failure is said only with no list to show.
   if (!result.ok) {
-    if (targets.value === null) loadError.value = failureText(t, result);
+    if (!targets.value?.length && !problem.value) loadError.value = failureText(t, result);
     return;
   }
   loadError.value = null;

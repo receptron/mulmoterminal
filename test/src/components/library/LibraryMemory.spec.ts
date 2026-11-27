@@ -5,10 +5,13 @@ import { flushPromises, mount } from "@vue/test-utils";
 import type { LibraryMemoryFile, LibraryMemoryHealth, LibraryMemoryProject } from "../../../../common/libraryMemory";
 
 let texts: Record<string, string | null> = {};
+/** Held to make a text read answer later than what follows it. */
+let textGate: Promise<void> = Promise.resolve();
 vi.mock("../../../../src/composables/libraryApi", () => ({
-  loadLibraryMemoryFile: (slug: string, file: string) => {
+  loadLibraryMemoryFile: async (slug: string, file: string) => {
     const text = texts[`${slug}/${file}`];
-    return Promise.resolve(text === undefined ? null : { text, ...(text === null ? {} : { version: "v1" }) });
+    await textGate;
+    return text === undefined ? null : { text, ...(text === null ? {} : { version: "v1" }) };
   },
   saveLibraryMemoryFile: () => Promise.resolve({ kind: "saved", version: "v2" }),
   trashLibraryMemoryFile: (...args: unknown[]) => trashCalls.push(args) && Promise.resolve(trashAnswer),
@@ -67,6 +70,7 @@ beforeEach(() => {
   sources = {};
   mergeAnswer = { kind: "merged", version: "v3", undo: "u-m", text: "merged as written", links: 0 };
   linksAnswer = { count: 0, unplaceable: [] };
+  textGate = Promise.resolve();
   texts = {
     "-w-app/reply.md": "---\nname: reply-in-japanese\n---\nAlways Japanese. See [[codex-sandbox]] and [[gone]].",
     "-w-app/codex.md": "---\nname: codex-sandbox\n---\nThe sandbox refuses rm.",
@@ -318,6 +322,21 @@ describe("LibraryMemory", () => {
     expect(wrapper.emitted("changed")).toHaveLength(1);
   });
 
+  it("keeps the saved text when a read begun before the save answers after it", async () => {
+    const wrapper = await mountMemory();
+    await wrapper.find("[data-testid=memory-edit]").trigger("click");
+    await flushPromises();
+    let release: () => void = () => {};
+    textGate = new Promise((resolve) => (release = resolve));
+    await wrapper.setProps({ projects: projects.map((project) => ({ ...project })) }); // a re-read of the old text goes out
+    await wrapper.find("[data-testid=memory-editor-field]").setValue("---\nname: reply-in-japanese\n---\nEdited here.");
+    await wrapper.find("[data-testid=memory-editor-save]").trigger("click");
+    await flushPromises();
+    release();
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-body]").text()).toBe("Edited here.");
+  });
+
   it("offers no editing for a memory that could not be read", async () => {
     texts["-w-app/reply.md"] = null;
     const wrapper = await mountMemory();
@@ -475,6 +494,20 @@ describe("LibraryMemory", () => {
       await flushPromises();
       expect(wrapper.find("[data-testid=memory-trash-notice]").text()).toContain("Merged “reply-in-japanese” into “codex-sandbox”. 2 links now point at it.");
       expect(wrapper.find("[data-testid=memory-body]").text()).toBe("As written, codex-sandbox.");
+    });
+
+    it("keeps the merged text when a read begun before the merge answers after it", async () => {
+      const wrapper = await mountMemory();
+      await chooseMerge(wrapper);
+      await pickFirst(wrapper);
+      let release: () => void = () => {};
+      textGate = new Promise((resolve) => (release = resolve));
+      await wrapper.setProps({ projects: projects.map((project) => ({ ...project })) }); // a re-read of the old text goes out
+      await wrapper.find("[data-testid=memory-editor-save]").trigger("click");
+      await flushPromises();
+      release();
+      await flushPromises();
+      expect(wrapper.find("[data-testid=memory-body]").text()).toBe("merged as written");
     });
 
     it("says which memories' links could not be rewritten, before saving and when refused, and merges nothing", async () => {

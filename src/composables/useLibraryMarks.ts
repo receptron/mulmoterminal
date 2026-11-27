@@ -69,6 +69,7 @@ export function useLibraryMarks(isOpen: Ref<boolean>) {
     // back takes a round trip, and until then the list (and the selection on it) must not jump.
     if (conversation !== undefined && update.pinned !== undefined) pinned.value = pinnedAfter(pinned.value, conversation, update.pinned);
     marks.value = saved;
+    seq.marksRead = true; // the file as it now is: a later failed read keeps it, as it keeps a read one
     seq.applied++;
     loadFailed.value = false; // the answer is the file as it now is, so it can be read again
     // By what the answer says, not by what this change asked: a pin whose own answer was superseded

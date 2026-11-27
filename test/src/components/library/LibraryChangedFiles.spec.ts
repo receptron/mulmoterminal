@@ -155,3 +155,23 @@ describe("an open diff shown again", () => {
     wrapper.unmount();
   });
 });
+
+describe("an open diff whose list comes back as new objects", () => {
+  it("keeps the diff when the same file's sides then cannot be read, and reads them once", async () => {
+    files = [tracked("a.md", [[1, true]])];
+    texts = { "a.md@1": { text: "one" }, "a.md@now": { text: "two" } };
+    const { wrapper, showAgain } = mountUnderOverlay(LibraryChangedFiles, { conversation }, { attachTo: document.body });
+    await flushPromises();
+    await wrapper.find("[data-testid=library-files-toggle]").trigger("click");
+    await flushPromises();
+    expect(drawn.at(-1)).toEqual(["one", "two"]);
+    files = [tracked("a.md", [[1, true]])]; // the same file, read again: a new object
+    texts = {};
+    asked.length = 0;
+    await showAgain();
+    expect(wrapper.find("[data-testid=library-file-blocked]").exists()).toBe(false);
+    expect(drawn.at(-1)).toEqual(["one", "two"]);
+    expect(asked).toEqual(["a.md@1", "a.md@now"]);
+    wrapper.unmount();
+  });
+});
