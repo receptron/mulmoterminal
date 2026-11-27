@@ -805,9 +805,9 @@ function stopWatchingDrawing(): void {
   drawnUnsubscribes.clear();
 }
 watch(
-  // Keyed by the session ids themselves: cells come and go, and a cell gets its session id well
-  // after it appears (onSession), so watching the cell list alone would miss the moment a fresh
-  // terminal becomes subscribable.
+  // Keyed by each cell's draw channel, which names its host as well as its session: cells come and
+  // go, and a cell gets its session id well after it appears (onSession), so watching the cell list
+  // alone would miss the moment a fresh terminal becomes subscribable.
   [expandedUid, () => state.value.cells.map((c) => drawChannelOf(c) ?? "").join(",")],
   () => {
     // While something IS enlarged, TerminalGrid owns this. Nothing to watch for here.

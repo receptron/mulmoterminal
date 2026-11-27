@@ -531,15 +531,20 @@ async function openCanvasFor(uid: number, enlarge = true, stillWanted?: () => bo
 // authority anyway: the seed's POST awaits the write before answering, so the GET below sees the
 // card — and it answers 200 for a card it DROPPED as well, which a hand-set flag would report as
 // something to render.
+// Whether a late answer still speaks for the pane's cell: a session is named by its host and its id,
+// and a local and a remote session can carry the same id.
+const isPaneSession = (sessionId: string, host: string | null): boolean => sessionId === paneCellSessionOnHost.value && host === paneCellHost.value;
+
 const mayHaveGainedACard = (): boolean => paneCellSessionOnHost.value !== null && !canvasAvailable.value && !canvasHasCard.value;
 
 async function adoptStoredCard(): Promise<void> {
   const sessionId = paneCellSessionOnHost.value;
+  const host = paneCellHost.value;
   if (!sessionId) return;
-  const has = await hasStoredCard(sessionId, paneCellHost.value);
+  const has = await hasStoredCard(sessionId, host);
   // The zoom can walk while the ask is in flight; `canvasHasCard` is one flag for whichever cell
   // is enlarged, so a late answer must not speak for the cell that replaced it.
-  if (sessionId === paneCellSessionOnHost.value) canvasHasCard.value = has;
+  if (isPaneSession(sessionId, host)) canvasHasCard.value = has;
 }
 
 // The same gesture for the files pane: the path menu's "Browse files in the app", which is on
@@ -1058,7 +1063,7 @@ watch(
     // session CAN draw, this answers what it already HAS. A failure here leaves the flag false —
     // the tools answer still decides, exactly as before this existed.
     void hasStoredCard(sessionId, host).then((has) => {
-      if (sessionId === paneCellSessionOnHost.value) canvasHasCard.value = has;
+      if (isPaneSession(sessionId, host)) canvasHasCard.value = has;
     });
     try {
       const res = await fetchWithTimeout(pathOnHost(host, `/api/tools?sessionId=${encodeURIComponent(sessionId)}`));
@@ -1069,7 +1074,7 @@ watch(
       // ASK is not recorded as an answer. Defaulting here would record one.
       if (!isUnknownArray(body.groups)) throw new Error("GET /api/tools → body has no groups array");
       // Late reply for a cell we have since walked away from would show the wrong button.
-      if (sessionId !== paneCellSessionOnHost.value) return;
+      if (!isPaneSession(sessionId, host)) return;
       // The GROUPS, not the tool names. Every cell here is a grid cell, so "has a canvas group"
       // is the whole question — and matching on a `present*` prefix would count
       // presentCollection, which belongs to `data` and draws nothing without the collection
@@ -1080,7 +1085,7 @@ watch(
     } catch {
       // Unreachable server: no button rather than one that opens an empty panel. Left unchecked
       // so the panel does not blame the session for what is our own failure to ask.
-      if (sessionId === paneCellSessionOnHost.value) {
+      if (isPaneSession(sessionId, host)) {
         canvasAvailable.value = false;
         collectionsAvailable.value = false;
       }
