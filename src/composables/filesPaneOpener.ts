@@ -17,8 +17,16 @@ import { i18n } from "../i18n";
 
 /** Show `pathRel` (relative to `cwd`) in the pane, at `location` when one was named, in a new tab when
  *  `newTab`. `session` is the cell the click came from — on the tiled grid, the cell the pane opens
- *  beside (#3238); null for a terminal with no session yet. False = not handled, use the old route. */
-export type FilesPaneOpener = (cwd: string, pathRel: string, location: FileLocation | undefined, newTab: boolean, session: string | null) => boolean;
+ *  beside (#3238); null for a terminal with no session yet. `host` is the remote host that terminal
+ *  runs on (#3506), null for this machine. False = not handled, use the old route. */
+export type FilesPaneOpener = (
+  cwd: string,
+  pathRel: string,
+  location: FileLocation | undefined,
+  newTab: boolean,
+  session: string | null,
+  host: string | null,
+) => boolean;
 
 let opener: FilesPaneOpener | null = null;
 
@@ -28,8 +36,15 @@ export function setFilesPaneOpener(fn: FilesPaneOpener | null): void {
   opener = fn;
 }
 
-export function openInFilesPane(cwd: string, pathRel: string, location: FileLocation | undefined, newTab: boolean, session: string | null): boolean {
-  return opener?.(cwd, pathRel, location, newTab, session) ?? false;
+export function openInFilesPane(
+  cwd: string,
+  pathRel: string,
+  location: FileLocation | undefined,
+  newTab: boolean,
+  session: string | null,
+  host: string | null = null,
+): boolean {
+  return opener?.(cwd, pathRel, location, newTab, session, host) ?? false;
 }
 
 /** First chance at a path clicked in terminal output: the grid's right pane, when it can show
@@ -38,13 +53,28 @@ export function openInFilesPane(cwd: string, pathRel: string, location: FileLoca
  *  (#3238) — unless a tab shows it better: a page, a picture, a PDF or media outside the cell keeps
  *  the one-file grant, since the pane draws those from routes that serve only served directories.
  *  False sends the click down the route it had before — a new tab, or the full-screen view. */
-export function tryOpenInPane(filePath: string, cwd: string, location: FileLocation | undefined, newTab: boolean, session: string | null): boolean {
+export function tryOpenInPane(
+  filePath: string,
+  cwd: string,
+  location: FileLocation | undefined,
+  newTab: boolean,
+  session: string | null,
+  host: string | null = null,
+): boolean {
+  if (host !== null) return tryOpenOnHost(filePath, cwd, location, newTab, session, host);
   if (!isPaneViewable(filePath)) return false;
   const pathRel = pathWithinCwd(filePath, cwd);
   if (pathRel !== null) return openInFilesPane(cwd, pathRel, location, newTab, session);
   const outside = rebaseOutsideCwd(filePath, cwd);
   if (outside === null || grantKind(outside.rel) !== null) return false;
   return openInFilesPane(cwd, joinedPath(outside.base, outside.rel), location, newTab, session);
+}
+
+/** A path printed by a remote cell (#3506): the pane is the only place it can open, so any file is
+ *  handed over, and only one under the cell's directory — the gateway serves no other. */
+function tryOpenOnHost(filePath: string, cwd: string, location: FileLocation | undefined, newTab: boolean, session: string | null, host: string): boolean {
+  const pathRel = pathWithinCwd(filePath, cwd);
+  return pathRel !== null && openInFilesPane(cwd, pathRel, location, newTab, session, host);
 }
 
 /** A clicked file outside the cell that a tab shows: opened in one, through a one-file URL. */

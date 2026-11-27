@@ -89,7 +89,7 @@ import { handoffTargets, pullLastTurn, pullSinceRelay, slotLabel, type HandoffTa
 import { findPartner, isSendAction, runRelay, type RelayAction, type RelaySelf } from "../composables/useRelayActions";
 import { gridSessionJump } from "../composables/gridSessionJump";
 import { useRelayButton } from "../composables/useRelayButton";
-import { dirKeyOf } from "../composables/dirAddress";
+import { dirApiUrl, dirKeyOf } from "../composables/dirAddress";
 import { slotsChanged } from "../composables/slotsVersion";
 import { relayButtonLabel } from "../composables/relayButtonLabel";
 import { cellSendButton } from "../composables/cellSendButton";
@@ -113,7 +113,16 @@ import RemoteHostGone from "./RemoteHostGone.vue";
 import { useRemoteCellActivity } from "../composables/useRemoteCellActivity";
 import { useRemoteHostStatus } from "../composables/configuredRemoteHosts";
 import { mayConnect } from "./remoteHostStatus";
-import { activityKeyOf, cellActionAllowed, isRemoteHost, onThisMachine, REMOTE_CELL_DECLINE_EN, sessionDetailPath, sessionWritePath } from "./remoteCell";
+import {
+  activityKeyOf,
+  cellActionAllowed,
+  isRemoteHost,
+  onThisMachine,
+  REMOTE_CELL_DECLINE_EN,
+  repoWritePath,
+  sessionDetailPath,
+  sessionWritePath,
+} from "./remoteCell";
 
 // How long a handoff failure stays on the cell before it clears itself.
 const ASK_MSG_MS = 4000;
@@ -568,7 +577,8 @@ function watchCanvasOutput(id: string | null) {
     unseenCanvas.value += 1;
   });
 }
-watch(sessionId, watchCanvasOutput, { immediate: true });
+// This machine's channel names this machine's sessions: a remote cell's drawings are on its host (#3506).
+watch(localSession, watchCanvasOutput, { immediate: true });
 // Opening the pane on this cell clears the count — that IS having looked.
 watch(
   () => props.paneShown && props.rightPane === "canvas",
@@ -742,7 +752,11 @@ function refreshAskTargets() {
 // Read from the slot, not kept here: the slot outlives this component, which the trip into and out of
 // a collection pane remounts.
 const talkStartable = computed(() => canStartTalk({ sessionId: sessionId.value, sessionEnded: connView.get(`cell-${props.uid}`)?.sessionEnded ?? false }));
-const talkAvailable = computed(() => !isRemote && talkStartable.value && askTargets.value.length > 0);
+const talkAvailable = computed(() => talkStartable.value && askTargets.value.length > 0);
+// An exchange and a round table wait on each seat's turn as this server sees it, so they seat only
+// this machine's terminals; a remote one is handed turns through the rows above them (#3506).
+const tableTargets = computed(() => (isRemote ? [] : askTargets.value.filter((target) => !target.source.host)));
+const exchangeable = (target: HandoffTarget): boolean => !isRemote && !target.source.host;
 
 function openAskMenu() {
   refreshAskTargets();
@@ -776,14 +790,17 @@ async function askCell(target: HandoffTarget) {
 
 async function relayCell(target: HandoffTarget) {
   askMenuOpen.value = false;
-  const error = await pullSinceRelay(target, `cell-${props.uid}`, cwd.value);
+  const error = await pullSinceRelay(target, `cell-${props.uid}`, { cwd: cwd.value, host: props.remoteHost ?? null });
   if (error) showAskMsg(error);
 }
 
 // The send / bring cell actions (#3397). One partner in this directory or repo is acted on; several
 // open the Talk menu to choose; none says so. After a send the partner comes forward with the
 // keyboard, so the user reads what landed and presses Enter there.
-const relaySelf = (session: string): RelaySelf => ({ key: `cell-${props.uid}`, source: { sessionId: session, cwd: cwd.value, agent: agent.value } });
+const relaySelf = (session: string): RelaySelf => ({
+  key: `cell-${props.uid}`,
+  source: { sessionId: session, cwd: cwd.value, agent: agent.value, ...(isRemote ? { host: props.remoteHost } : {}) },
+});
 
 function relayHere(action: RelayAction): boolean {
   if (!cellActionAllowed(props.remoteHost, action) || !talkStartable.value || !sessionId.value) return false;
@@ -792,7 +809,7 @@ function relayHere(action: RelayAction): boolean {
 }
 
 async function relayWithPartner(action: RelayAction, self: RelaySelf) {
-  const pick = await findPartner(self.key, cwd.value, props.home);
+  const pick = await findPartner(self.key, cwd.value, props.home, undefined, props.remoteHost ?? null);
   if (pick.kind === "none") return showAskMsg("No other agent terminal in this directory or repo");
   if (pick.kind === "choose") return openAskMenu();
   await finishRelay(action, self, pick.partner);
@@ -808,11 +825,11 @@ async function finishRelay(action: RelayAction, self: RelaySelf, partner: Handof
 
 // The cell's own send button (#3399): shown, without any config, while this cell can send and some
 // partner is open, and named after the partner so the user learns the two can hand turns over.
-const livePartners = useRelayButton(() => `cell-${props.uid}`, localCwd);
+const livePartners = useRelayButton(() => `cell-${props.uid}`, cwd, props.remoteHost ?? null);
 // This cell's part of what every cell's partner list reads: its session, directory and connection.
 watch([sessionId, cwd, () => connView.get(`cell-${props.uid}`)?.status], slotsChanged);
 onUnmounted(() => void nextTick(slotsChanged));
-const sendButton = computed(() => (cellSendButton.value && talkStartable.value && !isRemote ? relayButtonLabel(livePartners.value) : null));
+const sendButton = computed(() => (cellSendButton.value && talkStartable.value ? relayButtonLabel(livePartners.value) : null));
 const sendButtonText = computed(() => {
   const label = sendButton.value;
   if (label === null) return "";
@@ -1199,12 +1216,11 @@ async function removeAndClose() {
 }
 
 async function requestRemove(dir: string) {
-  if (isRemote) return; // the path names a worktree on the other machine, and this server would remove its own
   closeError.value = null;
   termRef.value?.terminate(); // free the worktree dir first (Windows locks a process's cwd)
   try {
     const res = await fetchWithTimeout(
-      "/api/worktrees/remove",
+      repoWritePath(props.remoteHost, "/api/worktrees/remove", dir),
       {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -1431,7 +1447,7 @@ const isWorktreeDiffData = (value: unknown): value is WorktreeDiffData =>
 
 const diff = ref<WorktreeDiffData | null>(null);
 const diffOpen = ref(false);
-const isWorktreeCell = computed(() => worktreeLabel(localCwd.value) !== null);
+const isWorktreeCell = computed(() => worktreeLabel(cwd.value) !== null);
 const showDiffBadge = computed(() => !!diff.value?.isWorktree && (diff.value.ahead > 0 || diff.value.dirty > 0));
 let diffReq = 0;
 
@@ -1444,7 +1460,7 @@ async function loadDiff() {
   }
   const reqId = ++diffReq;
   try {
-    const res = await fetchWithTimeout(`/api/worktrees/diff?cwd=${encodeURIComponent(cwd.value)}`, undefined, SLOW_COMMAND_TIMEOUT_MS);
+    const res = await fetchWithTimeout(dirApiUrl(dirKey.value ?? cwd.value, "/api/worktrees/diff"), undefined, SLOW_COMMAND_TIMEOUT_MS);
     if (reqId !== diffReq) return;
     const data = res.ok ? await jsonBody(res) : {};
     if (reqId !== diffReq) return;
@@ -1479,16 +1495,17 @@ function commitViaClaude() {
 const reasonOf = (data: Record<string, unknown>): string | null => (typeof data.reason === "string" ? data.reason : null);
 
 async function worktreeAction(endpoint: "push" | "pr"): Promise<Record<string, unknown> | null> {
-  if (!cwd.value || prBusy.value) return null;
+  const dir = cwd.value;
+  if (!dir || prBusy.value) return null;
   prBusy.value = true;
   prMsg.value = endpoint === "push" ? "Pushing…" : "Creating PR…";
   try {
     const res = await fetchWithTimeout(
-      `/api/worktrees/${endpoint}`,
+      repoWritePath(props.remoteHost, `/api/worktrees/${endpoint}`, dir),
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ cwd: cwd.value }),
+        body: JSON.stringify({ cwd: dir }),
       },
       SLOW_COMMAND_TIMEOUT_MS,
     );
@@ -1796,7 +1813,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
               :can-park="true"
               :parked="parked"
               :panes-hidden="isRemote"
-              :timeline-available="!!localSession && agent === 'claude'"
+              :session-on-host="isRemote"
+              :timeline-available="!!sessionId && agent === 'claude'"
               :library-available="!!localSession && agent === 'claude'"
               :restart-available="launched && !!sessionId"
               :talk-available="talkAvailable"
@@ -1878,6 +1896,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                       <span class="material-symbols-outlined" aria-hidden="true">forward_to_inbox</span>
                     </button>
                     <button
+                      v-if="exchangeable(target)"
                       type="button"
                       data-testid="cell-exchange-item"
                       :aria-label="t('tips.cell.exchangeTurnAria', { name: target.label })"
@@ -1892,8 +1911,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                 </div>
                 <p v-if="!askTargets.length" class="m-0 px-2 py-1.5 font-sans text-[12px] text-dim">No other terminal to read</p>
                 <RoundTableMenu
-                  v-if="askTargets.length"
-                  :targets="askTargets"
+                  v-if="tableTargets.length"
+                  :targets="tableTargets"
                   :self-label="`#${uid}`"
                   :running="tableRunning"
                   :room="tableRoom"
@@ -1923,7 +1942,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
             </span>
           </span>
         </div>
-        <TimelineOverlay :session-id="sessionId" :cwd="cwd" :open="timelineOpen" @close="timelineOpen = false" />
+        <TimelineOverlay :session-id="sessionId" :cwd="cwd" :host="remoteHost ?? null" :open="timelineOpen" @close="timelineOpen = false" />
         <RemoteHostGone v-if="remoteHost && hostStatus === 'gone'" :host="remoteHost" />
         <TerminalView
           v-else-if="mayConnect(hostStatus)"
@@ -1990,7 +2009,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
             />
           </template>
           <template #header-actions>
-            <CopyCodeBlock v-if="sessionId && !isRemote" ref="copyCodeRef" :class="CELL_BTN" :session-id="sessionId" :cwd="cwd" :agent="agent" />
+            <CopyCodeBlock v-if="sessionId" ref="copyCodeRef" :class="CELL_BTN" :session-id="sessionId" :cwd="cwd" :agent="agent" :host="remoteHost ?? null" />
             <button
               v-if="sendButton"
               type="button"

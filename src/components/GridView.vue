@@ -810,7 +810,8 @@ watch(
   () => {
     // While something IS enlarged, TerminalGrid owns this. Nothing to watch for here.
     if (expandedUid.value !== null) return stopWatchingDrawing();
-    const live = new Set(state.value.cells.map((c) => c.session).filter((s): s is string => s !== null));
+    // A remote cell's session is on its host, and this machine's channel would name another (#3506).
+    const live = new Set(state.value.cells.flatMap((c) => (c.session !== null && !c.remoteHost ? [c.session] : [])));
     for (const [id, off] of drawnUnsubscribes) {
       if (live.has(id)) continue;
       off();

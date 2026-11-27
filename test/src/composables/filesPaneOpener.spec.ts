@@ -14,7 +14,7 @@ describe("tryOpenInPane", () => {
     const opener = vi.fn(() => true);
     setFilesPaneOpener(opener);
     expect(tryOpenInPane("/Users/me/proj/src/main.ts", CWD, undefined, false, "s1")).toBe(true);
-    expect(opener).toHaveBeenCalledWith(CWD, "src/main.ts", undefined, false, "s1");
+    expect(opener).toHaveBeenCalledWith(CWD, "src/main.ts", undefined, false, "s1", null);
   });
 
   // #2573. The line an agent named after the path rides along to the pane.
@@ -22,7 +22,7 @@ describe("tryOpenInPane", () => {
     const opener = vi.fn(() => true);
     setFilesPaneOpener(opener);
     expect(tryOpenInPane("src/main.ts", CWD, { line: 42, col: 7 }, false, "s1")).toBe(true);
-    expect(opener).toHaveBeenCalledWith(CWD, "src/main.ts", { line: 42, col: 7 }, false, "s1");
+    expect(opener).toHaveBeenCalledWith(CWD, "src/main.ts", { line: 42, col: 7 }, false, "s1", null);
   });
 
   // #3005. Cmd/Ctrl on the terminal click reaches the pane as "open in a new tab".
@@ -32,8 +32,8 @@ describe("tryOpenInPane", () => {
     expect(tryOpenInPane("src/main.ts", CWD, undefined, true, "s1")).toBe(true);
     expect(tryOpenInPane("src/main.ts", CWD, { line: 42, col: null }, true, "s1")).toBe(true);
     expect(opener.mock.calls).toEqual([
-      [CWD, "src/main.ts", undefined, true, "s1"],
-      [CWD, "src/main.ts", { line: 42, col: null }, true, "s1"],
+      [CWD, "src/main.ts", undefined, true, "s1", null],
+      [CWD, "src/main.ts", { line: 42, col: null }, true, "s1", null],
     ]);
   });
 
@@ -50,7 +50,7 @@ describe("tryOpenInPane", () => {
     const opener = vi.fn(() => true);
     setFilesPaneOpener(opener);
     expect(tryOpenInPane(name, CWD, undefined, false, "s1")).toBe(true);
-    expect(opener).toHaveBeenCalledWith(CWD, name, undefined, false, "s1");
+    expect(opener).toHaveBeenCalledWith(CWD, name, undefined, false, "s1", null);
   });
 
   // #2674: a PDF, a video and a sound are drawn in the pane too, from the same raw route a tab used.
@@ -58,7 +58,7 @@ describe("tryOpenInPane", () => {
     const opener = vi.fn(() => true);
     setFilesPaneOpener(opener);
     expect(tryOpenInPane(name, CWD, undefined, false, "s1")).toBe(true);
-    expect(opener).toHaveBeenCalledWith(CWD, name, undefined, false, "s1");
+    expect(opener).toHaveBeenCalledWith(CWD, name, undefined, false, "s1", null);
   });
 
   it("leaves a PDF to its tab when no pane is open", () => {
@@ -82,7 +82,7 @@ describe("tryOpenInPane", () => {
     const opener = vi.fn(() => true);
     setFilesPaneOpener(opener);
     expect(tryOpenInPane("src/main.ts", CWD, undefined, false, null)).toBe(true);
-    expect(opener).toHaveBeenLastCalledWith(CWD, "src/main.ts", undefined, false, null);
+    expect(opener).toHaveBeenLastCalledWith(CWD, "src/main.ts", undefined, false, null, null);
   });
 
   // #3238, part 5. A text file outside the cell is handed over by its ABSOLUTE path — joined the way
@@ -91,18 +91,18 @@ describe("tryOpenInPane", () => {
     const opener = vi.fn(() => true);
     setFilesPaneOpener(opener);
     expect(tryOpenInPane("/etc/hosts.ts", CWD, undefined, false, "s1")).toBe(true);
-    expect(opener).toHaveBeenLastCalledWith(CWD, "/etc/hosts.ts", undefined, false, "s1");
+    expect(opener).toHaveBeenLastCalledWith(CWD, "/etc/hosts.ts", undefined, false, "s1", null);
     expect(tryOpenInPane("../other/report.md", CWD, { line: 3, col: null }, true, "s1")).toBe(true);
-    expect(opener).toHaveBeenLastCalledWith(CWD, "/Users/me/other/report.md", { line: 3, col: null }, true, "s1");
+    expect(opener).toHaveBeenLastCalledWith(CWD, "/Users/me/other/report.md", { line: 3, col: null }, true, "s1", null);
     expect(tryOpenInPane("~/notes/a.md", CWD, undefined, false, "s1")).toBe(true);
-    expect(opener).toHaveBeenLastCalledWith(CWD, "~/notes/a.md", undefined, false, "s1");
+    expect(opener).toHaveBeenLastCalledWith(CWD, "~/notes/a.md", undefined, false, "s1", null);
   });
 
   it("joins a Windows cell's outside path with the separator the routes take", () => {
     const opener = vi.fn(() => true);
     setFilesPaneOpener(opener);
     expect(tryOpenInPane("C:\\other\\a.ts", "C:\\work\\app", undefined, false, "s1")).toBe(true);
-    expect(opener).toHaveBeenLastCalledWith("C:\\work\\app", "C:/other/a.ts", undefined, false, "s1");
+    expect(opener).toHaveBeenLastCalledWith("C:\\work\\app", "C:/other/a.ts", undefined, false, "s1", null);
   });
 
   // A page, a picture, a PDF or media outside the cell keeps its one-file grant in a tab: the pane
@@ -120,7 +120,7 @@ describe("tryOpenInPane", () => {
     const opener = vi.fn(() => true);
     setFilesPaneOpener(opener);
     expect(tryOpenInPane("/tmp/book.xlsx", CWD, undefined, false, "s1")).toBe(true);
-    expect(opener).toHaveBeenLastCalledWith(CWD, "/tmp/book.xlsx", undefined, false, "s1");
+    expect(opener).toHaveBeenLastCalledWith(CWD, "/tmp/book.xlsx", undefined, false, "s1", null);
   });
 
   // The grid declines when there is no room for the pane, or when the pane trails the zoom. Its "no"
@@ -142,5 +142,38 @@ describe("tryOpenInPane", () => {
     expect(tryOpenInPane("src/main.ts", CWD, undefined, false, "s1")).toBe(true);
     setFilesPaneOpener(null);
     expect(tryOpenInPane("src/main.ts", CWD, undefined, false, "s1")).toBe(false);
+  });
+});
+
+// #3506. A remote cell's path has no tab or Files view to fall back to, and the gateway serves only
+// the cell's directory: any file under it goes to the pane with the host, and nothing outside it.
+describe("tryOpenInPane for a remote cell", () => {
+  const CWD = "/srv/proj";
+
+  beforeEach(() => setFilesPaneOpener(null));
+
+  it("hands any file under the cell's directory to the pane, with the host", () => {
+    const opener = vi.fn(() => true);
+    setFilesPaneOpener(opener);
+    ["src/main.ts", "/srv/proj/out/book.xlsx", "./a/../shot.png"].forEach((text) => expect(tryOpenInPane(text, CWD, undefined, false, "s1", "lx")).toBe(true));
+    expect(opener.mock.calls).toEqual([
+      [CWD, "src/main.ts", undefined, false, "s1", "lx"],
+      [CWD, "out/book.xlsx", undefined, false, "s1", "lx"],
+      [CWD, "shot.png", undefined, false, "s1", "lx"],
+    ]);
+  });
+
+  it("hands nothing outside it", () => {
+    const opener = vi.fn(() => true);
+    setFilesPaneOpener(opener);
+    ["/etc/hosts.md", "../up.ts", "~/notes/a.md", "/srv/projx/a.ts"].forEach((text) =>
+      expect(tryOpenInPane(text, CWD, undefined, false, "s1", "lx")).toBe(false),
+    );
+    expect(opener).not.toHaveBeenCalled();
+  });
+
+  it("says so when the grid declines", () => {
+    setFilesPaneOpener(() => false);
+    expect(tryOpenInPane("src/main.ts", CWD, undefined, false, "s1", "lx")).toBe(false);
   });
 });

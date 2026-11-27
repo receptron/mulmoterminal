@@ -24,7 +24,7 @@ vi.mock("../../../src/utils/fetchWithTimeout", () => ({
 
 const { usePalettePrompts } = await import("../../../src/composables/usePalettePrompts");
 
-const sourceFor = (session: string): PalettePromptSource => ({ uid: 1, slotKey: "cell-1", session, agent: "codex", cwd: "/w" });
+const sourceFor = (session: string): PalettePromptSource => ({ uid: 1, slotKey: "cell-1", session, agent: "codex", cwd: "/w", host: null });
 
 const mountPrompts = (source: () => PalettePromptSource | null) =>
   mount(

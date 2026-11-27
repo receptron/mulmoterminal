@@ -9,8 +9,10 @@
 import type { Terminal } from "@xterm/xterm";
 import { createFilePathLinkProvider } from "./terminalFilePathLinkProvider";
 import { openOutsideFile, tryOpenInPane } from "./filesPaneOpener";
+import { pathWithinCwd } from "./pathWithinCwd";
 import { filesGotoFile } from "./useFilesView";
 import { closeLinkMenu, linkMenuRequest, requestLinkMenu, type HoveredLink, type LinkMenuRequest } from "./terminalLinkMenu";
+import type { FileLocation } from "./filePathLocation";
 
 /** What a terminal's links left behind, to forget when the terminal goes: the hover, and the menu
  *  if it is the one this terminal asked for — never another terminal's. */
@@ -26,7 +28,21 @@ export function forgetFilePathLinks(term: Terminal): void {
 export interface LinkOrigin {
   cwd: () => string | null;
   session: () => string | null;
+  /** The remote host the terminal runs on (#3506), null for this machine. */
+  host: string | null;
 }
+
+// What a click falls back to once the pane declines: a tab or the Files view, both reading this
+// machine's disk — so a remote cell's path has none, and only one under its directory is a link.
+const localRoutes = {
+  openUrl: (url: string) => {
+    window.open(url, "_blank", "noopener,noreferrer");
+  },
+  openInFiles: (filePath: string, cwd: string, location?: FileLocation) => filesGotoFile(cwd, filePath, location),
+  openOutside: openOutsideFile,
+};
+const noRoutes = { openUrl: () => {}, openInFiles: () => {}, openOutside: () => {} };
+const underCwd = (text: string, cwd: string): boolean => pathWithinCwd(text, cwd) !== null;
 
 export function registerFilePathLinks(term: Terminal, origin: LinkOrigin): void {
   let hovered: HoveredLink | null = null;
@@ -38,10 +54,9 @@ export function registerFilePathLinks(term: Terminal, origin: LinkOrigin): void 
   });
   term.registerLinkProvider(
     createFilePathLinkProvider(term, origin.cwd, {
-      openUrl: (url) => window.open(url, "_blank", "noopener,noreferrer"),
-      openInFiles: (filePath, cwd, location) => filesGotoFile(cwd, filePath, location),
-      openInPane: (filePath, cwd, location, newTab) => tryOpenInPane(filePath, cwd, location, newTab, origin.session()),
-      openOutside: openOutsideFile,
+      ...(origin.host === null ? localRoutes : noRoutes),
+      openInPane: (filePath, cwd, location, newTab) => tryOpenInPane(filePath, cwd, location, newTab, origin.session(), origin.host),
+      ...(origin.host === null ? {} : { linkable: underCwd }),
       onHover: (link) => {
         hovered = link;
       },
@@ -52,7 +67,7 @@ export function registerFilePathLinks(term: Terminal, origin: LinkOrigin): void 
   term.element?.addEventListener("contextmenu", (event) => {
     if (!hovered) return;
     event.preventDefault();
-    asked = { ...hovered, session: origin.session(), point: { top: event.clientY, left: event.clientX } };
+    asked = { ...hovered, session: origin.session(), host: origin.host, point: { top: event.clientY, left: event.clientX } };
     requestLinkMenu(asked);
   });
 }

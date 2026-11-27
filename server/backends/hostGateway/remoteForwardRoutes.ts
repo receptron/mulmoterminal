@@ -100,7 +100,7 @@ function decide(req: Request, deps: RemoteForwardDeps): Decided {
   const remote = remotePathOf(req.path);
   const host = remote ? deps.remoteHosts().find((candidate) => candidate.id === remote.id) : undefined;
   if (!remote || !host) return { kind: "send", answer: { status: 404, error: `no remote host for ${req.path}` } };
-  const decision = decideForward(req.method, remote.rest, req.query, deps.routes);
+  const decision = decideForward(req.method, remote.rest, req.query, deps.routes, req.body);
   if (decision.kind === "refuse") return { kind: "send", answer: { status: decision.status, error: decision.reason } };
   return { kind: "forward", host, route: decision.route, path: decision.path };
 }

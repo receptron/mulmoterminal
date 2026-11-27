@@ -3,7 +3,14 @@ import { palettePrompts, promptFirstLine, promptSourceOf } from "../../../src/co
 
 describe("promptSourceOf", () => {
   it("is the cell's session, agent and input slot for an agent terminal", () => {
-    expect(promptSourceOf({ uid: 3, session: "s", cwd: "/w", agent: "codex" })).toEqual({ uid: 3, slotKey: "cell-3", session: "s", agent: "codex", cwd: "/w" });
+    expect(promptSourceOf({ uid: 3, session: "s", cwd: "/w", agent: "codex" })).toEqual({
+      uid: 3,
+      slotKey: "cell-3",
+      session: "s",
+      agent: "codex",
+      cwd: "/w",
+      host: null,
+    });
   });
 
   it("reads Claude's history for a cell that names no agent, a custom agent's included", () => {
@@ -21,7 +28,7 @@ describe("promptSourceOf", () => {
 
 describe("palettePrompts", () => {
   it("lists the newest first, each keeping its place as read and the terminal it came from", () => {
-    const source = { uid: 3, slotKey: "cell-3", session: "s", agent: "claude" as const, cwd: null };
+    const source = { uid: 3, slotKey: "cell-3", session: "s", agent: "claude" as const, cwd: null, host: null };
     const read = [
       { at: 1, text: "old" },
       { at: 2, text: "new" },

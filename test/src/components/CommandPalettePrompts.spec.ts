@@ -41,7 +41,7 @@ describe("CommandPalette — past prompts", () => {
       startDir: () => null,
       full: () => false,
       openSessionIds: () => [],
-      promptSource: () => ({ uid: 9, slotKey: "cell-9", session: "s-9", agent: "claude", cwd: "/w" }),
+      promptSource: () => ({ uid: 9, slotKey: "cell-9", session: "s-9", agent: "claude", cwd: "/w", host: null }),
     });
     openCommandPalette();
     const w = mount(CommandPalette, { attachTo: document.body });

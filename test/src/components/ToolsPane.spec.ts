@@ -369,6 +369,22 @@ describe("ToolsPane", () => {
     expect(wrapper.find('[data-testid="tool-name"]').text()).toBe("presentDocument");
   });
 
+  // #3506. This machine's announcement names this machine's session: a remote session with the same
+  // id is another one, read on its host.
+  it("is not re-asked by this machine's announcement for a remote session", async () => {
+    const asked: string[] = [];
+    mockFetch((url) => {
+      asked.push(url);
+      return Promise.resolve(jsonRes(url.includes("/api/tools") ? { tools: [] } : { toolCalls: [] }));
+    });
+    mount(ToolsPane, { props: { sessionId: "a", host: "lx" } });
+    await flushPromises();
+    expect(asked.sort()).toEqual(["/remote/lx/api/tool-calls/a", "/remote/lx/api/tools?sessionId=a"]);
+    capturedGroups?.({ sessionId: "a", groups: ["render"] });
+    await flushPromises();
+    expect(asked).toHaveLength(2);
+  });
+
   // Since the re-ask there are routinely two /api/tools loads in flight for the SAME session — the
   // early one asked at mount and the one the announcement triggered. A session-id guard passes both,
   // so an older reply landing second would restore the empty list the re-ask exists to get rid of.

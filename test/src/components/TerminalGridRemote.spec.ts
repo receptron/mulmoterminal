@@ -5,9 +5,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import TerminalGrid from "../../../src/components/TerminalGrid.vue";
 import FilesPane from "../../../src/components/FilesPane.vue";
+import PromptsPane from "../../../src/components/PromptsPane.vue";
+import TranscriptPane from "../../../src/components/TranscriptPane.vue";
+import ToolsPane from "../../../src/components/ToolsPane.vue";
 import { openInFilesPane } from "../../../src/composables/filesPaneOpener";
 import { dirKeyOf } from "../../../src/composables/dirAddress";
 import { rememberPane } from "../../../src/components/filesPaneStore";
+import { setFileLinkOpensPane } from "../../../src/composables/fileLinkOpensPane";
 import { oneFile } from "./filesPaneFixture";
 import type { Cell } from "../../../src/components/gridTabs.js";
 
@@ -24,7 +28,7 @@ vi.mock("../../../src/composables/usePubSub", () => ({
 vi.mock("../../../src/components/TerminalCell.vue", () => ({
   default: { name: "TerminalCell", props: ["expanded"], template: '<div class="stub-cell" />' },
 }));
-vi.mock("../../../src/components/GuiPanel.vue", () => ({ default: { name: "GuiPanel", props: ["sessionId"], template: "<div />" } }));
+vi.mock("../../../src/components/GuiPanel.vue", () => ({ default: { name: "GuiPanel", props: ["sessionId", "host", "unavailable"], template: "<div />" } }));
 
 const SESSION = "0b8f0a0e-7c55-4c1e-9e0a-3f1d2c4b5a69";
 
@@ -45,11 +49,11 @@ beforeEach(() => {
 
 const cellOn = (uid: number, remoteHost: string | undefined): Cell => ({ uid, session: SESSION, cwd: "/srv/project", ...(remoteHost ? { remoteHost } : {}) });
 
-const mountEnlarged = (remoteHost: string | undefined, cells: Cell[] = [cellOn(1, remoteHost)]) => {
+const mountEnlarged = (remoteHost: string | undefined, cells: Cell[] = [cellOn(1, remoteHost)], expandedUid: number | null = 1) => {
   return mount(TerminalGrid, {
     props: {
       cells,
-      expandedUid: 1,
+      expandedUid,
       listRows: [],
       cancelUid: null,
       defaultCwd: "/work",
@@ -64,7 +68,11 @@ const mountEnlarged = (remoteHost: string | undefined, cells: Cell[] = [cellOn(1
   });
 };
 
-const askedAbout = (): string[] => [...requested.filter((url) => url.includes(SESSION)), ...subscribed.channels.filter((channel) => channel.includes(SESSION))];
+// What THIS server is asked about the session: the gateway's routes answer from the host.
+const askedAbout = (): string[] => [
+  ...requested.filter((url) => url.includes(SESSION) && !url.startsWith("/remote/")),
+  ...subscribed.channels.filter((channel) => channel.includes(SESSION) && !channel.startsWith("remote:")),
+];
 
 describe("an enlarged remote cell", () => {
   it("is asked about on this server only when it is local", async () => {
@@ -96,11 +104,10 @@ describe("a remote cell's Files pane", () => {
     expect(filesRequests().every((url) => url.startsWith("/remote/lx/api/files/browse/"))).toBe(true);
   });
 
-  it("is the only pane it opens", async () => {
+  it("opens no pane that reads this machine's collections", async () => {
     const grid = mountEnlarged("lx");
     await flushPromises();
-    expect(grid.vm.runCellAction("pane-canvas", 1)).toBe(false);
-    expect(grid.vm.runCellAction("pane-transcript", 1)).toBe(false);
+    expect(grid.vm.runCellAction("pane-collections", 1)).toBe(false);
   });
 
   // The same path on two machines is two directories: moving between them re-roots the pane.
@@ -137,6 +144,41 @@ describe("a remote cell's Files pane", () => {
     expect(openInFilesPane("/srv/project", "README.md", undefined, false, null)).toBe(false);
   });
 
+  // A path printed by the remote cell is its host's, and opens in the pane on that host.
+  it("opens a path its own terminal printed, on its host", async () => {
+    const grid = mountEnlarged("lx");
+    await flushPromises();
+    requested = [];
+    expect(openInFilesPane("/srv/project", "README.md", undefined, false, SESSION, "lx")).toBe(true);
+    await flushPromises();
+    expect(grid.findComponent(FilesPane).props("host")).toBe("lx");
+    expect(filesRequests().some((url) => url.startsWith("/remote/lx/api/files/browse/text?") && url.includes("path=README.md"))).toBe(true);
+    expect(filesRequests().every((url) => url.startsWith("/remote/lx/api/files/browse/"))).toBe(true);
+  });
+
+  it("takes no path printed on another host", async () => {
+    mountEnlarged("lx");
+    await flushPromises();
+    expect(openInFilesPane("/srv/project", "README.md", undefined, false, SESSION, "other")).toBe(false);
+  });
+
+  it("leaves a local cell's pane to this machine's paths", async () => {
+    mountEnlarged(undefined);
+    await flushPromises();
+    expect(openInFilesPane("/srv/project", "README.md", undefined, false, SESSION, "lx")).toBe(false);
+  });
+
+  // On the tiled grid a click opens the pane beside the cell that printed it (#3238), on its host.
+  it("opens beside the remote cell on the tiled grid, for a path it printed", async () => {
+    setFileLinkOpensPane(true);
+    const grid = mountEnlarged("lx", [cellOn(1, "lx")], null);
+    await flushPromises();
+    expect(openInFilesPane("/srv/project", "README.md", undefined, false, SESSION, "lx")).toBe(true);
+    await flushPromises();
+    expect(grid.findComponent(FilesPane).props()).toMatchObject({ cwd: "/srv/project", host: "lx" });
+    expect(openInFilesPane("/srv/project", "README.md", undefined, false, SESSION, null)).toBe(false);
+  });
+
   it("opens one beside a local cell for its clicked path (control)", async () => {
     mountEnlarged(undefined);
     await flushPromises();
@@ -165,5 +207,95 @@ describe("a remote cell's Files pane", () => {
     const stored = localStorage.getItem("files_pane_state") ?? "";
     expect(stored).toContain(JSON.stringify(dirKeyOf("lx", "/srv/project")).slice(1, -1));
     expect(stored).not.toContain('"/srv/project"');
+  });
+});
+
+// Its session's prompts and conversation, read on its host (#3506).
+describe("a remote cell's history panes", () => {
+  const transcriptRequests = () => requested.filter((url) => url.includes("/api/transcript/"));
+
+  it.each([
+    ["pane-prompts", PromptsPane, "prompts"],
+    ["pane-transcript", TranscriptPane, "view"],
+  ] as const)("opens %s on its host, and asks this server nothing about the session", async (action, pane, route) => {
+    const grid = mountEnlarged("lx");
+    await flushPromises();
+    requested = [];
+    expect(grid.vm.runCellAction(action, 1)).toBe(true);
+    await flushPromises();
+    expect(grid.findComponent(pane).props()).toMatchObject({ sessionId: SESSION, host: "lx" });
+    expect(transcriptRequests().map((url) => url.split("?")[0])).toEqual([`/remote/lx/api/transcript/${route}`]);
+    expect(askedAbout().every((url) => url.startsWith("/remote/lx/"))).toBe(true);
+  });
+
+  it("opens them on this machine for a local cell (control)", async () => {
+    const grid = mountEnlarged(undefined);
+    await flushPromises();
+    requested = [];
+    grid.vm.runCellAction("pane-prompts", 1);
+    await flushPromises();
+    expect(grid.findComponent(PromptsPane).props()).toMatchObject({ sessionId: SESSION, host: null });
+    expect(transcriptRequests().map((url) => url.split("?")[0])).toEqual(["/api/transcript/prompts"]);
+  });
+});
+
+// Its tool calls, read on its host and heard on the channel the relay follows for it (#3506).
+describe("a remote cell's Tools pane", () => {
+  it("reads the tools and calls on its host, and listens on its Mac-side channel", async () => {
+    const grid = mountEnlarged("lx");
+    await flushPromises();
+    requested = [];
+    subscribed.channels = [];
+    expect(grid.vm.runCellAction("pane-tools", 1)).toBe(true);
+    await flushPromises();
+    expect(grid.findComponent(ToolsPane).props()).toMatchObject({ sessionId: SESSION, host: "lx" });
+    expect(requested.filter((url) => url.includes("/tool")).sort()).toEqual([
+      `/remote/lx/api/tool-calls/${SESSION}`,
+      `/remote/lx/api/tools?sessionId=${SESSION}`,
+    ]);
+    expect(subscribed.channels.filter((channel) => channel.includes(SESSION))).toEqual([`remote:lx:toolcalls:${SESSION}`]);
+  });
+
+  it("reads them on this machine for a local cell (control)", async () => {
+    const grid = mountEnlarged(undefined);
+    await flushPromises();
+    requested = [];
+    subscribed.channels = [];
+    grid.vm.runCellAction("pane-tools", 1);
+    await flushPromises();
+    expect(requested.filter((url) => url.includes("/tool")).sort()).toEqual([`/api/tool-calls/${SESSION}`, `/api/tools?sessionId=${SESSION}`]);
+    expect(subscribed.channels).toContain(`toolcalls:${SESSION}`);
+  });
+});
+
+// Its cards, read on its host (#3506). Its collections are not: that pane reads this machine's.
+describe("a remote cell's Canvas", () => {
+  it("opens on its host, as available as its host says, and offers no collections", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        requested.push(String(input));
+        return { ok: true, status: 200, json: async () => ({ groups: ["render", "data"], toolResults: [] }) };
+      }),
+    );
+    const grid = mountEnlarged("lx");
+    await flushPromises();
+    expect(requested.filter((url) => url.includes("/tools?") || url.includes("toolResults")).sort()).toEqual([
+      `/remote/lx/api/agent/toolResults/${SESSION}`,
+      `/remote/lx/api/tools?sessionId=${SESSION}`,
+    ]);
+    expect(grid.vm.runCellAction("pane-canvas", 1)).toBe(true);
+    await flushPromises();
+    expect(grid.findComponent({ name: "GuiPanel" }).props()).toMatchObject({ sessionId: SESSION, host: "lx", unavailable: null });
+    expect(grid.vm.runCellAction("pane-collections", 1)).toBe(false);
+  });
+
+  it("asks this server for a local cell's (control)", async () => {
+    mountEnlarged(undefined);
+    await flushPromises();
+    expect(requested.filter((url) => url.includes("/tools?") || url.includes("toolResults")).sort()).toEqual([
+      `/api/agent/toolResults/${SESSION}`,
+      `/api/tools?sessionId=${SESSION}`,
+    ]);
   });
 });

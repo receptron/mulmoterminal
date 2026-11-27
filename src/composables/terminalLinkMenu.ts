@@ -20,6 +20,8 @@ export interface LinkMenuRequest extends HoveredLink {
   /** The cell the terminal belongs to, which "open in the pane" opens beside on the tiled grid
    *  (#3238); null for a terminal with no session yet. */
   session: string | null;
+  /** The remote host the terminal runs on (#3506), null for this machine: the path names a file there. */
+  host: string | null;
   /** Where the pointer was: the menu opens there. */
   point: MenuPoint;
 }

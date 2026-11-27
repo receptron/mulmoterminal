@@ -129,7 +129,7 @@ describe("pullSinceRelay", () => {
     const error = await pullSinceRelay(
       target("cell-2"),
       "cell-1",
-      "/dest",
+      { cwd: "/dest" },
       relayDeps({
         paste: (key, text) => (pasted.push([key, text]), true),
         recordMark: async (source, dest, mark) => void recorded.push([source.sessionId, dest, mark]),
@@ -145,7 +145,7 @@ describe("pullSinceRelay", () => {
     const error = await pullSinceRelay(
       target(),
       "cell-1",
-      "/dest",
+      { cwd: "/dest" },
       relayDeps({
         paste: () => false,
         recordMark: async () => {
@@ -165,7 +165,7 @@ describe("pullSinceRelay", () => {
     const error = await pullSinceRelay(
       target(),
       "cell-1",
-      "/dest",
+      { cwd: "/dest" },
       relayDeps({ fetchRelay: async () => ({ status, text: "", mark: null }), paste: () => (pasteCalls++, true) }),
     );
     expect(error).toBe(message);
@@ -173,11 +173,13 @@ describe("pullSinceRelay", () => {
   });
 
   it("reports a failed read, a failed record, and a cell with no directory", async () => {
-    expect(await pullSinceRelay(target(), "cell-1", "/dest", relayDeps({ fetchRelay: async () => Promise.reject(new Error("x")) }))).toBe(
+    expect(await pullSinceRelay(target(), "cell-1", { cwd: "/dest" }, relayDeps({ fetchRelay: async () => Promise.reject(new Error("x")) }))).toBe(
       "Could not read that terminal's conversation",
     );
-    expect(await pullSinceRelay(target(), "cell-1", "/dest", relayDeps({ recordMark: async () => Promise.reject(new Error("x")) }))).toMatch(/^Pasted, but/);
-    expect(await pullSinceRelay(target(), "cell-1", null, relayDeps())).toBe("This terminal has no directory to remember the relay by");
+    expect(await pullSinceRelay(target(), "cell-1", { cwd: "/dest" }, relayDeps({ recordMark: async () => Promise.reject(new Error("x")) }))).toMatch(
+      /^Pasted, but/,
+    );
+    expect(await pullSinceRelay(target(), "cell-1", { cwd: null }, relayDeps())).toBe("This terminal has no directory to remember the relay by");
   });
 });
 

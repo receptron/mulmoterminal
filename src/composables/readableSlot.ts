@@ -16,6 +16,7 @@ export interface SlotCandidate {
   sessionId: string | null; // absent until the server reports one
   cwd: string | null;
   agent: TerminalAgent;
+  host: string | null; // the remote host it runs on (#3506), null for this machine
 }
 
 export interface SlotInfo {
@@ -23,6 +24,8 @@ export interface SlotInfo {
   sessionId: string;
   cwd: string | null;
   agent: TerminalAgent;
+  /** The remote host the conversation runs on (#3506), absent for this machine: it is read there. */
+  host?: string;
 }
 
 // The readable form of a slot, or null when there is nothing to read. A slot without a
@@ -30,5 +33,11 @@ export interface SlotInfo {
 // so a cell that hasn't launched has nothing to offer yet.
 export function readableSlot(candidate: SlotCandidate): SlotInfo | null {
   if (!candidate.connected || candidate.isCommand || candidate.isShellLauncher || !candidate.sessionId) return null;
-  return { key: candidate.key, sessionId: candidate.sessionId, cwd: candidate.cwd, agent: candidate.agent };
+  return {
+    key: candidate.key,
+    sessionId: candidate.sessionId,
+    cwd: candidate.cwd,
+    agent: candidate.agent,
+    ...(candidate.host ? { host: candidate.host } : {}),
+  };
 }

@@ -211,11 +211,14 @@ export interface FileLinkOpeners extends LinkRouteDeps {
   // Told which link the pointer is over, and when it leaves one: a right-click on the terminal
   // asks this to know what it was over (#3238).
   onHover?: (link: HoveredLink | null) => void;
+  // Which printed paths are links at all; every one when absent.
+  linkable?: (text: string, cwd: string) => boolean;
 }
 
 export function createFilePathLinkProvider(term: Terminal, getCwd: () => string | null, openers: FileLinkOpeners): ILinkProvider {
   const { openUrl, openInFiles, openInPane, openOutside } = openers;
   const onHover = openers.onHover ?? (() => {});
+  const linkable = openers.linkable ?? (() => true);
   // The link the pointer is over, so that only ITS leave or disposal clears the hover: xterm
   // releases a cached link when the line it is on changes, which may be a link the pointer left
   // long ago.
@@ -239,7 +242,8 @@ export function createFilePathLinkProvider(term: Terminal, getCwd: () => string 
         return callback(undefined);
       }
       // A Windows cell prints `\`-separated paths; anywhere else `\` can be part of a file name.
-      const links: ILink[] = computeFilePathLinks(cells, { windowsPaths: isWindowsRoot(cwd) }).map((link) => {
+      const found = computeFilePathLinks(cells, { windowsPaths: isWindowsRoot(cwd) }).filter((link) => linkable(link.text, cwd));
+      const links: ILink[] = found.map((link) => {
         const hovered: HoveredLink = { text: link.text, cwd, location: link.location };
         return {
           text: link.text,

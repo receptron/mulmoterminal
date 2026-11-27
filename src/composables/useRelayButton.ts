@@ -31,12 +31,13 @@ function worktreePathsOf(cwd: string, now_ms: number): Promise<string[]> {
 export const someoneElsewhere = (slots: readonly SlotInfo[], selfKey: string, selfCwd: string | null): boolean =>
   selfCwd !== null && slots.some((slot) => slot.key !== selfKey && slot.cwd !== null && slot.cwd !== selfCwd);
 
-/** `selfKey` is a getter: a cell's key follows its uid, which a grid re-parse can renumber. */
-export function useRelayButton(selfKey: () => string, cwd: Ref<string | null>): ComputedRef<SlotInfo[]> {
+/** `selfKey` is a getter: a cell's key follows its uid, which a grid re-parse can renumber. `host` is
+ *  the remote host the cell runs on (#3506), null for this machine: its worktrees are not asked for. */
+export function useRelayButton(selfKey: () => string, cwd: Ref<string | null>, host: string | null = null): ComputedRef<SlotInfo[]> {
   const worktreePaths = ref<string[]>([]);
   const slots = shallowRef<SlotInfo[]>(listSlots());
   watch(slotsVersion, () => (slots.value = listSlots()));
-  const needsWorktrees = computed(() => someoneElsewhere(slots.value, selfKey(), cwd.value));
+  const needsWorktrees = computed(() => host === null && someoneElsewhere(slots.value, selfKey(), cwd.value));
   watch(
     [needsWorktrees, cwd],
     async ([needed, dir], previous) => {
@@ -48,5 +49,5 @@ export function useRelayButton(selfKey: () => string, cwd: Ref<string | null>): 
     },
     { immediate: true },
   );
-  return computed(() => relayPartners(slots.value, selfKey(), cwd.value, worktreePaths.value));
+  return computed(() => relayPartners(slots.value, selfKey(), cwd.value, worktreePaths.value, host));
 }

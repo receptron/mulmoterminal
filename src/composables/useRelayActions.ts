@@ -59,13 +59,21 @@ export interface PartnerDeps {
 const defaultPartnerDeps: PartnerDeps = { slots: listSlots, worktreePaths: fetchWorktreePaths };
 
 /** The repo's worktrees are asked for only when some terminal sits outside this one's directory: it
- *  is a git call per worktree, and the common case — two agents in one directory — needs none. */
-export async function findPartner(selfKey: string, selfCwd: string | null, home: string | null, deps: PartnerDeps = defaultPartnerDeps): Promise<PartnerPick> {
+ *  is a git call per worktree, and the common case — two agents in one directory — needs none. A
+ *  remote cell (#3506) pairs only within its directory: this server cannot list another machine's
+ *  worktrees. */
+export async function findPartner(
+  selfKey: string,
+  selfCwd: string | null,
+  home: string | null,
+  deps: PartnerDeps = defaultPartnerDeps,
+  selfHost: string | null = null,
+): Promise<PartnerPick> {
   const slots = deps.slots();
-  const sameDir = relayPartners(slots, selfKey, selfCwd, []);
+  const sameDir = relayPartners(slots, selfKey, selfCwd, [], selfHost);
   const elsewhere = slots.some((slot) => slot.key !== selfKey && slot.cwd !== null && !sameDir.includes(slot));
-  const paths = elsewhere && selfCwd ? await deps.worktreePaths(selfCwd) : [];
-  return pickOf(relayPartners(slots, selfKey, selfCwd, paths).map((slot) => toHandoffTarget(slot, home)));
+  const paths = elsewhere && selfCwd && selfHost === null ? await deps.worktreePaths(selfCwd) : [];
+  return pickOf(relayPartners(slots, selfKey, selfCwd, paths, selfHost).map((slot) => toHandoffTarget(slot, home)));
 }
 
 export interface RelaySelf {
@@ -92,5 +100,5 @@ export function runRelay(
   if (action === "terminal-send-turn") return sendLastTurn(self.source, partner, { ...defaultDeps, ...toPartner });
   if (action === "terminal-send-since") return sendSinceRelay(self.source, partner, { ...defaultRelayDeps, ...toPartner });
   if (action === "terminal-bring-turn") return pullLastTurn(partner, self.key, { ...defaultDeps, ...toSelf });
-  return pullSinceRelay(partner, self.key, self.source.cwd, { ...defaultRelayDeps, ...toSelf });
+  return pullSinceRelay(partner, self.key, self.source, { ...defaultRelayDeps, ...toSelf });
 }

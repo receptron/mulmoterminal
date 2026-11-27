@@ -36,6 +36,15 @@ beforeEach(() => {
 afterEach(() => scope.stop());
 
 describe("useRelayButton", () => {
+  // #3506. A remote cell's repo is on its host; this server's worktree list names another machine's.
+  it("asks no worktree list for a remote cell, and pairs only its own machine's terminals", async () => {
+    live.slots = [slot("cell-1", "/a"), slot("cell-2", "/b"), { ...slot("cell-3", "/a"), host: "lx" }];
+    const partners = scope.run(() => useRelayButton(() => "cell-1", ref("/a"), "lx"));
+    await flushPromises();
+    expect(live.worktreeCalls).toEqual([]);
+    expect(partners?.value.map((partner) => partner.key)).toEqual(["cell-3"]);
+  });
+
   it("follows the slot set: a partner appears when it opens and goes when it closes", async () => {
     live.slots = [slot("cell-1", "/a")];
     const partners = mount("cell-1", "/a");
