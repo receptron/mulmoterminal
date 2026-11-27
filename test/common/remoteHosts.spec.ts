@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  parseRemoteAskQuestion,
+  remoteSessionAddressOf,
   parseRemoteSessionChannel,
   remoteSessionChannel,
   isRemoteHostId,
@@ -186,5 +188,24 @@ describe("remote session channels", () => {
     "",
   ])("names nothing for %j", (room) => {
     expect(parseRemoteSessionChannel(room, isId)).toBeNull();
+  });
+});
+
+describe("remoteSessionAddressOf", () => {
+  it("splits a remote session key, and names nothing for a bare id", () => {
+    expect(remoteSessionAddressOf("lx/abc")).toEqual({ host: "lx", id: "abc" });
+    ["abc", "", "/abc", "lx/", "LX/abc", "l x/abc"].forEach((key) => expect(remoteSessionAddressOf(key)).toBeNull());
+  });
+});
+
+describe("parseRemoteAskQuestion", () => {
+  it("reads a relayed dialog with its host, and nothing else", () => {
+    const dialog = { sessionId: "s1", toolUseId: "t1", questions: [{ question: "Pick?", header: "Pick", options: [{ label: "A" }], multiSelect: false }] };
+    const done = { sessionId: "s1", toolUseId: "t1", done: true };
+    expect(parseRemoteAskQuestion({ host: "lx", question: dialog })).toEqual({ host: "lx", question: dialog });
+    expect(parseRemoteAskQuestion({ host: "lx", question: done })).toEqual({ host: "lx", question: done });
+    [null, {}, { host: "lx" }, { host: "lx", question: { a: 1 } }, { host: "LX", question: dialog }, { question: dialog }].forEach((data) =>
+      expect(parseRemoteAskQuestion(data)).toBeNull(),
+    );
   });
 });

@@ -1,8 +1,19 @@
 import { isRecord } from "../../common/isRecord";
 import { isAnswerFailure, isAskQuestionEvent, type AnswerFailure, type AnswerRequestBody, type AskQuestionEvent } from "../../common/askQuestion";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
+import { remoteSessionAddressOf } from "../../common/remoteHosts";
+import { pathOnHost } from "../components/remoteCell";
 
 const REQUEST_TIMEOUT_MS = 5000;
+
+// A session is named by its key: the bare id for this machine's, `host/id` for a remote one (#3506),
+// whose dialog is read and answered on its host. What the host answers names its own bare id, so
+// the dialog is handed back under the key it was asked by.
+const questionPath = (key: string, suffix = ""): string => {
+  const remote = remoteSessionAddressOf(key);
+  const id = remote?.id ?? key;
+  return pathOnHost(remote?.host, `/api/question/${encodeURIComponent(id)}${suffix}`);
+};
 
 // What the question pane's channel cannot tell a browser that arrived late: the dialog a session is
 // blocked on RIGHT NOW. Pub/sub here is event-only and replays nothing on reconnect, so without
@@ -23,11 +34,11 @@ export type OpenQuestionLookup = { ok: true; question: AskQuestionEvent | null }
 
 export async function lookUpOpenQuestion(sessionId: string): Promise<OpenQuestionLookup> {
   try {
-    const res = await fetchWithTimeout(`/api/question/${encodeURIComponent(sessionId)}`, undefined, REQUEST_TIMEOUT_MS);
+    const res = await fetchWithTimeout(questionPath(sessionId), undefined, REQUEST_TIMEOUT_MS);
     if (!res.ok) return { ok: false };
     const body: unknown = await res.json();
     if (!isRecord(body)) return { ok: false };
-    return { ok: true, question: isAskQuestionEvent(body.question) ? body.question : null };
+    return { ok: true, question: isAskQuestionEvent(body.question) ? { ...body.question, sessionId } : null };
   } catch {
     return { ok: false };
   }
@@ -51,7 +62,7 @@ export async function postWords(sessionId: string, toolUseId: string, text: stri
 async function postToAnswerRoute(sessionId: string, body: AnswerRequestBody): Promise<AnswerFailure | null> {
   try {
     const res = await fetchWithTimeout(
-      `/api/question/${encodeURIComponent(sessionId)}/answer`,
+      questionPath(sessionId, "/answer"),
       { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
       REQUEST_TIMEOUT_MS,
     );
