@@ -7,6 +7,7 @@ import type { Socket } from "node:net";
 import { createPubSub } from "../../../../server/infra/async/pubsub.js";
 import { browserOriginHostnames, createIsAllowedOrigin } from "../../../../server/infra/http/allowed-origin.js";
 import { relayMessage, relayPrompt, startRemoteSessionsRelay } from "../../../../server/backends/hostGateway/remoteSessionsRelay.js";
+import { followRemoteSessionChannels } from "../../../../server/backends/hostGateway/configuredRemoteSessionsRelay.js";
 import {
   REMOTE_PROMPT_SUBMITTED_CHANNEL,
   REMOTE_SESSIONS_CHANNEL,
@@ -55,13 +56,15 @@ async function remote(): Promise<{ host: RemoteHost; pubsub: ReturnType<typeof c
 function relayTo(hosts: () => RemoteHost[], usable: () => Promise<boolean> = async () => true) {
   const published: RemoteSessionsMessage[] = [];
   const prompts: unknown[] = [];
+  const others: [string, unknown][] = [];
   const publish = (channel: string, data: unknown) => {
     if (channel === REMOTE_PROMPT_SUBMITTED_CHANNEL) prompts.push(data);
     else if (channel === REMOTE_SESSIONS_CHANNEL && isSessionsMessage(data)) published.push(data);
+    else others.push([channel, data]);
   };
   const relay = startRemoteSessionsRelay({ hosts, usable, publish, reconcile_ms: 60_000 });
   cleanups.push(relay.stop);
-  return { relay, published, prompts };
+  return { relay, published, prompts, others };
 }
 
 async function until(predicate: () => boolean, label: string, budgetMs = 4000): Promise<void> {
@@ -125,7 +128,7 @@ describe("the session relay", () => {
 
   it("relays the sessions channel and nothing else", async () => {
     const { host, pubsub } = await remote();
-    const { published, prompts } = relayTo(() => [host]);
+    const { published, prompts, others } = relayTo(() => [host]);
     await until(() => published.some(isResync), "resync on connect");
     await subscribed(pubsub);
     pubsub.publish("file-write", { path: "/etc/passwd" });
@@ -134,6 +137,8 @@ describe("the session relay", () => {
     await until(() => published.length === 2, "the sessions row");
     expect(published.filter((message) => !isResync(message))).toEqual([{ host: "lx", row: ROW }]);
     expect(prompts).toEqual([]);
+    // Nor is a fixed channel republished raw under the host's name, as a followed one would be.
+    expect(others).toEqual([]);
   });
 
   // A remote cell's Prompts pane keeps up off this, as a local one does off `prompt-submitted`.
@@ -193,5 +198,61 @@ describe("the session relay", () => {
     pubsub.publish("sessions", ROW);
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect([...refused.published, ...broken.published]).toEqual([]);
+  });
+});
+
+// #3506. A remote session's own channel is followed only while a browser listens to its Mac-side name,
+// and republished there unchanged; when the last listener leaves, the remote is told to stop sending.
+describe("the session relay's followed channels", () => {
+  const CHANNEL = `toolcalls:${SESSION}`;
+  const CALL = { toolUseId: "t1", toolName: "Bash", state: "running" };
+
+  it("relays a followed channel under the host's name, and stops when it is let go", async () => {
+    const { host, pubsub } = await remote();
+    const { relay, published, others } = relayTo(() => [host]);
+    await until(() => published.some(isResync), "resync on connect");
+    relay.follow("lx", CHANNEL);
+    await until(() => pubsub.subscriberCount(CHANNEL) === 1, "the follow on the remote");
+    pubsub.publish(CHANNEL, CALL);
+    pubsub.publish(`toolcalls:${"1".repeat(8)}-2222-4333-8444-555555555555`, CALL);
+    await until(() => others.length > 0, "a relayed call");
+    expect(others).toEqual([[`remote:lx:${CHANNEL}`, CALL]]);
+    relay.unfollow("lx", CHANNEL);
+    await until(() => pubsub.subscriberCount(CHANNEL) === 0, "the unfollow on the remote");
+  });
+
+  it("follows a channel asked for before its host connects, once it does", async () => {
+    const { host, pubsub } = await remote();
+    // The host is checked before it is attached: the follow arrives while there is no socket yet.
+    const later: { follow: () => void } = { follow: () => {} };
+    const { relay, published, others } = relayTo(
+      () => [host],
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        later.follow();
+        return true;
+      },
+    );
+    later.follow = () => relay.follow("lx", CHANNEL);
+    await until(() => published.some(isResync), "resync on connect");
+    await until(() => pubsub.subscriberCount(CHANNEL) === 1, "the follow on connect");
+    pubsub.publish(CHANNEL, CALL);
+    await until(() => others.length > 0, "a relayed call");
+    expect(others).toEqual([[`remote:lx:${CHANNEL}`, CALL]]);
+  });
+});
+
+describe("followRemoteSessionChannels", () => {
+  it("follows on a remote session channel's first listener and lets go on its last, and ignores any other room", () => {
+    let listener: (room: string, subscribed: boolean) => void = () => {};
+    const calls: string[] = [];
+    followRemoteSessionChannels(
+      { onSubscriptionChange: (given) => ((listener = given), () => {}) },
+      { follow: (host, channel) => calls.push(`follow ${host} ${channel}`), unfollow: (host, channel) => calls.push(`unfollow ${host} ${channel}`) },
+    );
+    listener(`remote:lx:toolcalls:${SESSION}`, true);
+    listener(`remote:lx:toolcalls:${SESSION}`, false);
+    [`toolcalls:${SESSION}`, `remote:lx:toolcalls:nope`, `remote:lx:plugin:${SESSION}`, "sessions"].forEach((room) => listener(room, true));
+    expect(calls).toEqual([`follow lx toolcalls:${SESSION}`, `unfollow lx toolcalls:${SESSION}`]);
   });
 });

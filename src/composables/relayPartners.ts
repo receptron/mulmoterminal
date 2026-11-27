@@ -1,6 +1,7 @@
 // Which terminals a send / bring action pairs this cell with (#3397): another agent terminal in the
 // same directory, or anywhere inside another worktree of the same repo. A terminal in an unrelated
-// directory is left out — the Talk menu still lists every terminal for that.
+// directory is left out — the Talk menu still lists every terminal for that. So is one on another
+// machine (#3506): the same path there is another directory.
 import type { SlotInfo } from "./readableSlot";
 
 const SEPARATORS = ["/", "\\"];
@@ -14,9 +15,16 @@ export function isWithin(dir: string, root: string): boolean {
   return target === base || SEPARATORS.some((sep) => target.startsWith(base + sep));
 }
 
-/** `worktreePaths` is every worktree of this cell's repo, its own included; empty outside git. */
-export function relayPartners(slots: readonly SlotInfo[], selfKey: string, selfCwd: string | null, worktreePaths: readonly string[]): SlotInfo[] {
+/** `worktreePaths` is every worktree of this cell's repo, its own included; empty outside git.
+ *  `selfHost` is the remote host this cell runs on, null for this machine. */
+export function relayPartners(
+  slots: readonly SlotInfo[],
+  selfKey: string,
+  selfCwd: string | null,
+  worktreePaths: readonly string[],
+  selfHost: string | null = null,
+): SlotInfo[] {
   if (!selfCwd) return [];
   const related = (cwd: string): boolean => trimSeparator(cwd) === trimSeparator(selfCwd) || worktreePaths.some((root) => isWithin(cwd, root));
-  return slots.filter((slot) => slot.key !== selfKey && slot.cwd !== null && related(slot.cwd));
+  return slots.filter((slot) => slot.key !== selfKey && (slot.host ?? null) === selfHost && slot.cwd !== null && related(slot.cwd));
 }

@@ -1468,3 +1468,34 @@ describe("GridView roster metadata fetch (#2121)", () => {
     w.unmount();
   });
 });
+
+// #3506. With nothing enlarged the grid watches every cell's session for a drawing, on this machine's
+// channel; a remote cell's session is on its host, and that channel would name another.
+describe("GridView's drawing watch", () => {
+  it("joins this machine's session channel for a local cell only", async () => {
+    pubsub.reset();
+    localStorage.setItem(
+      "grid_v2",
+      JSON.stringify({
+        cells: [
+          { uid: 10, session: IDS.idleA, cwd: "/w" },
+          { uid: 11, session: IDS.idleB, cwd: "/srv/p", remoteHost: "lx" },
+        ],
+        expanded: null,
+        page: 0,
+      }),
+    );
+    const w = mount(GridView, { global: { stubs: { TerminalGrid: OrderStub, AppToolbar: ToolbarStub, SettingsModal: SettingsStub } } });
+    await flushPromises();
+    expect(
+      w
+        .findComponent(OrderStub)
+        .props("cells")
+        .map((c: { remoteHost?: string }) => c.remoteHost ?? null),
+    ).toEqual([null, "lx"]);
+    const channels = [...pubsub.handlers.keys()];
+    expect(channels).toContain(`session:${IDS.idleA}`);
+    expect(channels.filter((channel) => channel.includes(IDS.idleB))).toEqual([]);
+    w.unmount();
+  });
+});

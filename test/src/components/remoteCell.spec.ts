@@ -26,13 +26,21 @@ describe("cellActionAllowed", () => {
     "terminal-move-next",
     "terminal-restart",
     "terminal-timeline",
+    "terminal-talk",
     "terminal-park",
     "terminal-copy-code",
     "terminal-voice",
+    "terminal-diff",
     "terminal-note",
+    "terminal-send-turn",
+    "terminal-send-since",
+    "terminal-bring-turn",
+    "terminal-bring-since",
     "pane-files",
     "pane-prompts",
     "pane-transcript",
+    "pane-tools",
+    "pane-canvas",
   ];
 
   it("allows every action on a local cell", () => {

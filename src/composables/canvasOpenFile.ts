@@ -19,6 +19,7 @@
 //                    and this host opts into it — server/backends/plugins/mulmoscript.ts. Reading the old
 //                    sentence as still true is what kept a repository deck on the rooted wire
 //                    path, which is #1970.)
+import { pathOnHost } from "../components/remoteCell";
 import { TOOL_NAME as DOCUMENT_TOOL, isDocumentPath } from "@mulmoclaude/markdown-plugin/vue";
 import { isOutsidePath } from "../components/filesOutsidePath";
 import { TOOL_NAME as HTML_TOOL, isPresentableHtmlPath, isHtmlArtifactPath, htmlArtifactPreviewUrl, htmlFileUrl } from "@mulmoclaude/html-plugin";
@@ -387,9 +388,10 @@ export async function seedCanvasCard(sessionId: string, card: CanvasCard): Promi
  * the cost is accepted rather than hidden. A failure answers "no", which only means the button
  * falls back to what the tools said, as it did before.
  */
-export async function hasStoredCard(sessionId: string): Promise<boolean> {
+/** `host` is the remote host the session runs on (#3506), null for this machine. */
+export async function hasStoredCard(sessionId: string, host: string | null = null): Promise<boolean> {
   try {
-    const res = await fetchWithTimeout(`/api/agent/toolResults/${encodeURIComponent(sessionId)}`, undefined, REQUEST_TIMEOUT_MS);
+    const res = await fetchWithTimeout(pathOnHost(host, `/api/agent/toolResults/${encodeURIComponent(sessionId)}`), undefined, REQUEST_TIMEOUT_MS);
     if (!res.ok) return false;
     const body: unknown = await res.json();
     return isRecord(body) && Array.isArray(body.toolResults) && body.toolResults.length > 0;
