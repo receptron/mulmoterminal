@@ -1,7 +1,7 @@
 // The remote hosts' session rows, relayed onto this server's pub/sub (#3506 phase 2).
 //
 // One socket.io client per configured host, through the user's `ssh -L`, subscribed to `sessions`
-// and `prompt-submitted`, and to a remote session's own channel only while a browser listens to its
+// `prompt-submitted` and `ask-question`, and to a remote session's own channel only while a browser listens to its
 // Mac-side name (`remote:<host>:<kind>:<id>`, parseRemoteSessionChannel), whose kinds and id this
 // server checks. The browser never subscribes to a remote itself.
 //
@@ -10,18 +10,21 @@
 // down are not replayed and a dropped host's last row would otherwise read as its current state.
 import { io } from "socket.io-client";
 import {
+  REMOTE_ASK_QUESTION_CHANNEL,
   REMOTE_PROMPT_SUBMITTED_CHANNEL,
   REMOTE_SESSIONS_CHANNEL,
   remoteSessionRowOf,
+  type RemoteAskQuestion,
   type RemotePromptSubmitted,
   type RemoteSessionRowMessage,
 } from "../../../common/remoteHosts.js";
 import { PROMPT_SUBMITTED_CHANNEL, isPromptSubmittedEvent } from "../../../common/promptChannel.js";
+import { ASK_QUESTION_CHANNEL, isAskQuestionDone, isAskQuestionEvent } from "../../../common/askQuestion.js";
 import { SESSION_ID_RE } from "../../config/env.js";
 import type { RemoteHost } from "./remoteHostsConfig.js";
 
 const RELAYED_CHANNEL = "sessions";
-const RELAYED_CHANNELS = [RELAYED_CHANNEL, PROMPT_SUBMITTED_CHANNEL] as const;
+const RELAYED_CHANNELS = [RELAYED_CHANNEL, PROMPT_SUBMITTED_CHANNEL, ASK_QUESTION_CHANNEL] as const;
 // A host added to or removed from config.json is noticed on this tick; nothing watches the file.
 export const RELAY_RECONCILE_MS = 15_000;
 
@@ -54,6 +57,13 @@ export function relayMessage(host: string, data: unknown): RemoteSessionRowMessa
 /** The relayed message for one `prompt-submitted` message from `host`, or null when it names no session. */
 export function relayPrompt(host: string, data: unknown): RemotePromptSubmitted | null {
   return isPromptSubmittedEvent(data) && SESSION_ID_RE.test(data.sessionId) ? { host, sessionId: data.sessionId } : null;
+}
+
+/** The relayed message for one `ask-question` message from `host`: a dialog opened or closed in a real
+ *  session, or null for anything else. */
+export function relayQuestion(host: string, data: unknown): RemoteAskQuestion | null {
+  const dialog = isAskQuestionEvent(data) || isAskQuestionDone(data);
+  return dialog && SESSION_ID_RE.test(data.sessionId) ? { host, question: data } : null;
 }
 
 function dataOf(message: unknown, channel: string): unknown {
@@ -101,6 +111,8 @@ function relayFrame(host: string, message: unknown, following: ReadonlySet<strin
   if (relayed) publish(REMOTE_SESSIONS_CHANNEL, relayed);
   const prompt = relayPrompt(host, dataOf(message, PROMPT_SUBMITTED_CHANNEL));
   if (prompt) publish(REMOTE_PROMPT_SUBMITTED_CHANNEL, prompt);
+  const question = relayQuestion(host, dataOf(message, ASK_QUESTION_CHANNEL));
+  if (question) publish(REMOTE_ASK_QUESTION_CHANNEL, question);
   const channel = channelOf(message);
   if (channel !== undefined && following.has(channel)) publish(`remote:${host}:${channel}`, dataOf(message, channel));
 }
