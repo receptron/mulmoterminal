@@ -60,24 +60,27 @@ describe("useLibraryData", () => {
     host.unmount();
   }, 10_000);
 
-  it("drops a search still pending when the screen closes", async () => {
+  // The screen is kept while closed: what was typed, and what it found, are there on the next open.
+  it("keeps the query and its results across a close", async () => {
     const { useLibraryData } = await import("../../../src/composables/useLibraryData");
-    hits = [{ conversation: conversation("stale", "Stale"), snippet: "stale", role: "user" }];
+    hits = [{ conversation: conversation("kept", "Kept"), snippet: "kept", role: "user" }];
     const open = ref(true);
     let data: ReturnType<typeof useLibraryData> | null = null;
     const host = mount({ setup: () => (data = useLibraryData(open)), template: "<div />" });
     await flushPromises();
     if (data === null) throw new Error("not mounted");
     const state: ReturnType<typeof useLibraryData> = data;
-    state.query.value = "stale";
+    state.query.value = "kept";
+    await new Promise((resolve) => setTimeout(resolve, 300));
     await flushPromises();
     open.value = false;
     await flushPromises();
+    expect(state.query.value).toBe("kept");
+    expect(state.hits.value?.map((hit) => hit.conversation.id)).toEqual(["kept"]);
     open.value = true;
-    await new Promise((resolve) => setTimeout(resolve, 300));
     await flushPromises();
-    expect(state.query.value).toBe("");
-    expect(state.hits.value).toBeNull();
+    expect(state.query.value).toBe("kept");
+    expect(state.hits.value?.map((hit) => hit.conversation.id)).toEqual(["kept"]);
     host.unmount();
   });
 

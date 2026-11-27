@@ -16,6 +16,7 @@ import SkillEvalCandidate from "./SkillEvalCandidate.vue";
 import SkillEvalLadder from "./SkillEvalLadder.vue";
 import SkillEvalHistory from "./SkillEvalHistory.vue";
 import { skillEvalNext, type SkillEvalNext, type SkillEvalStep } from "./skillEvalNext";
+import { useOverlayVisible } from "../composables/overlayVisibility";
 
 const props = defineProps<{ source: SkillSource; skill: CatalogSkill }>();
 const emit = defineEmits<{ adopted: [] }>();
@@ -93,9 +94,11 @@ async function refresh(): Promise<void> {
   else startPolling();
 }
 
+const visible = useOverlayVisible();
 function startPolling(): void {
-  poll ??= setInterval(() => void refresh(), POLL_MS);
+  if (visible.value) poll ??= setInterval(() => void refresh(), POLL_MS);
 }
+watch(visible, (shown) => (shown ? void refresh() : stopPolling()));
 
 watch(
   () => [props.source, props.skill.id],

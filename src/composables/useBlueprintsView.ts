@@ -7,9 +7,15 @@ import { hearingAnswersSchema } from "../../common/blueprint/hearing";
 import { readSessionStored, removeSessionStored, writeSessionStored } from "../utils/localStore";
 import { router } from "../router";
 import { overlayOriginState, overlayReturnPath } from "./overlayOrigin";
+import { lastPlaceIn } from "./overlayLastPlace";
 import { RUN_ID_RE } from "../../common/blueprint/run";
 
 export function blueprintsViewOpen(runId?: string): void {
+  const last = lastBlueprintsPlace();
+  if (runId === undefined && last !== null) {
+    void router.push({ path: last, state: overlayOriginState() });
+    return;
+  }
   const to = runId && RUN_ID_RE.test(runId) ? { name: "blueprintRun", params: { run: runId } } : { name: "blueprints" };
   void router.push({ ...to, state: overlayOriginState() });
 }
@@ -93,6 +99,7 @@ export function takeFormFill(): FormFill | null {
 }
 
 const ROUTE_NAMES = new Set(["blueprints", "blueprintRun", "blueprintMarket"]);
+const lastBlueprintsPlace = lastPlaceIn(ROUTE_NAMES);
 
 export function useBlueprintsView(): { isOpen: ComputedRef<boolean>; runId: ComputedRef<string | null>; inMarket: ComputedRef<boolean>; close: () => void } {
   const route = computed(() => router.currentRoute.value);

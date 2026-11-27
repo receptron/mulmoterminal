@@ -105,24 +105,22 @@ async function refreshUsage(): Promise<void> {
   if (read === usageRead) usage.value = answer;
 }
 
+// Read again on every opening, with the last catalog left on screen until the answer replaces it: the
+// screen is kept while closed, so what was chosen and read stays where it was.
+let catalogRead = 0;
 async function refresh(): Promise<void> {
-  catalog.value = null;
-  usage.value = null;
-  marks.value = null;
-  loadFailed.value = false;
+  const read = ++catalogRead;
   void refreshUsage();
   void refreshMarks();
-  const read = await loadSkillCatalog();
-  catalog.value = read;
-  loadFailed.value = read === null;
+  const answer = await loadSkillCatalog();
+  if (read !== catalogRead) return;
+  if (answer !== null || catalog.value === null) catalog.value = answer;
+  loadFailed.value = catalog.value === null;
 }
 
 watch(
   isOpen,
   (open) => {
-    picked.value = null;
-    doc.value = null;
-    mode.value = "local";
     if (open) void refresh();
   },
   { immediate: true },
@@ -160,7 +158,7 @@ async function reload(): Promise<void> {
 </script>
 
 <template>
-  <FullScreenOverlay v-if="isOpen" :region-label="t('skillsView.region')" :close-label="t('skillsView.close')" @close="close">
+  <FullScreenOverlay :open="isOpen" :region-label="t('skillsView.region')" :close-label="t('skillsView.close')" @close="close">
     <template #header>
       <span class="font-sans text-[14px] font-[650] text-fg">{{ t("skillsView.title") }}</span>
       <div class="flex rounded-[4px] border border-border" role="group" :aria-label="t('skillsView.modes')">

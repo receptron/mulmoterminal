@@ -2,7 +2,8 @@
 // Each running session and the process tree under its panes (#2219). Read only while this pane is
 // mounted — every few seconds, one `ps` and one tmux listing on the server — so a closed page costs
 // nothing. CPU is measured between reads, so it is blank until the second one.
-import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
+import { onBeforeUnmount, ref, shallowRef } from "vue";
+import { whileOverlayVisible } from "../../composables/overlayVisibility";
 import { useI18n } from "vue-i18n";
 import { killProcess, loadSessionProcesses, type KillOutcome } from "../../composables/processesApi";
 import { isHot, isLongRunning, isPaneRoot, type SessionProcess, type SessionProcesses } from "../../../common/sessionProcesses";
@@ -60,10 +61,16 @@ async function end(process: SessionProcess): Promise<void> {
   await refresh();
 }
 
-onMounted(() => {
-  void refresh();
-  timer = setInterval(() => void refresh(), POLL_INTERVAL_MS);
-});
+whileOverlayVisible(
+  () => {
+    void refresh();
+    timer = setInterval(() => void refresh(), POLL_INTERVAL_MS);
+  },
+  () => {
+    if (timer !== null) clearInterval(timer);
+    timer = null;
+  },
+);
 onBeforeUnmount(() => {
   unmounted = true;
   readAgain = false;

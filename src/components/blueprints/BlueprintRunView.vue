@@ -20,6 +20,7 @@ import BlueprintOriginalsDiff from "./BlueprintOriginalsDiff.vue";
 import BlueprintNextSteps from "./BlueprintNextSteps.vue";
 import BlueprintTargets from "./BlueprintTargets.vue";
 import { filesGotoFile } from "../../composables/useFilesView";
+import { whileOverlayVisible } from "../../composables/overlayVisibility";
 import { openTerminalAt } from "../../composables/useNewTerminal";
 import MarkdownProse from "../MarkdownProse.vue";
 
@@ -102,9 +103,17 @@ watch(
   { immediate: true },
 );
 
-void refresh();
-const pollTimer = setInterval(() => void refresh(), RUN_POLL_MS);
-onUnmounted(() => clearInterval(pollTimer));
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+whileOverlayVisible(
+  () => {
+    void refresh();
+    pollTimer = setInterval(() => void refresh(), RUN_POLL_MS);
+  },
+  () => {
+    if (pollTimer !== null) clearInterval(pollTimer);
+    pollTimer = null;
+  },
+);
 
 async function act(event: PersonEvent): Promise<void> {
   const step = current.value;

@@ -1,5 +1,5 @@
-// The Library's memory list (#3331), read each time the Library opens: memory changes while the
-// agent works, and a list kept from the last open would show files that have moved on.
+// The Library's memory list (#3331), read again each time the Library opens: memory changes while the
+// agent works. The last open's list stays on screen until the answer replaces it.
 import { ref, watch, type Ref } from "vue";
 import type { LibraryMemoryHealth, LibraryMemoryProject } from "../../common/libraryMemory";
 import { loadLibraryMemory, loadLibraryMemoryHealth } from "./libraryApi";
@@ -33,14 +33,7 @@ export function useLibraryMemory(isOpen: Ref<boolean>) {
     isOpen,
     async (open) => {
       if (!open) return;
-      const mine = ++reads;
-      // Not the last open's list while this one is read: a memory removed meanwhile would still show.
-      loaded.value = false;
-      failed.value = false;
-      projects.value = [];
-      health.value = new Map();
-      healthFailed.value = false;
-      await read(mine);
+      await read(++reads);
     },
     { immediate: true },
   );

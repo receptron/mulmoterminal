@@ -3,6 +3,7 @@
 // removed (#2219). Read once when shown and on Refresh — it is a few git calls per worktree.
 // Removing is a button per candidate; nothing is removed automatically.
 import { computed, onMounted, ref, shallowRef } from "vue";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 import { useI18n } from "vue-i18n";
 import { loadWorktreeCleanup, removeCleanupWorktree } from "../../composables/processesApi";
 import { cleanupBlockers, isCleanupCandidate, type WorktreeCleanupRow } from "../../../common/worktreeCleanup";
@@ -53,6 +54,7 @@ async function remove(row: WorktreeCleanupRow): Promise<void> {
 }
 
 onMounted(() => void refresh());
+onOverlayShownAgain(() => void refresh());
 </script>
 
 <template>

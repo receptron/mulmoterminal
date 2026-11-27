@@ -6,6 +6,7 @@ import { computed, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useBlueprintsView, blueprintsViewMarket, blueprintsViewSelect } from "../../composables/useBlueprintsView";
 import { useEscapeToClose } from "../../composables/useEscapeToClose";
+import { heldWhileClosed, provideOverlayVisible, useEverOpened } from "../../composables/overlayVisibility";
 import { listRuns, type RunList } from "../../composables/blueprintsApi";
 import { runGroups } from "./blueprintView";
 import BlueprintRunItem from "./BlueprintRunItem.vue";
@@ -17,7 +18,13 @@ import BlueprintMarket from "./BlueprintMarket.vue";
 const LIST_POLL_MS = 3000;
 
 const { t } = useI18n();
-const { isOpen, runId, inMarket, close } = useBlueprintsView();
+const view = useBlueprintsView();
+const { isOpen, close } = view;
+// Held while closed, so the hidden screen keeps the build it showed instead of switching to the form.
+const runId = heldWhileClosed(isOpen, () => view.runId.value);
+const inMarket = heldWhileClosed(isOpen, () => view.inMarket.value);
+provideOverlayVisible(isOpen);
+const everOpened = useEverOpened(isOpen);
 // Bumped when the market installs or removes a pack, so the new-build form reads the packs again.
 const packsVersion = ref(0);
 useEscapeToClose(isOpen, close);
@@ -56,7 +63,7 @@ const groups = computed(() => runGroups(runs.value));
 </script>
 
 <template>
-  <div v-if="isOpen" class="fixed inset-x-0 top-10 bottom-0 z-50 flex flex-col bg-deep" role="region" :aria-label="t('blueprints.title')">
+  <div v-if="everOpened" v-show="isOpen" class="fixed inset-x-0 top-10 bottom-0 z-50 flex flex-col bg-deep" role="region" :aria-label="t('blueprints.title')">
     <header class="flex flex-none items-center gap-2.5 border-b border-border bg-panel px-4 py-2">
       <span class="material-symbols-outlined text-[16px] text-secondary" aria-hidden="true">architecture</span>
       <span class="text-[14px] font-[650] text-fg">{{ t("blueprints.title") }}</span>

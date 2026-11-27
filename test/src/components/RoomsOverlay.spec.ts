@@ -7,8 +7,9 @@ const POLL_MS = 2000;
 
 // Route-driven like the other overlays; stub the seam so it is "open" on a room without a router.
 const openRoom = ref<string | null>("standup");
+const isOpen = ref(true);
 vi.mock("../../../src/composables/useRoomsView", () => ({
-  useRoomsView: () => ({ isOpen: ref(true), room: openRoom, close: vi.fn() }),
+  useRoomsView: () => ({ isOpen, room: openRoom, close: vi.fn() }),
   roomsViewSelect: vi.fn(),
 }));
 
@@ -47,6 +48,7 @@ const RoomsOverlay = (await import("../../../src/components/RoomsOverlay.vue")).
 
 beforeEach(() => {
   openRoom.value = "standup";
+  isOpen.value = true;
   messages = [];
   readOk = true;
   postOk = true;
@@ -65,6 +67,24 @@ const open = async () => {
 };
 
 describe("RoomsOverlay", () => {
+  // Closing hides the screen and the route drops the room; the conversation is still there, on the
+  // same room, when it opens again — and is read again then.
+  it("keeps the conversation across a close and reads it again on the next open", async () => {
+    messages = [{ at: 1, from: "human", text: "still here" }];
+    const w = await open();
+    isOpen.value = false;
+    openRoom.value = null;
+    await flushPromises();
+    expect(w.findAll('[data-testid="room-message"]').map((row) => row.text().includes("still here"))).toEqual([true]);
+    const readsWhileClosed = reads;
+    isOpen.value = true;
+    openRoom.value = "standup";
+    await flushPromises();
+    expect(w.findAll('[data-testid="room-message"]')).toHaveLength(1);
+    expect(reads).toBe(readsWhileClosed + 1);
+    w.unmount();
+  });
+
   it("shows what was said, and who said it", async () => {
     messages = [
       { at: 1, from: "#1 · claude", text: "I think we should split it" },

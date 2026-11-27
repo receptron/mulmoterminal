@@ -12,6 +12,7 @@
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { useRoomsView, roomsViewSelect } from "../composables/useRoomsView";
 import { useEscapeToClose } from "../composables/useEscapeToClose";
+import { heldWhileClosed } from "../composables/overlayVisibility";
 import { deleteRoom, listRooms, loadRoom, sendRoomMessage } from "../composables/useRooms";
 import { relativeTime } from "./cellDisplay";
 import type { RoomMessage } from "../../common/roomMessage";
@@ -25,7 +26,10 @@ const DEFAULT_SPEAKER = "human";
 /** How close to the end still counts as "reading the latest". */
 const NEAR_BOTTOM_PX = 80;
 
-const { isOpen, room, close } = useRoomsView();
+const view = useRoomsView();
+const { isOpen, close } = view;
+// Held while closed, so the hidden screen keeps the conversation it showed.
+const room = heldWhileClosed(isOpen, () => view.room.value);
 useEscapeToClose(isOpen, close);
 
 const rooms = ref<string[]>([]);
@@ -95,15 +99,18 @@ function stopPolling(): void {
 let watchRun = 0;
 
 // Poll only while the overlay is open and a room is chosen — a timer left running behind a closed
-// overlay is a request every two seconds for as long as the tab lives.
+// overlay is a request every two seconds for as long as the tab lives. Closing keeps the conversation
+// on screen for the next opening; only moving to another room clears it.
 watch(
   [isOpen, room],
-  async ([open]) => {
+  async ([open, id], previous) => {
     const run = ++watchRun;
     stopPolling();
-    messages.value = [];
-    readError.value = null;
-    sendError.value = null;
+    if (id !== previous?.[1]) {
+      messages.value = [];
+      readError.value = null;
+      sendError.value = null;
+    }
     if (!open) return;
     await Promise.all([refreshRooms(), refresh()]);
     if (run !== watchRun) return; // a newer run took over while this one was in flight
@@ -138,7 +145,7 @@ async function forget(id: string): Promise<void> {
 </script>
 
 <template>
-  <FullScreenOverlay v-if="isOpen" :region-label="t('tips.overlays.roomsRegion')" :close-label="t('tips.overlays.closeRooms')" @close="close">
+  <FullScreenOverlay :open="isOpen" :region-label="t('tips.overlays.roomsRegion')" :close-label="t('tips.overlays.closeRooms')" @close="close">
     <template #header>
       <span class="text-[14px] font-[650] text-fg">Rooms</span>
       <span v-if="room" class="truncate font-mono text-[12px] text-dim">{{ room }}</span>

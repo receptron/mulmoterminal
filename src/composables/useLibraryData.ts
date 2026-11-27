@@ -1,5 +1,6 @@
 // What the Library screen shows (#3329): the newest conversations a page at a time, the search
-// results for what is typed, and how far the index has got. Read while the screen is open only.
+// results for what is typed, and how far the index has got. Read while the screen is open only; kept
+// while it is closed.
 import { onBeforeUnmount, ref, shallowRef, watch, type Ref } from "vue";
 import type { LibraryConversation, LibraryIndexStatus, LibrarySearchHit } from "../../common/library";
 import { loadLibraryPage, loadLibraryStatus, searchLibrary } from "./libraryApi";
@@ -41,16 +42,10 @@ export function useLibraryData(isOpen: Ref<boolean>) {
     isOpen,
     (open) => {
       poll.stop();
-      if (!open) {
-        // A search typed before closing must not answer into the next opening.
-        search.cancel();
-        query.value = "";
-        hits.value = null;
-        searching.value = false;
-        searchFailed.value = false;
-        return;
-      }
+      // The query and its results stay for the next opening; both are read again then.
+      if (!open) return;
       void reload();
+      search.refresh();
       poll.start();
     },
     { immediate: true },

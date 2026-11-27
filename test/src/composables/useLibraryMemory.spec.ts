@@ -26,7 +26,8 @@ const { useLibraryMemory } = await import("../../../src/composables/useLibraryMe
 const project = (slug: string): LibraryMemoryProject => ({ slug, cwd: null, index: null, files: [] });
 
 describe("useLibraryMemory", () => {
-  it("shows nothing of the last open while the next one is read, and a failure as one", async () => {
+  // The screen is kept while closed: the last list stays until the next read replaces it.
+  it("keeps the last open's list while the next one is read, and shows a failure once it answers", async () => {
     answer = [project("before")];
     const isOpen = ref(true);
     const memory = useLibraryMemory(isOpen);
@@ -39,18 +40,10 @@ describe("useLibraryMemory", () => {
     answer = null;
     isOpen.value = true;
     await flushPromises();
-    expect(memory.loaded.value).toBe(false);
-    expect(memory.projects.value).toEqual([]);
+    expect([memory.loaded.value, memory.failed.value, memory.projects.value.map((p) => p.slug)]).toEqual([true, false, ["before"]]);
     release();
     await flushPromises();
     expect([memory.loaded.value, memory.failed.value, memory.projects.value]).toEqual([true, true, []]);
-    // And the failure is not shown while the next open is read.
-    isOpen.value = false;
-    await flushPromises();
-    gate = new Promise(() => {});
-    isOpen.value = true;
-    await flushPromises();
-    expect([memory.loaded.value, memory.failed.value]).toEqual([false, false]);
   });
 
   it("drops a health answer that arrives after the Library was opened again", async () => {
