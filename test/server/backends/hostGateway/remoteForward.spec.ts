@@ -68,9 +68,9 @@ describe("decideForward: which requests cross", () => {
       expect(decideForward(route.method, route.path, { cwd: "/srv/p", path: "src/a.ts" })).toMatchObject({ kind: "forward" });
     });
   });
-  it("ships the search and the whole index, alone, as routes the browser waits longer for", () => {
+  it("ships the search, the whole index and a new worktree, alone, as routes the browser waits longer for", () => {
     const slow = Object.values(REMOTE_ROUTES).filter((route) => "wait" in route && route.wait === "slow");
-    expect(slow.map((route) => route.path).sort()).toEqual(["/api/files/browse/index", "/api/files/browse/search"]);
+    expect(slow.map((route) => route.path).sort()).toEqual(["/api/files/browse/index", "/api/files/browse/search", "/api/worktrees/create"]);
   });
   it("ships a table whose every route decides to forward itself", () => {
     Object.values(REMOTE_ROUTES).forEach((route) => {
@@ -184,13 +184,41 @@ describe("decideForward: a path named in the body", () => {
     expect(decideWith("/api/worktrees/push", {})).toMatchObject({ kind: "forward" });
     expect(decideWith("/api/worktrees/push", undefined)).toMatchObject({ kind: "forward" });
   });
-  it("reads the diff for the cell's directory, and forwards no create or cleanup", () => {
+  it("reads the diff for the cell's directory, and forwards no cleanup", () => {
     expect(decideForward("GET", "/api/worktrees/diff", { cwd: "/srv/p", extra: 1 })).toMatchObject({
       kind: "forward",
       path: "/api/worktrees/diff?cwd=%2Fsrv%2Fp",
     });
-    expect(decideWith("/api/worktrees/create", { repoDir: "/srv/p" })).toMatchObject({ kind: "refuse", status: 404 });
+    expect(decideForward("GET", "/api/worktrees/cleanup", { cwd: "/srv/p" })).toMatchObject({ kind: "refuse", status: 404 });
     expect(decideWith("/api/worktrees/cleanup/remove", { repoDir: "/srv/p" })).toMatchObject({ kind: "refuse", status: 404 });
+  });
+});
+
+// The launch form's worktree section (#3506): a repo's worktrees read, and a new one made, for the
+// typed directory and nowhere else.
+describe("decideForward: the launch form's worktrees", () => {
+  const create = (body: unknown, query: Record<string, unknown> = { cwd: "/srv/p" }) => decideForward("POST", "/api/worktrees/create", query, undefined, body);
+  it("lists a directory's worktrees, with nothing but it", () => {
+    expect(decideForward("GET", "/api/worktrees", { cwd: "/srv/p", fresh: "1" })).toMatchObject({ kind: "forward", path: "/api/worktrees?cwd=%2Fsrv%2Fp" });
+    expect(decideForward("GET", "/api/worktrees", { cwd: "/srv/p/.." })).toMatchObject({ kind: "refuse", status: 400 });
+    expect(decideForward("GET", "/api/worktrees", {})).toMatchObject({ kind: "refuse", status: 400 });
+  });
+  it("creates one in the typed repo, its task and issue passed on", () => {
+    expect(create({ repoDir: "/srv/p", task: "fix-login", issue: 7 })).toMatchObject({ kind: "forward", path: "/api/worktrees/create?cwd=%2Fsrv%2Fp" });
+    expect(create({ repoDir: "/srv/p/sub", task: "t" })).toMatchObject({ kind: "forward" });
+  });
+  it.each([
+    ["another directory", "/srv/other"],
+    ["a climb out", "/srv/p/../other"],
+    ["a relative path", "sub"],
+    ["a home path the remote expands", "~/p"],
+    ["a non-string", 3],
+  ])("refuses %s as the repo", (_name, repoDir) => {
+    expect(create({ repoDir, task: "t" })).toMatchObject({ kind: "refuse", status: 400 });
+  });
+  it("requires the query's cwd that the repo is held to", () => {
+    expect(create({ repoDir: "/srv/p", task: "t" }, {})).toMatchObject({ kind: "refuse", status: 400 });
+    expect(create({ repoDir: "/srv/p", task: "t" }, { cwd: "/srv/other" })).toMatchObject({ kind: "refuse", status: 400 });
   });
 });
 

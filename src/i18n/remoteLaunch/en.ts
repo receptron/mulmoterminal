@@ -13,4 +13,13 @@ export const remoteLaunchEn = {
   chipFill: "Use {path}",
   resumeHeading: "or resume a conversation on {label}",
   resumeOpen: "open",
+  worktreeHeading: "or isolate in a worktree on {label}",
+  worktreeTaskPlaceholder: "task name (e.g. fix-login)",
+  worktreeNew: "New worktree",
+  worktreeCreatingLabel: "Creating…",
+  worktreeInUse: "in use",
+  worktreeResumeMark: "resume",
+  worktreeTimedOut: "Timed out waiting for git on {label}. It may still finish: pick this directory again to see.",
+  worktreeUnreachable: "Could not reach {label}: {error}",
+  worktreeNoPath: "{label} answered without a worktree path.",
 };

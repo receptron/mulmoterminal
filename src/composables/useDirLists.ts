@@ -227,7 +227,7 @@ export const useDirSkills = () =>
 // clobbering each other. Managed by the server (/api/worktrees).
 export const useDirWorktrees = () =>
   useDirList<WorktreeList>(
-    (dir) => `/api/worktrees?cwd=${encodeURIComponent(dir)}`,
+    (dir) => dirApiUrl(dir, "/api/worktrees"),
     (body) => ({ isGit: !!body.isGit, worktrees: rowsOf(body.worktrees, isWorktree) }),
     () => ({ isGit: false, worktrees: [] }),
   );

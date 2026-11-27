@@ -13,4 +13,13 @@ export const remoteLaunchZhCN = {
   chipFill: "使用 {path}",
   resumeHeading: "或在 {label} 上继续一个对话",
   resumeOpen: "已打开",
+  worktreeHeading: "或在 {label} 的工作树中隔离",
+  worktreeTaskPlaceholder: "任务名（如 fix-login）",
+  worktreeNew: "新建工作树",
+  worktreeCreatingLabel: "创建中…",
+  worktreeInUse: "使用中",
+  worktreeResumeMark: "继续",
+  worktreeTimedOut: "等待 {label} 上的 git 超时。它可能仍会完成：请重新选择此目录查看。",
+  worktreeUnreachable: "无法连接 {label}：{error}",
+  worktreeNoPath: "{label} 的响应中没有工作树路径。",
 };

@@ -9,6 +9,7 @@ import ChatModalAgentPickerSource from "../../../src/components/ChatModalAgentPi
 import agentPickerSource from "../../../src/components/agentPicker.ts?raw";
 import RemoteHostPickerSource from "../../../src/components/RemoteHostPicker.vue?raw";
 import RemoteLaunchFormSource from "../../../src/components/RemoteLaunchForm.vue?raw";
+import RemoteWorktreesSource from "../../../src/components/RemoteWorktrees.vue?raw";
 
 // The surface this section covers. A file added to the launch form belongs here too.
 describeTipSurface("launch", {
@@ -17,6 +18,7 @@ describeTipSurface("launch", {
   "agentPicker.ts": agentPickerSource,
   "RemoteHostPicker.vue": RemoteHostPickerSource,
   "RemoteLaunchForm.vue": RemoteLaunchFormSource,
+  "RemoteWorktrees.vue": RemoteWorktreesSource,
 });
 
 // agentPicker.ts has no i18n of its own, so it hands the form a key and the command; the hover is
