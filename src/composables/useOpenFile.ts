@@ -10,7 +10,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, type ComputedRef, type Ref, type ShallowRef } from "vue";
 import { createEditor, langKindForFilename, type CmEditor } from "../components/cmEditor";
 import { askTheMachine, bankText, browseQuery, browseUrl, writeBuffer } from "../components/filesPaneApi";
-import { isRemoteHost } from "../components/remoteCell";
+import { bytesPath, isRemoteHost } from "../components/remoteCell";
 import type { DirConfigSaveReport } from "../../common/dirConfigSaveReport";
 import type { FilesTabState } from "../components/filesPaneState";
 import { restoresPreview, staysOnSameFile } from "../components/filesPreviewMode";
@@ -155,7 +155,7 @@ async function loadFile(ctx: OpenFileCtx, pathRel: string, force: boolean, remem
     // A picture, PDF, video or sound is never read as text: the text route refuses anything over
     // the edit cap, and these are often bigger than that — which left them saying "too large to
     // edit" (#2269, #2674).
-    const adopt = showsMedia(ctx.host(), pathRel) ? await readMedia(ctx, pathRel) : await readText(ctx, pathRel);
+    const adopt = showsMedia(pathRel) ? await readMedia(ctx, pathRel) : await readText(ctx, pathRel);
     if (id !== ctx.reqId.n) return;
     adopt();
     restorePlace(ctx, pathRel, remembered, carried);
@@ -186,6 +186,8 @@ async function readMedia(ctx: OpenFileCtx, pathRel: string): Promise<() => void>
   const res = await fetchWithTimeout(urlOf(ctx, "version", pathRel));
   const data = await jsonBody(res);
   const grantPath = grantPathFor(res.status, data, pathRel);
+  // A one-file grant is this server's; a remote file behind a symlink out of its project is not shown.
+  if (grantPath !== null && isRemoteHost(ctx.host())) throw new Error(symlinkProblem("symlinkNotShown", pathRel));
   if (grantPath !== null) return await readGranted(ctx, pathRel, grantPath);
   if (!res.ok && res.status !== 413) throw new Error(failureReason(data, res.status));
   const version = typeof data.version === "string" ? data.version : null;
@@ -239,7 +241,7 @@ function applyRemembered(ctx: OpenFileCtx, remembered: FilesTabState): void {
     openPath: ctx.openPath.value,
     // Whether there is a Preview to LOAD, not only a kind: an HTML page with no root has no URL,
     // and coming back in a Preview that shows nothing leaves no button to leave it by.
-    previewable: previewSrcOf(ctx, ctx.cwd()) !== "",
+    previewable: previewSrcOf(ctx, ctx.cwd(), null, ctx.host()) !== "",
     unpreviewable: ctx.unpreviewable.value !== null,
   });
   if (remembered.path !== ctx.openPath.value || ctx.unpreviewable.value) return;
@@ -489,23 +491,30 @@ export interface OpenFile extends OpenFileBuffer {
 const previewTheme = computed(() => (activeThemeVars.value ? previewThemeFromVars(activeThemeVars.value) : null));
 
 /** The Preview frame's `src` for the open file, or "" when it has no Preview. */
-function previewSrcOf(buffer: OpenFileBuffer, cwd: string | null, token: string | null = null): string {
+function previewSrcOf(buffer: OpenFileBuffer, cwd: string | null, token: string | null = null, host: string | null = null): string {
   const kind = buffer.previewKind.value;
   const pathRel = buffer.openPath.value;
   if (!pathRel || !kind) return "";
-  return previewSrcFor(kind, cwd, pathRel, diskVersion(buffer.baseVersion.value, buffer.conflict.value), previewTheme.value, token);
+  // A remote file's through the byte proxy (#3506); its kinds exclude the page, served by path.
+  return bytesPath(host, previewSrcFor(kind, cwd, pathRel, diskVersion(buffer.baseVersion.value, buffer.conflict.value), previewTheme.value, token));
 }
 
 /** The Markdown Preview's document with a token of its own (#2515): a fresh one whenever the
  *  document does, which is exactly when the src would change anyway. */
-function previewOf(buffer: OpenFileBuffer, cwd: string | null): { src: string; token: string | null } {
+function previewOf(buffer: OpenFileBuffer, cwd: string | null, host: string | null): { src: string; token: string | null } {
   const token = buffer.previewKind.value === "markdown" ? crypto.randomUUID() : null;
-  return { src: previewSrcOf(buffer, cwd, token), token };
+  return { src: previewSrcOf(buffer, cwd, token, host), token };
 }
 
-// Pictures, PDFs and a file's Preview are served as bytes and pages, which the gateway does not
-// carry yet: a remote file is read as text, and one that is not text says so.
-const showsMedia = (host: string | null, pathRel: string): boolean => !isRemoteHost(host) && fileMediaKind(pathRel) !== null;
+// Pictures, PDFs and media are served as bytes, a remote file's through the byte proxy (#3506).
+const showsMedia = (pathRel: string): boolean => fileMediaKind(pathRel) !== null;
+
+// A remote file's Preview comes through the byte proxy, which carries rendered documents and raw
+// files; an HTML page is served beside the files it links to, so it has none there.
+const previewKindOn = (host: string | null, name: string): FilePreviewKind | null => {
+  const kind = filePreviewKind(name);
+  return kind === "html" && isRemoteHost(host) ? null : kind;
+};
 
 /** The refs one open file is made of, empty. */
 function newBuffer(host: () => string | null): OpenFileBuffer {
@@ -515,7 +524,7 @@ function newBuffer(host: () => string | null): OpenFileBuffer {
     openPath,
     openName,
     isMarkdown: computed(() => langKindForFilename(openName.value) === "markdown"),
-    previewKind: computed(() => (openName.value && !isRemoteHost(host()) ? filePreviewKind(openName.value) : null)),
+    previewKind: computed(() => (openName.value ? previewKindOn(host(), openName.value) : null)),
     dirty: ref(false),
     editSeq: ref(0),
     saving: ref(false),
@@ -534,7 +543,7 @@ function newBuffer(host: () => string | null): OpenFileBuffer {
 export function useOpenFile(cwd: () => string | null, host: () => string | null = () => null): OpenFile {
   const buffer = newBuffer(host);
   const ctx: OpenFileCtx = { ...buffer, cwd, host, reqId: { n: 0 } };
-  const preview = computed(() => previewOf(buffer, cwd()));
+  const preview = computed(() => previewOf(buffer, cwd(), host()));
 
   const pageHide = (): void => onPageHide(ctx);
   let stopWatchingExternal: (() => void) | null = null;
@@ -586,10 +595,10 @@ export function openFileMedia(
   cwd: () => string | null,
   host: () => string | null = () => null,
 ) {
-  const mediaKind = computed(() => (file.openPath.value && showsMedia(host(), file.openPath.value) ? fileMediaKind(file.openPath.value) : null));
+  const mediaKind = computed(() => (file.openPath.value && showsMedia(file.openPath.value) ? fileMediaKind(file.openPath.value) : null));
   const mediaSrc = computed(() => {
     if (!file.openPath.value || !mediaKind.value) return "";
-    return file.grantedMediaSrc.value ?? rawFileSrc(cwd(), file.openPath.value, file.baseVersion.value);
+    return file.grantedMediaSrc.value ?? rawFileSrc(cwd(), file.openPath.value, file.baseVersion.value, host());
   });
   return { mediaKind, mediaSrc };
 }

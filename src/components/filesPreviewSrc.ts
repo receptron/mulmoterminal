@@ -10,6 +10,7 @@ import { MD_PREVIEW_EMBED_ON, MD_PREVIEW_EMBED_PARAM, MD_PREVIEW_TOKEN_PARAM } f
 import type { PreviewTheme } from "../../common/previewTheme";
 import { filesPageUrl } from "../../common/filesPage";
 import type { FilePreviewKind } from "./filePreviewKind";
+import { bytesPath } from "./remoteCell";
 
 /** The version of the open file ON DISK, as the pane currently knows it.
  *
@@ -102,9 +103,10 @@ function renderedQuery(cwd: string | null, pathRel: string, version: string | nu
   return params.toString();
 }
 
-/** The raw route's URL for the file — an SVG's Preview, and the picture a raster image shows as. */
-export function rawFileSrc(cwd: string | null, pathRel: string, version: string | null = null): string {
+/** The raw route's URL for the file — an SVG's Preview, and the picture a raster image shows as;
+ *  through the byte proxy for a file on a remote host (#3506). */
+export function rawFileSrc(cwd: string | null, pathRel: string, version: string | null = null, host: string | null = null): string {
   const params = new URLSearchParams(browseQuery(cwd, pathRel));
   if (version) params.set("v", version);
-  return `/api/files/raw?${params.toString()}`;
+  return bytesPath(host, `/api/files/raw?${params.toString()}`);
 }

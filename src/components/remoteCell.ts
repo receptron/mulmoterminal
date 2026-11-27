@@ -62,6 +62,10 @@ export const pathOnHost = (host: string | null | undefined, path: string): strin
 
 export const REMOTE_CELL_DECLINE_EN = "This terminal runs on another machine, so that is not available here yet.";
 
+/** A file or rendered document as bytes: this server's route, or the gateway's byte proxy for a
+ *  remote cell, which passes the host's own sandboxing policy through (#3506). */
+export const bytesPath = (host: string | null | undefined, path: string): string => (isRemoteHost(host) ? remotePath(host, `/bytes${path}`) : path);
+
 /** A read of one session's own record: this server's route, or the gateway's for a remote cell. */
 export const transcriptPath = (
   host: string | null | undefined,

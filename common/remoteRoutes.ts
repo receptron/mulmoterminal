@@ -7,6 +7,8 @@
 // a decision about what a page on this machine may do there, not plumbing.
 
 import { DROP_FILENAME_HEADER } from "./dropUpload.js";
+import { MD_PREVIEW_EMBED_PARAM, MD_PREVIEW_TOKEN_PARAM } from "./mdPreviewMessage.js";
+import { PREVIEW_THEME_PARAMS } from "./previewTheme.js";
 
 export type RemoteRouteMethod = "GET" | "POST" | "PUT" | "DELETE";
 
@@ -121,6 +123,28 @@ export const REMOTE_ROUTES = {
 } as const satisfies Record<string, RemoteRoute>;
 
 export type RemoteRouteName = keyof typeof REMOTE_ROUTES;
+
+// A document the remote renders under its own sandboxing policy, for the Files pane's Preview: the
+// query a Preview URL carries (filesPreviewSrc.ts), its path held inside the cell's directory.
+const rendered = (route: string): RemoteRoute => ({
+  method: "GET",
+  path: `/api/files/browse/${route}`,
+  key: "cwd",
+  access: "read",
+  query: ["cwd", "path", "v", MD_PREVIEW_EMBED_PARAM, MD_PREVIEW_TOKEN_PARAM, ...Object.keys(PREVIEW_THEME_PARAMS)],
+  within: ["path"],
+});
+
+/** What the gateway serves as BYTES under `/remote/<id>/bytes/api/…`, rather than as JSON: a file the
+ *  Files pane shows as a picture, a PDF or media, and the documents it previews. Each response must
+ *  carry the remote's own `nosniff`, and its `sandbox` policy unless it is a PDF or media, which the
+ *  remote serves unsandboxed because a browser cannot open them sandboxed (server/backends/files). */
+export const REMOTE_BYTE_ROUTES = {
+  filesRaw: { method: "GET", path: "/api/files/raw", key: "cwd", access: "read", query: ["cwd", "path"], within: ["path"] },
+  filesMd: rendered("md"),
+  filesTable: rendered("table"),
+  filesJson: rendered("json"),
+} as const satisfies Record<string, RemoteRoute>;
 
 /** How a route is named in the census: its method and the path as the server mounts it. */
 export const routeSignature = (method: string, path: string): string => `${method.toUpperCase()} ${path}`;

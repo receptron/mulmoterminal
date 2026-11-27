@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { REMOTE_ROUTES, routeSignature } from "../../../../common/remoteRoutes.js";
+import { REMOTE_BYTE_ROUTES, REMOTE_ROUTES, routeSignature } from "../../../../common/remoteRoutes.js";
 import { makeTempDir } from "../../../support/tempDir.js";
 import { NEVER_FORWARDED, UNDECIDED, UNDECIDED_CEILING } from "./remoteRouteCensusLists.js";
 
@@ -22,7 +22,8 @@ const isApiRoute = (signature: string): boolean => {
   return path.startsWith("/api/") || path.startsWith("/^\\/api\\/");
 };
 
-const forwarded = Object.values(REMOTE_ROUTES).map((route) => shapeOf(routeSignature(route.method, route.path)));
+// As JSON or as bytes (the Files pane's Preview): either way, decided.
+const forwarded = [...Object.values(REMOTE_ROUTES), ...Object.values(REMOTE_BYTE_ROUTES)].map((route) => shapeOf(routeSignature(route.method, route.path)));
 const never = Object.values(NEVER_FORWARDED).flat().map(shapeOf);
 const undecided = UNDECIDED.map(shapeOf);
 

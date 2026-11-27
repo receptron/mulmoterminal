@@ -15,6 +15,7 @@ import { APP_CONFIG_FILE, mountConfigRoutes } from "../config/config-routes.js";
 import { getUpdateStatus } from "../config/update-status.js";
 import { loadRemoteHosts, mountRemoteHostsRoutes } from "../backends/hostGateway/remoteHostsRoutes.js";
 import { mountRemoteForwardRoutes, mountRemoteRawForwardRoutes } from "../backends/hostGateway/remoteForwardRoutes.js";
+import { mountRemoteBytesRoutes } from "../backends/hostGateway/remoteBytesRoutes.js";
 import { mountFilesBrowseRoutes } from "../files/files-browse.js";
 import { endTmuxSession, mountTmuxRoutes, type TmuxRouteDeps } from "../infra/process/tmux-routes.js";
 import { mountSwitchTokenRoutes } from "../infra/http/switch-token-routes.js";
@@ -492,7 +493,8 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
 
   // The other MulmoTerminal servers this one forwards to over ssh tunnels (GET /api/remote-hosts).
   mountRemoteHostsRoutes(app, { configFile: APP_CONFIG_FILE, localVersion: () => getUpdateStatus().version });
-  mountRemoteForwardRoutes(app, { remoteHosts: () => loadRemoteHosts(APP_CONFIG_FILE).hosts });
+  // ...as JSON, and their files and rendered documents as bytes, for a remote cell's Files pane Preview.
+  [mountRemoteForwardRoutes, mountRemoteBytesRoutes].forEach((mount) => mount(app, { remoteHosts: () => loadRemoteHosts(APP_CONFIG_FILE).hosts }));
 
   // Where this install keeps its docs and source, for the bundled help skill (GET /api/help/sources).
   mountHelpRoutes(app);
