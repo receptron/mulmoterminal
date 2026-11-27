@@ -95,6 +95,8 @@ whileOverlayVisible(
 const elapsed = computed(() => (activeSession.value ? elapsedParts(activeSession.value.atMs, now.value) : null));
 
 async function refresh(): Promise<void> {
+  // An action answering after the screen was closed reads nothing; showing it again reads.
+  if (!shownNow.value) return;
   // The server does not queue reads behind a person's action, so a read sent mid-action can see
   // the state from before it — and, being newer, would win. The action's own answer is the read.
   if (sending.value) return;

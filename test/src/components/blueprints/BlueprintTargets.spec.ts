@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { mountUnderOverlay } from "../underOverlay";
+import { ref } from "vue";
 import { basePlanSchema } from "../../../../common/blueprint/plan";
 import { initialState, type BlueprintState, type StepStatus } from "../../../../common/blueprint/state";
 import type { Target } from "../../../../common/blueprint/targets";
@@ -195,6 +196,30 @@ describe("the work list shown again", () => {
     await flushPromises();
     await showAgain();
     expect(loadTargets).toHaveBeenCalledTimes(2);
+    wrapper.unmount();
+  });
+});
+
+describe("a step moving while the screen is hidden", () => {
+  it("reads the list on showing, not while hidden", async () => {
+    loadTargets.mockReset();
+    loadTargets.mockResolvedValue(listed(null));
+    const round = ref(1);
+    const { wrapper, visible } = mountUnderOverlay(BlueprintTargets, () => ({
+      runId: "run-00000001",
+      steps,
+      state: at("passed", "awaiting-answer", round.value),
+    }));
+    await flushPromises();
+    visible.value = false;
+    await flushPromises();
+    loadTargets.mockClear();
+    round.value = 2;
+    await flushPromises();
+    expect(loadTargets).not.toHaveBeenCalled();
+    visible.value = true;
+    await flushPromises();
+    expect(loadTargets).toHaveBeenCalledTimes(1);
     wrapper.unmount();
   });
 });

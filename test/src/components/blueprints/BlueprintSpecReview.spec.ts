@@ -2,6 +2,7 @@
 // read instead, and keeps only the conversation, where what the person sends changes those files.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mountUnderOverlay } from "../underOverlay";
 import { defineComponent, h, ref } from "vue";
 import { provideOverlayVisible } from "../../../../src/composables/overlayVisibility";
 
@@ -117,6 +118,32 @@ describe("the spec shown again", () => {
     visible.value = true;
     await flushPromises();
     expect(loadSpec).toHaveBeenCalledTimes(2);
+    wrapper.unmount();
+  });
+});
+
+describe("a reply landing while the screen is hidden", () => {
+  it("reads the spec on showing, not while hidden", async () => {
+    loadSpec.mockReset();
+    loadSpec.mockResolvedValue(specView("# spec"));
+    const chat = ref(0);
+    const { wrapper, visible } = mountUnderOverlay(BlueprintSpecReview, () => ({
+      runId: "run-00000001",
+      revisionSessionId: null,
+      chatCount: chat.value,
+      projectDir: "/work/app",
+      expectsSpec: true,
+    }));
+    await flushPromises();
+    visible.value = false;
+    await flushPromises();
+    loadSpec.mockClear();
+    chat.value = 1;
+    await flushPromises();
+    expect(loadSpec).not.toHaveBeenCalled();
+    visible.value = true;
+    await flushPromises();
+    expect(loadSpec).toHaveBeenCalledTimes(1);
     wrapper.unmount();
   });
 });

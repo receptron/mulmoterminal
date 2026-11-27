@@ -236,6 +236,21 @@ describe("a review gate", () => {
   };
 
   // The gate stands before the step it names: without the name, the step's own title above read as work already done.
+  // The kept screen: a spec message answering after the close reads nothing; showing again reads.
+  it("reads nothing for a spec message that answers after the screen was closed", async () => {
+    loadRun.mockReset();
+    loadRun.mockResolvedValue(gated([]));
+    const { wrapper, visible } = mountUnderOverlay(BlueprintRunView, { runId: "run-00000001" });
+    await flushPromises();
+    visible.value = false;
+    await flushPromises();
+    loadRun.mockClear();
+    wrapper.findComponent({ name: "BlueprintSpecReview" }).vm.$emit("sent");
+    await flushPromises();
+    expect(loadRun).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it("says which step the approval lets start", async () => {
     loadRun.mockResolvedValue(gated([".blueprint/brief.md"]));
     const wrapper = mount(BlueprintRunView, { props: { runId: "run-00000001" } });
