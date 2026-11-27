@@ -8,8 +8,9 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **13.10.0 is out.** Two new built-in themes in Settings → Theme: Okamoto Taro (dark, with a
-> vermilion accent) and Pink (light). [Setup guide](v13.10.0.html)
+> **13.11.0 is out.** Full-screen screens such as the Library get a row of tabs and come back as
+> you left them, and a Cmd press during Japanese input no longer types the text twice.
+> [Setup guide](v13.11.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 

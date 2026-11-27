@@ -8,6 +8,38 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@13.11.0 — 2026-11-28
+
+> **Setup guide:** [13.11.0 — Tabs for the screens you opened, and Japanese input that no longer doubles](https://receptron.github.io/mulmoterminal/guide/en/v13.11.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.11.0.html))
+
+### Feature-menu screens are kept after the first open (#3576)
+
+Part 1 of #3575. Rooms, Library, Blueprints, Skills, Processes and Usage are built on the first open and only hidden on close (`v-if="everOpened" v-show="open"`), so a reopen shows search text, selection, scroll and the conversation being read at once and re-reads in the background. `src/composables/overlayVisibility.ts` gives components under a kept screen `whileOverlayVisible` / `onOverlayShownAgain` (start and stop work, re-read on re-show) and `heldWhileClosed` (route-derived state does not switch while hidden); `overlayLastPlace.ts` returns a plain open of Rooms or Blueprints to the last place inside it. Every component under a kept screen re-reads when shown again, starts nothing while hidden, and drops an older answer arriving after a newer one. Also: Escape in the Library search no longer clears the field before the screen closes, `usage` joins `OVERLAY_ROUTES`, and a Blueprints answer typed for one step is cleared when the step changes.
+
+### Keys for the Library, Processes and Usage screens, and `screen-toggle` (#3577)
+
+Part 2 of #3575. New actions `screen-library`, `screen-processes` and `screen-usage` (keymap bindings and `run: "action"` header buttons; Library also gets a command-palette row), and `screen-toggle` (`src/composables/screenToggle.ts`): on a screen it goes back to where the screen was opened from, elsewhere to the screen opened last with its full path and query, and before any screen was opened it refuses. `useGridKeys` now leaves a keydown already `defaultPrevented`, which had made `screen-toggle` undo itself within one keypress. Labels in all five locales; `config.md` (en/ja) and the `mulmoterminal-keys` skill list the new actions.
+
+### Tabs for the screens opened so far (#3578)
+
+Part 3 of #3575. While a full-screen screen is in front, a strip of tabs under the toolbar lists every screen opened since the page loaded, Grid view first; a tab returns to its screen where it was left and × forgets it, the next (else previous, else the grid) coming to the front. `screenTabsModel.ts` is the pure model (a screen's sub-routes are one tab; the worklog is the Wiki's tab), `useScreenTabs.ts` records visits through `router.afterEach`, and `ScreenTabs.vue` draws them. Screen roots start at `top-(--screen-top)`, lowered by `:root:has([data-screen-tabs])`, so no screen knows about the strip. `returnToPlace` is shared by the tabs and `screen-toggle`.
+
+### Late review findings on the kept screens (#3587)
+
+Closes #3585. CodeRabbit findings on #3576 / #3577 that were merged without triage, checked against main and fixed with one spec each: Blueprints new build no longer puts a default back over a cleared answer and drops answers the new questions do not accept; the run view clears its draft when the question is asked again; spec review separates read and send errors; targets say so when a re-read fails over an empty list; skill eval and the Library list wait for an outstanding read before polling; Library marks and memory saves outdate stale reads; a skill removed during an edit is dropped when the edit ends; the Library changed-files diff stays until both sides answer. The guides and keys skill say `screen-toggle` single keys work on every screen, two-key sequences only on the grid.
+
+### A bare Cmd during an IME composition no longer sends the text twice (#3586)
+
+Closes #3584. xterm 6.0.0's `CompositionHelper.keydown` commits the open composition for any keydown outside keyCodes 20/229/16/17/18; Meta (91/93) is missing, so a Cmd press while composing sent the text once immediately and again on `compositionend` (xtermjs/xterm.js#6244, open upstream). A common trigger is Karabiner's "Cmd alone sends 英数/かな" rule. The terminal's custom key handler now asks `xtermImeKeyVerdict` (`src/composables/imeComposition.ts`) first: `false` for a composing `keydown` with `key === "Meta"` (`composingMeta.ts`), which xterm returns on before its composition helper runs, and `true` for the existing #1353 Safari confirmation. No `preventDefault`, so the IME still receives the key. Remove once an xterm release fixes the modifier list.
+
+### GridView.vue back under max-lines (#3589)
+
+Closes #3588. #3580 and #3581 each fit, but together put `src/components/GridView.vue` one code line over `max-lines`, so lint was red on main. The pure `drawChannelOf` helper moved beside `sessionChannelOf` in `src/components/remoteCell.ts`, unchanged, with a spec.
+
+### Remote hosts groundwork (#3562, #3567, #3568, #3571, #3572, #3573, #3574, #3579, #3580, #3581, #3582, #3583)
+
+For #3506, which is still open. Work toward a feature that is not ready yet; it is inactive unless configured and not documented yet.
+
 ## mulmoterminal@13.10.0 — 2026-11-27
 
 > **Setup guide:** [13.10.0 — Two new themes, Okamoto Taro and Pink](https://receptron.github.io/mulmoterminal/guide/en/v13.10.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.10.0.html))
