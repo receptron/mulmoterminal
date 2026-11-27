@@ -57,7 +57,7 @@ export const shortcutActionsZhCN = {
   screenLibrary: "前往资料库",
   screenProcesses: "前往进程",
   screenUsage: "前往用量",
-  screenToggle: "在上一个画面和终端之间来回切换",
+  screenToggle: "在上一个画面和打开它的原画面之间来回切换",
   settingsOpen: "打开设置",
   soundToggle: "开启 / 关闭通知音",
   confetti: "撒彩纸（从设置的样式中随机混合）",

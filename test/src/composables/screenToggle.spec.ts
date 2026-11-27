@@ -15,12 +15,12 @@ describe("toggleLastScreen", () => {
   });
 
   it("leaves a screen for where it was opened from, and goes back to it, query and all", async () => {
-    await router.push("/terminals");
+    await router.push("/terminals?page=2#cells");
     libraryViewOpen({ session: "s1", cwd: "/work" });
     await flushPromises();
     expect(toggleLastScreen()).toBe(true);
     await flushPromises();
-    expect(here().name).toBe("terminals");
+    expect(here().fullPath).toBe("/terminals?page=2#cells");
     expect(toggleLastScreen()).toBe(true);
     await flushPromises();
     expect(here().name).toBe("library");
