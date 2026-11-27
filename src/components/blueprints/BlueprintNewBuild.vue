@@ -129,18 +129,26 @@ async function loadLists(first: boolean): Promise<boolean> {
     if (first) error.value = failureText(t, result);
     return false;
   }
+  if (first) error.value = null;
   packs.value = result.value.packs;
   return true;
 }
 
+/** The form set up from the packs, once they could be read; until then each showing tries again. */
+let setUp = false;
 onOverlayShownAgain(() => {
   void loadKnownFolders();
-  void loadLists(false);
+  void (setUp ? loadLists(false) : setUpForm());
 });
 
-onMounted(async () => {
+onMounted(() => {
   void loadKnownFolders();
+  void setUpForm();
+});
+
+async function setUpForm(): Promise<void> {
   if (!(await loadLists(true))) return;
+  setUp = true;
   const fill = pendingFill.value;
   if (fill && !base.value) {
     projectDir.value = fill.projectDir;
@@ -148,7 +156,7 @@ onMounted(async () => {
   }
   // Only when nothing was chosen yet: an example picked while this loaded must not be overwritten.
   if (!base.value) base.value = bases.value[0]?.slug ?? "";
-});
+}
 
 // Each follows the other only when the pair would not fit: an example, a follow-up or a kept form sets both at once.
 watch(base, (baseSlug) => {

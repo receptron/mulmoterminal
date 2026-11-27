@@ -42,4 +42,28 @@ describe("SessionProcessesPane", () => {
     expect(api.reads).toHaveLength(2);
     wrapper.unmount();
   });
+
+  // Reopened while a read from before the close is still out: the new read is queued behind it, never
+  // sent beside it, so the older answer cannot land after the newer one.
+  it("reads again after, not beside, a read still out from before the close", async () => {
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(SessionProcessesPane)) });
+    const wrapper = mount(Host, { global: { plugins: [i18n] } });
+    await flushPromises();
+    visible.value = false;
+    await flushPromises();
+    visible.value = true;
+    await flushPromises();
+    expect(api.reads).toHaveLength(1); // the reopening's read waits for the one still out
+    const session = (sessionId: string): SessionProcesses => ({ sessionId, cwd: `/w/${sessionId}`, processes: [] });
+    api.reads[0]?.([session("old")]);
+    await flushPromises();
+    expect(api.reads).toHaveLength(2);
+    api.reads[1]?.([session("new")]);
+    await flushPromises();
+    expect(wrapper.findAll("[data-testid=processes-session]")).toHaveLength(1);
+    expect(wrapper.text()).toContain("/w/new");
+    expect(wrapper.text()).not.toContain("/w/old");
+    wrapper.unmount();
+  });
 });

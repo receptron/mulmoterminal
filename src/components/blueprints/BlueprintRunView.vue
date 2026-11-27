@@ -20,7 +20,7 @@ import BlueprintOriginalsDiff from "./BlueprintOriginalsDiff.vue";
 import BlueprintNextSteps from "./BlueprintNextSteps.vue";
 import BlueprintTargets from "./BlueprintTargets.vue";
 import { filesGotoFile } from "../../composables/useFilesView";
-import { whileOverlayVisible } from "../../composables/overlayVisibility";
+import { onOverlayShownAgain, whileOverlayVisible } from "../../composables/overlayVisibility";
 import { openTerminalAt } from "../../composables/useNewTerminal";
 import MarkdownProse from "../MarkdownProse.vue";
 
@@ -53,15 +53,12 @@ const reviewing = computed(() => current.value?.gates.includes("review") ?? fals
 // because it sits in the hidden .blueprint/ folder a person would not open.
 const finished = computed(() => view.value !== null && current.value === null);
 const report = ref<ReportView | null>(null);
-watch(
-  finished,
-  async (done) => {
-    if (!done || report.value !== null) return;
-    const result = await loadReport(props.runId);
-    if (result.ok) report.value = result.value;
-  },
-  { immediate: true },
-);
+async function readReport(): Promise<void> {
+  if (!finished.value || report.value !== null) return;
+  const result = await loadReport(props.runId);
+  if (result.ok) report.value = result.value;
+}
+watch(finished, () => void readReport(), { immediate: true });
 
 // The session working on the step right now, if one is: what the live panel and the clock follow.
 const activeSession = computed(() => {
@@ -100,17 +97,28 @@ async function refresh(): Promise<void> {
 }
 
 // Asked once per build shown, not on every poll: taking a shared app's copy again reads its records from Firestore.
+// Showing the kept screen again counts as showing the build, as reopening it always did.
 const sourceChangedAt = ref<string | null>(null);
+let sourceReads = 0;
+async function readSource(runId: string): Promise<void> {
+  const mine = ++sourceReads;
+  const result = await loadRunSource(runId);
+  if (mine !== sourceReads || runId !== props.runId || !result.ok) return;
+  sourceChangedAt.value = result.value.status === "changed" ? new Date(result.value.takenAt).toLocaleString(locale.value) : null;
+}
 watch(
   () => props.runId,
-  async (runId) => {
+  (runId) => {
     sourceChangedAt.value = null;
-    const result = await loadRunSource(runId);
-    if (runId !== props.runId || !result.ok || result.value.status !== "changed") return;
-    sourceChangedAt.value = new Date(result.value.takenAt).toLocaleString(locale.value);
+    void readSource(runId);
   },
   { immediate: true },
 );
+// A report that could not be read is asked for again, and the source checked again.
+onOverlayShownAgain(() => {
+  void readReport();
+  void readSource(props.runId);
+});
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 whileOverlayVisible(

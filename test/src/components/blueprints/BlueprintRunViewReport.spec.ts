@@ -2,6 +2,7 @@
 // open, and rendered from Markdown with the path it came from.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mountUnderOverlay } from "../underOverlay";
 
 const { loadRun, loadReport, listPacks, filesGotoFile, filesGotoIndex, blueprintsViewFollowUp } = vi.hoisted(() => ({
   loadRun: vi.fn(),
@@ -296,5 +297,25 @@ describe("a step stopped because Claude Code does not trust the folder", () => {
     const wrapper = mount(BlueprintRunView, { props: { runId: "run-00000001" } });
     await flushPromises();
     expect(wrapper.find('[data-testid="blueprint-run-open-trust"]').exists()).toBe(false);
+  });
+});
+
+// The Blueprints screen is kept while closed: a report that could not be read is asked for again when shown.
+describe("the report shown again", () => {
+  it("is asked for again when it could not be read, and not once it was", async () => {
+    loadRun.mockReset();
+    loadRun.mockResolvedValue(runView("passed"));
+    listPacks.mockResolvedValue({ ok: true, value: { packs: [] } });
+    const good = { ok: true, value: { path: "/work/docs/.blueprint/review-report.md", markdown: "## found", changed: { files: [], more: false } } };
+    loadReport.mockReset();
+    loadReport.mockResolvedValueOnce({ ok: false, error: "busy" }).mockResolvedValue(good);
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintRunView, { runId: "run-00000001" });
+    await flushPromises();
+    await showAgain();
+    expect(loadReport).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).toContain("found");
+    await showAgain();
+    expect(loadReport).toHaveBeenCalledTimes(2);
+    wrapper.unmount();
   });
 });
