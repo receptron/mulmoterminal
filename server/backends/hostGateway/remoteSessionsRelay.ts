@@ -1,7 +1,7 @@
 // The remote hosts' session rows, relayed onto this server's pub/sub (#3506 phase 2).
 //
 // One socket.io client per configured host, through the user's `ssh -L`, subscribed to `sessions`
-// `prompt-submitted` and `ask-question`, and to a remote session's own channel only while a browser listens to its
+// `prompt-submitted`, `ask-question` and `tool-groups`, and to a remote session's own channel only while a browser listens to its
 // Mac-side name (`remote:<host>:<kind>:<id>`, parseRemoteSessionChannel), whose kinds and id this
 // server checks. The browser never subscribes to a remote itself.
 //
@@ -13,18 +13,21 @@ import {
   REMOTE_ASK_QUESTION_CHANNEL,
   REMOTE_PROMPT_SUBMITTED_CHANNEL,
   REMOTE_SESSIONS_CHANNEL,
+  REMOTE_TOOL_GROUPS_CHANNEL,
   remoteSessionRowOf,
   type RemoteAskQuestion,
   type RemotePromptSubmitted,
   type RemoteSessionRowMessage,
+  type RemoteToolGroups,
 } from "../../../common/remoteHosts.js";
 import { PROMPT_SUBMITTED_CHANNEL, isPromptSubmittedEvent } from "../../../common/promptChannel.js";
 import { ASK_QUESTION_CHANNEL, isAskQuestionDone, isAskQuestionEvent } from "../../../common/askQuestion.js";
+import { TOOL_GROUPS_CHANNEL, toolGroupsAnnouncementOf } from "../../../common/toolGroupsAnnouncement.js";
 import { SESSION_ID_RE } from "../../config/env.js";
 import type { RemoteHost } from "./remoteHostsConfig.js";
 
 const RELAYED_CHANNEL = "sessions";
-const RELAYED_CHANNELS = [RELAYED_CHANNEL, PROMPT_SUBMITTED_CHANNEL, ASK_QUESTION_CHANNEL] as const;
+const RELAYED_CHANNELS = [RELAYED_CHANNEL, PROMPT_SUBMITTED_CHANNEL, ASK_QUESTION_CHANNEL, TOOL_GROUPS_CHANNEL] as const;
 // A host added to or removed from config.json is noticed on this tick; nothing watches the file.
 export const RELAY_RECONCILE_MS = 15_000;
 
@@ -64,6 +67,13 @@ export function relayPrompt(host: string, data: unknown): RemotePromptSubmitted 
 export function relayQuestion(host: string, data: unknown): RemoteAskQuestion | null {
   const dialog = isAskQuestionEvent(data) || isAskQuestionDone(data);
   return dialog && SESSION_ID_RE.test(data.sessionId) ? { host, question: data } : null;
+}
+
+/** The relayed message for one `tool-groups` announcement from `host`, copied field by field, or null
+ *  when it names no real session. */
+export function relayToolGroups(host: string, data: unknown): RemoteToolGroups | null {
+  const announcement = toolGroupsAnnouncementOf(data);
+  return announcement && SESSION_ID_RE.test(announcement.sessionId) ? { host, announcement } : null;
 }
 
 function dataOf(message: unknown, channel: string): unknown {
@@ -113,6 +123,8 @@ function relayFrame(host: string, message: unknown, following: ReadonlySet<strin
   if (prompt) publish(REMOTE_PROMPT_SUBMITTED_CHANNEL, prompt);
   const question = relayQuestion(host, dataOf(message, ASK_QUESTION_CHANNEL));
   if (question) publish(REMOTE_ASK_QUESTION_CHANNEL, question);
+  const toolGroups = relayToolGroups(host, dataOf(message, TOOL_GROUPS_CHANNEL));
+  if (toolGroups) publish(REMOTE_TOOL_GROUPS_CHANNEL, toolGroups);
   const channel = channelOf(message);
   if (channel !== undefined && following.has(channel)) publish(`remote:${host}:${channel}`, dataOf(message, channel));
 }

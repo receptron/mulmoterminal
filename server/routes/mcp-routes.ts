@@ -25,6 +25,7 @@ import {
 import { groupsWithin } from "../mcp/tool-gate.js";
 import { isToolGroup, TOOL_GROUPS, type ToolGroup } from "../../common/toolGroups.js";
 import { isRecord } from "../../common/isRecord.js";
+import { TOOL_GROUPS_CHANNEL } from "../../common/toolGroupsAnnouncement.js";
 import { entitledToolGroups, bridgeResolvableSessions, resolveBridgeSession } from "../session/bridge-session.js";
 import { ancestorPids } from "../infra/process/process-tree.js";
 import { tmuxPanePids } from "../infra/process/tmux.js";
@@ -38,11 +39,6 @@ const rejectNonPost = (_req: Request, res: Response) => res.status(405).set("All
 // handed the session id before claude is even spawned, so the panel's first question about it
 // is normally asked before claude's MCP client has connected. Without a push, that first "no"
 // would stand until the user collapsed and re-expanded the cell.
-//
-// Its own channel rather than the `sessions` one: that channel's consumer guards with
-// `"id" in d` and feeds whatever passes to applyActivity, so a foreign message shaped like
-// this would be read as an activity update.
-export const TOOL_GROUPS_CHANNEL = "tool-groups";
 
 export interface McpRouteDeps {
   publish: (channel: string, data: unknown) => void;
