@@ -34,11 +34,12 @@ describe("toggleLastScreen", () => {
   it("goes back to the most recent of several screens", async () => {
     await router.push("/terminals");
     await router.push({ name: "skills", state: overlayOriginState() });
-    await router.push({ name: "usage", state: overlayOriginState() });
+    await router.push({ name: "usage", hash: "#weeks", state: overlayOriginState() });
     await router.push("/terminals");
     expect(toggleLastScreen()).toBe(true);
     await flushPromises();
     expect(here().name).toBe("usage");
+    expect(here().hash).toBe("#weeks");
     toggleLastScreen();
     await flushPromises();
   });
