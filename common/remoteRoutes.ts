@@ -106,6 +106,9 @@ export const REMOTE_ROUTES = {
   transcriptRelayMark: transcript("relay-mark", ["agent", "dest"], "POST", "write"),
   // The Tools pane: a session's tool calls, and the tools its groups give it.
   toolCalls: { method: "GET", path: "/api/tool-calls/:sid", key: "session", access: "read", query: [] },
+  // The Canvas: a session's cards. A view's change of state is not written back: that route is the
+  // agent's own, and forwarding it would let a page put a card in the remote session.
+  toolResults: { method: "GET", path: "/api/agent/toolResults/:sid", key: "session", access: "read", query: [] },
   tools: { method: "GET", path: "/api/tools", key: "session", access: "read", query: ["sessionId"] },
   worktreeDiff: { method: "GET", path: "/api/worktrees/diff", key: "cwd", access: "read", query: ["cwd"] },
   worktreePush: repoWrite("/api/worktrees/push", ["cwd"]),

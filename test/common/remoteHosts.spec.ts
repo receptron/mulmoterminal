@@ -171,10 +171,11 @@ describe("remote session channels", () => {
   it("round-trips a known kind of a session on a host", () => {
     expect(remoteSessionChannel("lx", "toolcalls", ID)).toBe(`remote:lx:toolcalls:${ID}`);
     expect(parseRemoteSessionChannel(remoteSessionChannel("lx", "toolcalls", ID), isId)).toEqual({ host: "lx", channel: `toolcalls:${ID}` });
+    expect(parseRemoteSessionChannel(remoteSessionChannel("lx", "session", ID), isId)).toEqual({ host: "lx", channel: `session:${ID}` });
   });
   it.each([
     `toolcalls:${ID}`,
-    `remote:lx:session:${ID}`,
+    `remote:lx:ask-question:${ID}`,
     `remote:lx:plugin:x:file:${ID}`,
     `remote:lx:toolcalls:not-an-id`,
     `remote:lx:toolcalls:${ID}:extra`,

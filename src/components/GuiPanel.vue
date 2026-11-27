@@ -17,6 +17,8 @@ import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import { pushCollectionSurface, popCollectionSurface, type CollectionSurface } from "../composables/collectionSurface";
 import { cachedProjectIdForCwd, projectIdForCwd } from "../composables/collectionProject";
 import { useI18n } from "vue-i18n";
+import { pathOnHost } from "./remoteCell";
+import { remoteSessionChannel } from "../../common/remoteHosts";
 
 const { t } = useI18n();
 
@@ -51,6 +53,10 @@ const props = defineProps<{
   // both cases: there is nothing to ask, or nothing that could answer. Absent/null means the
   // panel is usable, which keeps the single view (where it always is) unchanged.
   unavailable?: "no-session" | "no-canvas-mcp" | null;
+  /** The remote host the session runs on (#3506), null or absent for this machine. Its cards are read
+   *  there, and only a card that draws from the result alone is drawn: the rest read files and plugin
+   *  routes on that host. */
+  host?: string | null;
 }>();
 const emit = defineEmits<{ toggleExpand: []; close: [] }>();
 
@@ -84,9 +90,9 @@ const NEAR_BOTTOM_THRESHOLD_PX = 80;
 // Deduping by uuid mirrors applyToolResultToSession.
 const { upsert } = useSessionFeed(results, {
   sessionId: () => props.sessionId,
-  historyUrl: (id) => `/api/agent/toolResults/${encodeURIComponent(id)}`,
+  historyUrl: (id) => pathOnHost(props.host, `/api/agent/toolResults/${encodeURIComponent(id)}`),
   historyKey: "toolResults",
-  channel: (id) => `session:${id}`,
+  channel: (id) => (props.host ? remoteSessionChannel(props.host, "session", id) : `session:${id}`),
   identify: (result) => result.uuid,
   // The channel carries untrusted JSON; a card with no uuid cannot be deduped or keyed, so it is
   // not a result this panel can render.
@@ -124,7 +130,8 @@ const { upsert } = useSessionFeed(results, {
 async function onUpdateResult(existing: ToolResult, update: Partial<ToolResult>) {
   const merged: ToolResult = { ...existing, ...update };
   upsert(merged);
-  if (!props.sessionId) return;
+  // Not written back for a remote card: that route is the agent's own, not forwarded (#3506).
+  if (!props.sessionId || props.host) return;
   try {
     await fetchWithTimeout("/api/agent/toolResult", {
       method: "POST",
@@ -186,10 +193,12 @@ const cardKey = (result: ToolResult) => `${scopeId.value ?? ""}\u0000${result.uu
 // undefined three times — and a non-null assertion inside a template is invisible to
 // @typescript-eslint/no-non-null-assertion, which is on and catches the same thing in .ts (#1231).
 // Resolving here puts it where the compiler proves it instead.
+// A remote cell's card that reads its host's files or plugin routes is listed by name instead (#3506).
 const drawableCards = computed(() =>
   cards.value.flatMap((result) => {
     const plugin = getPlugin(result.toolName);
-    return plugin ? [{ result, plugin }] : [];
+    if (!plugin) return [];
+    return [{ result, plugin, drawn: !props.host || plugin.selfContained === true }];
   }),
 );
 
@@ -276,7 +285,7 @@ const availableTools = ref<string[] | null>(null);
 async function loadAvailableTools(sessionId: string | null) {
   availableTools.value = null;
   try {
-    const res = await fetchWithTimeout(sessionId ? `/api/tools?sessionId=${encodeURIComponent(sessionId)}` : "/api/tools");
+    const res = await fetchWithTimeout(sessionId ? pathOnHost(props.host, `/api/tools?sessionId=${encodeURIComponent(sessionId)}`) : "/api/tools");
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = await jsonBody(res);
     // Late reply for a session we have since walked away from would list another cell's tools.
@@ -318,6 +327,8 @@ watch(
   () => props.cwd,
   async (cwd) => {
     const mine = ++scopeGeneration;
+    // A remote directory is in none of this machine's projects, and its collection cards are not drawn.
+    if (props.host) return applyScope(null);
     // Synchronously when the project list is already warm, which it is for every canvas after the
     // first: then there is no window at all, rather than a window the cards usually win.
     const cached = cachedProjectIdForCwd(cwd ?? null);
@@ -331,8 +342,9 @@ watch(
 // The answer above is normally asked BEFORE it can be true: the browser is handed a session id
 // while claude is still being spawned, so its MCP client has not connected to the group URLs yet
 // and the server has not learned which tools this cell got.
+// This machine's announcements name this machine's sessions.
 onToolGroupsAnnounced((announcement) => {
-  if (announcement.sessionId === props.sessionId) void loadAvailableTools(props.sessionId);
+  if (!props.host && announcement.sessionId === props.sessionId) void loadAvailableTools(props.sessionId);
 });
 
 // What this session can be asked for, grouped. Ordered by TOOL_GROUPS (blast radius, least
@@ -429,8 +441,13 @@ const hasTools = computed(() => toolSections.value.some((section) => section.too
       </div>
       <!-- Guarded as well as cleared on session change: a stale view rendered under an
            "unavailable" heading would contradict it. -->
-      <template v-for="{ result, plugin } in unavailable ? [] : drawableCards" :key="cardKey(result)">
+      <template v-for="{ result, plugin, drawn } in unavailable ? [] : drawableCards" :key="cardKey(result)">
+        <div v-if="!drawn" data-testid="canvas-remote-card" class="text-[13px] text-dim [&+&]:mt-4 [&+&]:border-t [&+&]:border-border [&+&]:pt-4">
+          <code class="rounded-[4px] bg-subtle px-[5px] py-px">{{ result.title ?? result.toolName }}</code>
+          <p class="mt-1">This card reads files on {{ host }}, which this Canvas does not draw yet. Open it in MulmoTerminal on {{ host }}.</p>
+        </div>
         <PluginFrame
+          v-else
           class="[&+&]:mt-4 [&+&]:border-t [&+&]:border-border [&+&]:pt-4"
           :css="plugin.css"
           :height="plugin.height"

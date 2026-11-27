@@ -151,7 +151,7 @@ export const parseRemotePromptSubmitted = (data: unknown): RemotePromptSubmitted
 
 /** A remote session's own channels the relay follows on demand (#3506): the kinds a browser may ask
  *  for, each carrying one session's live items. */
-export const REMOTE_SESSION_CHANNEL_KINDS = ["toolcalls"] as const;
+export const REMOTE_SESSION_CHANNEL_KINDS = ["toolcalls", "session"] as const;
 export type RemoteSessionChannelKind = (typeof REMOTE_SESSION_CHANNEL_KINDS)[number];
 
 const REMOTE_CHANNEL_PREFIX = "remote:";

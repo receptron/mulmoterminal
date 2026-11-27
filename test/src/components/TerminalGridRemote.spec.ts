@@ -27,7 +27,7 @@ vi.mock("../../../src/composables/usePubSub", () => ({
 vi.mock("../../../src/components/TerminalCell.vue", () => ({
   default: { name: "TerminalCell", props: ["expanded"], template: '<div class="stub-cell" />' },
 }));
-vi.mock("../../../src/components/GuiPanel.vue", () => ({ default: { name: "GuiPanel", props: ["sessionId"], template: "<div />" } }));
+vi.mock("../../../src/components/GuiPanel.vue", () => ({ default: { name: "GuiPanel", props: ["sessionId", "host", "unavailable"], template: "<div />" } }));
 
 const SESSION = "0b8f0a0e-7c55-4c1e-9e0a-3f1d2c4b5a69";
 
@@ -67,7 +67,11 @@ const mountEnlarged = (remoteHost: string | undefined, cells: Cell[] = [cellOn(1
   });
 };
 
-const askedAbout = (): string[] => [...requested.filter((url) => url.includes(SESSION)), ...subscribed.channels.filter((channel) => channel.includes(SESSION))];
+// What THIS server is asked about the session: the gateway's routes answer from the host.
+const askedAbout = (): string[] => [
+  ...requested.filter((url) => url.includes(SESSION) && !url.startsWith("/remote/")),
+  ...subscribed.channels.filter((channel) => channel.includes(SESSION) && !channel.startsWith("remote:")),
+];
 
 describe("an enlarged remote cell", () => {
   it("is asked about on this server only when it is local", async () => {
@@ -99,10 +103,9 @@ describe("a remote cell's Files pane", () => {
     expect(filesRequests().every((url) => url.startsWith("/remote/lx/api/files/browse/"))).toBe(true);
   });
 
-  it("opens no pane that reads this machine's Canvas or collections", async () => {
+  it("opens no pane that reads this machine's collections", async () => {
     const grid = mountEnlarged("lx");
     await flushPromises();
-    expect(grid.vm.runCellAction("pane-canvas", 1)).toBe(false);
     expect(grid.vm.runCellAction("pane-collections", 1)).toBe(false);
   });
 
@@ -226,5 +229,37 @@ describe("a remote cell's Tools pane", () => {
     await flushPromises();
     expect(requested.filter((url) => url.includes("/tool")).sort()).toEqual([`/api/tool-calls/${SESSION}`, `/api/tools?sessionId=${SESSION}`]);
     expect(subscribed.channels).toContain(`toolcalls:${SESSION}`);
+  });
+});
+
+// Its cards, read on its host (#3506). Its collections are not: that pane reads this machine's.
+describe("a remote cell's Canvas", () => {
+  it("opens on its host, as available as its host says, and offers no collections", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        requested.push(String(input));
+        return { ok: true, status: 200, json: async () => ({ groups: ["render", "data"], toolResults: [] }) };
+      }),
+    );
+    const grid = mountEnlarged("lx");
+    await flushPromises();
+    expect(requested.filter((url) => url.includes("/tools?") || url.includes("toolResults")).sort()).toEqual([
+      `/remote/lx/api/agent/toolResults/${SESSION}`,
+      `/remote/lx/api/tools?sessionId=${SESSION}`,
+    ]);
+    expect(grid.vm.runCellAction("pane-canvas", 1)).toBe(true);
+    await flushPromises();
+    expect(grid.findComponent({ name: "GuiPanel" }).props()).toMatchObject({ sessionId: SESSION, host: "lx", unavailable: null });
+    expect(grid.vm.runCellAction("pane-collections", 1)).toBe(false);
+  });
+
+  it("asks this server for a local cell's (control)", async () => {
+    mountEnlarged(undefined);
+    await flushPromises();
+    expect(requested.filter((url) => url.includes("/tools?") || url.includes("toolResults")).sort()).toEqual([
+      `/api/agent/toolResults/${SESSION}`,
+      `/api/tools?sessionId=${SESSION}`,
+    ]);
   });
 });

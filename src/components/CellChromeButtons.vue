@@ -66,8 +66,8 @@ const props = defineProps<{
   talkAvailable?: boolean;
   // A remote cell (#3506): every pane reads this machine's copy of the session, which it has none of.
   panesHidden?: boolean;
-  // Except its session's own panes, which a remote agent cell reads on its host: its history, and
-  // its tool calls.
+  // Except its session's own panes, which a remote agent cell reads on its host: its history, its
+  // tool calls and its cards.
   sessionOnHost?: boolean;
 }>();
 const emit = defineEmits<{
@@ -102,7 +102,7 @@ const menuState = computed<CellPaneMenuState>(() => ({
   talkAvailable: !!props.talkAvailable,
 }));
 const history = computed(() => historyEntries(menuState.value, t));
-const keptOnHost = computed<CellPaneMenuId[]>(() => (props.sessionOnHost ? ["tools"] : []));
+const keptOnHost = computed<CellPaneMenuId[]>(() => (props.sessionOnHost ? ["tools", "canvas"] : []));
 const tools = computed(() => (props.panesHidden ? actionsOnly(toolEntries(menuState.value, t), keptOnHost.value) : toolEntries(menuState.value, t)));
 
 const PICK_EVENT = {
