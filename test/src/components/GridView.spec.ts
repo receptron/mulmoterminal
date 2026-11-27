@@ -1472,7 +1472,7 @@ describe("GridView roster metadata fetch (#2121)", () => {
 // #3506. With nothing enlarged the grid watches every cell's session for a drawing, on this machine's
 // channel; a remote cell's session is on its host, and that channel would name another.
 describe("GridView's drawing watch", () => {
-  it("joins this machine's session channel for a local cell only", async () => {
+  it("joins this machine's session channel for a local cell, and the relay's for a remote one", async () => {
     pubsub.reset();
     localStorage.setItem(
       "grid_v2",
@@ -1495,7 +1495,7 @@ describe("GridView's drawing watch", () => {
     ).toEqual([null, "lx"]);
     const channels = [...pubsub.handlers.keys()];
     expect(channels).toContain(`session:${IDS.idleA}`);
-    expect(channels.filter((channel) => channel.includes(IDS.idleB))).toEqual([]);
+    expect(channels.filter((channel) => channel.includes(IDS.idleB))).toEqual([`remote:lx:session:${IDS.idleB}`]);
     w.unmount();
   });
 });

@@ -346,4 +346,41 @@ describe("the canvas opening itself when the agent draws", () => {
     await flushPromises();
     expect(canvasOpen(w)).toBe(true);
   });
+
+  // #3506. A remote cell's drawings arrive from its host through the relay; this machine's channel
+  // with the same bare id names another session.
+  it("opens on a remote cell's drawing from its host, and not on this machine's same id", async () => {
+    const w = mountGrid([{ ...cell(1, "s1"), remoteHost: "lx" }], 1);
+    await flushPromises();
+
+    publish("session:s1", drew);
+    await flushPromises();
+    expect(canvasOpen(w)).toBe(false);
+
+    publish("remote:lx:session:s1", drew);
+    await flushPromises();
+    expect(canvasOpen(w)).toBe(true);
+  });
+
+  // The card it drew is on its host too, so a remote session without the render tools still opens
+  // onto that card rather than "not enabled for this session".
+  it("finds a remote cell's drawn card on its host", async () => {
+    const cards: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        const body = url.startsWith("/remote/lx/api/agent/toolResults/") ? { toolResults: cards } : { groups: [], tools: [], toolResults: [] };
+        return { ok: true, json: async () => body };
+      }),
+    );
+    const w = mountGrid([{ ...cell(1, "s1"), remoteHost: "lx" }], 1);
+    await flushPromises();
+
+    cards.push(drew);
+    publish("remote:lx:session:s1", drew);
+    await flushPromises();
+    expect(canvasOpen(w)).toBe(true);
+    expect(w.findComponent({ name: "GuiPanel" }).props("unavailable")).toBeFalsy();
+  });
 });

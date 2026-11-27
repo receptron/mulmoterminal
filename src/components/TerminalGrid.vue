@@ -27,7 +27,7 @@ import type { Launcher, LaunchPick } from "./launchers";
 import type { CustomAgent } from "../../common/customAgents";
 import type { AgentAccount } from "../../common/agentAccounts";
 import { isCellSelfAction, isPaneAction, paneOfAction, type CellAction } from "../../common/headerActions";
-import { actionAllowedOn, activityKeyOf, onThisMachine, paneAllowed, pathOnHost } from "./remoteCell";
+import { actionAllowedOn, activityKeyOf, onThisMachine, paneAllowed, pathOnHost, sessionChannelOf } from "./remoteCell";
 import { parseRemoteAskQuestion, REMOTE_ASK_QUESTION_CHANNEL, remoteSessionKey } from "../../common/remoteHosts";
 import { dirKeyOf } from "../composables/dirAddress";
 import { registerGridCellRunner } from "../composables/useGridCellAction";
@@ -531,15 +531,15 @@ async function openCanvasFor(uid: number, enlarge = true, stillWanted?: () => bo
 // authority anyway: the seed's POST awaits the write before answering, so the GET below sees the
 // card — and it answers 200 for a card it DROPPED as well, which a hand-set flag would report as
 // something to render.
-const mayHaveGainedACard = (): boolean => paneCellSessionId.value !== null && !canvasAvailable.value && !canvasHasCard.value;
+const mayHaveGainedACard = (): boolean => paneCellSessionOnHost.value !== null && !canvasAvailable.value && !canvasHasCard.value;
 
 async function adoptStoredCard(): Promise<void> {
-  const sessionId = paneCellSessionId.value;
+  const sessionId = paneCellSessionOnHost.value;
   if (!sessionId) return;
-  const has = await hasStoredCard(sessionId);
+  const has = await hasStoredCard(sessionId, paneCellHost.value);
   // The zoom can walk while the ask is in flight; `canvasHasCard` is one flag for whichever cell
   // is enlarged, so a late answer must not speak for the cell that replaced it.
-  if (sessionId === paneCellSessionId.value) canvasHasCard.value = has;
+  if (sessionId === paneCellSessionOnHost.value) canvasHasCard.value = has;
 }
 
 // The same gesture for the files pane: the path menu's "Browse files in the app", which is on
@@ -733,14 +733,19 @@ const paneCellAgent = computed(() => asTerminalAgent(cellOf(paneCellUid.value)?.
 // dismiss the drawing in front of you, not a standing preference against the next one.
 const { subscribe: subscribeSession, onReconnect: onPubSubReconnect } = usePubSub();
 let unsubscribeDrawn: (() => void) | undefined;
+// A remote cell's drawings arrive from its host through the relay (#3506).
+const expandedDrawChannel = computed(() => {
+  const cell = cellOf(props.expandedUid);
+  return cell?.session ? sessionChannelOf(cell.remoteHost, cell.session) : null;
+});
 
 watch(
-  expandedSessionId,
-  (sessionId) => {
+  expandedDrawChannel,
+  (channel) => {
     unsubscribeDrawn?.();
     unsubscribeDrawn = undefined;
-    if (!sessionId) return;
-    unsubscribeDrawn = subscribeSession(`session:${sessionId}`, (data) => {
+    if (!channel) return;
+    unsubscribeDrawn = subscribeSession(channel, (data) => {
       if (rightPane.value === "canvas" || props.expandedUid === null) return;
       if (!isDrawnResult(data)) return;
       // Through openCanvasFor rather than setRightPane: the files pane has a buffer to flush on

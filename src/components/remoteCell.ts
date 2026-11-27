@@ -5,7 +5,7 @@
 // to the remote, they are withheld here.
 import type { CellAction } from "../../common/headerActions";
 import type { RightPane } from "./gridCell";
-import { remoteHostSessionRoute, remotePath, remoteSessionKey } from "../../common/remoteHosts";
+import { remoteHostSessionRoute, remotePath, remoteSessionChannel, remoteSessionKey } from "../../common/remoteHosts";
 
 export const isRemoteHost = (host: string | null | undefined): host is string => typeof host === "string" && host.length > 0;
 
@@ -86,6 +86,10 @@ export interface RemoteCellSession {
 
 export const remoteCellSessions = (cells: readonly { session: string | null; remoteHost?: string | undefined }[]): RemoteCellSession[] =>
   cells.flatMap((cell) => (isRemoteHost(cell.remoteHost) && cell.session ? [{ host: cell.remoteHost, id: cell.session }] : []));
+
+/** The channel a cell's session draws its cards on: this machine's, or the relay's for a remote cell. */
+export const sessionChannelOf = (host: string | null | undefined, sessionId: string): string =>
+  isRemoteHost(host) ? remoteSessionChannel(host, "session", sessionId) : `session:${sessionId}`;
 
 /** The key a cell's activity is looked up by: its bare id when local, host and id when remote. */
 export const activityKeyOf = (cell: { session: string | null; remoteHost?: string | undefined }): string | null =>
