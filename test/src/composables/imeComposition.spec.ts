@@ -6,7 +6,7 @@
 // (#1353).
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-import { isImeConfirming, resetImeComposition } from "../../../src/composables/imeComposition";
+import { isImeConfirming, resetImeComposition, xtermImeKeyVerdict } from "../../../src/composables/imeComposition";
 import { SAFARI_IME_RACE_WINDOW_MS } from "../../../src/composables/useImeAwareEnter";
 
 const enter = (over: Partial<KeyboardEvent> = {}): KeyboardEvent =>
@@ -80,5 +80,28 @@ describe("isImeConfirming", () => {
 
     expect(isImeConfirming(enter())).toBe(false);
     input.remove();
+  });
+});
+
+describe("xtermImeKeyVerdict", () => {
+  const meta = (isComposing: boolean) => enter({ key: "Meta", isComposing });
+
+  it("withholds a Meta keydown during a composition (xtermjs/xterm.js#6244)", () => {
+    expect(xtermImeKeyVerdict(meta(true))).toBe(false);
+  });
+
+  it("hands an IME-confirming key back to xterm", () => {
+    expect(xtermImeKeyVerdict(enter({ isComposing: true }))).toBe(true);
+  });
+
+  it("hands back the Safari confirmation that follows compositionend", () => {
+    fire("compositionstart");
+    fire("compositionend");
+    expect(xtermImeKeyVerdict(enter())).toBe(true);
+  });
+
+  it("has no verdict when no IME is involved, Meta included", () => {
+    expect(xtermImeKeyVerdict(enter())).toBeUndefined();
+    expect(xtermImeKeyVerdict(meta(false))).toBeUndefined();
   });
 });

@@ -57,7 +57,7 @@ import { TERMINAL_FONT_SIZE_DEFAULT } from "../../common/terminalFontSize";
 import { TERMINAL_FONT_FAMILY_DEFAULT } from "../../common/terminalFontFamily";
 import { getTerminalSubmitMode } from "./terminalSubmitMode";
 import { clipboardActionFor, selectionToCopy } from "../../common/terminalClipboard";
-import { isImeConfirming } from "./imeComposition";
+import { xtermImeKeyVerdict } from "./imeComposition";
 import { getActiveKeymap } from "./activeKeymap";
 import { isCopyOnSelectEnabled } from "./copyOnSelect";
 import { forgetFilePathLinks, registerFilePathLinks } from "./terminalFileLinks";
@@ -413,8 +413,9 @@ function wireTerminalInput(term: Terminal, c: Conn): void {
     // all three below would otherwise claim it. Each already refuses `e.isComposing`, which covers
     // Chrome and Firefox — this is the Safari case, where compositionend has already fired and the
     // flag is false by now (#1353). `true` hands the key back to xterm, which is what happens
-    // anyway when none of the three matches.
-    if (isImeConfirming(e)) return true;
+    // anyway when none of the three matches; `false` keeps one away from xterm's own IME handling.
+    const imeVerdict = xtermImeKeyVerdict(e);
+    if (imeVerdict !== undefined) return imeVerdict;
     if (clipboardActionFor(getActiveKeymap(), e, term.hasSelection())) return false;
     if (!onSend(e)) return false;
     // BEFORE the bytes, so the app is back at the bottom when the submit lands rather than
@@ -489,8 +490,8 @@ function buildTerminal(swallowedMouseModes: Set<number>, font: TerminalFont): Te
 
 // The wiring that needs the connection itself, so it is re-applied to every terminal a slot owns.
 function wireTerminalToConn(term: Terminal, c: Conn): void {
-  // A path a remote terminal prints names a file on that machine; opening it here would show this one's.
-  if (!isRemoteHost(c.target.remoteHost)) registerFilePathLinks(term, { cwd: () => c.knownCwd, session: () => c.knownSessionId });
+  // A path a remote terminal prints names a file on that machine, which only its Files pane reads.
+  registerFilePathLinks(term, { cwd: () => c.knownCwd, session: () => c.knownSessionId, host: isRemoteHost(c.target.remoteHost) ? c.target.remoteHost : null });
   wireTerminalInput(term, c);
   if (c.theme) term.options.theme = c.theme;
 }

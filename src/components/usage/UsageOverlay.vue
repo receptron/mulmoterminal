@@ -65,7 +65,7 @@ const barClass = (window: TokenUsageWindow): string => ((window.leftPercent ?? 0
 </script>
 
 <template>
-  <FullScreenOverlay v-if="isOpen" :region-label="t('usageView.region')" :close-label="t('usageView.close')" @close="close">
+  <FullScreenOverlay :open="isOpen" :region-label="t('usageView.region')" :close-label="t('usageView.close')" @close="close">
     <template #header>
       <span class="font-sans text-[14px] font-[650] text-fg">{{ t("usageView.title") }}</span>
     </template>

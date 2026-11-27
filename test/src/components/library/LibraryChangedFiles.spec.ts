@@ -2,17 +2,20 @@
 // step once opened, and a reason in place of a diff it cannot draw.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mountUnderOverlay } from "../underOverlay";
 import type { LibraryConversation } from "../../../../common/library";
 import type { LibraryFileText, LibraryTrackedFile } from "../../../../common/libraryFiles";
 
 let files: LibraryTrackedFile[] | null = [];
 let texts: Record<string, LibraryFileText> = {};
 const asked: string[] = [];
+let textGate: Promise<void> = Promise.resolve();
 vi.mock("../../../../src/composables/libraryApi", () => ({
   loadLibraryFiles: () => Promise.resolve(files),
-  loadLibraryFileText: (_id: string, _cwd: string | null, file: string, version: number | "now") => {
+  loadLibraryFileText: async (_id: string, _cwd: string | null, file: string, version: number | "now") => {
     asked.push(`${file}@${String(version)}`);
-    return Promise.resolve(texts[`${file}@${String(version)}`] ?? null);
+    await textGate;
+    return texts[`${file}@${String(version)}`] ?? null;
   },
 }));
 const drawn: [string, string][] = [];
@@ -37,6 +40,7 @@ beforeEach(() => {
   texts = {};
   asked.length = 0;
   drawn.length = 0;
+  textGate = Promise.resolve();
 });
 
 async function opened() {
@@ -94,5 +98,60 @@ describe("LibraryChangedFiles", () => {
     const wrapper = await opened();
     expect(wrapper.find("[data-testid=library-file-blocked]").text()).toBe("Not a text file.");
     expect(drawn).toEqual([]);
+  });
+});
+
+// The reader is kept while the Library is closed, and the conversation may have gone on changing files.
+describe("the changed files shown again", () => {
+  it("are read again, staying on the file shown, and kept through a failed read", async () => {
+    files = [tracked("a.md", [[1, true]])];
+    const { wrapper, showAgain } = mountUnderOverlay(LibraryChangedFiles, { conversation }, { attachTo: document.body });
+    await flushPromises();
+    await wrapper.find("[data-testid=library-files-toggle]").trigger("click");
+    await flushPromises();
+    files = [tracked("b.md", [[1, true]]), tracked("a.md", [[1, true]])];
+    await showAgain();
+    expect(wrapper.findAll("[data-testid=library-file]").map((row) => row.text())).toEqual(["b.md", "a.md"]);
+    expect(wrapper.get("[data-testid=library-file][aria-current=true]").text()).toBe("a.md");
+    files = null;
+    await showAgain();
+    expect(wrapper.findAll("[data-testid=library-file]")).toHaveLength(2);
+    wrapper.unmount();
+  });
+});
+
+describe("a diff being read when the Library is shown again", () => {
+  it("is still drawn when the list's re-read fails", async () => {
+    files = [tracked("a.md", [[1, true]])];
+    texts = { "a.md@1": { text: "one" }, "a.md@now": { text: "two" } };
+    const { wrapper, showAgain } = mountUnderOverlay(LibraryChangedFiles, { conversation }, { attachTo: document.body });
+    await flushPromises();
+    let release: () => void = () => {};
+    textGate = new Promise((resolve) => (release = resolve));
+    await wrapper.find("[data-testid=library-files-toggle]").trigger("click");
+    await flushPromises();
+    files = null;
+    await showAgain();
+    release();
+    await flushPromises();
+    expect(drawn.length).toBeGreaterThan(0);
+    wrapper.unmount();
+  });
+});
+
+describe("an open diff shown again", () => {
+  it("keeps the diff when its sides cannot be read again", async () => {
+    files = [tracked("a.md", [[1, true]])];
+    texts = { "a.md@1": { text: "one" }, "a.md@now": { text: "two" } };
+    const { wrapper, showAgain } = mountUnderOverlay(LibraryChangedFiles, { conversation }, { attachTo: document.body });
+    await flushPromises();
+    await wrapper.find("[data-testid=library-files-toggle]").trigger("click");
+    await flushPromises();
+    expect(drawn.at(-1)).toEqual(["one", "two"]);
+    texts = {};
+    await showAgain();
+    expect(wrapper.find("[data-testid=library-file-blocked]").exists()).toBe(false);
+    expect(drawn.at(-1)).toEqual(["one", "two"]);
+    wrapper.unmount();
   });
 });

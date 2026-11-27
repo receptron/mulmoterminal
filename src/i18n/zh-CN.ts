@@ -6,12 +6,14 @@ import { commandPaletteZhCN } from "./commandPalette/zh-CN";
 import { terminalCopyModeZhCN } from "./terminalCopyMode/zh-CN";
 import { rowMenuZhCN } from "./rowMenu/zh-CN";
 import { focusModeZhCN } from "./focusMode/zh-CN";
+import { screenTabsZhCN } from "./screenTabs/zh-CN";
 import { requestTimeoutZhCN } from "./requestTimeout/zh-CN";
 import { gridRestoreZhCN } from "./gridRestore/zh-CN";
 import { fileHistoryZhCN } from "./fileHistory/zh-CN";
 import { filesRecentZhCN } from "./filesRecent/zh-CN";
 import { dirConfigSaveZhCN } from "./dirConfigSave/zh-CN";
 import { releaseNotesZhCN } from "./releaseNotes/zh-CN";
+import { whatsNewZhCN } from "./whatsNew/zh-CN";
 import { dirConfigOpenZhCN } from "./dirConfigOpen/zh-CN";
 import { dirSettingsFormZhCN } from "./dirSettingsForm/zh-CN";
 import { themeEditorZhCN } from "./themeEditor/zh-CN";
@@ -378,7 +380,7 @@ export const zhCN: Messages = {
     theme: {
       missing: "选中的主题 {id} 没有定义。请把它加到 {configFile} 的 {themesKey} 里，或者在下面选一个。在那之前会保留你的选择。",
       intro:
-        "从已有的配色里选。你自己的写在 {configFile} 的 {themesKey} 里，就会出现在这里，和内置的四个并排 —— skill 能从一组色板、一张照片或者一个品牌的颜色里写出一套，并检查对比度。",
+        "从已有的配色里选。你自己的写在 {configFile} 的 {themesKey} 里，就会出现在这里，和内置的配色并排 —— skill 能从一组色板、一张照片或者一个品牌的颜色里写出一套，并检查对比度。",
       group: "主题",
       create: "创建一个主题…",
     },
@@ -610,14 +612,7 @@ export const zhCN: Messages = {
     tip: "此文件的标题（选择即可跳转）",
     empty: "此文件没有标题。",
   },
-  whatsNew: {
-    title: "新功能",
-    intro: "MulmoTerminal 已更新到 {version}。以下是自上次使用以来的变化。",
-    englishOnly: "版本说明以英文撰写。",
-    openOnWeb: "在网页中打开此页",
-    older: "更早的版本请查看更新日志。",
-    close: "知道了",
-  },
+  whatsNew: whatsNewZhCN,
   fileHistory: fileHistoryZhCN,
   filesRecent: filesRecentZhCN,
   dirConfigSave: dirConfigSaveZhCN,
@@ -628,6 +623,7 @@ export const zhCN: Messages = {
   headerChips: headerChipsZhCN,
   headerButtons: headerButtonsZhCN,
   focusMode: focusModeZhCN,
+  screenTabs: screenTabsZhCN,
   requestTimeout: requestTimeoutZhCN,
   gridRestore: gridRestoreZhCN,
   settingsControls: settingsControlsZhCN,

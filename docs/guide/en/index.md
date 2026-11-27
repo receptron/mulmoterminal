@@ -8,8 +8,8 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **13.8.2 is out.** A Claude conversation moved to the background with ← stays in the activity history
-> and conversation pane, and a skill call no longer splits a turn. [Setup guide](v13.8.2.html)
+> **13.10.0 is out.** Two new built-in themes in Settings → Theme: Okamoto Taro (dark, with a
+> vermilion accent) and Pink (light). [Setup guide](v13.10.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 

@@ -6,12 +6,14 @@ import { commandPaletteJa } from "./commandPalette/ja";
 import { terminalCopyModeJa } from "./terminalCopyMode/ja";
 import { rowMenuJa } from "./rowMenu/ja";
 import { focusModeJa } from "./focusMode/ja";
+import { screenTabsJa } from "./screenTabs/ja";
 import { requestTimeoutJa } from "./requestTimeout/ja";
 import { gridRestoreJa } from "./gridRestore/ja";
 import { fileHistoryJa } from "./fileHistory/ja";
 import { filesRecentJa } from "./filesRecent/ja";
 import { dirConfigSaveJa } from "./dirConfigSave/ja";
 import { releaseNotesJa } from "./releaseNotes/ja";
+import { whatsNewJa } from "./whatsNew/ja";
 import { dirConfigOpenJa } from "./dirConfigOpen/ja";
 import { dirSettingsFormJa } from "./dirSettingsForm/ja";
 import { themeEditorJa } from "./themeEditor/ja";
@@ -389,7 +391,7 @@ export const ja: Messages = {
     theme: {
       missing: "選択中のテーマ {id} が定義されていません。{configFile} の {themesKey} に追加するか、下から選んでください。それまで選択は保持されます。",
       intro:
-        "あるものから選びます。自作の配色は {configFile} の {themesKey} に置くと、組み込みの 4 つの隣に出ます。スキルはパレット・写真・ブランドカラーから配色を書き起こし、コントラストも確認します。",
+        "あるものから選びます。自作の配色は {configFile} の {themesKey} に置くと、組み込みのテーマの隣に出ます。スキルはパレット・写真・ブランドカラーから配色を書き起こし、コントラストも確認します。",
       group: "テーマ",
       create: "テーマを作る…",
     },
@@ -628,14 +630,7 @@ export const ja: Messages = {
     tip: "このファイルの見出し（選ぶとそこへ移動）",
     empty: "このファイルには見出しがありません。",
   },
-  whatsNew: {
-    title: "新しくなったこと",
-    intro: "MulmoTerminal が {version} になりました。前回使ってから変わったことをまとめています。",
-    englishOnly: "リリースの説明は英語で書かれています。",
-    openOnWeb: "このページを Web で開く",
-    older: "それより前の版は変更履歴にあります。",
-    close: "わかった",
-  },
+  whatsNew: whatsNewJa,
   fileHistory: fileHistoryJa,
   filesRecent: filesRecentJa,
   dirConfigSave: dirConfigSaveJa,
@@ -646,6 +641,7 @@ export const ja: Messages = {
   headerChips: headerChipsJa,
   headerButtons: headerButtonsJa,
   focusMode: focusModeJa,
+  screenTabs: screenTabsJa,
   requestTimeout: requestTimeoutJa,
   gridRestore: gridRestoreJa,
   settingsControls: settingsControlsJa,

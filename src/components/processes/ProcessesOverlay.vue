@@ -18,7 +18,7 @@ const tab = ref<(typeof TABS)[number]>("processes");
 </script>
 
 <template>
-  <FullScreenOverlay v-if="isOpen" :region-label="t('processesView.region')" :close-label="t('processesView.close')" @close="close">
+  <FullScreenOverlay :open="isOpen" :region-label="t('processesView.region')" :close-label="t('processesView.close')" @close="close">
     <template #header>
       <span class="font-sans text-[14px] font-[650] text-fg">{{ t("processesView.title") }}</span>
       <div class="flex rounded-[4px] border border-border" role="group" :aria-label="t('processesView.tabs')">

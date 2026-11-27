@@ -7,8 +7,9 @@ import { dropMemoryDraft, keepMemoryDraft, memoryDraftFor, memoryDraftKey, stale
 import { isImeConfirming } from "../../composables/imeComposition";
 import { useI18n } from "vue-i18n";
 import { loadLibraryMemoryLinks, mergeLibraryMemoryFiles, saveLibraryMemoryFile, type MemorySaveResult } from "../../composables/libraryApi";
-import { sessionRunningIn } from "./memorySessions";
+import { sessionRunningOrUnknown } from "./memorySessions";
 import { MEMORY_EDIT_MAX_BYTES } from "../../../common/libraryMemory";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 
 const props = defineProps<{
   slug: string;
@@ -113,15 +114,42 @@ function cancel(): void {
   emit("cancel");
 }
 
+// One counter for the mount's check and each showing's, so an older answer cannot undo a newer one.
+let runningChecks = 0;
+async function recheckRunning(): Promise<void> {
+  const mine = ++runningChecks;
+  const running = await sessionRunningOrUnknown(props.cwd);
+  // A list that could not be read says nothing either way: the warning shown stays.
+  if (mine === runningChecks && running !== null) sessionRunning.value = running;
+}
+
+// The links a merge would rewrite, read on opening and again when the Library is shown again (the
+// files may have changed meanwhile); a failed re-read keeps what is shown.
+let linkReads = 0;
+async function readLinks(): Promise<void> {
+  const merging = props.merging;
+  if (!merging) return;
+  const mine = ++linkReads;
+  const links = await loadLibraryMemoryLinks(props.slug, props.file, merging.file);
+  if (mine !== linkReads || (links === null && mergeLinks.value !== null)) return;
+  mergeLinks.value = links;
+  // Said before saving, as the merge would be refused for it; gone once a later read finds nothing to refuse.
+  if ((links?.unplaceable.length ?? 0) > 0) notice.value = "unplaceable";
+  else if (links !== null && notice.value === "unplaceable") notice.value = null;
+}
+
+// The editor stays open while the Library is closed; a session may have started or ended, and the
+// files changed, in the meantime.
+onOverlayShownAgain(() => {
+  void recheckRunning();
+  void readLinks();
+});
+
 onMounted(async () => {
   await nextTick();
   field.value?.focus();
-  const merging = props.merging;
-  const [running, links] = await Promise.all([sessionRunningIn(props.cwd), merging ? loadLibraryMemoryLinks(props.slug, props.file, merging.file) : null]);
-  sessionRunning.value = running;
-  mergeLinks.value = links;
-  // Said before saving, as the merge would be refused for it.
-  if ((links?.unplaceable.length ?? 0) > 0) notice.value = "unplaceable";
+  void recheckRunning();
+  await readLinks();
 });
 
 async function save(): Promise<void> {

@@ -33,7 +33,7 @@ afterEach(() => {
 
 const open = async (text = "docs/a.md") => {
   const wrapper = mount(TerminalLinkMenu, { attachTo: document.body });
-  requestLinkMenu({ text, cwd: "/proj", location: undefined, session: "s1", point: { top: 40, left: 60 } });
+  requestLinkMenu({ text, cwd: "/proj", location: undefined, session: "s1", host: null, point: { top: 40, left: 60 } });
   await nextTick();
   await nextTick();
   return wrapper;
@@ -43,13 +43,27 @@ describe("TerminalLinkMenu", () => {
   it("is absent until a terminal asks, then opens at the pointer with the path and four items", async () => {
     const wrapper = mount(TerminalLinkMenu, { attachTo: document.body });
     expect(panel()).toBeNull();
-    requestLinkMenu({ text: "docs/a.md", cwd: "/proj", location: undefined, session: "s1", point: { top: 40, left: 60 } });
+    requestLinkMenu({ text: "docs/a.md", cwd: "/proj", location: undefined, session: "s1", host: null, point: { top: 40, left: 60 } });
     await nextTick();
     await nextTick();
     expect(panel()?.style.top).toBe("40px");
     expect(panel()?.style.left).toBe("60px");
     expect(panel()?.textContent).toContain("docs/a.md");
     expect(document.body.querySelectorAll("[data-testid=terminal-link-menu] [role=menuitem]")).toHaveLength(4);
+    wrapper.unmount();
+  });
+
+  // #3506. The tab and the Files view read this machine's disk; a remote cell's path is its host's.
+  it("offers a remote cell's path only the pane and the copy", async () => {
+    const wrapper = mount(TerminalLinkMenu, { attachTo: document.body });
+    requestLinkMenu({ text: "src/a.ts", cwd: "/proj", location: undefined, session: "s1", host: "lx", point: { top: 1, left: 1 } });
+    await nextTick();
+    await nextTick();
+    const items = [...document.body.querySelectorAll<HTMLElement>("[data-testid=terminal-link-menu] [role=menuitem]")].map((item) => item.dataset.testid);
+    expect(items).toEqual(["link-open-pane", "link-copy-path"]);
+    document.body.querySelector<HTMLElement>("[data-testid=link-open-pane]")?.click();
+    expect(paneOpener).toHaveBeenCalledWith("src/a.ts", "/proj", undefined, false, "s1", "lx");
+    expect(gotoFile).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 
@@ -66,10 +80,10 @@ describe("TerminalLinkMenu", () => {
   it("asks the pane first for the pane item, and goes to the Files view for that item", async () => {
     const wrapper = await open("src/a.ts");
     item("link-open-pane")?.click();
-    expect(paneOpener).toHaveBeenCalledWith("src/a.ts", "/proj", undefined, false, "s1");
+    expect(paneOpener).toHaveBeenCalledWith("src/a.ts", "/proj", undefined, false, "s1", null);
     expect(gotoFile).toHaveBeenCalledWith("/proj", "src/a.ts", undefined);
     gotoFile.mockClear();
-    requestLinkMenu({ text: "src/a.ts", cwd: "/proj", location: { line: 7, col: null }, session: "s1", point: { top: 1, left: 1 } });
+    requestLinkMenu({ text: "src/a.ts", cwd: "/proj", location: { line: 7, col: null }, session: "s1", host: null, point: { top: 1, left: 1 } });
     await nextTick();
     await nextTick();
     item("link-open-files")?.click();
@@ -103,7 +117,7 @@ describe("TerminalLinkMenu", () => {
     item("link-copy-path")?.click();
     await nextTick();
     expect(document.activeElement).toBe(box);
-    requestLinkMenu({ text: "docs/a.md", cwd: "/proj", location: undefined, session: "s1", point: { top: 1, left: 1 } });
+    requestLinkMenu({ text: "docs/a.md", cwd: "/proj", location: undefined, session: "s1", host: null, point: { top: 1, left: 1 } });
     await nextTick();
     await nextTick();
     expect(document.activeElement).not.toBe(box);
@@ -171,7 +185,7 @@ describe("TerminalLinkMenu", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     await nextTick();
     expect(panel()).toBeNull();
-    requestLinkMenu({ text: "docs/a.md", cwd: "/proj", location: undefined, session: "s1", point: { top: 1, left: 1 } });
+    requestLinkMenu({ text: "docs/a.md", cwd: "/proj", location: undefined, session: "s1", host: null, point: { top: 1, left: 1 } });
     await nextTick();
     await nextTick();
     document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));

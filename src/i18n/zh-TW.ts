@@ -6,12 +6,14 @@ import { commandPaletteZhTW } from "./commandPalette/zh-TW";
 import { terminalCopyModeZhTW } from "./terminalCopyMode/zh-TW";
 import { rowMenuZhTW } from "./rowMenu/zh-TW";
 import { focusModeZhTW } from "./focusMode/zh-TW";
+import { screenTabsZhTW } from "./screenTabs/zh-TW";
 import { requestTimeoutZhTW } from "./requestTimeout/zh-TW";
 import { gridRestoreZhTW } from "./gridRestore/zh-TW";
 import { fileHistoryZhTW } from "./fileHistory/zh-TW";
 import { filesRecentZhTW } from "./filesRecent/zh-TW";
 import { dirConfigSaveZhTW } from "./dirConfigSave/zh-TW";
 import { releaseNotesZhTW } from "./releaseNotes/zh-TW";
+import { whatsNewZhTW } from "./whatsNew/zh-TW";
 import { dirConfigOpenZhTW } from "./dirConfigOpen/zh-TW";
 import { dirSettingsFormZhTW } from "./dirSettingsForm/zh-TW";
 import { themeEditorZhTW } from "./themeEditor/zh-TW";
@@ -381,7 +383,7 @@ export const zhTW: Messages = {
     theme: {
       missing: "選取的主題 {id} 沒有定義。請把它加到 {configFile} 的 {themesKey} 裡，或者在下面選一個。在那之前會保留你的選擇。",
       intro:
-        "從既有的配色裡選。你自己的寫在 {configFile} 的 {themesKey} 裡，就會出現在這裡，和內建的四個並排 —— skill 能從一組色票、一張照片或一個品牌的顏色寫出一套，並檢查對比。",
+        "從既有的配色裡選。你自己的寫在 {configFile} 的 {themesKey} 裡，就會出現在這裡，和內建的配色並排 —— skill 能從一組色票、一張照片或一個品牌的顏色寫出一套，並檢查對比。",
       group: "主題",
       create: "建立一個主題…",
     },
@@ -615,14 +617,7 @@ export const zhTW: Messages = {
     tip: "此檔案的標題（選取即可跳轉）",
     empty: "此檔案沒有標題。",
   },
-  whatsNew: {
-    title: "新功能",
-    intro: "MulmoTerminal 已更新至 {version}。以下是自上次使用以來的變化。",
-    englishOnly: "版本說明以英文撰寫。",
-    openOnWeb: "在網頁中開啟此頁",
-    older: "更早的版本請查看更新紀錄。",
-    close: "知道了",
-  },
+  whatsNew: whatsNewZhTW,
   fileHistory: fileHistoryZhTW,
   filesRecent: filesRecentZhTW,
   dirConfigSave: dirConfigSaveZhTW,
@@ -633,6 +628,7 @@ export const zhTW: Messages = {
   headerChips: headerChipsZhTW,
   headerButtons: headerButtonsZhTW,
   focusMode: focusModeZhTW,
+  screenTabs: screenTabsZhTW,
   requestTimeout: requestTimeoutZhTW,
   gridRestore: gridRestoreZhTW,
   settingsControls: settingsControlsZhTW,

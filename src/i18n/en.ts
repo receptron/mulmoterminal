@@ -19,12 +19,14 @@ import { commandPaletteEn } from "./commandPalette/en";
 import { terminalCopyModeEn } from "./terminalCopyMode/en";
 import { rowMenuEn } from "./rowMenu/en";
 import { focusModeEn } from "./focusMode/en";
+import { screenTabsEn } from "./screenTabs/en";
 import { requestTimeoutEn } from "./requestTimeout/en";
 import { gridRestoreEn } from "./gridRestore/en";
 import { fileHistoryEn } from "./fileHistory/en";
 import { filesRecentEn } from "./filesRecent/en";
 import { dirConfigSaveEn } from "./dirConfigSave/en";
 import { releaseNotesEn } from "./releaseNotes/en";
+import { whatsNewEn } from "./whatsNew/en";
 import { dirConfigOpenEn } from "./dirConfigOpen/en";
 import { dirSettingsFormEn } from "./dirSettingsForm/en";
 import { themeEditorEn } from "./themeEditor/en";
@@ -395,7 +397,7 @@ export const en = {
     theme: {
       missing: "The selected theme {id} is not defined. Add it to {themesKey} in {configFile}, or pick one below. Your choice is kept until then.",
       intro:
-        "Picks from the schemes that exist. Your own go in {themesKey} in {configFile} and appear here next to the built-in four — the skill writes one from a palette, a photo or a brand's colours, and checks it for contrast.",
+        "Picks from the schemes that exist. Your own go in {themesKey} in {configFile} and appear here next to the built-in ones — the skill writes one from a palette, a photo or a brand's colours, and checks it for contrast.",
       group: "Theme",
       create: "Create a theme…",
     },
@@ -645,14 +647,7 @@ export const en = {
     tip: "Headings in this file — pick one to go there",
     empty: "No headings in this file.",
   },
-  whatsNew: {
-    title: "What's new",
-    intro: "MulmoTerminal was updated to {version}. Here is what changed since you last used it.",
-    englishOnly: "The release notes are written in English.",
-    openOnWeb: "Open this page on the web",
-    older: "Older releases are in the changelog.",
-    close: "Got it",
-  },
+  whatsNew: whatsNewEn,
   fileHistory: fileHistoryEn,
   filesRecent: filesRecentEn,
   dirConfigSave: dirConfigSaveEn,
@@ -663,6 +658,7 @@ export const en = {
   headerChips: headerChipsEn,
   headerButtons: headerButtonsEn,
   focusMode: focusModeEn,
+  screenTabs: screenTabsEn,
   requestTimeout: requestTimeoutEn,
   gridRestore: gridRestoreEn,
   settingsControls: settingsControlsEn,

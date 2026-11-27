@@ -86,6 +86,8 @@ export const commandPaletteEn = {
     pageNext: "Shows the next page of the tiled grid (9 terminals a page); nothing past the last.",
     pagePrev: "Shows the previous page of the tiled grid; nothing before the first.",
     terminalReopen: "Opens the most recently closed terminal again beside the current one, resuming its conversation; a shell comes back fresh.",
+    screenToggle:
+      "Goes back and forth between the screen opened last (Library, Skills, Files, …) and the view it was opened from; the screen comes back as it was left.",
     terminalTimeline: "Opens the activity timeline of the current terminal (Claude sessions only).",
     terminalTalk: "Opens the list of other terminals to hand a question to, from the current terminal.",
     terminalPark: "Sets the current terminal aside, or wakes it if it already is.",

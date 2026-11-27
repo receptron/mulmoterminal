@@ -2,7 +2,8 @@
 // The right-click menu on a path printed in terminal output (#3238). Mounted once, in App.vue: a
 // terminal asks for it through terminalLinkMenu.ts with the link and the pointer, and it opens
 // there. Four items — the pane (what a click does), a tab of its own, the Files view, the path —
-// each decided in terminalLinkActions.ts, so this file is the look and the wiring.
+// each decided in terminalLinkActions.ts, so this file is the look and the wiring. A remote cell's
+// path (#3506) has only the pane and the path: the tab and the Files view read this machine's disk.
 import { nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { fitMenu, type MenuPoint } from "./rowMenu";
@@ -140,10 +141,24 @@ async function copyPath(link: HoveredLink, point: MenuPoint): Promise<void> {
       <button type="button" role="menuitem" data-testid="link-open-pane" :class="ITEM_CLASS" @click="pick((link) => openLinkInPane(link, deps))">
         <span :class="ICON_CLASS" aria-hidden="true">view_sidebar</span> {{ t("linkMenu.openInPane") }}
       </button>
-      <button type="button" role="menuitem" data-testid="link-open-tab" :class="ITEM_CLASS" @click="pick((link) => openLinkInTab(link, deps))">
+      <button
+        v-if="linkMenuRequest.host === null"
+        type="button"
+        role="menuitem"
+        data-testid="link-open-tab"
+        :class="ITEM_CLASS"
+        @click="pick((link) => openLinkInTab(link, deps))"
+      >
         <span :class="ICON_CLASS" aria-hidden="true">open_in_new</span> {{ t("linkMenu.openInTab") }}
       </button>
-      <button type="button" role="menuitem" data-testid="link-open-files" :class="ITEM_CLASS" @click="pick((link) => openLinkInFiles(link, deps))">
+      <button
+        v-if="linkMenuRequest.host === null"
+        type="button"
+        role="menuitem"
+        data-testid="link-open-files"
+        :class="ITEM_CLASS"
+        @click="pick((link) => openLinkInFiles(link, deps))"
+      >
         <span :class="ICON_CLASS" aria-hidden="true">folder_open</span> {{ t("linkMenu.openInFiles") }}
       </button>
       <button

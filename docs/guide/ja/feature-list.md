@@ -4,7 +4,7 @@ nav_title: 全機能リスト
 layout: default
 parent: 日本語
 nav_order: 6.5
-as_of: 13.8.2
+as_of: 13.10.0
 description: MulmoTerminal のいまある機能を、入った版つきで領域ごとに一行ずつ並べた一覧（9.1.0 時点）。
 ---
 
@@ -338,6 +338,7 @@ description: MulmoTerminal のいまある機能を、入った版つきで領�
 - これまで JSON を手で書いていた全体設定を、設定画面で変えられる (v4.5.0)
 - 設定の各項目に、その設定を書くスキルを起動するボタンがある（4.7.5 で起動前に確認） (v2.8.0)
 - themes で自作の配色を足し、アプリ全体の色を変える（4.27 でターミナルの16色、7.2 で色選びとライブ表示） (v2.5.2)
+- 組み込みのテーマに Okamoto Taro（暗い背景に朱色）と Pink（明るい）が加わり、Midnight・Nord・Daylight・Solarized Light と並ぶ (v13.10.0)
 - 設定の「Directory settings」で、効いている値とその出どころ、無視されたキーを見られる (v2.4.0)
 - orderPriority でグリッドのセルの順を決め、2.8 で起動フォームのチップもその順になる (v2.2.0)
 - fontFamily でターミナルのフォントを決める（既定に日本語などの CJK フォントを含む） (v2.2.0)

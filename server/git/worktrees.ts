@@ -14,6 +14,7 @@ import { canonicalPath } from "../infra/fs/canonical-path.js";
 import { ensureWorktreeEnv } from "../config/worktree/worktree-env.js";
 import { splitLines } from "../infra/fs/split-lines.js";
 import { runTool } from "./run-tool.js";
+import { withoutOptionalLocks } from "./git-env.js";
 import { excludeFromIndexing, oncePerRootUnlessFailed, type IndexingOutcome } from "./worktree-indexing.js";
 import { spawnCaptureAsync } from "../infra/process/spawnCapture.js";
 import { DIR_CONFIG_FILE, DIR_LOCAL_CONFIG_FILE } from "../config/dir/dir-config.js";
@@ -130,7 +131,7 @@ export async function git(
   // holding the pipes, and kills that grandchild with git (#2935). It also turns the synchronous
   // throw `spawn` gives for an argument execve will not take — a NUL byte, reachable from the
   // content search's `?q=%00` — into an ordinary result, so the promise above never rejects.
-  const run = await runTool("git", cwd ? ["-C", cwd, ...args] : args, { timeoutMs, signal, maxStdoutBytes });
+  const run = await runTool("git", cwd ? ["-C", cwd, ...args] : args, { env: withoutOptionalLocks(process.env), timeoutMs, signal, maxStdoutBytes });
   if (run.end === "overflow") return { ok: false, stdout: "", code: null, overflow: true };
   // A timeout keeps what git printed before it was stopped, as a signal-killed child always has.
   if (run.end === "timeout") return { ok: false, stdout: run.stdout, code: null };

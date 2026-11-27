@@ -30,7 +30,7 @@ export const CONTENT_ROUTES = new Set([
 // Rooms sit with PRs rather than with the content: a room is the record of what the terminals in
 // the grid said to each other, not something the workspace holds independently of them. Blueprint
 // builds sit there too: a build is the record of the terminals it ran.
-const OVERLAY_ROUTES = new Set([
+export const OVERLAY_ROUTES: ReadonlySet<string> = new Set([
   ...CONTENT_ROUTES,
   "github",
   "githubBoard",
@@ -42,6 +42,7 @@ const OVERLAY_ROUTES = new Set([
   "skills",
   "library",
   "processes",
+  "usage",
 ]);
 
 /** The route an open overlay should return to. */

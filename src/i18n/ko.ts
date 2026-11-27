@@ -6,12 +6,14 @@ import { commandPaletteKo } from "./commandPalette/ko";
 import { terminalCopyModeKo } from "./terminalCopyMode/ko";
 import { rowMenuKo } from "./rowMenu/ko";
 import { focusModeKo } from "./focusMode/ko";
+import { screenTabsKo } from "./screenTabs/ko";
 import { requestTimeoutKo } from "./requestTimeout/ko";
 import { gridRestoreKo } from "./gridRestore/ko";
 import { fileHistoryKo } from "./fileHistory/ko";
 import { filesRecentKo } from "./filesRecent/ko";
 import { dirConfigSaveKo } from "./dirConfigSave/ko";
 import { releaseNotesKo } from "./releaseNotes/ko";
+import { whatsNewKo } from "./whatsNew/ko";
 import { dirConfigOpenKo } from "./dirConfigOpen/ko";
 import { dirSettingsFormKo } from "./dirSettingsForm/ko";
 import { themeEditorKo } from "./themeEditor/ko";
@@ -386,7 +388,7 @@ export const ko: Messages = {
     theme: {
       missing: "선택한 테마 {id}이(가) 정의되어 있지 않습니다. {configFile}의 {themesKey}에 추가하거나 아래에서 하나 고르세요. 그때까지 선택은 유지됩니다.",
       intro:
-        "있는 것 중에서 고릅니다. 직접 만든 배색은 {configFile}의 {themesKey}에 두면 내장된 넷 옆에 나옵니다 —— skill은 팔레트나 사진, 브랜드 색에서 하나를 써 내고 대비까지 확인합니다.",
+        "있는 것 중에서 고릅니다. 직접 만든 배색은 {configFile}의 {themesKey}에 두면 내장 테마 옆에 나옵니다 —— skill은 팔레트나 사진, 브랜드 색에서 하나를 써 내고 대비까지 확인합니다.",
       group: "테마",
       create: "테마 만들기…",
     },
@@ -625,14 +627,7 @@ export const ko: Messages = {
     tip: "이 파일의 제목(선택하면 그곳으로 이동)",
     empty: "이 파일에는 제목이 없습니다.",
   },
-  whatsNew: {
-    title: "새로운 기능",
-    intro: "MulmoTerminal이 {version}(으)로 업데이트되었습니다. 마지막으로 사용한 이후 달라진 점입니다.",
-    englishOnly: "릴리스 설명은 영어로 작성되어 있습니다.",
-    openOnWeb: "이 페이지를 웹에서 열기",
-    older: "이전 버전은 변경 기록에 있습니다.",
-    close: "확인",
-  },
+  whatsNew: whatsNewKo,
   fileHistory: fileHistoryKo,
   filesRecent: filesRecentKo,
   dirConfigSave: dirConfigSaveKo,
@@ -643,6 +638,7 @@ export const ko: Messages = {
   headerChips: headerChipsKo,
   headerButtons: headerButtonsKo,
   focusMode: focusModeKo,
+  screenTabs: screenTabsKo,
   requestTimeout: requestTimeoutKo,
   gridRestore: gridRestoreKo,
   settingsControls: settingsControlsKo,

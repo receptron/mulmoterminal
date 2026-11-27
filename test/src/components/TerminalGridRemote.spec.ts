@@ -11,6 +11,7 @@ import ToolsPane from "../../../src/components/ToolsPane.vue";
 import { openInFilesPane } from "../../../src/composables/filesPaneOpener";
 import { dirKeyOf } from "../../../src/composables/dirAddress";
 import { rememberPane } from "../../../src/components/filesPaneStore";
+import { setFileLinkOpensPane } from "../../../src/composables/fileLinkOpensPane";
 import { oneFile } from "./filesPaneFixture";
 import type { Cell } from "../../../src/components/gridTabs.js";
 
@@ -48,11 +49,11 @@ beforeEach(() => {
 
 const cellOn = (uid: number, remoteHost: string | undefined): Cell => ({ uid, session: SESSION, cwd: "/srv/project", ...(remoteHost ? { remoteHost } : {}) });
 
-const mountEnlarged = (remoteHost: string | undefined, cells: Cell[] = [cellOn(1, remoteHost)]) => {
+const mountEnlarged = (remoteHost: string | undefined, cells: Cell[] = [cellOn(1, remoteHost)], expandedUid: number | null = 1) => {
   return mount(TerminalGrid, {
     props: {
       cells,
-      expandedUid: 1,
+      expandedUid,
       listRows: [],
       cancelUid: null,
       defaultCwd: "/work",
@@ -141,6 +142,41 @@ describe("a remote cell's Files pane", () => {
     mountEnlarged("lx");
     await flushPromises();
     expect(openInFilesPane("/srv/project", "README.md", undefined, false, null)).toBe(false);
+  });
+
+  // A path printed by the remote cell is its host's, and opens in the pane on that host.
+  it("opens a path its own terminal printed, on its host", async () => {
+    const grid = mountEnlarged("lx");
+    await flushPromises();
+    requested = [];
+    expect(openInFilesPane("/srv/project", "README.md", undefined, false, SESSION, "lx")).toBe(true);
+    await flushPromises();
+    expect(grid.findComponent(FilesPane).props("host")).toBe("lx");
+    expect(filesRequests().some((url) => url.startsWith("/remote/lx/api/files/browse/text?") && url.includes("path=README.md"))).toBe(true);
+    expect(filesRequests().every((url) => url.startsWith("/remote/lx/api/files/browse/"))).toBe(true);
+  });
+
+  it("takes no path printed on another host", async () => {
+    mountEnlarged("lx");
+    await flushPromises();
+    expect(openInFilesPane("/srv/project", "README.md", undefined, false, SESSION, "other")).toBe(false);
+  });
+
+  it("leaves a local cell's pane to this machine's paths", async () => {
+    mountEnlarged(undefined);
+    await flushPromises();
+    expect(openInFilesPane("/srv/project", "README.md", undefined, false, SESSION, "lx")).toBe(false);
+  });
+
+  // On the tiled grid a click opens the pane beside the cell that printed it (#3238), on its host.
+  it("opens beside the remote cell on the tiled grid, for a path it printed", async () => {
+    setFileLinkOpensPane(true);
+    const grid = mountEnlarged("lx", [cellOn(1, "lx")], null);
+    await flushPromises();
+    expect(openInFilesPane("/srv/project", "README.md", undefined, false, SESSION, "lx")).toBe(true);
+    await flushPromises();
+    expect(grid.findComponent(FilesPane).props()).toMatchObject({ cwd: "/srv/project", host: "lx" });
+    expect(openInFilesPane("/srv/project", "README.md", undefined, false, SESSION, null)).toBe(false);
   });
 
   it("opens one beside a local cell for its clicked path (control)", async () => {

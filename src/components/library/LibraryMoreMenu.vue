@@ -3,6 +3,7 @@
 // are the slot's, each a `role=menuitem` button; the owner closes it with `close()` when one is picked.
 import { nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { useOverlayVisible } from "../../composables/overlayVisibility";
 
 const { t } = useI18n();
 const menuOpen = ref(false);
@@ -56,6 +57,10 @@ onBeforeUnmount(() => {
 function close(): void {
   menuOpen.value = false;
 }
+// The screen is hidden, not unmounted, when it closes: a menu left open would keep the keys.
+watch(useOverlayVisible(), (shown) => {
+  if (!shown) close();
+});
 defineExpose({ close });
 </script>
 

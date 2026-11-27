@@ -189,7 +189,7 @@ export const quickCommandSchema = z.object({
   agents: z.array(z.enum(SESSION_AGENTS)).optional(),
 }) satisfies z.ZodType<QuickCommand>;
 
-// A colour scheme the user defined (#996), offered in Settings next to the four built-ins.
+// A colour scheme the user defined (#996), offered in Settings next to the built-ins.
 //
 // The values land in CSS custom properties, so `paletteColor` is doing security work here, not
 // just tidiness: a value that escaped the hex shape would be injected into a style declaration.

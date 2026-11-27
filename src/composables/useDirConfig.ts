@@ -21,7 +21,7 @@ import { dirApiUrl, isRemoteDirKey } from "./dirAddress";
 // server-side; `hasSound` says whether GET /api/dir-sound has something to stream.
 export interface DirConfig extends DirChrome {
   // ThemeIdLike, not ThemeId: a directory may pin a theme the user defined, so this cannot claim
-  // to be one of the four built-ins (#996). Membership is not checked here either — the server
+  // to be one of the built-ins (#996). Membership is not checked here either — the server
   // already dropped an id that resolves to nothing, and this parser cannot see the user's themes.
   theme: string | null;
   // Per-key xterm palette overrides applied on top of `theme` (or the app theme).

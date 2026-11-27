@@ -18,6 +18,7 @@ import { isRecord } from "../../../common/isRecord.js";
 import { publicInputProblems } from "./publicForm.js";
 import { scopedFieldProblems } from "./scopedFields.js";
 import { SIGN_IN_STEP } from "./signInStep.js";
+import { withoutOptionalLocks } from "../../git/git-env.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -63,10 +64,11 @@ export interface SharedAppFailure {
  *  commits and a non-repository are the same answer here: the stamp is attribution, not a
  *  requirement. */
 export async function gitStamp(root: string): Promise<GitStamp> {
+  const env = withoutOptionalLocks(process.env);
   try {
-    const { stdout } = await execFileAsync("git", ["-C", root, "rev-parse", "HEAD"]);
+    const { stdout } = await execFileAsync("git", ["-C", root, "rev-parse", "HEAD"], { env });
     const commit = stdout.trim();
-    const { stdout: status } = await execFileAsync("git", ["-C", root, "status", "--porcelain"]);
+    const { stdout: status } = await execFileAsync("git", ["-C", root, "status", "--porcelain"], { env });
     return { commit: commit.length > 0 ? commit : undefined, dirty: status.trim().length > 0 };
   } catch {
     return {};

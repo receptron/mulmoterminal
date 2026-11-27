@@ -22,11 +22,12 @@ export interface PaneClickState {
   paneHost?: string | null;
 }
 
-/** Can a click from the session running in `cwd` be shown in the pane right now? */
-export function paneCanShowClick(state: PaneClickState, cwd: string): boolean {
+/** Can a click from the session running in `cwd`, on `host` (null for this machine), be shown in the
+ *  pane right now? */
+export function paneCanShowClick(state: PaneClickState, cwd: string, host: string | null = null): boolean {
   if (!state.roomForPane) return false;
-  // A clicked path is this machine's, and the same path on a remote host is another directory.
-  if (state.paneHost) return false;
+  // The same path on another machine is another directory.
+  if ((state.paneHost ?? null) !== host) return false;
   // Every cell stays mounted while one is enlarged (the filmstrip), and every tile is on screen
   // beside a tiled pane, so a click can come from a cell the pane is not about.
   if (state.paneCellCwd !== cwd) return false;
@@ -49,7 +50,12 @@ export interface TiledClickState {
  *  to `paneCanShowClick` and the route. The click's cell has to be one of this grid's, and its
  *  directory the one the path was read against: a session that just changed directory reports the
  *  new one before the cell does, and the path would resolve against the wrong root. */
-export function paneToOpenBeside(state: TiledClickState, from: { uid: number; cwd: string | null } | undefined, cwd: string): number | null {
+export function paneToOpenBeside(
+  state: TiledClickState,
+  from: { uid: number; cwd: string | null; remoteHost?: string } | undefined,
+  cwd: string,
+  host: string | null = null,
+): number | null {
   if (state.zoomed || !state.fileLinkOpensPane || from === undefined) return null;
-  return from.cwd === cwd ? from.uid : null;
+  return from.cwd === cwd && (from.remoteHost ?? null) === host ? from.uid : null;
 }

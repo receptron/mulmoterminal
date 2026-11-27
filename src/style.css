@@ -9,7 +9,7 @@
 
 /* Theme tokens. The default (:root) palette is "Midnight"; [data-theme] blocks
    below override it. Components reference these via var(--token), so switching
-   the data-theme attribute on <html> recolors the whole app. The four themes
+   the data-theme attribute on <html> recolors the whole app. The built-in themes
    span dark→light and cool→warm so they read as clearly different. */
 :root,
 :root[data-theme="midnight"] {
@@ -107,6 +107,54 @@
   --term-selection: #eee8d5;
 }
 
+/* Okamoto Taro — dark and loud. Near-black ground, vermilion accent, warm off-white text. */
+:root[data-theme="okamoto"] {
+  --bg-base: #141112;
+  --bg-deep: #0c0a0b;
+  --bg-panel: #1f1a1b;
+  --bg-subtle: #2a2223;
+  --bg-elevated: #2a2223;
+  --bg-input: #0f0c0d;
+  --bg-hover: #3a2a2b;
+  --bg-selected: #5a1a16;
+  --bg-selected-hover: #74211b;
+  --border: #3a2e2f;
+  --accent: #ff4b33;
+  --accent-bg: #d42a1a;
+  --accent-bg-hover: #b8200f;
+  --on-accent: #ffffff;
+  --text: #f6efe6;
+  --text-secondary: #e8d9c4;
+  --text-muted: #b9a89a;
+  --text-dim: #8f7f73;
+  --term-fg: #f2ead8;
+  --term-selection: #4a2a26;
+}
+
+/* Pink — bright and warm. Pale pink base, white panels, deep rose accent. */
+:root[data-theme="pink"] {
+  --bg-base: #fff0f5;
+  --bg-deep: #fbe1ea;
+  --bg-panel: #ffffff;
+  --bg-subtle: #ffe8f0;
+  --bg-elevated: #ffeaf2;
+  --bg-input: #ffffff;
+  --bg-hover: #fcd9e6;
+  --bg-selected: #f9c9db;
+  --bg-selected-hover: #f5b3cb;
+  --border: #f2c6d6;
+  --accent: #c2255c;
+  --accent-bg: #c2255c;
+  --accent-bg-hover: #a51f4e;
+  --on-accent: #ffffff;
+  --text: #3a1d2b;
+  --text-secondary: #5a3043;
+  --text-muted: #8a4a62;
+  --text-dim: #b07a90;
+  --term-fg: #3a1d2b;
+  --term-selection: #fbd0e0;
+}
+
 /* Status colors carry meaning (success / warning / error). They don't follow the
    palette hue, but they DO flip with background lightness: dark themes get
    dark-filled pills with light text (below); light themes get light-tinted pills
@@ -143,6 +191,16 @@
    canvas's pixels. One token so the two sides cannot drift apart. */
 :root {
   --focus-zoom: 1.03;
+}
+
+/* Where the full-screen screens start: under the toolbar (h-10), and under the screen tabs (h-8)
+   too while those are up. Read from the DOM rather than set from script, so no screen has to know
+   the strip exists. */
+:root {
+  --screen-top: 2.5rem;
+}
+:root:has([data-screen-tabs]) {
+  --screen-top: 4.5rem;
 }
 
 /* Light themes: status pills become light-tinted with dark, saturated text so

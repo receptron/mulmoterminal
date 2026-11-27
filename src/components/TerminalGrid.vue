@@ -1089,7 +1089,7 @@ watch(
 // server to say so is what stops that first "no" from standing until the user collapses and
 // re-expands the cell.
 onToolGroupsAnnounced((announcement) => {
-  if (announcement.sessionId !== paneCellSessionId.value) return;
+  if (announcement.host !== paneCellHost.value || announcement.sessionId !== paneCellSessionOnHost.value) return;
   // Only the announcement that actually carries groups says anything about them; the bare
   // "my MCP client is up" one is a cue to ask again, not an empty answer.
   if (!announcement.groups) return;
@@ -1289,9 +1289,16 @@ watch(
 // The pane's SECOND entrance (#910): a file path clicked in terminal output, offered here
 // before it falls back to a new tab or the full-screen view. Whether this grid can show it is
 // `paneCanShowClick`; all that is left here is doing it.
-function openClickedPath(cwd: string, pathRel: string, location: FileLocation | undefined, newTab: boolean, session: string | null): boolean {
+function openClickedPath(
+  cwd: string,
+  pathRel: string,
+  location: FileLocation | undefined,
+  newTab: boolean,
+  session: string | null,
+  host: string | null,
+): boolean {
   // On the tiled grid the click opens the pane beside its own cell (#3238), as that cell's menu would.
-  const beside = paneToOpenBeside({ zoomed: zoomed.value, fileLinkOpensPane: isFileLinkOpensPaneEnabled() }, cellBySession(session), cwd);
+  const beside = paneToOpenBeside({ zoomed: zoomed.value, fileLinkOpensPane: isFileLinkOpensPaneEnabled() }, cellBySession(session), cwd, host);
   if (beside !== null) {
     void showClickedPathBeside(beside, pathRel, location, newTab);
     return true;
@@ -1302,7 +1309,7 @@ function openClickedPath(cwd: string, pathRel: string, location: FileLocation | 
     paneCwd: paneCwd.value,
     paneHost: paneHost.value,
   };
-  if (!paneCanShowClick(state, cwd)) return false;
+  if (!paneCanShowClick(state, cwd, host)) return false;
   void showClickedPath(pathRel, location, newTab);
   return true;
 }

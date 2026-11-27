@@ -7,7 +7,7 @@ extracting a component never leaves CSS behind.
 
 ## How it's wired
 
-- **`src/style.css`** — the design tokens. Four themes (`midnight`/`nord`/`daylight`/`solarized`)
+- **`src/style.css`** — the design tokens. The built-in themes (`midnight`/`nord`/`daylight`/`solarized`/`okamoto`/`pink`)
   each redefine the same `--bg-*` / `--text-*` / `--border` / `--accent` / status
   vars under `:root[data-theme="…"]`. Switching `data-theme` on `<html>` recolors
   everything. This is the single source of color truth.
@@ -135,6 +135,6 @@ Spacing/radius use Tailwind's scale on a 4px base: `px-2` = 8px, `px-2.5` = 10px
    accessible selector or `data-testid`. When a parent needs to find a child, give the
    child a `data-testid` rather than reaching for a styling class.
 4. Confirm the built utility declarations match the originals; screenshot across the
-   four themes if it's visually load-bearing.
+   built-in themes if it's visually load-bearing.
 
 Migration is incremental — touch a component, Tailwind-ify what you touch.
