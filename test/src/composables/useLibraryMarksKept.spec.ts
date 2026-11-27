@@ -44,6 +44,17 @@ describe("useLibraryMarks on a kept screen", () => {
     expect([kept.loadFailed.value, kept.marks.value.names]).toEqual([true, {}]);
   });
 
+  it("keeps what a save answered when the next opening's read fails, though the first read failed", async () => {
+    const isOpen = ref(true);
+    const kept = useLibraryMarks(isOpen);
+    await flushPromises(); // the first read fails
+    api.saving = Promise.resolve({ pinned: [], names: { a: "Named here" } });
+    await kept.change("a", { name: "Named here" });
+    expect(kept.loadFailed.value).toBe(false);
+    await reopen(isOpen); // and the read on opening fails too
+    expect([kept.loadFailed.value, kept.marks.value.names]).toEqual([false, { a: "Named here" }]);
+  });
+
   // Closing outdates a save still out (the open/close watcher), so its follow-up never runs hidden.
   it("reads no pinned conversation for a pin that answers after the Library closed", async () => {
     api.answer = { pinned: [], names: {} };

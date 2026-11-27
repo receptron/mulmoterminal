@@ -119,6 +119,10 @@ export const REMOTE_ROUTES = {
   // An AskUserQuestion dialog: the one a session is blocked on, and an answer, typed by the host.
   question: { method: "GET", path: "/api/question/:sid", key: "session", access: "read", query: [] },
   questionAnswer: { method: "POST", path: "/api/question/:sid/answer", key: "session", access: "write", query: [] },
+  // The launch form's worktree section: a repo's managed worktrees, and a new one, which `git worktree
+  // add` checks out in full.
+  worktrees: { method: "GET", path: "/api/worktrees", key: "cwd", access: "read", query: ["cwd"] },
+  worktreeCreate: { ...repoWrite("/api/worktrees/create", ["repoDir"]), wait: "slow" },
   worktreeDiff: { method: "GET", path: "/api/worktrees/diff", key: "cwd", access: "read", query: ["cwd"] },
   worktreePush: repoWrite("/api/worktrees/push", ["cwd"]),
   worktreePr: repoWrite("/api/worktrees/pr", ["cwd"]),

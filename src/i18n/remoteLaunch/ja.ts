@@ -13,4 +13,13 @@ export const remoteLaunchJa = {
   chipFill: "{path} を使う",
   resumeHeading: "または {label} の会話を再開",
   resumeOpen: "開いています",
+  worktreeHeading: "または {label} のワークツリーで分離",
+  worktreeTaskPlaceholder: "タスク名（例: fix-login）",
+  worktreeNew: "新しいワークツリー",
+  worktreeCreatingLabel: "作成中…",
+  worktreeInUse: "使用中",
+  worktreeResumeMark: "再開",
+  worktreeTimedOut: "{label} の git の応答を待ちきれませんでした。まだ終わる可能性があります。このディレクトリを選び直して確かめてください。",
+  worktreeUnreachable: "{label} に届きませんでした: {error}",
+  worktreeNoPath: "{label} の応答にワークツリーのパスがありませんでした。",
 };

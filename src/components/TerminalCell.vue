@@ -120,6 +120,7 @@ import {
   onThisMachine,
   REMOTE_CELL_DECLINE_EN,
   repoWritePath,
+  sessionChannelOf,
   sessionDetailPath,
   sessionWritePath,
 } from "./remoteCell";
@@ -566,19 +567,20 @@ async function refreshUsage() {
 const unseenCanvas = ref(0);
 let unsubscribeCanvas: (() => void) | undefined;
 
-function watchCanvasOutput(id: string | null) {
+function watchCanvasOutput(channel: string | null) {
   unsubscribeCanvas?.();
   unsubscribeCanvas = undefined;
   unseenCanvas.value = 0;
-  if (!id) return;
-  unsubscribeCanvas = subscribe(`session:${id}`, () => {
+  if (!channel) return;
+  unsubscribeCanvas = subscribe(channel, () => {
     // Already looking at it: arrivals land in a pane the user can see, so nothing is unseen.
     if (props.paneShown && props.rightPane === "canvas") return;
     unseenCanvas.value += 1;
   });
 }
-// This machine's channel names this machine's sessions: a remote cell's drawings are on its host (#3506).
-watch(localSession, watchCanvasOutput, { immediate: true });
+// A remote cell's drawings arrive from its host through the relay (#3506).
+const canvasChannel = computed(() => (sessionId.value ? sessionChannelOf(props.remoteHost, sessionId.value) : null));
+watch(canvasChannel, watchCanvasOutput, { immediate: true });
 // Opening the pane on this cell clears the count — that IS having looked.
 watch(
   () => props.paneShown && props.rightPane === "canvas",

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { CELL_ACTIONS } from "../../../common/headerActions";
-import { actionAllowedOn, cellActionAllowed, isRemoteHost, onThisMachine, pathOnHost } from "../../../src/components/remoteCell";
+import { actionAllowedOn, cellActionAllowed, isRemoteHost, onThisMachine, pathOnHost, sessionChannelOf } from "../../../src/components/remoteCell";
 import { connWsUrl, type ConnTargetUrlInput } from "../../../src/components/wsUrl";
 
 describe("isRemoteHost / onThisMachine", () => {
@@ -13,6 +13,15 @@ describe("isRemoteHost / onThisMachine", () => {
     expect(onThisMachine(undefined, "/p")).toBe("/p");
     expect(onThisMachine("lx", "/p")).toBeNull();
     expect(onThisMachine(null, null)).toBeNull();
+  });
+});
+
+describe("sessionChannelOf", () => {
+  it("is this machine's channel for a local cell and the relay's for a remote one", () => {
+    expect(sessionChannelOf(null, "s1")).toBe("session:s1");
+    expect(sessionChannelOf(undefined, "s1")).toBe("session:s1");
+    expect(sessionChannelOf("", "s1")).toBe("session:s1");
+    expect(sessionChannelOf("lx", "s1")).toBe("remote:lx:session:s1");
   });
 });
 

@@ -66,7 +66,7 @@ const CanvasGridStub = {
 
 const drew = { uuid: "u1", toolName: "presentDocument", data: { markdown: "# hi" } };
 
-const storeCells = (cells: Array<{ uid: number; session: string; cwd: string }>, expanded: number | null) =>
+const storeCells = (cells: Array<{ uid: number; session: string; cwd: string; remoteHost?: string }>, expanded: number | null) =>
   localStorage.setItem("grid_v2", JSON.stringify({ cells, expanded, page: 0, sortMode: "manual" }));
 
 const storeGrid = (expanded: number | null) =>
@@ -165,6 +165,22 @@ describe("the grid enlarging a cell that drew while nothing was enlarged", () =>
     await flushPromises();
 
     expect(opened).toEqual([]);
+    w.unmount();
+  });
+
+  // #3506. A remote cell's drawings arrive from its host through the relay; this machine's channel
+  // with the same bare id names another session.
+  it("enlarges a remote cell on its host's drawing, and not on this machine's same id", async () => {
+    storeCells([{ uid: 10, session: S1, cwd: "/w", remoteHost: "lx" }], null);
+    const w = await mountGrid();
+
+    pubsub.push(`session:${S1}`, drew);
+    await flushPromises();
+    expect(opened).toEqual([]);
+
+    pubsub.push(`remote:lx:session:${S1}`, drew);
+    await flushPromises();
+    expect(w.findComponent(CanvasGridStub).props("expandedUid")).toBe(uidOf(w, S1));
     w.unmount();
   });
 });

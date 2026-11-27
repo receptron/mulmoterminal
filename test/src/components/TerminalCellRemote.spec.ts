@@ -11,11 +11,12 @@ import { invalidateDirConfig } from "../../../src/composables/useDirConfig";
 import { dirKeyOf } from "../../../src/composables/dirAddress";
 import { requestCellAction } from "../../../src/composables/useCellAction";
 
-const subscribedTo = vi.hoisted(() => ({ channels: [] as string[] }));
+const subscribedTo = vi.hoisted(() => ({ channels: [] as string[], handlers: new Map<string, (data: unknown) => void>() }));
 vi.mock("../../../src/composables/usePubSub", () => ({
   usePubSub: () => ({
-    subscribe: (channel: string) => {
+    subscribe: (channel: string, handler: (data: unknown) => void) => {
       subscribedTo.channels.push(channel);
+      subscribedTo.handlers.set(channel, handler);
       return () => {};
     },
     onReconnect: () => () => {},
@@ -336,16 +337,21 @@ describe("a remote cell", () => {
     remote.unmount();
   });
 
-  // This machine's session channel names this machine's sessions; a remote cell's is on its host.
-  it("joins no session channel of this machine, while a local cell does", async () => {
+  // This machine's session channel names this machine's sessions; a remote cell's arrives from its
+  // host through the relay, and counts its unseen drawings there.
+  it("counts its unseen drawings from its host's channel, never this machine's", async () => {
     subscribedTo.channels = [];
     mountCell(null);
     await flushPromises();
     expect(subscribedTo.channels).toContain(`session:${SESSION}`);
     subscribedTo.channels = [];
-    mountCell("lx");
+    const remote = mountCell("lx");
     await flushPromises();
-    expect(subscribedTo.channels.filter((channel) => channel.includes(SESSION))).toEqual([]);
+    expect(subscribedTo.channels.filter((channel) => channel.includes(SESSION))).toEqual([`remote:lx:session:${SESSION}`]);
+    expect(remote.find('[data-testid="cell-canvas-chip"]').exists()).toBe(false);
+    subscribedTo.handlers.get(`remote:lx:session:${SESSION}`)?.({ uuid: "u1", toolName: "presentDocument", data: {} });
+    await nextTick();
+    expect(remote.find('[data-testid="cell-canvas-chip"]').text()).toContain("1");
   });
 
   // #3506. The last code block is read from the session's own log, on its host.

@@ -17,8 +17,7 @@ import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import { pushCollectionSurface, popCollectionSurface, type CollectionSurface } from "../composables/collectionSurface";
 import { cachedProjectIdForCwd, projectIdForCwd } from "../composables/collectionProject";
 import { useI18n } from "vue-i18n";
-import { pathOnHost } from "./remoteCell";
-import { remoteSessionChannel } from "../../common/remoteHosts";
+import { pathOnHost, sessionChannelOf } from "./remoteCell";
 
 const { t } = useI18n();
 
@@ -92,7 +91,7 @@ const { upsert } = useSessionFeed(results, {
   sessionId: () => props.sessionId,
   historyUrl: (id) => pathOnHost(props.host, `/api/agent/toolResults/${encodeURIComponent(id)}`),
   historyKey: "toolResults",
-  channel: (id) => (props.host ? remoteSessionChannel(props.host, "session", id) : `session:${id}`),
+  channel: (id) => sessionChannelOf(props.host, id),
   identify: (result) => result.uuid,
   // The channel carries untrusted JSON; a card with no uuid cannot be deduped or keyed, so it is
   // not a result this panel can render.

@@ -182,7 +182,13 @@ function startEditing(): void {
 function onSaved(text: string, version: string): void {
   docRead += 1; // a read from before the save must not put the old text back
   showDoc(text, version);
+  endEditing();
+}
+
+// A skill the catalog lost during the edit was kept for the edit's sake only.
+function endEditing(): void {
   editing.value = false;
+  if (catalog.value !== null) dropPickGone(catalog.value);
 }
 
 async function reload(): Promise<void> {
@@ -239,8 +245,9 @@ async function reload(): Promise<void> {
     <SkillsShPane v-if="mode === 'remote'" :local-slugs="localSlugs" />
     <p v-else-if="loadFailed" class="m-0 p-4 font-sans text-[13px] text-err-text">{{ t("skillsView.loadFailed") }}</p>
     <p v-else-if="!catalog" class="m-0 p-4 font-sans text-[13px] text-dim">{{ t("skillsView.loading") }}</p>
-    <p v-else-if="!catalog.sources.length" class="m-0 p-4 font-sans text-[13px] text-dim">{{ t("skillsView.empty") }}</p>
-    <p v-else-if="!shownSources.length" data-testid="skills-no-match" class="m-0 p-4 font-sans text-[13px] text-dim">
+    <!-- Not during an edit: these replace the pane, and the editor with the text being typed. -->
+    <p v-else-if="!catalog.sources.length && !editing" class="m-0 p-4 font-sans text-[13px] text-dim">{{ t("skillsView.empty") }}</p>
+    <p v-else-if="!shownSources.length && !editing" data-testid="skills-no-match" class="m-0 p-4 font-sans text-[13px] text-dim">
       {{ attentionOnly ? t("skillsView.attentionEmpty") : t("skillsView.noMatch") }}
     </p>
 
@@ -323,7 +330,7 @@ async function reload(): Promise<void> {
             :text="raw"
             :version="docVersion"
             @saved="onSaved"
-            @cancel="editing = false"
+            @cancel="endEditing"
             @reload="reload"
           />
           <div v-else-if="doc !== null" class="max-w-[90ch] font-sans text-[13px] text-fg"><MarkdownProse :markdown="doc" images-as-links /></div>

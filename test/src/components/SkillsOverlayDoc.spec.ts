@@ -143,3 +143,51 @@ describe("a skill removed while the screen was closed", () => {
     wrapper.unmount();
   });
 });
+
+// An edit is the person's text: the catalog moving under it waits until the edit ends.
+describe("a skill removed while it is being edited", () => {
+  const twoSkills = {
+    sources: [{ ...catalog.sources[0], skills: [...catalog.sources[0].skills, { slug: "deploy", id: "deploy", description: "", overridesUser: false }] }],
+  };
+  const editAfterRemoval = async (after: unknown) => {
+    listedCatalog.current = twoSkills;
+    const wrapper = mount(SkillsOverlay, { global: { plugins: [i18n] } });
+    await flushPromises();
+    await wrapper.get("[data-testid=skills-item]").trigger("click");
+    docs.shift()?.(doc("being edited"));
+    await flushPromises();
+    await wrapper.get("[data-testid=skills-edit]").trigger("click");
+    await wrapper.get("[data-testid=skill-editor-field]").setValue("a draft not saved yet");
+    listedCatalog.current = after;
+    await reopen();
+    return wrapper;
+  };
+
+  it("is taken off the screen once the edit is cancelled, or saved", async () => {
+    const withoutIt = { sources: [{ ...twoSkills.sources[0], skills: [twoSkills.sources[0].skills[1]] }] };
+    const cancelled = await editAfterRemoval(withoutIt);
+    expect(cancelled.find("[data-testid=skill-editor]").exists()).toBe(true);
+    await cancelled.get("[data-testid=skill-editor-cancel]").trigger("click");
+    await flushPromises();
+    expect(cancelled.text()).not.toContain("being edited");
+    expect(cancelled.findComponent({ name: "SkillEvalPanel" }).exists()).toBe(false);
+    cancelled.unmount();
+    const saved = await editAfterRemoval(withoutIt);
+    saved.findComponent(SkillDocEditor).vm.$emit("saved", "as saved", "v2");
+    await flushPromises();
+    expect(saved.text()).not.toContain("as saved");
+    expect(saved.findComponent({ name: "SkillEvalPanel" }).exists()).toBe(false);
+    saved.unmount();
+  });
+
+  it("keeps the editor and its draft when the catalog empties, or the search matches nothing", async () => {
+    const emptied = await editAfterRemoval({ sources: [] });
+    expect(emptied.get<HTMLTextAreaElement>("[data-testid=skill-editor-field]").element.value).toBe("a draft not saved yet");
+    emptied.unmount();
+    const searched = await editAfterRemoval(twoSkills);
+    await searched.get("[data-testid=skills-search]").setValue("nothing is called this");
+    await flushPromises();
+    expect(searched.get<HTMLTextAreaElement>("[data-testid=skill-editor-field]").element.value).toBe("a draft not saved yet");
+    searched.unmount();
+  });
+});

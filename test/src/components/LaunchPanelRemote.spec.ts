@@ -18,14 +18,30 @@ let dirsAnswer: { status: number; body: unknown } = NO_DIRS;
 // What the remote's conversation lists answer, through the gateway.
 let remoteSessions: unknown[] = [];
 let remoteListCwd: string | undefined = "/srv/app";
+// The remote's worktree list, what its create answers, and the creates asked of it.
+let remoteWorktrees: unknown = { isGit: false, worktrees: [] };
+let createAnswer: { status: number; body: unknown } = { status: 200, body: {} };
+let creates: { url: string; body: unknown }[] = [];
+// Set to hold a create's answer back until the test lets it go.
+let createGate: Promise<void> | null = null;
 const stubFetch = (hosts: RemoteHostSummary[]) => {
   requested = [];
   dirsAnswer = NO_DIRS;
   remoteSessions = [];
   remoteListCwd = "/srv/app";
-  globalThis.fetch = vi.fn(async (url: string) => {
+  remoteWorktrees = { isGit: false, worktrees: [] };
+  createAnswer = { status: 200, body: {} };
+  creates = [];
+  createGate = null;
+  globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
     requested.push(String(url));
     if (String(url).endsWith("/dirs")) return { ok: dirsAnswer.status === 200, status: dirsAnswer.status, json: async () => dirsAnswer.body };
+    if (String(url).startsWith("/remote/lx/api/worktrees/create")) {
+      creates.push({ url: String(url), body: JSON.parse(String(init?.body)) });
+      await createGate;
+      return { ok: createAnswer.status === 200, status: createAnswer.status, json: async () => createAnswer.body };
+    }
+    if (String(url).startsWith("/remote/lx/api/worktrees")) return { ok: true, json: async () => remoteWorktrees };
     if (String(url).startsWith("/remote/lx/api/")) return { ok: true, json: async () => ({ cwd: remoteListCwd, sessions: remoteSessions }) };
     if (String(url).includes("/api/remote-hosts")) return { ok: true, json: async () => ({ hosts, rejected: [] }) };
     if (String(url).includes("/api/worktrees")) return { ok: true, json: async () => ({ isGit: false, base: null, worktrees: [] }) };
@@ -226,5 +242,104 @@ describe("the launch panel's host picker", () => {
     await typeDir(w, "/srv/app");
     await w.find('[data-testid="remote-launch"]').trigger("submit");
     expect(w.emitted("start-remote")).toHaveLength(1);
+  });
+
+  describe("the host's worktrees", () => {
+    const SESSION = "33333333-3333-4333-8333-333333333333";
+    const tree = (task: string, session: unknown = null) => ({ path: `/srv/app-wt/${task}`, branch: `agent/${task}`, task, dirty: false, session });
+    const openForm = async () => {
+      const w = await mountPanel();
+      await pickHost(w, "lx");
+      remoteWorktrees = {
+        isGit: true,
+        worktrees: [
+          tree("free"),
+          tree("idle", { id: SESSION, agent: "codex", attached: false }),
+          tree("held", { id: SESSION, agent: "claude", attached: true }),
+        ],
+      };
+      await typeDir(w, "/srv/app");
+      await settle();
+      return w;
+    };
+    const rows = (w: VueWrapper) => w.findAll('[data-testid="remote-wt-row"]');
+
+    it("lists them from the host, and starts, resumes or refuses each by its one session", async () => {
+      const w = await openForm();
+      expect(requested).toContain("/remote/lx/api/worktrees?cwd=%2Fsrv%2Fapp");
+      expect(rows(w).map((row) => row.attributes("disabled") !== undefined)).toEqual([false, false, true]);
+      await rows(w)[0]?.trigger("click");
+      await rows(w)[1]?.trigger("click");
+      await rows(w)[2]?.trigger("click");
+      expect(w.emitted("start-remote")).toEqual([[{ host: "lx", dir: "/srv/app-wt/free", agent: "claude" }]]);
+      expect(w.emitted("resume-remote")).toEqual([[{ host: "lx", id: SESSION, cwd: "/srv/app-wt/idle", agent: "codex" }]]);
+    });
+
+    it("creates one on the host for the typed task, and starts in it", async () => {
+      const w = await openForm();
+      createAnswer = { status: 200, body: { path: "/srv/app-wt/fix-login", branch: "agent/fix-login" } };
+      await w.find('[data-testid="remote-wt-task"]').setValue(" fix-login ");
+      await w.find('[data-testid="remote-wt-start"]').trigger("click");
+      await flushPromises();
+      expect(creates).toEqual([{ url: "/remote/lx/api/worktrees/create?cwd=%2Fsrv%2Fapp", body: { repoDir: "/srv/app", task: "fix-login" } }]);
+      expect(w.emitted("start-remote")).toEqual([[{ host: "lx", dir: "/srv/app-wt/fix-login", agent: "claude" }]]);
+      expect((w.find('[data-testid="remote-wt-task"]').element as HTMLInputElement).value).toBe("");
+    });
+
+    it("says why a create failed, and starts nothing", async () => {
+      const w = await openForm();
+      createAnswer = { status: 500, body: { error: "could not create the worktree (is this a git repo?)" } };
+      await w.find('[data-testid="remote-wt-task"]').setValue("t");
+      await w.find('[data-testid="remote-wt-start"]').trigger("click");
+      await flushPromises();
+      expect(w.find('[data-testid="remote-wt-error"]').text()).toContain("could not create the worktree");
+      createAnswer = { status: 200, body: { branch: "agent/t" } };
+      await w.find('[data-testid="remote-wt-start"]').trigger("click");
+      await flushPromises();
+      expect(w.find('[data-testid="remote-wt-error"]').text()).toContain("without a worktree path");
+      expect(w.emitted("start-remote")).toBeUndefined();
+    });
+
+    // The answer can take a minute, and by then the form may name another repo, another agent, or nothing.
+    it.each([
+      ["the directory changes", async (w: VueWrapper) => typeDir(w, "/srv/other")],
+      ["the agent changes", async (w: VueWrapper) => w.find('[data-testid="remote-agent-codex"]').trigger("click")],
+      // Back to this machine: the remote form unmounts while the panel that would place the cell stays,
+      // and Vue drops an unmounted component's emits, so this case holds without a guard of ours.
+      ["the form closes", async (w: VueWrapper) => w.find('[data-testid="remote-host-picker"] [role="radio"]').trigger("click")],
+    ])("starts nothing when a create answers after %s", async (_when, moveOn) => {
+      const w = await openForm();
+      let release = (): void => undefined;
+      createGate = new Promise((resolve) => {
+        release = resolve;
+      });
+      createAnswer = { status: 200, body: { path: "/srv/app-wt/late", branch: "agent/late" } };
+      await w.find('[data-testid="remote-wt-task"]').setValue("late");
+      await w.find('[data-testid="remote-wt-start"]').trigger("click");
+      await flushPromises();
+      expect(creates).toHaveLength(1);
+      await moveOn(w);
+      release();
+      await flushPromises();
+      expect(w.emitted("start-remote")).toBeUndefined();
+    });
+
+    it("is not offered for a shell, the host's workspace, or a directory that is not a repo", async () => {
+      const w = await openForm();
+      expect(w.find('[data-testid="remote-worktrees"]').exists()).toBe(true);
+      await w.find('[data-testid="remote-agent-shell"]').trigger("click");
+      expect(w.find('[data-testid="remote-worktrees"]').exists()).toBe(false);
+      await w.find('[data-testid="remote-agent-claude"]').trigger("click");
+      remoteWorktrees = { isGit: false, worktrees: [] };
+      await typeDir(w, "/srv/plain");
+      await settle();
+      expect(w.find('[data-testid="remote-worktrees"]').exists()).toBe(false);
+    });
+
+    it("hides them in the host's workspace", async () => {
+      dirsAnswer = { status: 200, body: { cwd: "/srv/app", presets: [] } };
+      const w = await openForm();
+      expect(w.find('[data-testid="remote-worktrees"]').exists()).toBe(false);
+    });
   });
 });

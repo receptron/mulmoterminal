@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // The launch form for a remote host (#3506): a directory, typed or picked from the remote's own saved
-// ones, and a built-in agent or the shell — or one of that agent's past conversations there, resumed.
+// ones, and a built-in agent or the shell — or one of that agent's past conversations there, resumed,
+// or a worktree of that repo on the host.
 // CellLaunchForm is not reused with a flag: every directory it lists and checks is on THIS disk.
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useRemoteHostDirs } from "../composables/useRemoteHostDirs";
@@ -12,6 +13,7 @@ import { useResumableSessions, type ResumableSession } from "../composables/useD
 import { dirKeyOf } from "../composables/dirAddress";
 import { isTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
 import { LAUNCH_ROW } from "./launchFormClasses";
+import RemoteWorktrees from "./RemoteWorktrees.vue";
 import type { RemoteHostSummary } from "../../common/remoteHosts";
 
 const { t } = useI18n();
@@ -44,24 +46,31 @@ function start() {
 
 // The picked agent's own past conversations in the typed directory, read on the host. A shell has none.
 const listAgent = computed<TerminalAgent | null>(() => (isTerminalAgent(agent.value) ? agent.value : null));
-const { value: resumable, forget: forgetResumable, load: loadResumable } = useResumableSessions();
-const RESUME_RELOAD_DEBOUNCE_MS = 300;
-let reloadTimer: ReturnType<typeof setTimeout> | undefined;
-// The rows go the moment the directory or the agent changes, since they are the previous one's; the
-// reload waits out the typing.
-watch([dir, listAgent], () => {
-  clearTimeout(reloadTimer);
-  forgetResumable();
-  reloadTimer = setTimeout(() => {
-    const listed = listAgent.value;
-    void loadResumable(listed === null ? null : dirKeyOf(props.host.id, remoteDirOf(dir.value)), listed ?? "claude");
-  }, RESUME_RELOAD_DEBOUNCE_MS);
+const { value: resumable, load: loadResumable } = useResumableSessions();
+// The typed directory the lists are read for: null the moment it moves, since every row shown is the
+// previous one's, and set again once typing has paused.
+const DIR_SETTLE_DEBOUNCE_MS = 300;
+const settledDir = ref<string | null>(null);
+let settleTimer: ReturnType<typeof setTimeout> | undefined;
+watch(dir, () => {
+  clearTimeout(settleTimer);
+  settledDir.value = null;
+  settleTimer = setTimeout(() => {
+    settledDir.value = remoteDirOf(dir.value);
+  }, DIR_SETTLE_DEBOUNCE_MS);
 });
-onUnmounted(() => clearTimeout(reloadTimer));
+onUnmounted(() => clearTimeout(settleTimer));
+watch([settledDir, listAgent], ([settled, listed]) => {
+  void loadResumable(listed === null ? null : dirKeyOf(props.host.id, settled), listed ?? "claude");
+});
 
 // Held by a terminal somewhere — this grid's own remote cells included, since the gateway's socket is
 // one the remote counts. Opening it here would take it from whoever has it.
 const heldElsewhere = (session: ResumableSession): boolean => session.attached === true;
+
+function startInWorktree(path: string): void {
+  emit("start", { host: props.host.id, dir: path, agent: agent.value });
+}
 
 function resume(session: ResumableSession): void {
   const cwd = resumable.value.cwd;
@@ -138,6 +147,14 @@ function resume(session: ResumableSession): void {
       <span class="material-symbols-outlined text-[18px]" aria-hidden="true">play_arrow</span>
       {{ t("tips.launch.remote.start", { label: host.label }) }}
     </button>
+    <RemoteWorktrees
+      :host="host"
+      :repo-dir="settledDir"
+      :agent="listAgent"
+      :workspace="dirs?.cwd ?? null"
+      @start="startInWorktree"
+      @resume="emit('resume', $event)"
+    />
     <div v-if="resumable.sessions.length" data-testid="remote-resume" :class="LAUNCH_ROW" class="flex flex-col items-center gap-1.5">
       <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim">{{ t("tips.launch.remote.resumeHeading", { label: host.label }) }}</span>
       <div class="flex w-full flex-col gap-1">

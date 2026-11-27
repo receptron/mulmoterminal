@@ -346,6 +346,77 @@ describe("the canvas opening itself when the agent draws", () => {
     await flushPromises();
     expect(canvasOpen(w)).toBe(true);
   });
+
+  // #3506. A remote cell's drawings arrive from its host through the relay; this machine's channel
+  // with the same bare id names another session.
+  it("opens on a remote cell's drawing from its host, and not on this machine's same id", async () => {
+    const w = mountGrid([{ ...cell(1, "s1"), remoteHost: "lx" }], 1);
+    await flushPromises();
+
+    publish("session:s1", drew);
+    await flushPromises();
+    expect(canvasOpen(w)).toBe(false);
+
+    publish("remote:lx:session:s1", drew);
+    await flushPromises();
+    expect(canvasOpen(w)).toBe(true);
+  });
+
+  // The card it drew is on its host too, so a remote session without the render tools still opens
+  // onto that card rather than "not enabled for this session".
+  it("finds a remote cell's drawn card on its host", async () => {
+    const cards: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        const body = url.startsWith("/remote/lx/api/agent/toolResults/") ? { toolResults: cards } : { groups: [], tools: [], toolResults: [] };
+        return { ok: true, json: async () => body };
+      }),
+    );
+    const w = mountGrid([{ ...cell(1, "s1"), remoteHost: "lx" }], 1);
+    await flushPromises();
+
+    cards.push(drew);
+    publish("remote:lx:session:s1", drew);
+    await flushPromises();
+    expect(canvasOpen(w)).toBe(true);
+    expect(w.findComponent({ name: "GuiPanel" }).props("unavailable")).toBeFalsy();
+  });
+});
+
+// #3506. A session is named by its host and its id, and a local one can carry a remote one's id: an
+// answer asked of one host must not turn the Canvas button on for the same id on another.
+describe("a late answer for a session on another host", () => {
+  it("does not speak for the same id on this machine once the zoom has moved there", async () => {
+    let release = (): void => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("/remote/lx/api/agent/toolResults/")) {
+          await held;
+          return { ok: true, json: async () => ({ toolResults: [drew] }) };
+        }
+        if (url.startsWith("/remote/lx/api/tools")) {
+          await held;
+          return { ok: true, json: async () => ({ groups: ["render"], tools: [] }) };
+        }
+        return { ok: true, json: async () => ({ groups: [], tools: [], toolResults: [] }) };
+      }),
+    );
+    const w = mountGrid([{ ...cell(1, "s1"), remoteHost: "lx" }, cell(2, "s1")], 1);
+    await flushPromises();
+    await w.setProps({ expandedUid: 2 });
+    await flushPromises();
+    release();
+    await flushPromises();
+    const local = w.findAllComponents({ name: "TerminalCell" }).find((c) => c.attributes("data-uid") === "2");
+    expect(local?.props("canvasAvailable")).toBe(false);
+  });
 });
 
 // #3506. The Canvas button's first answer is asked before the agent's MCP client is up, so it is the

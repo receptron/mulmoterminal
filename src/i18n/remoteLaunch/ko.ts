@@ -13,4 +13,13 @@ export const remoteLaunchKo = {
   chipFill: "{path} 사용",
   resumeHeading: "또는 {label}의 대화 이어가기",
   resumeOpen: "열려 있음",
+  worktreeHeading: "또는 {label}의 워크트리에서 분리",
+  worktreeTaskPlaceholder: "작업 이름 (예: fix-login)",
+  worktreeNew: "새 워크트리",
+  worktreeCreatingLabel: "생성 중…",
+  worktreeInUse: "사용 중",
+  worktreeResumeMark: "재개",
+  worktreeTimedOut: "{label}의 git 응답을 기다리다 시간이 초과되었습니다. 아직 끝날 수 있으니 이 디렉터리를 다시 선택해 확인하세요.",
+  worktreeUnreachable: "{label}에 연결할 수 없습니다: {error}",
+  worktreeNoPath: "{label}의 응답에 워크트리 경로가 없습니다.",
 };
