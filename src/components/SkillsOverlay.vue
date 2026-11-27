@@ -96,13 +96,14 @@ let marksRead = 0;
 async function refreshMarks(): Promise<void> {
   const read = ++marksRead;
   const answer = await loadSkillEvalMarks();
-  if (read === marksRead) marks.value = answer;
+  // A failed re-read keeps the marks shown, as the catalog does.
+  if (read === marksRead && (answer !== null || marks.value === null)) marks.value = answer;
 }
 
 async function refreshUsage(): Promise<void> {
   const read = ++usageRead;
   const answer = await loadSkillUsage();
-  if (read === usageRead) usage.value = answer;
+  if (read === usageRead && (answer !== null || usage.value === null)) usage.value = answer;
 }
 
 // Read again on every opening, with the last catalog left on screen until the answer replaces it: the
