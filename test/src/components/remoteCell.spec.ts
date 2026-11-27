@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { CELL_ACTIONS } from "../../../common/headerActions";
-import { actionAllowedOn, cellActionAllowed, isRemoteHost, onThisMachine, pathOnHost, sessionChannelOf } from "../../../src/components/remoteCell";
+import {
+  actionAllowedOn,
+  cellActionAllowed,
+  drawChannelOf,
+  isRemoteHost,
+  onThisMachine,
+  pathOnHost,
+  sessionChannelOf,
+} from "../../../src/components/remoteCell";
 import { connWsUrl, type ConnTargetUrlInput } from "../../../src/components/wsUrl";
 
 describe("isRemoteHost / onThisMachine", () => {
@@ -22,6 +30,25 @@ describe("sessionChannelOf", () => {
     expect(sessionChannelOf(undefined, "s1")).toBe("session:s1");
     expect(sessionChannelOf("", "s1")).toBe("session:s1");
     expect(sessionChannelOf("lx", "s1")).toBe("remote:lx:session:s1");
+  });
+});
+
+describe("drawChannelOf", () => {
+  it("is null until the cell has a session", () => {
+    expect(drawChannelOf({ session: null })).toBeNull();
+    expect(drawChannelOf({ session: null, remoteHost: "lx" })).toBeNull();
+  });
+
+  it("is the session's channel on the cell's own machine", () => {
+    expect(drawChannelOf({ session: "s1" })).toBe("session:s1");
+    expect(drawChannelOf({ session: "s1", remoteHost: undefined })).toBe("session:s1");
+    expect(drawChannelOf({ session: "s1", remoteHost: "" })).toBe("session:s1");
+    expect(drawChannelOf({ session: "s1", remoteHost: "lx" })).toBe("remote:lx:session:s1");
+  });
+
+  // Only null means "no session yet": an empty id is still a session, unlike the truthy checks elsewhere.
+  it("treats an empty session id as a session", () => {
+    expect(drawChannelOf({ session: "" })).toBe("session:");
   });
 });
 
