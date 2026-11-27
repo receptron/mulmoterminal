@@ -114,17 +114,7 @@ function cancel(): void {
   emit("cancel");
 }
 
-onMounted(async () => {
-  await nextTick();
-  field.value?.focus();
-  const merging = props.merging;
-  const [running, links] = await Promise.all([sessionRunningIn(props.cwd), merging ? loadLibraryMemoryLinks(props.slug, props.file, merging.file) : null]);
-  sessionRunning.value = running;
-  mergeLinks.value = links;
-  // Said before saving, as the merge would be refused for it.
-  if ((links?.unplaceable.length ?? 0) > 0) notice.value = "unplaceable";
-});
-// The editor stays open while the Library is closed; a session may have started or ended in the meantime.
+// One counter for the mount's check and each showing's, so an older answer cannot undo a newer one.
 let runningChecks = 0;
 async function recheckRunning(): Promise<void> {
   const mine = ++runningChecks;
@@ -132,6 +122,18 @@ async function recheckRunning(): Promise<void> {
   if (mine === runningChecks) sessionRunning.value = running;
 }
 onOverlayShownAgain(() => void recheckRunning());
+
+onMounted(async () => {
+  await nextTick();
+  field.value?.focus();
+  const merging = props.merging;
+  void recheckRunning();
+  const links = merging ? await loadLibraryMemoryLinks(props.slug, props.file, merging.file) : null;
+  mergeLinks.value = links;
+  // Said before saving, as the merge would be refused for it.
+  if ((links?.unplaceable.length ?? 0) > 0) notice.value = "unplaceable";
+});
+// The editor stays open while the Library is closed; a session may have started or ended in the meantime.
 
 async function save(): Promise<void> {
   if (saving.value) return;

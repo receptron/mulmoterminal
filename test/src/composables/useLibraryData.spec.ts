@@ -9,10 +9,13 @@ let status: LibraryIndexStatus | null = null;
 let statusGate: Promise<void> = Promise.resolve();
 let hits: LibrarySearchHit[] | null = [];
 let firstHasMore = false;
+let moreGate: Promise<void> = Promise.resolve();
 vi.mock("../../../src/composables/libraryApi", () => ({
   LIBRARY_PAGE: 50,
-  loadLibraryPage: (offset: number) =>
-    Promise.resolve(offset === 0 && page !== null ? { conversations: page, hasMore: firstHasMore, indexFinishedAt: 1 } : null),
+  loadLibraryPage: async (offset: number) => {
+    if (offset > 0) await moreGate;
+    return offset === 0 && page !== null ? { conversations: page, hasMore: firstHasMore, indexFinishedAt: 1 } : null;
+  },
   loadLibraryStatus: async () => {
     await statusGate;
     return status;
@@ -35,6 +38,7 @@ beforeEach(() => {
   statusGate = Promise.resolve();
   hits = [];
   firstHasMore = false;
+  moreGate = Promise.resolve();
 });
 
 describe("useLibraryData", () => {
@@ -148,6 +152,24 @@ describe("useLibraryData", () => {
     await flushPromises();
     expect([holder.data?.loadFailed.value, holder.data?.conversations.value]).toEqual([true, []]);
     second.unmount();
+  });
+
+  it("keeps the way to more pages when a failed reload overtakes a Show more still out", async () => {
+    const { useLibraryData } = await import("../../../src/composables/useLibraryData");
+    firstHasMore = true;
+    const open = ref(true);
+    const holder: { data: ReturnType<typeof useLibraryData> | null } = { data: null };
+    const host = mount({ setup: () => (holder.data = useLibraryData(open)), template: "<div />" });
+    await flushPromises();
+    const state = holder.data;
+    if (state === null) throw new Error("not mounted");
+    moreGate = new Promise(() => {});
+    void state.loadMore();
+    expect(state.hasMore.value).toBe(false); // one request at a time
+    page = null;
+    await state.reload();
+    expect([state.loadFailed.value, state.hasMore.value]).toEqual([false, true]);
+    host.unmount();
   });
 
   it("holds Show more while the list is being read again", async () => {

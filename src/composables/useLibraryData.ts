@@ -73,6 +73,8 @@ function usePagedConversations() {
   let reloading = 0;
   /** A page was read at least once: a failed re-read keeps it on screen instead of an error. */
   let listed = false;
+  /** Whether more pages followed, as the last answer said: a "Show more" still out has cleared it. */
+  let settledHasMore = false;
   async function reload(): Promise<void> {
     const mine = ++pageRequest;
     reloading++;
@@ -82,10 +84,13 @@ function usePagedConversations() {
     // A failed read reflects no pass, so the next status answer reads the list again.
     reflects.value = page === null ? undefined : page.indexFinishedAt;
     loadFailed.value = page === null && !listed;
-    if (page === null) return;
+    if (page === null) {
+      hasMore.value = settledHasMore;
+      return;
+    }
     listed = true;
     conversations.value = page.conversations;
-    hasMore.value = page.hasMore;
+    hasMore.value = settledHasMore = page.hasMore;
   }
 
   async function loadMore(): Promise<void> {
@@ -99,7 +104,7 @@ function usePagedConversations() {
       return;
     }
     conversations.value = [...conversations.value, ...page.conversations];
-    hasMore.value = page.hasMore;
+    hasMore.value = settledHasMore = page.hasMore;
   }
 
   return { conversations, hasMore, loaded, loadFailed, reflects, reload, loadMore };

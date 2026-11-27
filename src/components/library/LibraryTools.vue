@@ -68,7 +68,12 @@ watch(cwd, async (dir) => {
 async function rereadInstructions(dir: string): Promise<void> {
   const mine = ++reads;
   const read = await loadInstructions(dir);
-  if (mine !== reads || read === null) return;
+  if (mine !== reads) return;
+  // A failed re-read keeps what is shown; with nothing shown (it overtook the first read) it says so.
+  if (read === null) {
+    failed.value = instructions.value === null;
+    return;
+  }
   instructions.value = read;
   failed.value = false;
 }
@@ -106,7 +111,9 @@ async function rereadText(): Promise<void> {
   if (dir === null || file === null) return;
   const mine = ++textReads;
   const read = await loadInstruction(dir, file);
-  if (mine === textReads && read !== null) text.value = read;
+  if (mine !== textReads) return;
+  if (read !== null) text.value = read;
+  else text.value ??= { text: null, reason: "unreadable" };
 }
 onOverlayShownAgain(() => void rereadText());
 

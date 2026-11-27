@@ -31,7 +31,11 @@ watch(
 async function reread(): Promise<void> {
   const mine = ++reads;
   const read = await loadToolSettings(props.cwd);
-  if (mine !== reads || read === null) return;
+  if (mine !== reads) return;
+  if (read === null) {
+    failed.value = settings.value === null; // nothing to keep: the re-read overtook the first one
+    return;
+  }
   settings.value = read;
   failed.value = false;
 }

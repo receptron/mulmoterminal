@@ -112,3 +112,15 @@ describe("the collections shown again", () => {
     wrapper.unmount();
   });
 });
+
+describe("a first read overtaken by the screen shown again", () => {
+  it("says why when the re-read fails too", async () => {
+    listSourceCollections.mockReset();
+    listSourceCollections.mockReturnValueOnce(new Promise(() => {})).mockResolvedValue({ ok: false, error: "the collections could not be read" });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintCollectionPicker, { fieldId: "blueprint-q-source", answer: "" });
+    await flushPromises();
+    await showAgain();
+    expect(wrapper.text()).toContain("the collections could not be read");
+    wrapper.unmount();
+  });
+});

@@ -290,3 +290,23 @@ describe("the editor shown again", () => {
     wrapper.unmount();
   });
 });
+
+describe("the running check from opening the editor", () => {
+  it("does not undo a newer check from showing the Library again", async () => {
+    let releaseMount: () => void = () => {};
+    runningGates.push(new Promise((resolve) => (releaseMount = resolve)));
+    running = false;
+    const { wrapper, showAgain } = mountUnderOverlay(
+      LibraryMemoryEditor,
+      { slug: "-w-app", file: "a.md", text: "body", version: "v1", cwd: "/w/app" },
+      { attachTo: document.body },
+    );
+    await flushPromises();
+    running = true;
+    await showAgain();
+    releaseMount();
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-editor-running]").exists()).toBe(true);
+    wrapper.unmount();
+  });
+});

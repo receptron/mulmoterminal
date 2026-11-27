@@ -37,13 +37,19 @@ const dark = computed(() => activeThemeVars.value === null || !isLightTheme(acti
 
 // The views are built once the hosts are in the page, and again when the theme turns light or dark; the gone files
 // have no host.
-watch([hosts, dark], ([elements, isDark]) => {
-  clearViews();
-  const shown = (originals.value?.files ?? []).filter((file) => file.current !== null);
-  // CodeMirror fills `$` with the count; the translation keeps it where its own language wants the number.
-  const phrases = { "$ unchanged lines": t("blueprints.run.originalsFolded", { count: "$" }) };
-  views = (elements ?? []).map((host, index) => createDiffView(host, shown[index]?.original ?? "", shown[index]?.current ?? "", { phrases, dark: isDark }));
-});
+// And again when the originals are read again (the kept screen shown again): the same files keep the same
+// hosts, so the hosts alone would not say the texts changed. After the render, so new hosts are in place.
+watch(
+  [hosts, dark, originals],
+  ([elements, isDark]) => {
+    clearViews();
+    const shown = (originals.value?.files ?? []).filter((file) => file.current !== null);
+    // CodeMirror fills `$` with the count; the translation keeps it where its own language wants the number.
+    const phrases = { "$ unchanged lines": t("blueprints.run.originalsFolded", { count: "$" }) };
+    views = (elements ?? []).map((host, index) => createDiffView(host, shown[index]?.original ?? "", shown[index]?.current ?? "", { phrases, dark: isDark }));
+  },
+  { flush: "post" },
+);
 
 watch(
   () => props.runId,

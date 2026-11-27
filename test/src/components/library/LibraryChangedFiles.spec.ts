@@ -9,11 +9,13 @@ import type { LibraryFileText, LibraryTrackedFile } from "../../../../common/lib
 let files: LibraryTrackedFile[] | null = [];
 let texts: Record<string, LibraryFileText> = {};
 const asked: string[] = [];
+let textGate: Promise<void> = Promise.resolve();
 vi.mock("../../../../src/composables/libraryApi", () => ({
   loadLibraryFiles: () => Promise.resolve(files),
-  loadLibraryFileText: (_id: string, _cwd: string | null, file: string, version: number | "now") => {
+  loadLibraryFileText: async (_id: string, _cwd: string | null, file: string, version: number | "now") => {
     asked.push(`${file}@${String(version)}`);
-    return Promise.resolve(texts[`${file}@${String(version)}`] ?? null);
+    await textGate;
+    return texts[`${file}@${String(version)}`] ?? null;
   },
 }));
 const drawn: [string, string][] = [];
@@ -38,6 +40,7 @@ beforeEach(() => {
   texts = {};
   asked.length = 0;
   drawn.length = 0;
+  textGate = Promise.resolve();
 });
 
 async function opened() {
@@ -113,6 +116,25 @@ describe("the changed files shown again", () => {
     files = null;
     await showAgain();
     expect(wrapper.findAll("[data-testid=library-file]")).toHaveLength(2);
+    wrapper.unmount();
+  });
+});
+
+describe("a diff being read when the Library is shown again", () => {
+  it("is still drawn when the list's re-read fails", async () => {
+    files = [tracked("a.md", [[1, true]])];
+    texts = { "a.md@1": { text: "one" }, "a.md@now": { text: "two" } };
+    const { wrapper, showAgain } = mountUnderOverlay(LibraryChangedFiles, { conversation }, { attachTo: document.body });
+    await flushPromises();
+    let release: () => void = () => {};
+    textGate = new Promise((resolve) => (release = resolve));
+    await wrapper.find("[data-testid=library-files-toggle]").trigger("click");
+    await flushPromises();
+    files = null;
+    await showAgain();
+    release();
+    await flushPromises();
+    expect(drawn.length).toBeGreaterThan(0);
     wrapper.unmount();
   });
 });

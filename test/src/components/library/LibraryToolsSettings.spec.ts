@@ -3,6 +3,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { mountUnderOverlay } from "../underOverlay";
+import { en } from "../../../../src/i18n/en";
 
 const settings = (allow: string) => ({
   cwd: "/w/app",
@@ -27,6 +28,16 @@ describe("LibraryToolsSettings", () => {
     expect(wrapper.text()).toContain("Bash(yarn test)");
     await showAgain();
     expect(wrapper.text()).toContain("Bash(yarn test)");
+    wrapper.unmount();
+  });
+
+  it("says it failed when a re-read that overtook the first read fails", async () => {
+    loadToolSettings.mockReset();
+    loadToolSettings.mockReturnValueOnce(new Promise(() => {})).mockResolvedValue(null);
+    const { wrapper, showAgain } = mountUnderOverlay(LibraryToolsSettings, { cwd: "/w/app" });
+    await flushPromises();
+    await showAgain();
+    expect(wrapper.text()).toContain(en.libraryView.tools.settings.failed);
     wrapper.unmount();
   });
 });

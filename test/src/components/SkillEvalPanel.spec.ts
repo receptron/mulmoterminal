@@ -224,6 +224,27 @@ describe("SkillEvalPanel", () => {
     wrapper.unmount();
   });
 
+  it("follows a run whose start answers after the panel was hidden and shown again", async () => {
+    overview = { ...base, set, runs: [] };
+    let answerStart: (value: { kind: "started"; id: string }) => void = () => {};
+    starting = new Promise((resolve) => (answerStart = resolve));
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(SkillEvalPanel, { source, skill })) });
+    const wrapper = mount(Host, { global: { plugins: [i18n] } });
+    await flushPromises();
+    await wrapper.find("[data-testid=skill-eval-measure]").trigger("click");
+    await wrapper.find("[data-testid=skill-eval-go]").trigger("click");
+    visible.value = false;
+    await flushPromises();
+    visible.value = true;
+    await flushPromises(); // the read on showing again found no run yet
+    overview = { ...base, set, runs: [run(true, false, { status: "running", attempts: [] })], activeRunId: "1795000000000-aaaaaaaa" };
+    answerStart({ kind: "started", id: "r" });
+    await flushPromises();
+    expect(wrapper.find("[data-testid=skill-eval-progress]").exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it("opens one drafting cell however often the button is pressed while it opens", async () => {
     let answer: (id: string | null) => void = () => {};
     authoring = new Promise((resolve) => (answer = resolve));

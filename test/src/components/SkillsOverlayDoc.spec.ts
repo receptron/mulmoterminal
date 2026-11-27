@@ -21,6 +21,7 @@ vi.mock("../../../src/composables/useSkillCatalog", () => ({
 }));
 vi.mock("../../../src/composables/skillEvalApi", () => ({ loadSkillEvalMarks: () => Promise.resolve(null), loadSkillEval: () => Promise.resolve(null) }));
 const SkillsOverlay = (await import("../../../src/components/SkillsOverlay.vue")).default;
+const SkillDocEditor = (await import("../../../src/components/SkillDocEditor.vue")).default;
 
 const i18n = createI18n({ legacy: false, locale: "en", messages: { en: skillsViewEn } });
 const doc = (text: string): DocAnswer => ({ markdown: text, version: text });
@@ -71,6 +72,37 @@ describe("the picked skill's SKILL.md", () => {
     await flushPromises();
     expect(wrapper.text()).toContain("fresh text");
     expect(wrapper.text()).not.toContain("stale text");
+    wrapper.unmount();
+  });
+});
+
+describe("reads of the SKILL.md around a close", () => {
+  it("says it could not be read when the re-read that overtook the first one fails", async () => {
+    const wrapper = mount(SkillsOverlay, { global: { plugins: [i18n] } });
+    await flushPromises();
+    await wrapper.get("[data-testid=skills-item]").trigger("click");
+    await reopen(); // the first read is still out; this one overtakes it
+    docs.at(-1)?.(null);
+    await flushPromises();
+    expect(wrapper.find("[data-testid=skills-doc-error]").exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("does not let a read from before an edit replace the text it saved", async () => {
+    const wrapper = mount(SkillsOverlay, { global: { plugins: [i18n] } });
+    await flushPromises();
+    await wrapper.get("[data-testid=skills-item]").trigger("click");
+    docs.shift()?.(doc("as opened"));
+    await flushPromises();
+    await reopen();
+    const outstanding = docs.shift();
+    await wrapper.get("[data-testid=skills-edit]").trigger("click");
+    wrapper.findComponent(SkillDocEditor).vm.$emit("saved", "as saved", "v2");
+    await flushPromises();
+    outstanding?.(doc("from before the edit"));
+    await flushPromises();
+    expect(wrapper.text()).toContain("as saved");
+    expect(wrapper.text()).not.toContain("from before the edit");
     wrapper.unmount();
   });
 });

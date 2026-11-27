@@ -107,3 +107,18 @@ describe("the originals shown again", () => {
     wrapper.unmount();
   });
 });
+
+describe("the diff editors shown again", () => {
+  it("draw the texts read again, on the same files", async () => {
+    loadOriginals.mockReset();
+    createDiffView.mockClear();
+    loadOriginals
+      .mockResolvedValueOnce({ ok: true, value: { files: [{ path: "a.md", original: "old a", current: "new a" }], more: false } })
+      .mockResolvedValue({ ok: true, value: { files: [{ path: "a.md", original: "old a", current: "newer a" }], more: false } });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintOriginalsDiff, { runId: "r1" });
+    await flushPromises();
+    await showAgain();
+    expect(createDiffView.mock.calls.at(-1)?.[2]).toBe("newer a");
+    wrapper.unmount();
+  });
+});

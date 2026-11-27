@@ -80,8 +80,9 @@ function stopPolling(): void {
 
 async function refresh(): Promise<void> {
   const asked = selection;
+  const showing = showings;
   const read = await loadSkillEval(props.source, props.skill.slug);
-  if (asked !== selection) return;
+  if (asked !== selection || showing !== showings) return;
   // A failed read while a run is shown keeps what is on screen and tries again on the next tick.
   if (read === null) {
     loadFailed.value = overview.value === null;
@@ -99,10 +100,12 @@ const visible = useOverlayVisible();
 function startPolling(): void {
   if (visible.value) poll ??= setInterval(() => void refresh(), POLL_MS);
 }
-// Hiding outdates whatever is in flight: the read on showing again is the one to believe.
+// Hiding outdates the reads in flight: the read on showing again is the one to believe. A start is
+// not outdated by it (`selection` is the skill), so one that answers after showing again is followed.
+let showings = 0;
 watch(visible, (shown) => {
   if (shown) return void refresh();
-  selection += 1;
+  showings += 1;
   stopPolling();
 });
 
@@ -137,7 +140,8 @@ async function measure(): Promise<void> {
     // Polled from here, not only once a read has seen the run: that read may fail.
     startPolling();
   }
-  await refresh();
+  // Hidden, there is nothing to show it on; showing again reads.
+  if (visible.value) await refresh();
 }
 
 async function stop(): Promise<void> {

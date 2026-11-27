@@ -24,6 +24,8 @@ const sides = ref<{ original: LibraryFileText; current: LibraryFileText } | null
 const host = useTemplateRef<HTMLElement>("diffHost");
 let view: EditorView | null = null;
 let reads = 0;
+// The diff's own: a list read again must not outdate a diff read for a file that is still chosen.
+let sideReads = 0;
 
 const chosen = computed(() => files.value?.find((file) => file.trackingPath === chosenPath.value) ?? null);
 const steps = computed(() => (chosen.value ? diffSteps(chosen.value) : []));
@@ -50,7 +52,11 @@ async function reread(): Promise<void> {
   const mine = ++reads;
   const { id, cwd } = props.conversation;
   const found = await loadLibraryFiles(id, cwd);
-  if (mine !== reads || found === null) return;
+  if (mine !== reads) return;
+  if (found === null) {
+    files.value ??= []; // nothing to keep: the re-read overtook the first one
+    return;
+  }
   files.value = found;
   if (!found.some((file) => file.trackingPath === chosenPath.value)) chosenPath.value = found[0]?.trackingPath ?? null;
   const file = chosen.value;
@@ -60,14 +66,14 @@ async function reread(): Promise<void> {
 onOverlayShownAgain(() => void reread());
 
 async function loadSides(file: LibraryTrackedFile, shown: DiffStep): Promise<void> {
-  const mine = ++reads;
+  const mine = ++sideReads;
   sides.value = null;
   const { id, cwd } = props.conversation;
   const [original, current] = await Promise.all([
     loadLibraryFileText(id, cwd, file.trackingPath, shown.from),
     loadLibraryFileText(id, cwd, file.trackingPath, shown.to),
   ]);
-  if (mine !== reads) return;
+  if (mine !== sideReads) return;
   const failed: LibraryFileText = { text: null, reason: "unreadable" };
   sides.value = { original: original ?? failed, current: current ?? failed };
 }

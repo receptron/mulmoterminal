@@ -4,6 +4,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, ref } from "vue";
 import { provideOverlayVisible } from "../../../../src/composables/overlayVisibility";
+import { mountUnderOverlay } from "../underOverlay";
+import { en } from "../../../../src/i18n/en";
 import type { LibraryInstructionFile, LibraryInstructionScope, LibraryInstructions } from "../../../../common/libraryTools";
 
 const file = (scope: LibraryInstructionScope, filePath: string, over: Partial<LibraryInstructionFile> = {}): LibraryInstructionFile => ({
@@ -17,6 +19,8 @@ const file = (scope: LibraryInstructionScope, filePath: string, over: Partial<Li
   ...over,
 });
 let listing: Record<string, LibraryInstructions> = {};
+/** Answers the next instruction reads take instead of `listing`, one each. */
+const instructionsHeld: Promise<LibraryInstructions | null>[] = [];
 const reads: string[] = [];
 let directoriesAnswer: string[] | null = ["/w/app", "/w/lib"];
 let textAnswer: { text: string | null; reason?: string; missing?: string[] } | null = null;
@@ -34,7 +38,7 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
       hooks: [{ event: "Stop", value: "say done", source: "user" }],
       other: [{ key: "model", value: '"opus"', source: "user" }],
     }),
-  loadInstructions: (cwd: string) => Promise.resolve(listing[cwd] ?? null),
+  loadInstructions: (cwd: string) => instructionsHeld.shift() ?? Promise.resolve(listing[cwd] ?? null),
   loadInstruction: (_cwd: string, filePath: string) => (reads.push(filePath), Promise.resolve(textAnswer ?? { text: `text of ${filePath}` })),
 }));
 
@@ -193,6 +197,18 @@ describe("LibraryTools", () => {
     textAnswer = { text: "edited while closed" };
     await showAgain();
     expect(wrapper.text()).toContain("edited while closed");
+    wrapper.unmount();
+  });
+});
+
+describe("a first read overtaken by the Library shown again", () => {
+  it("says the files could not be read when the re-read fails too", async () => {
+    instructionsHeld.push(new Promise(() => {}));
+    const { wrapper, showAgain } = mountUnderOverlay(LibraryTools, { query: "", initialCwd: "/w/app" }, { attachTo: document.body });
+    await flushPromises();
+    listing = {};
+    await showAgain();
+    expect(wrapper.text()).toContain(en.libraryView.tools.failed);
     wrapper.unmount();
   });
 });

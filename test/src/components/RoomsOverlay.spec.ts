@@ -133,6 +133,22 @@ describe("RoomsOverlay", () => {
     w.unmount();
   });
 
+  it("lets a slow read finish instead of overtaking it on every tick", async () => {
+    vi.useFakeTimers();
+    const w = await open();
+    let release: () => void = () => {};
+    roomGate = new Promise((resolve) => (release = resolve));
+    const before = reads;
+    await vi.advanceTimersByTimeAsync(POLL_MS); // a read goes out and stays out
+    await vi.advanceTimersByTimeAsync(POLL_MS * 3);
+    expect(reads).toBe(before + 1);
+    messages = [{ at: 9, from: "human", text: "slow but shown" }];
+    release();
+    await flushPromises();
+    vi.useRealTimers();
+    w.unmount();
+  });
+
   it("shows what was said, and who said it", async () => {
     messages = [
       { at: 1, from: "#1 · claude", text: "I think we should split it" },

@@ -147,7 +147,7 @@ async function readDoc(source: SkillSource, skill: CatalogSkill, first: boolean)
   const mine = ++docRead;
   const read = await loadSkillDoc(source, skill.slug);
   if (mine !== docRead || !isPicked(source, skill)) return; // moved on while the request was in flight
-  if (read === null && !first) return;
+  if (read === null && !first && raw.value !== null) return; // keep what is shown; with nothing shown, say so
   showDoc(read?.markdown ?? null, read?.version ?? null);
   docFailed.value = read === null;
 }
@@ -158,7 +158,13 @@ function showDoc(markdown: string | null, version: string | null): void {
   docVersion.value = version;
 }
 
+function startEditing(): void {
+  docRead += 1; // a read still out must not replace the text being edited
+  editing.value = true;
+}
+
 function onSaved(text: string, version: string): void {
+  docRead += 1; // a read from before the save must not put the old text back
   showDoc(text, version);
   editing.value = false;
 }
@@ -282,7 +288,7 @@ async function reload(): Promise<void> {
               type="button"
               data-testid="skills-edit"
               class="ml-auto flex flex-none cursor-pointer items-center gap-1 rounded border border-border bg-transparent px-2 py-1 font-sans text-[12px] text-secondary hover:text-fg"
-              @click="editing = true"
+              @click="startEditing"
             >
               <span class="material-symbols-outlined text-[14px]">edit</span>{{ t("skillsView.edit.edit") }}
             </button>

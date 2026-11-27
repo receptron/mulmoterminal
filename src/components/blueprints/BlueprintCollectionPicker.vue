@@ -23,7 +23,7 @@ let reads = 0;
 async function read(kept: boolean): Promise<void> {
   const mine = ++reads;
   const result = await listSourceCollections();
-  if (mine !== reads || (kept && !result.ok)) return;
+  if (mine !== reads || (kept && !result.ok && collections.value !== null)) return;
   error.value = result.ok ? null : failureText(t, result);
   collections.value = result.ok ? result.value.collections : [];
 }

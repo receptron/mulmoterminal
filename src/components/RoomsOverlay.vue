@@ -74,12 +74,20 @@ async function showMessages(next: RoomMessage[]): Promise<void> {
 const roomRead = latestOnly();
 const roomsRead = latestOnly();
 
+// A tick while a read is still out waits for it: each newer read outdates the older one, so reads
+// slower than the interval would otherwise never be shown at all.
+let roomReadsOut = 0;
+function pollTick(): void {
+  if (roomReadsOut === 0) void refresh();
+}
+
 async function refresh(): Promise<void> {
   const id = room.value;
   // A post or a delete can answer after the screen was closed; the next opening reads anyway.
   if (!id || !isOpen.value) return;
   const ticket = roomRead.take();
-  const read = await loadRoom(id);
+  roomReadsOut += 1;
+  const read = await loadRoom(id).finally(() => (roomReadsOut -= 1));
   if (room.value !== id || !roomRead.isLatest(ticket)) return; // moved on, or a newer read was asked for
   now.value = Date.now();
   if (!read.ok) {
@@ -124,7 +132,7 @@ watch(
     if (!open) return;
     await Promise.all([refreshRooms(), refresh()]);
     if (run !== watchRun) return; // a newer run took over while this one was in flight
-    if (room.value) pollTimer = setInterval(refresh, POLL_MS);
+    if (room.value) pollTimer = setInterval(pollTick, POLL_MS);
   },
   { immediate: true },
 );
