@@ -2,7 +2,7 @@
 // One build: every step with where it stands, and — for the step it is on — the one thing the person
 // can do there. Approving, answering and retrying are the only moves the executor waits for; while
 // an agent is working this only says so.
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { archiveRun, loadReport, loadRun, loadRunSource, sendEvent, type PersonEvent, type ReportView } from "../../composables/blueprintsApi";
 import { currentStep } from "../../../common/blueprint/state";
@@ -73,8 +73,17 @@ const activeSession = computed(() => {
 // Ticks once a second so the elapsed time moves between polls.
 const CLOCK_TICK_MS = 1000;
 const now = ref(Date.now());
-const clockTimer = setInterval(() => (now.value = Date.now()), CLOCK_TICK_MS);
-onUnmounted(() => clearInterval(clockTimer));
+let clockTimer: ReturnType<typeof setInterval> | null = null;
+whileOverlayVisible(
+  () => {
+    now.value = Date.now();
+    clockTimer = setInterval(() => (now.value = Date.now()), CLOCK_TICK_MS);
+  },
+  () => {
+    if (clockTimer !== null) clearInterval(clockTimer);
+    clockTimer = null;
+  },
+);
 const elapsed = computed(() => (activeSession.value ? elapsedParts(activeSession.value.atMs, now.value) : null));
 
 async function refresh(): Promise<void> {

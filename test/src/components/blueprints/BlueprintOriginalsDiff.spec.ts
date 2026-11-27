@@ -2,6 +2,7 @@
 // and nothing at all for a build that kept no originals.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mountUnderOverlay } from "../underOverlay";
 
 const { loadOriginals, createDiffView } = vi.hoisted(() => ({
   loadOriginals: vi.fn<(runId: string) => Promise<unknown>>(),
@@ -88,5 +89,21 @@ describe("BlueprintOriginalsDiff", () => {
     expect(createDiffView.mock.calls.map((call) => call[3])).toEqual([expect.objectContaining({ dark: true }), expect.objectContaining({ dark: false })]);
     expect(first?.destroy).toHaveBeenCalled();
     themeVars.value = { "--bg-base": "#0d1117" };
+  });
+});
+
+// The Blueprints screen is kept while closed: shown again, the originals are read again, and a read
+// that fails then keeps the ones shown.
+describe("the originals shown again", () => {
+  it("are read again each time the screen is shown, and kept through a failed read", async () => {
+    loadOriginals.mockReset();
+    loadOriginals.mockResolvedValueOnce({ ok: true, value: { files: [{ path: "a.md", original: "old a", current: "new a" }], more: false } });
+    loadOriginals.mockResolvedValue({ ok: false, error: "gone" });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintOriginalsDiff, { runId: "r1" });
+    await flushPromises();
+    await showAgain();
+    expect(loadOriginals).toHaveBeenCalledTimes(2);
+    expect(wrapper.findAll('[data-testid="blueprint-original"]')).toHaveLength(1);
+    wrapper.unmount();
   });
 });

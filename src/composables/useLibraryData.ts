@@ -71,17 +71,21 @@ function usePagedConversations() {
   /** Reloads in flight. "Show more" waits for them: a page counted from the old list's length would
    *  repeat or skip rows once the reload replaces it. */
   let reloading = 0;
+  /** A page was read at least once: a failed re-read keeps it on screen instead of an error. */
+  let listed = false;
   async function reload(): Promise<void> {
     const mine = ++pageRequest;
     reloading++;
     const page = await loadLibraryPage(0).finally(() => reloading--);
     if (mine !== pageRequest) return;
     loaded.value = true;
-    loadFailed.value = page === null;
     // A failed read reflects no pass, so the next status answer reads the list again.
     reflects.value = page === null ? undefined : page.indexFinishedAt;
-    conversations.value = page?.conversations ?? [];
-    hasMore.value = page?.hasMore ?? false;
+    loadFailed.value = page === null && !listed;
+    if (page === null) return;
+    listed = true;
+    conversations.value = page.conversations;
+    hasMore.value = page.hasMore;
   }
 
   async function loadMore(): Promise<void> {

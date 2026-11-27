@@ -121,7 +121,11 @@ async function refresh(): Promise<void> {
 watch(
   isOpen,
   (open) => {
-    if (open) void refresh();
+    if (!open) return;
+    void refresh();
+    // The picked skill's SKILL.md may have changed while the screen was closed; not under an edit.
+    const shown = picked.value;
+    if (shown && !editing.value) void readDoc(shown.source, shown.skill, false);
   },
   { immediate: true },
 );
@@ -133,8 +137,17 @@ async function pick(source: SkillSource, skill: CatalogSkill): Promise<void> {
   docVersion.value = null;
   editing.value = false;
   docFailed.value = false;
+  await readDoc(source, skill, true);
+}
+
+// The screen outlives a close, so a read from before it can answer after a newer one for the same skill.
+let docRead = 0;
+/** Reads the skill's SKILL.md; a re-read (`first` false) that fails keeps what is shown. */
+async function readDoc(source: SkillSource, skill: CatalogSkill, first: boolean): Promise<void> {
+  const mine = ++docRead;
   const read = await loadSkillDoc(source, skill.slug);
-  if (!isPicked(source, skill)) return; // moved on while the request was in flight
+  if (mine !== docRead || !isPicked(source, skill)) return; // moved on while the request was in flight
+  if (read === null && !first) return;
   showDoc(read?.markdown ?? null, read?.version ?? null);
   docFailed.value = read === null;
 }

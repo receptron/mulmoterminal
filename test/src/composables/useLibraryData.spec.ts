@@ -11,7 +11,8 @@ let hits: LibrarySearchHit[] | null = [];
 let firstHasMore = false;
 vi.mock("../../../src/composables/libraryApi", () => ({
   LIBRARY_PAGE: 50,
-  loadLibraryPage: (offset: number) => Promise.resolve(offset === 0 ? { conversations: page, hasMore: firstHasMore, indexFinishedAt: 1 } : null),
+  loadLibraryPage: (offset: number) =>
+    Promise.resolve(offset === 0 && page !== null ? { conversations: page, hasMore: firstHasMore, indexFinishedAt: 1 } : null),
   loadLibraryStatus: async () => {
     await statusGate;
     return status;
@@ -26,7 +27,7 @@ const conversation = (id: string, title: string): LibraryConversation => ({
   ...{ id, agent: "claude", title, cwd: "/w", gitBranch: "main", prs: [], costUsd: null, linesAdded: null, linesRemoved: null },
   ...{ startedAt: NOW, endedAt: NOW, skills: [], hookErrors: 0, userTurns: 1, isSidechain: false, parentId: null, isTemporary: false, entrypoint: "cli" },
 });
-let page: LibraryConversation[] = [];
+let page: LibraryConversation[] | null = [];
 
 beforeEach(() => {
   page = [conversation("a", "A"), conversation("b", "B")];
@@ -128,6 +129,25 @@ describe("useLibraryData", () => {
     expect(searches).not.toHaveBeenCalled();
     searches.mockRestore();
     host.unmount();
+  });
+
+  it("keeps the list through a failed re-read, and says so only when there never was one", async () => {
+    const { useLibraryData } = await import("../../../src/composables/useLibraryData");
+    const open = ref(true);
+    let data: ReturnType<typeof useLibraryData> | null = null;
+    const host = mount({ setup: () => (data = useLibraryData(open)), template: "<div />" });
+    await flushPromises();
+    if (data === null) throw new Error("not mounted");
+    const state: ReturnType<typeof useLibraryData> = data;
+    page = null;
+    await state.reload();
+    expect([state.loadFailed.value, state.conversations.value.map((row) => row.id)]).toEqual([false, ["a", "b"]]);
+    host.unmount();
+    const holder: { data: ReturnType<typeof useLibraryData> | null } = { data: null };
+    const second = mount({ setup: () => (holder.data = useLibraryData(ref(true))), template: "<div />" });
+    await flushPromises();
+    expect([holder.data?.loadFailed.value, holder.data?.conversations.value]).toEqual([true, []]);
+    second.unmount();
   });
 
   it("holds Show more while the list is being read again", async () => {

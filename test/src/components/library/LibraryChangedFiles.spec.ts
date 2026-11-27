@@ -2,6 +2,7 @@
 // step once opened, and a reason in place of a diff it cannot draw.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mountUnderOverlay } from "../underOverlay";
 import type { LibraryConversation } from "../../../../common/library";
 import type { LibraryFileText, LibraryTrackedFile } from "../../../../common/libraryFiles";
 
@@ -94,5 +95,24 @@ describe("LibraryChangedFiles", () => {
     const wrapper = await opened();
     expect(wrapper.find("[data-testid=library-file-blocked]").text()).toBe("Not a text file.");
     expect(drawn).toEqual([]);
+  });
+});
+
+// The reader is kept while the Library is closed, and the conversation may have gone on changing files.
+describe("the changed files shown again", () => {
+  it("are read again, staying on the file shown, and kept through a failed read", async () => {
+    files = [tracked("a.md", [[1, true]])];
+    const { wrapper, showAgain } = mountUnderOverlay(LibraryChangedFiles, { conversation }, { attachTo: document.body });
+    await flushPromises();
+    await wrapper.find("[data-testid=library-files-toggle]").trigger("click");
+    await flushPromises();
+    files = [tracked("b.md", [[1, true]]), tracked("a.md", [[1, true]])];
+    await showAgain();
+    expect(wrapper.findAll("[data-testid=library-file]").map((row) => row.text())).toEqual(["b.md", "a.md"]);
+    expect(wrapper.get("[data-testid=library-file][aria-current=true]").text()).toBe("a.md");
+    files = null;
+    await showAgain();
+    expect(wrapper.findAll("[data-testid=library-file]")).toHaveLength(2);
+    wrapper.unmount();
   });
 });

@@ -9,6 +9,7 @@ import { failureText } from "./refusalText";
 import { isPullRequestUrl, targetRows, type Target, type TargetPhase } from "../../../common/blueprint/targets";
 import type { BlueprintState } from "../../../common/blueprint/state";
 import type { PlanStep } from "../../../common/blueprint/plan";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 
 const props = defineProps<{ runId: string; steps: readonly PlanStep[]; state: BlueprintState }>();
 const { t } = useI18n();
@@ -50,6 +51,8 @@ async function load(): Promise<void> {
 }
 
 watch([() => props.runId, progressKey], () => void load(), { immediate: true });
+// The screen is kept while closed; what this shows may have changed in the meantime.
+onOverlayShownAgain(() => void load());
 
 const rows = computed(() => (targets.value ? targetRows(targets.value, props.steps, props.state) : []));
 

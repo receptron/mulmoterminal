@@ -11,6 +11,7 @@ import { createDiffView } from "../cmDiffView";
 import { latestOnly } from "./latestOnly";
 import { activeThemeVars } from "../../composables/useTheme";
 import { isLightTheme } from "../../../common/themeVars";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 
 const props = defineProps<{ runId: string }>();
 const { t } = useI18n();
@@ -24,11 +25,12 @@ const clearViews = (): void => {
   views = [];
 };
 
-async function load(runId: string): Promise<void> {
+async function load(runId: string, kept = false): Promise<void> {
   const ticket = reads.take();
   const result = await loadOriginals(runId);
   if (!reads.isLatest(ticket)) return;
-  originals.value = result.ok ? result.value : null;
+  if (result.ok) originals.value = result.value;
+  else if (!kept) originals.value = null;
 }
 
 const dark = computed(() => activeThemeVars.value === null || !isLightTheme(activeThemeVars.value));
@@ -48,6 +50,8 @@ watch(
   (runId) => void load(runId),
   { immediate: true },
 );
+// The screen is kept while closed; what this shows may have changed in the meantime.
+onOverlayShownAgain(() => void load(props.runId, true));
 onBeforeUnmount(clearViews);
 </script>
 

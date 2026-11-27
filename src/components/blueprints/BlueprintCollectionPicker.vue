@@ -4,6 +4,7 @@ import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { listSourceCollections, type SourceChoice } from "../../composables/blueprintsApi";
 import { failureText } from "./refusalText";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 
 defineProps<{ fieldId: string; answer: string }>();
 const emit = defineEmits<{ update: [answer: string | undefined] }>();
@@ -17,11 +18,18 @@ const groups = computed(() =>
 );
 const error = ref<string | null>(null);
 
-onMounted(async () => {
+let reads = 0;
+/** The collections offered; a re-read that fails keeps the list shown. */
+async function read(kept: boolean): Promise<void> {
+  const mine = ++reads;
   const result = await listSourceCollections();
+  if (mine !== reads || (kept && !result.ok)) return;
   error.value = result.ok ? null : failureText(t, result);
   collections.value = result.ok ? result.value.collections : [];
-});
+}
+onMounted(() => void read(false));
+// The screen is kept while closed; what this shows may have changed in the meantime.
+onOverlayShownAgain(() => void read(true));
 
 const onChange = (event: Event): void => {
   if (event.target instanceof HTMLSelectElement) emit("update", event.target.value === "" ? undefined : event.target.value);

@@ -9,6 +9,7 @@ import { useI18n } from "vue-i18n";
 import { loadLibraryMemoryLinks, mergeLibraryMemoryFiles, saveLibraryMemoryFile, type MemorySaveResult } from "../../composables/libraryApi";
 import { sessionRunningIn } from "./memorySessions";
 import { MEMORY_EDIT_MAX_BYTES } from "../../../common/libraryMemory";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 
 const props = defineProps<{
   slug: string;
@@ -123,6 +124,11 @@ onMounted(async () => {
   // Said before saving, as the merge would be refused for it.
   if ((links?.unplaceable.length ?? 0) > 0) notice.value = "unplaceable";
 });
+// The editor stays open while the Library is closed; a session may have started or ended in the meantime.
+async function recheckRunning(): Promise<void> {
+  sessionRunning.value = await sessionRunningIn(props.cwd);
+}
+onOverlayShownAgain(() => void recheckRunning());
 
 async function save(): Promise<void> {
   if (saving.value) return;

@@ -11,6 +11,7 @@ import { loadLibraryFiles, loadLibraryFileText } from "../../composables/library
 import { activeThemeVars } from "../../composables/useTheme";
 import { createDiffView } from "../cmDiffView";
 import { diffSteps, shownPath, type DiffStep } from "./changedFiles";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 
 const props = defineProps<{ conversation: LibraryConversation }>();
 const { t } = useI18n();
@@ -42,6 +43,21 @@ watch(
   },
   { immediate: true },
 );
+
+// The screen is kept while closed and the conversation may have gone on changing files: read the list
+// again, staying on the file shown when it is still there, and its sides if they are open.
+async function reread(): Promise<void> {
+  const mine = ++reads;
+  const { id, cwd } = props.conversation;
+  const found = await loadLibraryFiles(id, cwd);
+  if (mine !== reads || found === null) return;
+  files.value = found;
+  if (!found.some((file) => file.trackingPath === chosenPath.value)) chosenPath.value = found[0]?.trackingPath ?? null;
+  const file = chosen.value;
+  const shown = step.value;
+  if (file && shown && open.value) void loadSides(file, shown);
+}
+onOverlayShownAgain(() => void reread());
 
 async function loadSides(file: LibraryTrackedFile, shown: DiffStep): Promise<void> {
   const mine = ++reads;

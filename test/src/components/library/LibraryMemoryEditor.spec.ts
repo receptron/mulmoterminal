@@ -2,6 +2,7 @@
 // refused and said, Esc stops editing without closing the Library, and a running session is warned of.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mountUnderOverlay } from "../underOverlay";
 import type { MemorySaveResult } from "../../../../src/composables/libraryApi";
 
 let result: MemorySaveResult = { kind: "saved", version: "v2" };
@@ -254,5 +255,22 @@ describe("LibraryMemoryEditor", () => {
     await flushPromises();
     await again.find("[data-testid=memory-editor-use-stale]").trigger("click");
     expect((again.find("[data-testid=memory-editor-field]").element as HTMLTextAreaElement).value).toBe("written against v1");
+  });
+});
+
+// The editor stays open while the Library is closed: a session may have started in the meantime.
+describe("the editor shown again", () => {
+  it("checks again whether a session is running in the project", async () => {
+    const { wrapper, showAgain } = mountUnderOverlay(
+      LibraryMemoryEditor,
+      { slug: "-w-app", file: "a.md", text: "body", version: "v1", cwd: "/w/app" },
+      { attachTo: document.body },
+    );
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-editor-running]").exists()).toBe(false);
+    running = true;
+    await showAgain();
+    expect(wrapper.find("[data-testid=memory-editor-running]").exists()).toBe(true);
+    wrapper.unmount();
   });
 });
