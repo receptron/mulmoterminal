@@ -143,7 +143,7 @@ export function reviewPrompt({ repo, pr, head, round, maxRounds, skill }: Prompt
     `Follow the ${skill} skill for how to review; where it and this message differ on the verdict line or the PR comment, this message wins.`,
     `Read it with gh pr view ${pr} -R ${repo} and gh pr diff ${pr} -R ${repo}.`,
     "Do not modify, check out or commit in any existing checkout; to run code, make your own worktree or clone in a temporary directory.",
-    "Report every finding you have in this one round, each with a severity (P1 must fix, P2 should fix, P3 optional) and file:line, and the smallest change that resolves it.",
+    "Report every finding you have in this one round, each with a severity (P1 must fix, P2 should fix, P3 optional, N a note that does not block) and file:line, and the smallest change that resolves it.",
     `Begin your reply with exactly one line: REVIEW VERDICT: LGTM (head ${head}) or REVIEW VERDICT: CHANGES REQUESTED (head ${head}).`,
     `Then post the same reply as a comment on the PR: write it to a file and run gh pr comment ${pr} -R ${repo} --body-file <that file>.`,
   ];
