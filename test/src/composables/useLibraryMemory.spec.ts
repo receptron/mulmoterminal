@@ -82,4 +82,19 @@ describe("useLibraryMemory", () => {
     await flushPromises();
     expect([memory.healthFailed.value, memory.health.value.size]).toEqual([true, 0]);
   });
+
+  it("keeps what was judged when a re-read of the health check fails", async () => {
+    answer = [project("p")];
+    healthGate = Promise.resolve();
+    healthAnswer = [{ slug: "p", issues: [{ kind: "no-index" }], files: {} }];
+    const isOpen = ref(true);
+    const memory = useLibraryMemory(isOpen);
+    await flushPromises();
+    isOpen.value = false;
+    await flushPromises();
+    healthAnswer = null;
+    isOpen.value = true;
+    await flushPromises();
+    expect([memory.healthFailed.value, memory.health.value.size]).toEqual([false, 1]);
+  });
 });

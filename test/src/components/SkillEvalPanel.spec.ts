@@ -267,6 +267,24 @@ describe("SkillEvalPanel", () => {
     wrapper.unmount();
   });
 
+  it("keeps a read that answers while the panel is hidden: it is newer than what is shown", async () => {
+    vi.useFakeTimers();
+    overview = { ...base, set, runs: [run(true, false, { status: "running", attempts: [] })], activeRunId: "1795000000000-aaaaaaaa" };
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(SkillEvalPanel, { source, skill })) });
+    const wrapper = mount(Host, { global: { plugins: [i18n] } });
+    await flushPromises();
+    let release: (value: SkillEvalOverview) => void = () => {};
+    loads.push(new Promise((resolve) => (release = resolve)));
+    await vi.advanceTimersByTimeAsync(3000); // a poll read goes out
+    visible.value = false;
+    await flushPromises();
+    release({ ...base, set, runs: [run(true, false)] });
+    await flushPromises();
+    expect(wrapper.find("[data-testid=skill-eval-verdict]").text()).toBe("It helps");
+    wrapper.unmount();
+  });
+
   it("opens one drafting cell however often the button is pressed while it opens", async () => {
     let answer: (id: string | null) => void = () => {};
     authoring = new Promise((resolve) => (answer = resolve));

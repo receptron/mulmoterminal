@@ -82,9 +82,9 @@ async function refresh(): Promise<void> {
   // A stop or an adoption can answer after the panel was hidden; showing it again reads anyway.
   if (!visible.value) return;
   const asked = selection;
-  const showing = showings;
+  const mine = ++evalReads;
   const read = await loadSkillEval(props.source, props.skill.slug);
-  if (asked !== selection || showing !== showings) return;
+  if (asked !== selection || mine !== evalReads) return;
   // A failed read while a run is shown keeps what is on screen and tries again on the next tick.
   if (read === null) {
     loadFailed.value = overview.value === null;
@@ -102,14 +102,11 @@ const visible = useOverlayVisible();
 function startPolling(): void {
   if (visible.value) poll ??= setInterval(() => void refresh(), POLL_MS);
 }
-// Hiding outdates the reads in flight: the read on showing again is the one to believe. A start is
-// not outdated by it (`selection` is the skill), so one that answers after showing again is followed.
-let showings = 0;
-watch(visible, (shown) => {
-  if (shown) return void refresh();
-  showings += 1;
-  stopPolling();
-});
+// Only the newest read is applied: one from before a hide can answer after the read made on showing
+// again. One that answers while hidden is newer than what is shown, so it is kept. A start is not a
+// read (`selection` is the skill), so one that answers after showing again is followed.
+let evalReads = 0;
+watch(visible, (shown) => (shown ? void refresh() : stopPolling()));
 
 watch(
   () => [props.source, props.skill.id],

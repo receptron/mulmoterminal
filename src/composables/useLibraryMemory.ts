@@ -21,8 +21,9 @@ export function useLibraryMemory(isOpen: Ref<boolean>) {
     void (async () => {
       const judged = await loadLibraryMemoryHealth();
       if (mine !== reads) return;
-      healthFailed.value = judged === null;
-      health.value = new Map((judged ?? []).map((project) => [project.slug, project]));
+      // A failed re-read keeps what was judged before; with nothing judged yet, it says so.
+      healthFailed.value = judged === null && health.value.size === 0;
+      if (judged !== null) health.value = new Map(judged.map((project) => [project.slug, project]));
     })();
     const found = await loadLibraryMemory();
     if (mine !== reads) return;

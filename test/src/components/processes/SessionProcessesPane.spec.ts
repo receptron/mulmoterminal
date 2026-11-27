@@ -59,7 +59,7 @@ describe("SessionProcessesPane", () => {
     api.reads[0]?.([session("old")]);
     await flushPromises();
     expect(api.reads).toHaveLength(2);
-    expect(wrapper.text()).not.toContain("/w/old"); // asked for before the close: not shown after it
+    expect(wrapper.text()).toContain("/w/old"); // the newest answer there is, until the queued read's
     api.reads[1]?.([session("new")]);
     await flushPromises();
     expect(wrapper.findAll("[data-testid=processes-session]")).toHaveLength(1);
