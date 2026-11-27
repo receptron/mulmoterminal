@@ -84,7 +84,7 @@ import { isRecord } from "../../common/isRecord";
 import { isDrawnResult } from "../utils/drawnResult";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
 import { isFilesPaneAction } from "./filesPaneActions";
-import { actionAllowedOn, isRemoteHost, sessionChannelOf, sessionDetailPath } from "./remoteCell";
+import { actionAllowedOn, drawChannelOf, isRemoteHost, sessionDetailPath } from "./remoteCell";
 
 // The multi-terminal grid view, shown at /terminals. Leaving the grid is just a
 // route push from the shared toolbar (Chat / Collections / a favorite), so there's
@@ -798,8 +798,6 @@ onBeforeUnmount(() => {
 // nothing here is being read, and rearranging the grid they left would greet them on the way back
 // with a zoom they did not ask for. That drawing keeps the chip, which is where it was already.
 const drawnUnsubscribes = new Map<string, () => void>();
-// A remote cell's drawings arrive from its host through the relay (#3506).
-const drawChannelOf = (cell: Cell): string | null => (cell.session !== null ? sessionChannelOf(cell.remoteHost, cell.session) : null);
 const { subscribe: subscribeDrawn } = usePubSub();
 function stopWatchingDrawing(): void {
   for (const off of drawnUnsubscribes.values()) off();
