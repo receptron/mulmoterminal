@@ -22,6 +22,8 @@ let remoteListCwd: string | undefined = "/srv/app";
 let remoteWorktrees: unknown = { isGit: false, worktrees: [] };
 let createAnswer: { status: number; body: unknown } = { status: 200, body: {} };
 let creates: { url: string; body: unknown }[] = [];
+// Set to hold a create's answer back until the test lets it go.
+let createGate: Promise<void> | null = null;
 const stubFetch = (hosts: RemoteHostSummary[]) => {
   requested = [];
   dirsAnswer = NO_DIRS;
@@ -30,11 +32,13 @@ const stubFetch = (hosts: RemoteHostSummary[]) => {
   remoteWorktrees = { isGit: false, worktrees: [] };
   createAnswer = { status: 200, body: {} };
   creates = [];
+  createGate = null;
   globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
     requested.push(String(url));
     if (String(url).endsWith("/dirs")) return { ok: dirsAnswer.status === 200, status: dirsAnswer.status, json: async () => dirsAnswer.body };
     if (String(url).startsWith("/remote/lx/api/worktrees/create")) {
       creates.push({ url: String(url), body: JSON.parse(String(init?.body)) });
+      await createGate;
       return { ok: createAnswer.status === 200, status: createAnswer.status, json: async () => createAnswer.body };
     }
     if (String(url).startsWith("/remote/lx/api/worktrees")) return { ok: true, json: async () => remoteWorktrees };
@@ -293,6 +297,30 @@ describe("the launch panel's host picker", () => {
       await w.find('[data-testid="remote-wt-start"]').trigger("click");
       await flushPromises();
       expect(w.find('[data-testid="remote-wt-error"]').text()).toContain("without a worktree path");
+      expect(w.emitted("start-remote")).toBeUndefined();
+    });
+
+    // The answer can take a minute, and by then the form may name another repo, another agent, or nothing.
+    it.each([
+      ["the directory changes", async (w: VueWrapper) => typeDir(w, "/srv/other")],
+      ["the agent changes", async (w: VueWrapper) => w.find('[data-testid="remote-agent-codex"]').trigger("click")],
+      // Back to this machine: the remote form unmounts while the panel that would place the cell stays,
+      // and Vue drops an unmounted component's emits, so this case holds without a guard of ours.
+      ["the form closes", async (w: VueWrapper) => w.find('[data-testid="remote-host-picker"] [role="radio"]').trigger("click")],
+    ])("starts nothing when a create answers after %s", async (_when, moveOn) => {
+      const w = await openForm();
+      let release = (): void => undefined;
+      createGate = new Promise((resolve) => {
+        release = resolve;
+      });
+      createAnswer = { status: 200, body: { path: "/srv/app-wt/late", branch: "agent/late" } };
+      await w.find('[data-testid="remote-wt-task"]').setValue("late");
+      await w.find('[data-testid="remote-wt-start"]').trigger("click");
+      await flushPromises();
+      expect(creates).toHaveLength(1);
+      await moveOn(w);
+      release();
+      await flushPromises();
       expect(w.emitted("start-remote")).toBeUndefined();
     });
 

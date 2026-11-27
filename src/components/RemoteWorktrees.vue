@@ -51,6 +51,10 @@ watch(
   { immediate: true },
 );
 
+// Whether the form still asks for what a create was started for: a late answer must not open the old
+// repo's tree, or open it under another agent. A closed form needs nothing here: Vue drops its emits.
+const stillAsked = (repoDir: string, agent: TerminalAgent): boolean => props.repoDir === repoDir && props.agent === agent;
+
 // Only while the form still names the repo the request was for, as CellLaunchForm's error line.
 const reportFailure = (repoDir: string, message: string): void => {
   if (props.repoDir === repoDir) worktreeError.value = message;
@@ -64,11 +68,12 @@ const failureText = (e: unknown): string =>
 async function create(): Promise<void> {
   const repoDir = props.repoDir;
   const name = task.value.trim();
-  if (!repoDir || !name || props.agent === null) return;
-  await run(CREATE_KEY, () => requestWorktree(repoDir, name));
+  const agent = props.agent;
+  if (!repoDir || !name || agent === null) return;
+  await run(CREATE_KEY, () => requestWorktree(repoDir, name, agent));
 }
 
-async function requestWorktree(repoDir: string, name: string): Promise<void> {
+async function requestWorktree(repoDir: string, name: string, agent: TerminalAgent): Promise<void> {
   worktreeError.value = null;
   try {
     const init = { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repoDir, task: name }) };
@@ -78,6 +83,7 @@ async function requestWorktree(repoDir: string, name: string): Promise<void> {
     const body: unknown = await res.json();
     const path = isRecord(body) ? body.path : undefined;
     if (typeof path !== "string") return reportFailure(repoDir, t("tips.launch.remote.worktreeNoPath", { label: props.host.label }));
+    if (!stillAsked(repoDir, agent)) return;
     task.value = "";
     emit("start", path);
   } catch (e) {
