@@ -102,7 +102,7 @@ useEscapeToClose(isOpen, close);
 </script>
 
 <template>
-  <div v-if="isOpen" class="fixed inset-x-0 top-10 bottom-0 z-50 bg-deep flex flex-col" role="region" :aria-label="t('tips.overlays.wiki')">
+  <div v-if="isOpen" class="fixed inset-x-0 top-(--screen-top) bottom-0 z-50 bg-deep flex flex-col" role="region" :aria-label="t('tips.overlays.wiki')">
     <nav class="flex flex-none gap-1 border-b border-border bg-panel px-4 py-2" :aria-label="t('tips.overlays.wikiSections')">
       <button
         type="button"

@@ -1,8 +1,8 @@
 // One key between the screen last opened over the terminals and the view it was opened from: the
 // screens are kept while closed, so going back shows them as they were left.
 import { router } from "../router";
-import { lastPlaceIn } from "./overlayLastPlace";
-import { OVERLAY_ROUTES, overlayOriginState, overlayReturnPath } from "./overlayOrigin";
+import { lastPlaceIn, returnToPlace } from "./overlayLastPlace";
+import { OVERLAY_ROUTES, overlayReturnPath } from "./overlayOrigin";
 
 const lastScreen = lastPlaceIn(OVERLAY_ROUTES);
 
@@ -14,8 +14,6 @@ export function toggleLastScreen(): boolean {
   }
   const last = lastScreen();
   if (last === null) return false;
-  // A `path` holding a query would be pushed without it, and the Library keeps its conversation there.
-  const { path, query, hash } = router.resolve(last);
-  void router.push({ path, query, hash, state: overlayOriginState() });
+  returnToPlace(last);
   return true;
 }

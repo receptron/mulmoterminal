@@ -6,6 +6,7 @@ import { commandPaletteZhCN } from "./commandPalette/zh-CN";
 import { terminalCopyModeZhCN } from "./terminalCopyMode/zh-CN";
 import { rowMenuZhCN } from "./rowMenu/zh-CN";
 import { focusModeZhCN } from "./focusMode/zh-CN";
+import { screenTabsZhCN } from "./screenTabs/zh-CN";
 import { requestTimeoutZhCN } from "./requestTimeout/zh-CN";
 import { gridRestoreZhCN } from "./gridRestore/zh-CN";
 import { fileHistoryZhCN } from "./fileHistory/zh-CN";
@@ -622,6 +623,7 @@ export const zhCN: Messages = {
   headerChips: headerChipsZhCN,
   headerButtons: headerButtonsZhCN,
   focusMode: focusModeZhCN,
+  screenTabs: screenTabsZhCN,
   requestTimeout: requestTimeoutZhCN,
   gridRestore: gridRestoreZhCN,
   settingsControls: settingsControlsZhCN,

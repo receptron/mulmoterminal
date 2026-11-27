@@ -105,7 +105,7 @@ useEscapeToClose(isOpen, close);
 </script>
 
 <template>
-  <div v-if="isOpen" class="fixed inset-x-0 top-10 bottom-0 z-50 bg-deep flex flex-col" role="region" :aria-label="t('tips.overlays.collections')">
+  <div v-if="isOpen" class="fixed inset-x-0 top-(--screen-top) bottom-0 z-50 bg-deep flex flex-col" role="region" :aria-label="t('tips.overlays.collections')">
     <!-- Pinned favourites and the launch-agent picker. The row used to hide itself when nothing
          was pinned; the picker always has something to show, so the row is always there now. -->
     <div class="flex flex-none items-center gap-2.5 border-b border-border px-3 py-1.5 font-sans">
