@@ -12,6 +12,7 @@ vi.mock("../../../../src/composables/libraryApi", () => ({
   loadLibraryMemoryLinks: () => Promise.resolve(links.shift() ?? null),
 }));
 let running = false;
+let listUnreadable = false;
 /** The link counts the next merge-link reads answer with, one each. */
 const links: ({ count: number; unplaceable: string[] } | null)[] = [];
 /** When set, each running check waits on the next of these and answers with `running` as it was asked. */
@@ -20,6 +21,7 @@ vi.mock("../../../../src/composables/useDirLists", () => ({
   readResumableList: async () => {
     const asked = running;
     await (runningGates.shift() ?? Promise.resolve());
+    if (listUnreadable) return null;
     return { sessions: [{ id: "s", title: "", mtime: 0, runningKey: asked ? "s" : null }], cwd: "/w/app" };
   },
 }));
@@ -33,6 +35,7 @@ beforeEach(() => {
   result = { kind: "saved", version: "v2" };
   saves.length = 0;
   running = false;
+  listUnreadable = false;
 });
 
 const mountEditor = async () => {
@@ -330,6 +333,38 @@ describe("a merge shown again", () => {
     const second = shown();
     await showAgain();
     expect(shown()).toBe(second);
+    wrapper.unmount();
+  });
+});
+
+describe("checks that cannot be read", () => {
+  it("keeps the running warning when the session list cannot be read again", async () => {
+    running = true;
+    const { wrapper, showAgain } = mountUnderOverlay(
+      LibraryMemoryEditor,
+      { slug: "-w-app", file: "a.md", text: "body", version: "v1", cwd: "/w/app" },
+      { attachTo: document.body },
+    );
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-editor-running]").exists()).toBe(true);
+    listUnreadable = true;
+    await showAgain();
+    expect(wrapper.find("[data-testid=memory-editor-running]").exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("drops the unplaceable notice once a later read finds nothing it would refuse", async () => {
+    links.push({ count: 0, unplaceable: ["x.md"] }, { count: 0, unplaceable: [] });
+    const merging = { file: "b.md", version: "v2", title: "b", body: "added" };
+    const { wrapper, showAgain } = mountUnderOverlay(
+      LibraryMemoryEditor,
+      { slug: "-w-app", file: "a.md", text: "body", version: "v1", cwd: "/w/app", merging },
+      { attachTo: document.body },
+    );
+    await flushPromises();
+    expect(wrapper.find("[data-testid=memory-editor-notice]").exists()).toBe(true);
+    await showAgain();
+    expect(wrapper.find("[data-testid=memory-editor-notice]").exists()).toBe(false);
     wrapper.unmount();
   });
 });

@@ -106,3 +106,20 @@ describe("reads of the SKILL.md around a close", () => {
     wrapper.unmount();
   });
 });
+
+describe("an adoption answering after the screen was closed", () => {
+  it("reads no document while hidden, and leaves the one shown", async () => {
+    const wrapper = mount(SkillsOverlay, { global: { plugins: [i18n] } });
+    await flushPromises();
+    await wrapper.get("[data-testid=skills-item]").trigger("click");
+    docs.shift()?.(doc("as shown"));
+    await flushPromises();
+    open.value = false;
+    await flushPromises();
+    wrapper.findComponent({ name: "SkillEvalPanel" }).vm.$emit("adopted");
+    await flushPromises();
+    expect(docs).toHaveLength(0);
+    expect(wrapper.text()).toContain("as shown");
+    wrapper.unmount();
+  });
+});

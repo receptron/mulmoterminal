@@ -172,6 +172,25 @@ describe("useLibraryData", () => {
     host.unmount();
   });
 
+  it("keeps asking for a kept list whose re-read failed, while the index is idle", async () => {
+    const { useLibraryData } = await import("../../../src/composables/useLibraryData");
+    const api = await import("../../../src/composables/libraryApi");
+    const holder: { data: ReturnType<typeof useLibraryData> | null } = { data: null };
+    const host = mount({ setup: () => (holder.data = useLibraryData(ref(true))), template: "<div />" });
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 300)); // the poll goes quiet
+    const state = holder.data;
+    if (state === null) throw new Error("not mounted");
+    page = null;
+    await state.reload();
+    const reads = vi.spyOn(api, "loadLibraryPage");
+    await new Promise((resolve) => setTimeout(resolve, LIBRARY_STATUS_POLL_MS + 300));
+    expect(reads).toHaveBeenCalled();
+    expect(state.conversations.value.map((row) => row.id)).toEqual(["a", "b"]);
+    reads.mockRestore();
+    host.unmount();
+  }, 10_000);
+
   it("holds Show more while the list is being read again", async () => {
     const { useLibraryData } = await import("../../../src/composables/useLibraryData");
     const api = await import("../../../src/composables/libraryApi");

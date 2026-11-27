@@ -43,10 +43,15 @@ watch(
   [hosts, dark, originals],
   ([elements, isDark]) => {
     clearViews();
-    const shown = (originals.value?.files ?? []).filter((file) => file.current !== null);
+    const files = originals.value?.files ?? [];
     // CodeMirror fills `$` with the count; the translation keeps it where its own language wants the number.
     const phrases = { "$ unchanged lines": t("blueprints.run.originalsFolded", { count: "$" }) };
-    views = (elements ?? []).map((host, index) => createDiffView(host, shown[index]?.original ?? "", shown[index]?.current ?? "", { phrases, dark: isDark }));
+    // Each host says which file it is for: Vue keeps a ref array's existing hosts and appends new ones, so
+    // after a file comes back the array's order is not the files' order.
+    views = (elements ?? []).flatMap((host) => {
+      const file = files.find((candidate) => candidate.path === host.dataset.path && candidate.current !== null);
+      return file ? [createDiffView(host, file.original, file.current ?? "", { phrases, dark: isDark })] : [];
+    });
   },
   { flush: "post" },
 );
@@ -78,7 +83,13 @@ onBeforeUnmount(clearViews);
       <p v-if="file.current === null" class="m-0 font-sans text-[12px] text-secondary" data-testid="blueprint-original-gone">
         {{ t("blueprints.run.originalsGone") }}
       </p>
-      <div v-else ref="diffHost" class="max-h-[60vh] overflow-y-auto rounded-md border border-border text-[13px]" data-testid="blueprint-original-diff" />
+      <div
+        v-else
+        ref="diffHost"
+        :data-path="file.path"
+        class="max-h-[60vh] overflow-y-auto rounded-md border border-border text-[13px]"
+        data-testid="blueprint-original-diff"
+      />
     </div>
     <p v-if="originals.more" class="m-0 font-sans text-[12px] text-secondary">{{ t("blueprints.run.originalsMore") }}</p>
   </section>

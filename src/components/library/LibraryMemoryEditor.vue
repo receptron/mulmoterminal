@@ -7,7 +7,7 @@ import { dropMemoryDraft, keepMemoryDraft, memoryDraftFor, memoryDraftKey, stale
 import { isImeConfirming } from "../../composables/imeComposition";
 import { useI18n } from "vue-i18n";
 import { loadLibraryMemoryLinks, mergeLibraryMemoryFiles, saveLibraryMemoryFile, type MemorySaveResult } from "../../composables/libraryApi";
-import { sessionRunningIn } from "./memorySessions";
+import { sessionRunningOrUnknown } from "./memorySessions";
 import { MEMORY_EDIT_MAX_BYTES } from "../../../common/libraryMemory";
 import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 
@@ -118,8 +118,9 @@ function cancel(): void {
 let runningChecks = 0;
 async function recheckRunning(): Promise<void> {
   const mine = ++runningChecks;
-  const running = await sessionRunningIn(props.cwd);
-  if (mine === runningChecks) sessionRunning.value = running;
+  const running = await sessionRunningOrUnknown(props.cwd);
+  // A list that could not be read says nothing either way: the warning shown stays.
+  if (mine === runningChecks && running !== null) sessionRunning.value = running;
 }
 
 // The links a merge would rewrite, read on opening and again when the Library is shown again (the
@@ -132,8 +133,9 @@ async function readLinks(): Promise<void> {
   const links = await loadLibraryMemoryLinks(props.slug, props.file, merging.file);
   if (mine !== linkReads || (links === null && mergeLinks.value !== null)) return;
   mergeLinks.value = links;
-  // Said before saving, as the merge would be refused for it.
+  // Said before saving, as the merge would be refused for it; gone once a later read finds nothing to refuse.
   if ((links?.unplaceable.length ?? 0) > 0) notice.value = "unplaceable";
+  else if (links !== null && notice.value === "unplaceable") notice.value = null;
 }
 
 // The editor stays open while the Library is closed; a session may have started or ended, and the

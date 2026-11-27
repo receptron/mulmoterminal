@@ -170,6 +170,9 @@ function onSaved(text: string, version: string): void {
 }
 
 async function reload(): Promise<void> {
+  // An adoption answering after the screen was closed: the next opening reads the marks and the
+  // document, and picking again now would also end an edit nobody can see.
+  if (!isOpen.value) return;
   void refreshMarks();
   const current = picked.value;
   if (current !== null) await pick(current.source, current.skill);

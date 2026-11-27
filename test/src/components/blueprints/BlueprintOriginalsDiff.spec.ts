@@ -122,3 +122,44 @@ describe("the diff editors shown again", () => {
     wrapper.unmount();
   });
 });
+
+describe("a file that comes back while the screen is hidden", () => {
+  it("draws each file's own texts under its own name", async () => {
+    loadOriginals.mockReset();
+    createDiffView.mockClear();
+    loadOriginals
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          files: [
+            { path: "a.md", original: "old a", current: null },
+            { path: "b.md", original: "old b", current: "new b" },
+          ],
+          more: false,
+        },
+      })
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          files: [
+            { path: "a.md", original: "old a", current: "new a" },
+            { path: "b.md", original: "old b", current: "new b" },
+          ],
+          more: false,
+        },
+      });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintOriginalsDiff, { runId: "r1" });
+    await flushPromises();
+    createDiffView.mockClear();
+    await showAgain();
+    const drawn = createDiffView.mock.calls.map(([host, original]) => [host.dataset.path, original]);
+    expect(drawn).toEqual(
+      expect.arrayContaining([
+        ["a.md", "old a"],
+        ["b.md", "old b"],
+      ]),
+    );
+    expect(drawn).toHaveLength(2);
+    wrapper.unmount();
+  });
+});

@@ -11,7 +11,7 @@ export const LIBRARY_SEARCH_DEBOUNCE_MS = 200;
 export const LIBRARY_STATUS_POLL_MS = 2_000;
 
 export function useLibraryData(isOpen: Ref<boolean>) {
-  const { conversations, hasMore, loaded, loadFailed, reflects, reload, loadMore } = usePagedConversations();
+  const { conversations, hasMore, loaded, loadFailed, reloadFailed, reflects, reload, loadMore } = usePagedConversations();
   const status = shallowRef<LibraryIndexStatus | null>(null);
   const query = ref("");
   /** Null while nothing is typed; the list shows instead. */
@@ -27,11 +27,12 @@ export function useLibraryData(isOpen: Ref<boolean>) {
       void reload();
       search.refresh(); // a search that found nothing mid-build may find it now
     },
-    () => loadFailed.value,
+    () => reloadFailed.value,
   );
   const search = useDebouncedSearch(query, hits, searching, searchFailed);
-  // A list read can fail after the poll has already gone quiet (the index idle): wake it to retry.
-  watch(loadFailed, (failed) => {
+  // A list read can fail after the poll has already gone quiet (the index idle): wake it to retry. Any
+  // failed read, a kept list's re-read included, not only the first (which is all `loadFailed` shows).
+  watch(reloadFailed, (failed) => {
     if (failed) poll.wake();
   });
   // Any read can start a pass on the server (the index catches up when asked), so every answer wakes
@@ -64,6 +65,8 @@ function usePagedConversations() {
   const hasMore = ref(false);
   const loaded = ref(false);
   const loadFailed = ref(false);
+  /** The last read of the first page failed, whether or not a kept list hides that from the screen. */
+  const reloadFailed = ref(false);
   /** The finished index pass the list shows; undefined before the first page arrives. */
   const reflects = ref<number | null | undefined>(undefined);
   let pageRequest = 0;
@@ -84,6 +87,7 @@ function usePagedConversations() {
     // A failed read reflects no pass, so the next status answer reads the list again.
     reflects.value = page === null ? undefined : page.indexFinishedAt;
     loadFailed.value = page === null && !listed;
+    reloadFailed.value = page === null;
     if (page === null) {
       hasMore.value = settledHasMore;
       return;
@@ -107,7 +111,7 @@ function usePagedConversations() {
     hasMore.value = settledHasMore = page.hasMore;
   }
 
-  return { conversations, hasMore, loaded, loadFailed, reflects, reload, loadMore };
+  return { conversations, hasMore, loaded, loadFailed, reloadFailed, reflects, reload, loadMore };
 }
 
 /** Polls progress while the index is being built, and reloads the list whenever a pass has finished
