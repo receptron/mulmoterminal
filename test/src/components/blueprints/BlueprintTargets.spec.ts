@@ -223,3 +223,18 @@ describe("a step moving while the screen is hidden", () => {
     wrapper.unmount();
   });
 });
+
+describe("the work list read again", () => {
+  it("keeps the rows shown when the re-read fails, and says nothing", async () => {
+    loadTargets.mockReset();
+    loadTargets.mockResolvedValueOnce(listed(targets)).mockResolvedValue({ ok: false, error: "the list could not be read" });
+    const { wrapper, showAgain } = mountUnderOverlay(BlueprintTargets, { runId: "run-00000001", steps, state: at("passed", "awaiting-answer", 1) });
+    await flushPromises();
+    const rows = wrapper.findAll('[data-testid="blueprint-target"]').length;
+    expect(rows).toBeGreaterThan(0);
+    await showAgain();
+    expect(wrapper.findAll('[data-testid="blueprint-target"]')).toHaveLength(rows);
+    expect(wrapper.text()).not.toContain("the list could not be read");
+    wrapper.unmount();
+  });
+});

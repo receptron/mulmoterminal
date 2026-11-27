@@ -47,8 +47,12 @@ async function load(): Promise<void> {
   const ticket = reads.take();
   const result = await loadTargets(props.runId);
   if (!reads.isLatest(ticket)) return;
-  loadError.value = result.ok ? null : failureText(t, result);
-  if (!result.ok) return;
+  // A failed re-read keeps the list shown; the failure is said only with no list to show.
+  if (!result.ok) {
+    if (targets.value === null) loadError.value = failureText(t, result);
+    return;
+  }
+  loadError.value = null;
   targets.value = result.value.targets;
   problem.value = result.value.problem;
 }
