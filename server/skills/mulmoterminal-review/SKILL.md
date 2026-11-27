@@ -76,7 +76,7 @@ that makes the loop longer.
 9. **Consistency** — does it read like the code around it, reuse what exists, and follow the
    repository's rules?
 
-## 5. Every finding carries five things
+## 5. Every finding carries six things
 
 1. **Severity** — **P1** must fix (wrong behaviour, data loss, security), **P2** should fix,
    **P3** optional, **N** a note that does not block. Prose that is merely out of date is N; it is
@@ -86,9 +86,14 @@ that makes the loop longer.
    finding names a class of mistake; a site left for the next round is a round spent.
 4. **The smallest change** that resolves it, concrete enough to apply.
 5. **What would change your mind** — the fact that, if true, makes it a non-issue.
+6. **Evidence** that it is real — one of:
+   - the command you ran and what it printed (the failing line, the wrong value);
+   - the call chain from a real entry point to the line, naming the caller that supplies the input.
 
-Before reporting, confirm each finding is real: trace it from a real caller, or run it. A finding
-you could not confirm is labelled as such.
+**Only a finding with evidence holds the verdict.** One without it — "this could break if…" — may
+still be reported, marked **UNVERIFIED** and as **N**, whatever severity it would otherwise have. An
+unproved worry costs the author a whole round, and a real problem you cannot run (a race, a path only
+another platform takes) still qualifies through its call chain.
 
 ## 6. Later rounds
 
@@ -96,7 +101,7 @@ you could not confirm is labelled as such.
   per finding: fixed, not fixed, or fixed differently (and whether that is fine).
 - Do not raise a finding you raised before as if it were new. If the author answered it (in the PR,
   or in the code) and you still disagree, say **REOPENING** with the new evidence; otherwise let it
-  go.
+  go. A reopened finding needs evidence, as in §5.
 - When the same function draws a third finding, stop patching it case by case: say the rule itself
   is wrong and propose the rewrite.
 - New findings on code the author did not touch since the last round mean your earlier round was
@@ -113,8 +118,8 @@ The message that asked for the round gives the exact verdict lines; use them as 
    were asked about, never another.
 2. A one-line summary of the blocking findings, if any.
 3. The axis table: one row per axis, its findings or "none".
-4. The findings, most severe first, each with its five parts.
-5. N notes, if any, and what you could not run (UNVERIFIED).
+4. The findings, most severe first, each with its six parts.
+5. N notes, if any — the UNVERIFIED findings among them — and what you could not run.
 6. Last, on its own line, only if it is true: `FINDINGS COMPLETE: I read every hunk of the diff and
    this is every finding I have.` If it is not true, say which part you did not reach and why.
 
