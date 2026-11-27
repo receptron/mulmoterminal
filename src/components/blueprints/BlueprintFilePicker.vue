@@ -6,6 +6,7 @@ import { useI18n } from "vue-i18n";
 import { listFolderFiles } from "../../composables/blueprintsApi";
 import { answerLines, fitsOnALine, toggleLine } from "./blueprintView";
 import { failureText } from "./refusalText";
+import { onOverlayShownAgain } from "../../composables/overlayVisibility";
 
 const props = defineProps<{ projectDir: string; answer: string }>();
 const emit = defineEmits<{ update: [answer: string | undefined] }>();
@@ -22,17 +23,33 @@ const folder = computed(() => props.projectDir.trim());
 const open = computed(() => listedFor.value !== null && listedFor.value === folder.value);
 const chosen = computed(() => new Set(answerLines(props.answer)));
 
+let reads = 0;
 async function show(): Promise<void> {
   const dir = folder.value;
   if (dir === "" || loading.value) return;
+  const mine = ++reads;
   loading.value = true;
   const result = await listFolderFiles(dir);
   loading.value = false;
+  if (mine !== reads) return;
   error.value = result.ok ? null : failureText(t, result);
   files.value = result.ok ? result.value.files.filter(fitsOnALine) : [];
   more.value = result.ok && result.value.more;
   listedFor.value = dir;
 }
+
+// The form is kept while the screen is closed, and the folder's files may have changed: an open list is
+// read again, and a read that fails then keeps the one shown.
+async function reread(): Promise<void> {
+  const dir = listedFor.value;
+  if (!open.value || dir === null) return;
+  const mine = ++reads;
+  const result = await listFolderFiles(dir);
+  if (mine !== reads || !result.ok) return;
+  files.value = result.value.files.filter(fitsOnALine);
+  more.value = result.value.more;
+}
+onOverlayShownAgain(() => void reread());
 
 function toggle(file: string): void {
   const next = toggleLine(props.answer, file);
