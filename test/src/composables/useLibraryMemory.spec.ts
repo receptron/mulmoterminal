@@ -97,4 +97,19 @@ describe("useLibraryMemory", () => {
     await flushPromises();
     expect([memory.healthFailed.value, memory.health.value.size]).toEqual([false, 1]);
   });
+
+  it("reads nothing for a change that answers after the Library closed", async () => {
+    answer = [project("p")];
+    gate = Promise.resolve();
+    healthGate = Promise.resolve();
+    const isOpen = ref(true);
+    const memory = useLibraryMemory(isOpen);
+    await flushPromises();
+    isOpen.value = false;
+    await flushPromises();
+    answer = [project("p"), project("q")];
+    await memory.refresh();
+    await flushPromises();
+    expect(memory.projects.value.map((p) => p.slug)).toEqual(["p"]);
+  });
 });

@@ -5,17 +5,18 @@ import { ref } from "vue";
 import { flushPromises } from "@vue/test-utils";
 import type { LibraryMarks } from "../../../common/library";
 
-const api = vi.hoisted(() => ({ answer: null as LibraryMarks | null }));
+const api = vi.hoisted(() => ({ answer: null as LibraryMarks | null, conversationReads: 0, saving: Promise.resolve<LibraryMarks | null>(null) }));
 vi.mock("../../../src/composables/libraryApi", () => ({
   loadLibraryMarks: async () => api.answer,
-  loadLibraryConversation: async () => null,
-  saveLibraryMark: async () => null,
+  loadLibraryConversation: async () => (api.conversationReads++, null),
+  saveLibraryMark: () => api.saving,
 }));
 
 const { useLibraryMarks } = await import("../../../src/composables/useLibraryMarks");
 
 beforeEach(() => {
   api.answer = null;
+  api.conversationReads = 0;
 });
 
 const reopen = async (isOpen: { value: boolean }) => {
@@ -41,5 +42,22 @@ describe("useLibraryMarks on a kept screen", () => {
     const kept = useLibraryMarks(isOpen);
     await flushPromises();
     expect([kept.loadFailed.value, kept.marks.value.names]).toEqual([true, {}]);
+  });
+
+  // Closing outdates a save still out (the open/close watcher), so its follow-up never runs hidden.
+  it("reads no pinned conversation for a pin that answers after the Library closed", async () => {
+    api.answer = { pinned: [], names: {} };
+    const isOpen = ref(true);
+    const kept = useLibraryMarks(isOpen);
+    await flushPromises();
+    let answerSave: (value: LibraryMarks | null) => void = () => {};
+    api.saving = new Promise((resolve) => (answerSave = resolve));
+    const saving = kept.change("a", { pinned: true });
+    isOpen.value = false;
+    await flushPromises();
+    api.conversationReads = 0;
+    answerSave({ pinned: ["a"], names: {} });
+    await saving;
+    expect(api.conversationReads).toBe(0);
   });
 });

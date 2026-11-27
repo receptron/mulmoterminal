@@ -43,8 +43,11 @@ export function useLibraryMemory(isOpen: Ref<boolean>) {
     { immediate: true },
   );
 
-  /** After a change made here (an edit): read again, keeping what is shown until the answer comes. */
-  const refresh = (): Promise<void> => read(++reads);
+  /** After a change made here (an edit): read again, keeping what is shown until the answer comes. A
+   *  change answering after the Library closed reads nothing; the next opening reads. */
+  const refresh = async (): Promise<void> => {
+    if (isOpen.value) await read(++reads);
+  };
 
   return { projects, loaded, failed, health, healthFailed, refresh };
 }
