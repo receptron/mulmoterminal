@@ -81,7 +81,7 @@ export interface FilesRowTarget {
   /** Whether the machine has a Trash the server knows; without one the row offers no delete (#2578). */
   trash?: boolean;
   /** False for a root on a remote host (#3506): this machine's file manager cannot show its files,
-   *  and its gallery is pictures served as bytes, which the gateway does not carry. */
+   *  and the gallery lists and loads its pictures through this machine's routes, naming no host. */
   onThisMachine?: boolean;
 }
 

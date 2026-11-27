@@ -371,7 +371,7 @@ describe("filesRowActions — the spreadsheet entry", () => {
 });
 
 // #3506. A root on a remote host: its rows still open, insert and change files there, but this
-// machine's file manager cannot show them and the gallery's pictures are bytes the gateway does not carry.
+// machine's file manager cannot show them, and the gallery lists and loads through this machine's routes.
 describe("filesRowActions — a root on a remote host", () => {
   const remote = { cwd: "/srv/proj", terminal: { cwd: "/srv/proj" }, canvas: null, trash: true, onThisMachine: false };
   it("offers no reveal on a file or a folder, and no gallery", () => {
