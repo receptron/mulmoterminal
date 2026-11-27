@@ -87,4 +87,18 @@ describe("a build started from the form", () => {
     expect(wrapper.findAll('[data-testid="blueprint-run-item"]').map((item) => item.text().includes("fresh"))).toEqual([true]);
     wrapper.unmount();
   });
+
+  it("reads no list for a build started just before the screen closed", async () => {
+    const open = ref(true);
+    view.open = open;
+    const wrapper = mount(BlueprintsOverlay);
+    await flushPromises();
+    api.lists.splice(0).forEach((answer) => answer([]));
+    open.value = false;
+    await flushPromises();
+    wrapper.findComponent(BlueprintNewBuild).vm.$emit("started", "run-late");
+    await flushPromises();
+    expect(api.lists).toHaveLength(0);
+    wrapper.unmount();
+  });
 });

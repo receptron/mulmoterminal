@@ -79,6 +79,8 @@ function stopPolling(): void {
 }
 
 async function refresh(): Promise<void> {
+  // A stop or an adoption can answer after the panel was hidden; showing it again reads anyway.
+  if (!visible.value) return;
   const asked = selection;
   const showing = showings;
   const read = await loadSkillEval(props.source, props.skill.slug);

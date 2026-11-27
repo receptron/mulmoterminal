@@ -36,6 +36,7 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 const runsRead = latestOnly();
 
 async function refresh(): Promise<void> {
+  if (!isOpen.value) return; // a start or an archive answering after the close; the next opening reads
   const ticket = runsRead.take();
   const result = await listRuns();
   if (runsRead.isLatest(ticket) && result.ok) runs.value = result.value.runs;

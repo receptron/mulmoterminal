@@ -12,18 +12,21 @@ let overview: SkillEvalOverview | null = null;
 /** When set, each load takes the next answer from here instead of `overview`. */
 const loads: Promise<SkillEvalOverview | null>[] = [];
 const calls: string[] = [];
+const loadCalls = { count: 0 };
+const loadCount = (): number => loadCalls.count;
 const placed: unknown[] = [];
 const authorLanguages: (string | undefined)[] = [];
 let authoring: Promise<string | null> = Promise.resolve("chat-1");
+let stopping: Promise<boolean> = Promise.resolve(true);
 let starting: Promise<{ kind: "started"; id: string }> = Promise.resolve({ kind: "started", id: "r" });
 vi.mock("../../../src/composables/skillEvalApi", () => ({
-  loadSkillEval: () => loads.shift() ?? Promise.resolve(overview),
+  loadSkillEval: () => (loadCalls.count++, loads.shift() ?? Promise.resolve(overview)),
   startSkillEvalRun: (_source: unknown, _slug: string, mode?: string) => (calls.push(mode === undefined || mode === "measure" ? "start" : mode), starting),
   adoptSkillEvalCandidate: (_source: unknown, _slug: string, runId: string) => (
     calls.push(`adopt ${runId}`),
     Promise.resolve({ kind: "adopted", backup: "/b/1.md" })
   ),
-  stopSkillEvalRun: () => (calls.push("stop"), Promise.resolve(true)),
+  stopSkillEvalRun: () => (calls.push("stop"), stopping),
   startSkillEvalAuthoring: (_source: unknown, _slug: string, language?: string) => (calls.push("author"), authorLanguages.push(language), authoring),
 }));
 vi.mock("../../../src/composables/useSpawnedChat", () => ({ placeSpawnedChat: (request: unknown) => placed.push(request) }));
@@ -93,6 +96,7 @@ beforeEach(() => {
   authorLanguages.length = 0;
   loads.length = 0;
   authoring = Promise.resolve("chat-1");
+  stopping = Promise.resolve(true);
   starting = Promise.resolve({ kind: "started", id: "r" });
   vi.useRealTimers();
 });
@@ -242,6 +246,24 @@ describe("SkillEvalPanel", () => {
     answerStart({ kind: "started", id: "r" });
     await flushPromises();
     expect(wrapper.find("[data-testid=skill-eval-progress]").exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("reads nothing for a stop that answers after the panel was hidden", async () => {
+    overview = { ...base, set, runs: [run(true, false, { status: "running", attempts: [] })], activeRunId: "1795000000000-aaaaaaaa" };
+    let answerStop: (value: boolean) => void = () => {};
+    stopping = new Promise((resolve) => (answerStop = resolve));
+    const visible = ref(true);
+    const Host = defineComponent({ setup: () => (provideOverlayVisible(visible), () => h(SkillEvalPanel, { source, skill })) });
+    const wrapper = mount(Host, { global: { plugins: [i18n] } });
+    await flushPromises();
+    await wrapper.find("[data-testid=skill-eval-stop]").trigger("click");
+    visible.value = false;
+    await flushPromises();
+    const readsBefore = loadCount();
+    answerStop(true);
+    await flushPromises();
+    expect(loadCount()).toBe(readsBefore);
     wrapper.unmount();
   });
 

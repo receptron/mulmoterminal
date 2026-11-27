@@ -34,7 +34,7 @@ import { basePacks, basesFor, firstOfEachUsecase, presetGroups, usecaseGroups, u
 import { latestOnly } from "./latestOnly";
 import { failureText } from "./refusalText";
 import { keepFormFill, takeFormFill, type FormFill } from "../../composables/useBlueprintsView";
-import { onOverlayShownAgain } from "../../composables/overlayVisibility";
+import { onOverlayShownAgain, useOverlayVisible } from "../../composables/overlayVisibility";
 import { openTerminalAt } from "../../composables/useNewTerminal";
 import BlueprintHearingField from "./BlueprintHearingField.vue";
 
@@ -229,6 +229,7 @@ watch([base, usecase], ([baseSlug, usecaseSlug]) => loadPreview(baseSlug, usecas
 // Asked once typing pauses, not per keystroke.
 const PRESENCE_WAIT_MS = 300;
 let presenceTimer: ReturnType<typeof setTimeout> | undefined;
+const shownForm = useOverlayVisible();
 watch([projectDir, preview], () => {
   clearTimeout(presenceTimer);
   const ticket = presence.take();
@@ -236,7 +237,10 @@ watch([projectDir, preview], () => {
   const paths = preview.value ? neededPaths(preview.value.hearing) : [];
   const dir = projectDir.value.trim();
   if (paths.length === 0 || dir === "") return;
-  presenceTimer = setTimeout(() => void askPresence(dir, paths, ticket), PRESENCE_WAIT_MS);
+  // Typing just before a close: nothing is asked while hidden, and showing again asks.
+  presenceTimer = setTimeout(() => {
+    if (shownForm.value) void askPresence(dir, paths, ticket);
+  }, PRESENCE_WAIT_MS);
 });
 
 async function askPresence(dir: string, paths: string[], ticket: number): Promise<void> {
