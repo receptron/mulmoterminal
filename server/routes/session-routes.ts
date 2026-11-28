@@ -52,7 +52,7 @@ import { isRelayDest, type RelayMarkKey } from "../session/transcript/relay-mark
 import { relayMarkOf, setRelayMark } from "../session/transcript/relay-mark-store.js";
 import { currentBranch } from "../git/git-status.js";
 import { agentHomeChoices, codexSessionsUnder } from "../session/session-home.js";
-import { runningKeyOf, runningSessionKeys, sessionAttached, survivorSnapshot } from "../session/dir-session.js";
+import { runningKeyOf, runningSessionKeys, sessionAttached, sessionOccupancyOf, survivorSnapshot } from "../session/dir-session.js";
 import type { SessionOccupancy } from "../../common/sessionOccupancy.js";
 import type { SessionRunning } from "../../common/sessionRunning.js";
 import { tmuxAttachedCounts, tmuxHeldSessionIdsAsync } from "../infra/process/tmux.js";
@@ -483,7 +483,7 @@ async function sessionList(req: Request, res: Response) {
     const running = runningSessionKeys();
     res.json({
       cwd,
-      sessions: sessions.map((s) => ({ ...s, attached: sessionAttached(s.id, tmuxCounts), runningKey: runningKeyOf([s.id], running) })),
+      sessions: sessions.map((s) => ({ ...s, ...sessionOccupancyOf(s.id, tmuxCounts, running) })),
     });
   } catch (err) {
     console.error("[api] /api/sessions failed:", err);
@@ -661,6 +661,15 @@ const AGENT_SESSION_LISTS: Record<TerminalAgent, (req: Request, res: Response) =
   cursor: cursorSessionList,
 };
 
+function sessionOccupancy(req: Request, res: Response): void {
+  const id = req.query.id;
+  if (typeof id !== "string" || !SESSION_ID_RE.test(id)) {
+    res.status(400).json({ error: "invalid session id" });
+    return;
+  }
+  res.json({ id, ...sessionOccupancyOf(id, tmuxAttachedCounts(), runningSessionKeys()) });
+}
+
 export function mountSessionRoutes(app: Express, deps: SessionRouteDeps): void {
   app.get("/api/session/:id", (req, res) => sessionDetail(req, res, deps.freshenRosterTitle));
   app.post("/api/session/:id/memo", (req, res) => setMemo(req, res, deps.publishActivity));
@@ -699,6 +708,10 @@ export function mountSessionRoutes(app: Express, deps: SessionRouteDeps): void {
   // comes back, and nothing else can answer it — `/api/activity` reports all-false for an id it has
   // never heard of, and `/api/sessions` is scoped to one cwd and capped at the most recent N, so
   // absence from either says nothing about whether a session is alive.
+  // Who holds one session and what runs it, the fields a `/api/sessions` row carries, for an id that
+  // list may not reach: it is capped at the newest N, so a conversation left open long enough falls
+  // off it, and reading "not listed" as "free" took it away from whoever had it (#3343).
+  app.get("/api/sessions/occupancy", sessionOccupancy);
   app.get("/api/sessions/live", async (req, res) => {
     const ids = parseActivityIds(req.query.ids, (id) => SESSION_ID_RE.test(id), ACTIVITY_IDS_LIMIT);
     // `asked` is what this answer is ABOUT: the ids left after validation and the cap above. A

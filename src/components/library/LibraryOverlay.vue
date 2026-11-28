@@ -17,13 +17,13 @@ import { router } from "../../router";
 import { useEscapeToClose } from "../../composables/useEscapeToClose";
 import { isImeConfirming } from "../../composables/imeComposition";
 import { useLibraryData } from "../../composables/useLibraryData";
-import { readResumableList } from "../../composables/useDirLists";
+import { readResumableList, readSessionOccupancy } from "../../composables/useDirLists";
 import { openCellAt } from "../../composables/useNewTerminal";
 import { paletteTerminals } from "../../composables/commandPalette";
 import { cellForPanelResume } from "../launchCell";
 import { isEditableTarget } from "../../composables/gridShortcut";
 import { libraryKeyAction, movedFromGap, movedIndex } from "./libraryKeys";
-import { libraryResume, type LibraryResume } from "./libraryResume";
+import { libraryResume, needsOccupancy, type LibraryResume } from "./libraryResume";
 import { startPromote } from "./libraryPromoteStart";
 import type { PromoteTarget } from "../../../common/libraryPromote";
 import { conversationKey, groupConversations, listedInOrder } from "./libraryRows";
@@ -263,9 +263,10 @@ async function resumeConversation(conversation: LibraryConversation): Promise<vo
   const opening = openings;
   const key = conversationKey(conversation);
   const list = conversation.cwd === null ? null : await readResumableList(conversation.cwd, "claude");
+  const occupancy = needsOccupancy(conversation, list) ? await readSessionOccupancy(conversation.id) : null;
   // Closed (and maybe reopened), or moved to another conversation, while this checked: it stands down.
   if (opening !== openings || selectedKey.value !== key) return;
-  const decision = libraryResume(conversation, list, paletteTerminals.value?.openSessionIds() ?? []);
+  const decision = libraryResume(conversation, list, paletteTerminals.value?.openSessionIds() ?? [], occupancy);
   if (decision.kind !== "open") {
     notice.value = t(RESUME_REFUSALS[decision.kind]);
     return;
