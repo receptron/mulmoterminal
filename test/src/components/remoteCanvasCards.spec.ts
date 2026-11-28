@@ -1,7 +1,7 @@
 // #3506. What a remote cell's Canvas hands a card's view: the HTML page through the byte proxy, an
 // inline chart as it is, and nothing for a chart that reads a range it would read from this machine.
 import { describe, it, expect } from "vitest";
-import { drawnAsIs, htmlPageOnHost, inlineChartsOnly, type CanvasCardResult } from "../../../src/components/remoteCanvasCards";
+import { drawnAsIs, htmlPageOnHost, inlineChartsOnly, mulmoScriptMediaPath, type CanvasCardResult } from "../../../src/components/remoteCanvasCards";
 
 const card = (data: unknown): CanvasCardResult => ({ uuid: "u1", toolName: "t", data });
 const previewOf = (result: CanvasCardResult | null): unknown =>
@@ -64,5 +64,20 @@ describe("inlineChartsOnly", () => {
     ["no data", undefined],
   ])("does not draw %s", (_name, data) => {
     expect(inlineChartsOnly(card(data), "lx")).toBeNull();
+  });
+});
+
+describe("mulmoScriptMediaPath", () => {
+  it.each([
+    [null, { moviePath: "stories/out/a b.mp4" }, "/api/mulmoscript/media?moviePath=stories%2Fout%2Fa+b.mp4"],
+    [null, { pdfPath: "stories/out/a.pdf" }, "/api/mulmoscript/media?pdfPath=stories%2Fout%2Fa.pdf"],
+    [null, {}, "/api/mulmoscript/media?moviePath="],
+    ["lx", { moviePath: "/srv/p/out/a.mp4" }, "/remote/lx/bytes/api/mulmoscript/media?moviePath=%2Fsrv%2Fp%2Fout%2Fa.mp4"],
+    ["lx", { moviePath: "m.mp4", pdfPath: "p.pdf" }, "/remote/lx/bytes/api/mulmoscript/media?pdfPath=p.pdf"],
+    [null, { moviePath: "stories/out/a.mp4", root: "ws-1" }, "/api/mulmoscript/media?moviePath=stories%2Fout%2Fa.mp4&root=ws-1"],
+    ["lx", { pdfPath: "stories/out/a.pdf", root: "ws-1" }, "/remote/lx/bytes/api/mulmoscript/media?pdfPath=stories%2Fout%2Fa.pdf&root=ws-1"],
+    [null, { moviePath: "a.mp4", root: undefined }, "/api/mulmoscript/media?moviePath=a.mp4"],
+  ])("on %s, fetches %o from %s", (host, query, path) => {
+    expect(mulmoScriptMediaPath(host, query)).toBe(path);
   });
 });
