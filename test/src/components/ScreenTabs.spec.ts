@@ -114,15 +114,17 @@ describe("a tab per collection and feed", () => {
       ? { feeds: [{ slug: "hn", title: "Hacker News", icon: "newspaper" }] }
       : { collections: [{ slug: "art", title: "Art collection", icon: "palette" }] };
   const fetched: string[] = [];
+  let failing = false;
 
   beforeEach(() => {
     fetched.length = 0;
+    failing = false;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
         fetched.push(url);
-        return new Response(JSON.stringify(listed(url)), { status: 200 });
+        return failing ? new Response("down", { status: 500 }) : new Response(JSON.stringify(listed(url)), { status: 200 });
       }),
     );
   });
@@ -171,6 +173,21 @@ describe("a tab per collection and feed", () => {
     await openPath("/collections/art?project=p1");
     expect(labels(w)).toEqual(["Art collection", "Art collection"]);
     expect(fetched.filter((url) => url.includes("project=p1"))).toHaveLength(1);
+    w.unmount();
+  });
+
+  it("names a tab whose list failed once it answers on a later visit, without retrying in a loop", async () => {
+    const w = mount(ScreenTabs);
+    failing = true;
+    await openPath("/collections/art?project=p2");
+    expect(labels(w)).toEqual(["art"]);
+    const failedReads = fetched.filter((url) => url.includes("project=p2")).length;
+    expect(failedReads).toBe(1);
+    await flushPromises();
+    expect(fetched.filter((url) => url.includes("project=p2"))).toHaveLength(failedReads);
+    failing = false;
+    await openPath("/collections?project=p2");
+    expect(labels(w)).toEqual([en.tips.toolbar.collections, "Art collection"]);
     w.unmount();
   });
 });

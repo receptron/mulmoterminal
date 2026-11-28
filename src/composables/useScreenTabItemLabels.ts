@@ -4,7 +4,17 @@ import { effectScope, ref, watch } from "vue";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import { withProject } from "./collectionProject";
 import type { PaletteScreen } from "./paletteScreens";
-import { LIST_FIELD, listKeyOf, listsToRead, parseItemList, type ItemLabel, type ItemList, type ListRequest } from "./screenTabItemLabels";
+import {
+  LIST_FIELD,
+  finishedReading,
+  listKeyOf,
+  listsToRead,
+  parseItemList,
+  startedReading,
+  type ItemLabel,
+  type ItemList,
+  type ListRequest,
+} from "./screenTabItemLabels";
 import type { ScreenTab } from "./screenTabsModel";
 import { screenTabs } from "./useScreenTabs";
 
@@ -12,24 +22,28 @@ const LIST_URL: Partial<Record<PaletteScreen, string>> = { collections: "/api/co
 
 const lists = ref<Record<string, ItemList>>({});
 
-async function readLabels(request: ListRequest): Promise<Record<string, ItemLabel>> {
+async function readLabels(request: ListRequest): Promise<Record<string, ItemLabel> | null> {
   const url = LIST_URL[request.screen];
   const field = LIST_FIELD[request.screen];
-  if (url === undefined || field === undefined) return {};
+  if (url === undefined || field === undefined) return null;
   try {
     const response = await fetchWithTimeout(withProject(url, request.project));
-    return response.ok ? parseItemList(await response.json(), field) : {};
+    return response.ok ? parseItemList(await response.json(), field) : null;
   } catch {
-    return {};
+    return null;
   }
 }
 
 async function read(request: ListRequest): Promise<void> {
-  const before = lists.value[request.listKey];
-  const lookedFor = new Set([...(before?.lookedFor ?? []), ...request.slugs]);
-  lists.value = { ...lists.value, [request.listKey]: { labels: before?.labels ?? {}, lookedFor, reading: true } };
+  lists.value = { ...lists.value, [request.listKey]: startedReading(lists.value[request.listKey]) };
   const labels = await readLabels(request);
-  lists.value = { ...lists.value, [request.listKey]: { labels: { ...before?.labels, ...labels }, lookedFor, reading: false } };
+  lists.value = { ...lists.value, [request.listKey]: finishedReading(lists.value[request.listKey], request.slugs, labels) };
+  // A tab opened while this list was being read was skipped; a failed read waits for the next visit.
+  if (labels !== null) readWhatTabsName();
+}
+
+function readWhatTabsName(): void {
+  listsToRead(screenTabs.value, lists.value).forEach((request) => void read(request));
 }
 
 let watching = false;
@@ -39,9 +53,8 @@ export function useScreenTabItemLabels(): { labelOf: (tab: ScreenTab) => ItemLab
   if (!watching) {
     watching = true;
     // Detached: a watch made in the strip's setup would stop when it unmounts, and never start again.
-    effectScope(true).run(() =>
-      watch([screenTabs, lists], () => listsToRead(screenTabs.value, lists.value).forEach((request) => void read(request)), { immediate: true }),
-    );
+    // It follows the tabs alone, so a list that keeps failing is retried per visit, never in a loop.
+    effectScope(true).run(() => watch(screenTabs, readWhatTabsName, { immediate: true }));
   }
   const labelOf = (tab: ScreenTab): ItemLabel | null => (tab.item ? (lists.value[listKeyOf(tab.screen, tab.item)]?.labels[tab.item.slug] ?? null) : null);
   return { labelOf };

@@ -34,10 +34,26 @@ const toLabel = (entry: unknown): [string, ItemLabel] | null => {
   return [entry.slug, { title: entry.title, icon: typeof entry.icon === "string" ? entry.icon : "" }];
 };
 
-/** The labels a list response holds, by slug; nothing for a body that is not that list. */
-export function parseItemList(body: unknown, field: string): Record<string, ItemLabel> {
-  const entries = isRecord(body) && Array.isArray(body[field]) ? body[field] : [];
-  return Object.fromEntries(entries.map(toLabel).filter((pair) => pair !== null));
+/** The labels a list response holds, by slug; null for a body that is not that list, so a broken
+ *  answer is not mistaken for a list that names nothing. */
+export function parseItemList(body: unknown, field: string): Record<string, ItemLabel> | null {
+  if (!isRecord(body) || !Array.isArray(body[field])) return null;
+  return Object.fromEntries(body[field].map(toLabel).filter((pair) => pair !== null));
+}
+
+/** A list while a read of it is in flight. */
+export const startedReading = (before: ItemList | undefined): ItemList => ({
+  labels: before?.labels ?? {},
+  lookedFor: before?.lookedFor ?? new Set(),
+  reading: true,
+});
+
+/** A list after a read for `slugs` answered `labels`, or failed (null). Only an answer marks the
+ *  slugs as looked for: a failed read is tried again on the next visit, not given up on. */
+export function finishedReading(before: ItemList | undefined, slugs: readonly string[], labels: Record<string, ItemLabel> | null): ItemList {
+  const settled = startedReading(before);
+  if (labels === null) return { ...settled, reading: false };
+  return { labels: { ...settled.labels, ...labels }, lookedFor: new Set([...settled.lookedFor, ...slugs]), reading: false };
 }
 
 // A slug a read already looked for and did not find stays unnamed rather than being asked for forever.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { listKeyOf, listsToRead, parseItemList, type ItemList } from "../../../src/composables/screenTabItemLabels";
+import { finishedReading, listKeyOf, listsToRead, parseItemList, startedReading, type ItemList } from "../../../src/composables/screenTabItemLabels";
 import { tabOfRoute, type ScreenTab } from "../../../src/composables/screenTabsModel";
 
 const tabAt = (name: string, params: Record<string, unknown>, query: Record<string, unknown> = {}): ScreenTab => {
@@ -29,11 +29,11 @@ describe("parseItemList", () => {
     expect(parseItemList(body, "collections")).toEqual({ art: { title: "Art", icon: "palette" }, trip: { title: "Trip", icon: "" } });
   });
 
-  it("skips malformed entries and reads nothing from a body that is not the list", () => {
+  it("skips malformed entries, and is null for a body that is not the list", () => {
     const body = { feeds: [null, 7, "hn", { slug: 1, title: "x" }, { slug: "a" }, { title: "b" }, { slug: "ok", title: "OK", icon: 3 }] };
     expect(parseItemList(body, "feeds")).toEqual({ ok: { title: "OK", icon: "" } });
-    [null, undefined, "x", [], {}, { feeds: {} }, { collections: [{ slug: "a", title: "A" }] }].forEach((other) =>
-      expect(parseItemList(other, "feeds"), JSON.stringify(other)).toEqual({}),
+    [null, undefined, "x", [], {}, { feeds: {} }, { feeds: null }, { collections: [{ slug: "a", title: "A" }] }].forEach((other) =>
+      expect(parseItemList(other, "feeds"), JSON.stringify(other)).toBeNull(),
     );
   });
 });
@@ -63,5 +63,28 @@ describe("listsToRead", () => {
   it("reads nothing for tabs that are not items", () => {
     const tabs = ["collections", "feeds", "roomView", "skills"].map((name) => tabAt(name, { room: "r" }));
     expect(listsToRead(tabs, {})).toEqual([]);
+  });
+});
+
+describe("startedReading / finishedReading", () => {
+  it("marks the slugs looked for only when the read answered, keeping what was named before", () => {
+    const before = list(["art"], ["art"]);
+    const answered = finishedReading(startedReading(before), ["travel", "gone"], { travel: { title: "Travel", icon: "flight" } });
+    expect(answered.reading).toBe(false);
+    expect(Object.keys(answered.labels)).toEqual(["art", "travel"]);
+    expect([...answered.lookedFor]).toEqual(["art", "travel", "gone"]);
+  });
+
+  it("leaves a failed read's slugs to be read again on the next visit", () => {
+    const failed = finishedReading(startedReading(list(["art"], ["art"])), ["travel"], null);
+    expect(failed).toEqual(list(["art"], ["art"]));
+    expect(listsToRead([travel], { [workspaceCollections]: failed })).toEqual([
+      { listKey: workspaceCollections, screen: "collections", project: null, slugs: ["travel"] },
+    ]);
+  });
+
+  it("starts from nothing for a list never read", () => {
+    expect(startedReading(undefined)).toEqual(list([], [], true));
+    expect(finishedReading(undefined, ["art"], null)).toEqual(list([], []));
   });
 });
