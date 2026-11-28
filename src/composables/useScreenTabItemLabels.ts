@@ -1,6 +1,5 @@
 // The titles and icons of the collections and feeds open in tabs, read from the same lists their
-// index pages show, per project: again when a tab names a slug not yet looked for, and when a visit
-// shows an item's tab.
+// index pages show, per project, whenever a visit shows one of their tabs.
 import { effectScope, ref, watch } from "vue";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import { withProject } from "./collectionProject";
@@ -9,8 +8,9 @@ import {
   LIST_FIELD,
   finishedReading,
   listKeyOf,
-  listsToRead,
+  owedAnotherRead,
   parseItemList,
+  planReads,
   startedReading,
   type ItemLabel,
   type ItemList,
@@ -38,14 +38,19 @@ async function readLabels(request: ListRequest): Promise<Record<string, ItemLabe
 async function read(request: ListRequest): Promise<void> {
   lists.value = { ...lists.value, [request.listKey]: startedReading(lists.value[request.listKey]) };
   const labels = await readLabels(request);
-  lists.value = { ...lists.value, [request.listKey]: finishedReading(lists.value[request.listKey], request.slugs, labels) };
-  // A tab opened while this list was being read was skipped; a failed read waits for the next visit.
-  // Nothing counts as just shown here, or the tab in front would read its list forever.
-  if (labels !== null) readWhatTabsName(null);
+  const settled = finishedReading(lists.value[request.listKey], labels);
+  lists.value = { ...lists.value, [request.listKey]: settled };
+  // A visit during this read saw an answer that may predate it; one more read covers that visit.
+  if (settled.again) void read(request);
 }
 
-function readWhatTabsName(shownKey: string | null): void {
-  listsToRead(screenTabs.value, lists.value, shownKey).forEach((request) => void read(request));
+function readForVisit(shownKey: string | null): void {
+  const plan = planReads(screenTabs.value, lists.value, shownKey);
+  plan.owed.forEach((listKey) => {
+    const list = lists.value[listKey];
+    if (list) lists.value = { ...lists.value, [listKey]: owedAnotherRead(list) };
+  });
+  plan.read.forEach((request) => void read(request));
 }
 
 let watching = false;
@@ -55,9 +60,9 @@ export function useScreenTabItemLabels(): { labelOf: (tab: ScreenTab) => ItemLab
   if (!watching) {
     watching = true;
     // Detached: a watch made in the strip's setup would stop when it unmounts, and never start again.
-    // It follows the tabs alone, so a list is read again once per visit (a rename, a failed read), never in a loop.
-    effectScope(true).run(() => watch(screenTabs, () => readWhatTabsName(frontTabKey.value), { immediate: true }));
+    // It follows the tabs alone, so lists are read once per visit and never in a loop.
+    effectScope(true).run(() => watch(screenTabs, () => readForVisit(frontTabKey.value), { immediate: true }));
   }
-  const labelOf = (tab: ScreenTab): ItemLabel | null => (tab.item ? (lists.value[listKeyOf(tab.screen, tab.item)]?.labels[tab.item.slug] ?? null) : null);
+  const labelOf = (tab: ScreenTab): ItemLabel | null => (tab.item ? (lists.value[listKeyOf(tab.screen, tab.item)]?.labels?.[tab.item.slug] ?? null) : null);
   return { labelOf };
 }

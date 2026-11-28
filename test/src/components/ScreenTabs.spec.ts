@@ -109,11 +109,12 @@ describe("closing a tab from the keyboard", () => {
 });
 
 describe("a tab per collection and feed", () => {
-  let artTitle = "Art collection";
+  let artTitle: string | null = "Art collection";
   const listed = (url: string): unknown =>
     url.startsWith("/api/feeds")
       ? { feeds: [{ slug: "hn", title: "Hacker News", icon: "newspaper" }] }
-      : { collections: [{ slug: "art", title: artTitle, icon: "palette" }] };
+      : { collections: artTitle === null ? [] : [{ slug: "art", title: artTitle, icon: "palette" }] };
+  let hold: Promise<void> | null = null;
   const fetched: string[] = [];
   let failing = false;
 
@@ -121,12 +122,15 @@ describe("a tab per collection and feed", () => {
     fetched.length = 0;
     failing = false;
     artTitle = "Art collection";
+    hold = null;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
         fetched.push(url);
-        return failing ? new Response("down", { status: 500 }) : new Response(JSON.stringify(listed(url)), { status: 200 });
+        const body = failing ? null : JSON.stringify(listed(url));
+        if (hold) await hold;
+        return body === null ? new Response("down", { status: 500 }) : new Response(body, { status: 200 });
       }),
     );
   });
@@ -204,6 +208,37 @@ describe("a tab per collection and feed", () => {
     failing = false;
     await openPath("/collections?project=p2");
     expect(labels(w)).toEqual([en.tips.toolbar.collections, "Art collection"]);
+    w.unmount();
+  });
+
+  it("drops a deleted item's name when its tab is shown again", async () => {
+    const w = mount(ScreenTabs);
+    await openPath("/collections/art?project=p4");
+    await openPath("/collections?project=p4");
+    artTitle = null;
+    await w.findAll("[data-testid=screen-tab]")[1]?.trigger("click");
+    await flushPromises();
+    expect(labels(w)).toEqual([en.tips.toolbar.collections, "art"]);
+    w.unmount();
+  });
+
+  it("reads once more for a visit made while its list was being read", async () => {
+    const w = mount(ScreenTabs);
+    let release = (): void => undefined;
+    hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await openPath("/collections/art?project=p5");
+    await openPath("/collections?project=p5");
+    artTitle = "Paintings";
+    await w.findAll("[data-testid=screen-tab]")[1]?.trigger("click");
+    await flushPromises();
+    expect(fetched.filter((url) => url.includes("project=p5"))).toHaveLength(1);
+    hold = null;
+    release();
+    await flushPromises();
+    expect(labels(w)).toEqual([en.tips.toolbar.collections, "Paintings"]);
+    expect(fetched.filter((url) => url.includes("project=p5"))).toHaveLength(2);
     w.unmount();
   });
 });

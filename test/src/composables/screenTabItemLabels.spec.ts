@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { finishedReading, listKeyOf, listsToRead, parseItemList, startedReading, type ItemList } from "../../../src/composables/screenTabItemLabels";
+import {
+  finishedReading,
+  listKeyOf,
+  owedAnotherRead,
+  parseItemList,
+  planReads,
+  startedReading,
+  type ItemList,
+} from "../../../src/composables/screenTabItemLabels";
 import { tabOfRoute, type ScreenTab } from "../../../src/composables/screenTabsModel";
 
 const tabAt = (name: string, params: Record<string, unknown>, query: Record<string, unknown> = {}): ScreenTab => {
@@ -11,12 +19,17 @@ const art = tabAt("collectionDetail", { slug: "art" });
 const travel = tabAt("collectionDetail", { slug: "travel" });
 const artInP1 = tabAt("collectionDetail", { slug: "art" }, { project: "p1" });
 const hn = tabAt("feedDetail", { slug: "hn" });
-const list = (labels: string[], lookedFor: string[], reading = false): ItemList => ({
-  labels: Object.fromEntries(labels.map((slug) => [slug, { title: slug.toUpperCase(), icon: "star" }])),
-  lookedFor: new Set(lookedFor),
+const index = tabAt("collections", {});
+const answered = (slugs: string[], reading = false, again = false): ItemList => ({
+  labels: Object.fromEntries(slugs.map((slug) => [slug, { title: slug.toUpperCase(), icon: "star" }])),
   reading,
+  again,
 });
-const workspaceCollections = listKeyOf("collections", { slug: "x", project: null });
+const unanswered = (reading = false, again = false): ItemList => ({ labels: null, reading, again });
+const workspace = listKeyOf("collections", { slug: "x", project: null });
+const inP1 = listKeyOf("collections", { slug: "x", project: "p1" });
+const feeds = listKeyOf("feeds", { slug: "x", project: null });
+const request = (listKey: string, screen: "collections" | "feeds", project: string | null = null) => ({ listKey, screen, project });
 
 describe("parseItemList", () => {
   it("reads each entry's title and icon by slug from the named field", () => {
@@ -32,66 +45,57 @@ describe("parseItemList", () => {
   it("skips malformed entries, and is null for a body that is not the list", () => {
     const body = { feeds: [null, 7, "hn", { slug: 1, title: "x" }, { slug: "a" }, { title: "b" }, { slug: "ok", title: "OK", icon: 3 }] };
     expect(parseItemList(body, "feeds")).toEqual({ ok: { title: "OK", icon: "" } });
+    expect(parseItemList({ feeds: [] }, "feeds")).toEqual({});
     [null, undefined, "x", [], {}, { feeds: {} }, { feeds: null }, { collections: [{ slug: "a", title: "A" }] }].forEach((other) =>
       expect(parseItemList(other, "feeds"), JSON.stringify(other)).toBeNull(),
     );
   });
 });
 
-describe("listsToRead", () => {
-  it("reads one list per screen and project, for every slug the tabs name", () => {
-    const index: ScreenTab = { ...tabAt("collections", {}), path: "/collections" };
-    expect(listsToRead([index, art, travel, artInP1, hn], {}, null)).toEqual([
-      { listKey: workspaceCollections, screen: "collections", project: null, slugs: ["art", "travel"] },
-      { listKey: listKeyOf("collections", { slug: "x", project: "p1" }), screen: "collections", project: "p1", slugs: ["art"] },
-      { listKey: listKeyOf("feeds", { slug: "x", project: null }), screen: "feeds", project: null, slugs: ["hn"] },
-    ]);
+describe("planReads", () => {
+  it("reads every list that never answered, once per screen and project, with its project", () => {
+    expect(planReads([index, art, travel, artInP1, hn], {}, null)).toEqual({
+      read: [request(workspace, "collections"), request(inP1, "collections", "p1"), request(feeds, "feeds")],
+      owed: [],
+    });
+    expect(planReads([art], { [workspace]: unanswered() }, null).read).toEqual([request(workspace, "collections")]);
   });
 
-  it("reads nothing for named slugs, slugs already looked for, or a list being read", () => {
-    expect(listsToRead([art, travel], { [workspaceCollections]: list(["art", "travel"], ["art"]) }, null)).toEqual([]);
-    expect(listsToRead([art, travel], { [workspaceCollections]: list([], ["art", "travel"]) }, null)).toEqual([]);
-    expect(listsToRead([art], { [workspaceCollections]: list([], [], true) }, null)).toEqual([]);
+  it("reads an answered list again only for the visit that shows one of its tabs", () => {
+    const lists = { [workspace]: answered(["art"]), [feeds]: answered(["hn"]) };
+    expect(planReads([art, travel, hn], lists, null)).toEqual({ read: [], owed: [] });
+    expect(planReads([art, travel, hn], lists, "collections")).toEqual({ read: [], owed: [] });
+    expect(planReads([art, travel, hn], lists, travel.key)).toEqual({ read: [request(workspace, "collections")], owed: [] });
   });
 
-  it("reads a list again for a slug it has not looked for yet", () => {
-    expect(listsToRead([art, travel], { [workspaceCollections]: list(["art"], ["art"]) }, null)).toEqual([
-      { listKey: workspaceCollections, screen: "collections", project: null, slugs: ["travel"] },
-    ]);
+  it("owes a list one more read instead of reading it twice at once", () => {
+    expect(planReads([art], { [workspace]: answered(["art"], true) }, art.key)).toEqual({ read: [], owed: [workspace] });
+    expect(planReads([art], { [workspace]: unanswered(true) }, null)).toEqual({ read: [], owed: [workspace] });
+    expect(planReads([art], { [workspace]: answered(["art"], true) }, null)).toEqual({ read: [], owed: [] });
   });
 
-  it("reads the shown tab's list again, even for a slug already named, unless it is being read", () => {
-    const named = { [workspaceCollections]: list(["art", "travel"], ["art", "travel"]) };
-    expect(listsToRead([art, travel], named, art.key)).toEqual([{ listKey: workspaceCollections, screen: "collections", project: null, slugs: ["art"] }]);
-    expect(listsToRead([art, travel], named, "collections")).toEqual([]);
-    expect(listsToRead([art], { [workspaceCollections]: list(["art"], ["art"], true) }, art.key)).toEqual([]);
-  });
-
-  it("reads nothing for tabs that are not items", () => {
-    const tabs = ["collections", "feeds", "roomView", "skills"].map((name) => tabAt(name, { room: "r" }));
-    expect(listsToRead(tabs, {}, null)).toEqual([]);
+  it("reads nothing for tabs that are not collection or feed items", () => {
+    const tabs = ["collections", "feeds", "roomView", "blueprintRun", "wikiPage", "skills"].map((name) => tabAt(name, { room: "r", run: "b", slug: "s" }));
+    expect(planReads(tabs, {}, tabs[0]?.key ?? null)).toEqual({ read: [], owed: [] });
   });
 });
 
-describe("startedReading / finishedReading", () => {
-  it("marks the slugs looked for only when the read answered, keeping what was named before", () => {
-    const before = list(["art"], ["art"]);
-    const answered = finishedReading(startedReading(before), ["travel", "gone"], { travel: { title: "Travel", icon: "flight" } });
-    expect(answered.reading).toBe(false);
-    expect(Object.keys(answered.labels)).toEqual(["art", "travel"]);
-    expect([...answered.lookedFor]).toEqual(["art", "travel", "gone"]);
+describe("reading a list", () => {
+  it("replaces the last answer with the new one, so a renamed or deleted entry does not linger", () => {
+    const next = finishedReading(startedReading(answered(["art", "gone"])), { art: { title: "Paintings", icon: "brush" } });
+    expect(next).toEqual({ labels: { art: { title: "Paintings", icon: "brush" } }, reading: false, again: false });
   });
 
-  it("leaves a failed read's slugs to be read again on the next visit", () => {
-    const failed = finishedReading(startedReading(list(["art"], ["art"])), ["travel"], null);
-    expect(failed).toEqual(list(["art"], ["art"]));
-    expect(listsToRead([travel], { [workspaceCollections]: failed }, null)).toEqual([
-      { listKey: workspaceCollections, screen: "collections", project: null, slugs: ["travel"] },
-    ]);
+  it("keeps the last answer when a read fails", () => {
+    expect(finishedReading(startedReading(answered(["art"])), null)).toEqual(answered(["art"]));
+    expect(finishedReading(startedReading(undefined), null)).toEqual(unanswered());
+    expect(finishedReading(undefined, null)).toEqual(unanswered());
   });
 
-  it("starts from nothing for a list never read", () => {
-    expect(startedReading(undefined)).toEqual(list([], [], true));
-    expect(finishedReading(undefined, ["art"], null)).toEqual(list([], []));
+  it("carries a read owed during the read to its end, and a new read starts owing nothing", () => {
+    const owed = owedAnotherRead(startedReading(answered(["art"])));
+    expect(owed).toEqual(answered(["art"], true, true));
+    expect(finishedReading(owed, {}).again).toBe(true);
+    expect(startedReading(finishedReading(owed, {}))).toEqual({ labels: {}, reading: true, again: false });
   });
 });

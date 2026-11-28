@@ -16,9 +16,12 @@ do the same.
   tab of its screen. Anything else is added last, as before.
 - Visiting a key already open moves that tab's path; it never adds a second tab.
 - An item tab shows the item's title and icon from the list endpoint its index already uses
-  (`/api/collections/list`, `/api/feeds`, with `?project=`), and the slug until that answers. A
-  list is asked for again only when an open tab names a slug it has not looked for yet, so a
-  collection created after the first read gets its name without a fetch loop.
+  (`/api/collections/list`, `/api/feeds`, with `?project=`), and the slug until that answers. The
+  rule says when a read IS made: a visit that shows one of a list's tabs reads that list, and a
+  list that never answered is read on every visit. An answer replaces the previous one, so a rename,
+  an addition and a deletion all arrive through the same read; a failed read keeps the last answer.
+  A visit made while its list is being read is owed one more read when that one settles. The
+  watcher follows the tabs only, so there is at most a read per visit and never a loop.
 
 ## Left out
 

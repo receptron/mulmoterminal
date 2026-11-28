@@ -1,5 +1,6 @@
-// What an item tab is called: the title and icon its screen's own list gives that slug, read from
-// the list response, and which lists still have to be read for the tabs open.
+// What an item tab is called, and which lists a visit reads. Stated as when a read IS made — a visit
+// shows one of the list's tabs, or the list never answered — and an answer replaces the last one, so a
+// rename, an addition and a deletion all arrive through the same read.
 import { isRecord } from "../../common/isRecord";
 import type { PaletteScreen } from "./paletteScreens";
 import type { ScreenItem, ScreenTab } from "./screenTabsModel";
@@ -9,18 +10,23 @@ export interface ItemLabel {
   icon: string;
 }
 
-/** One list as read so far: the labels it gave, and every slug a read was made to find. */
+/** One list: its last answer (null until one arrives), whether a read is in flight, and whether a
+ *  visit asked for it during that read and so is owed one more. */
 export interface ItemList {
-  labels: Readonly<Record<string, ItemLabel>>;
-  lookedFor: ReadonlySet<string>;
+  labels: Readonly<Record<string, ItemLabel>> | null;
   reading: boolean;
+  again: boolean;
 }
 
 export interface ListRequest {
   listKey: string;
   screen: PaletteScreen;
   project: string | null;
-  slugs: string[];
+}
+
+export interface ReadPlan {
+  read: ListRequest[];
+  owed: string[];
 }
 
 // The array each list endpoint answers with.
@@ -42,35 +48,30 @@ export function parseItemList(body: unknown, field: string): Record<string, Item
 }
 
 /** A list while a read of it is in flight. */
-export const startedReading = (before: ItemList | undefined): ItemList => ({
-  labels: before?.labels ?? {},
-  lookedFor: before?.lookedFor ?? new Set(),
-  reading: true,
+export const startedReading = (before: ItemList | undefined): ItemList => ({ labels: before?.labels ?? null, reading: true, again: false });
+
+/** A list after its read answered `labels`, or failed (null) and so keeps its last answer. */
+export const finishedReading = (before: ItemList | undefined, labels: Record<string, ItemLabel> | null): ItemList => ({
+  labels: labels ?? before?.labels ?? null,
+  reading: false,
+  again: before?.again ?? false,
 });
 
-/** A list after a read for `slugs` answered `labels`, or failed (null). Only an answer marks the
- *  slugs as looked for: a failed read is tried again on the next visit, not given up on. */
-export function finishedReading(before: ItemList | undefined, slugs: readonly string[], labels: Record<string, ItemLabel> | null): ItemList {
-  const settled = startedReading(before);
-  if (labels === null) return { ...settled, reading: false };
-  return { labels: { ...settled.labels, ...labels }, lookedFor: new Set([...settled.lookedFor, ...slugs]), reading: false };
-}
+/** A list a visit asked for while it was being read. */
+export const owedAnotherRead = (before: ItemList): ItemList => ({ ...before, again: true });
 
-// A slug a read already looked for and did not find stays unnamed rather than being asked for forever,
-// except in the tab just shown: reading its list again there is what picks up a rename.
-const wanted = (list: ItemList | undefined, slug: string, shown: boolean): boolean =>
-  list === undefined || (!list.reading && (shown || (!(slug in list.labels) && !list.lookedFor.has(slug))));
-
-/** The lists to read now for `tabs`, each with every slug it is read to find. `shownKey` is the tab
- *  a visit just put in front, whose list is read again whatever was read before. */
-export function listsToRead(tabs: readonly ScreenTab[], lists: Readonly<Record<string, ItemList>>, shownKey: string | null): ListRequest[] {
-  const requests = new Map<string, ListRequest>();
+/** For a visit that put `shownKey` in front: the lists to read now, and the ones already being read
+ *  that it asked for, which are owed one more read when the current one settles. */
+export function planReads(tabs: readonly ScreenTab[], lists: Readonly<Record<string, ItemList>>, shownKey: string | null): ReadPlan {
+  const read = new Map<string, ListRequest>();
+  const owed = new Set<string>();
   tabs.forEach(({ key, screen, item }) => {
     if (item === null || LIST_FIELD[screen] === undefined) return;
     const listKey = listKeyOf(screen, item);
-    if (!wanted(lists[listKey], item.slug, key === shownKey)) return;
-    const request = requests.get(listKey) ?? { listKey, screen, project: item.project, slugs: [] };
-    requests.set(listKey, { ...request, slugs: [...request.slugs, item.slug] });
+    const list = lists[listKey];
+    if (key !== shownKey && list?.labels) return;
+    if (list?.reading) owed.add(listKey);
+    else read.set(listKey, { listKey, screen, project: item.project });
   });
-  return [...requests.values()];
+  return { read: [...read.values()], owed: [...owed] };
 }
