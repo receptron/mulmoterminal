@@ -123,8 +123,8 @@ export default [
     // codex, git — which have no portable absolute path and are found on PATH by
     // design. no-os-command-from-path fights that premise on every spawn, so it
     // is off here rather than suppressed inline at each call. The verify helper runs the same
-    // tmux (and lsof) against a server it started, so it is in the same position.
-    files: ["bin/**/*.js", "scripts/verify-scratch.ts"],
+    // tmux (and lsof) against a server it started, and so does its drive script.
+    files: ["bin/**/*.js", "scripts/verify-scratch.ts", ".claude/skills/verify-mulmoterminal/*.mjs"],
     rules: {
       "sonarjs/no-os-command-from-path": "off",
     },

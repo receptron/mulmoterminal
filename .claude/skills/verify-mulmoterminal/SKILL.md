@@ -58,12 +58,15 @@ that could have restarted the server.
 copy: the Playwright MCP when it can launch a browser, or another checkout's `node_modules`.
 
 ```bash
-node .claude/skills/verify-mulmoterminal/drive-shell.mjs <dir holding node_modules/playwright> \
-  "http://127.0.0.1:$P/" "$H/shell.png"
+node .claude/skills/verify-mulmoterminal/drive-shell.mjs <dir holding node_modules/playwright> "$H" "$H/shell.png"
 ```
 
-It clicks `[data-testid=agent-picker-shell]` and then `[data-testid=cell-dir-go]`, types
-`echo VERIFY_MARKER_3593`, and saves a screenshot. Copy it as the start of your own drive script.
+It reads the port and socket from `start`'s state file. It clicks `[data-testid=agent-picker-shell]`
+and then `[data-testid=cell-dir-go]`, types `echo VERIFY_MARKER_3593`, and saves a screenshot. Copy
+it as the start of your own drive script.
+
+The terminal is drawn on a canvas, so the page has no text to wait on. Wait on tmux instead — the
+session appearing, the output reaching `capture-pane` — never on a fixed delay.
 Do every check in the SAME browser session that opened the cell: a new browser starts on an empty
 grid.
 
