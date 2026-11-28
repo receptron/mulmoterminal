@@ -4,7 +4,7 @@ nav_title: Feature list
 layout: default
 parent: English
 nav_order: 6.5
-as_of: 13.11.0
+as_of: 13.12.0
 description: "Every capability MulmoTerminal has today, one line each with the release it arrived in, grouped by area (as of 9.1.0)."
 ---
 
@@ -17,6 +17,7 @@ Every capability MulmoTerminal has as of 9.1.0, one line each, grouped by area. 
 {:toc}
 
 ## Grid and cells
+- Each collection or feed opened gets a screen tab of its own, named with its title and icon, right after the Collections or Feeds tab; opening it again switches to that tab (v13.12.0)
 - While a full-screen screen is open, a row of tabs under the toolbar lists every screen opened since the page loaded, Grid view first; a tab returns to its screen as it was left and its × forgets it (v13.11.0)
 - Rooms, the Library, Blueprints, Skills, Processes and Usage stay as they were left after the first open: search text, selection, scroll and the conversation being read come back, refreshed in the background (v13.11.0)
 - The grid layout is also kept on the server, and a grid that opens empty (lost browser storage, a full disk, another address) offers the last layout's terminals back in a bar with Restore and Dismiss (v13.7.0)
@@ -129,6 +130,7 @@ More: [Conversations](conversation.html)
 - The Library reports a memory also kept in another work copy of the same repository, says whether its text is the same, and can bring the copies into one with Add its text here and Write this text there (v13.3.0)
 - Under a memory's title, Written in names the conversation that last wrote it and opens it (v13.3.0)
 - A Library conversation can be promoted to a memory, a CLAUDE.md rule, a plan, an issue or a skill: a Claude cell opens in plan mode where it ran, and the bundled mulmoterminal-library skill writes nothing until you approve (v13.3.0)
+- Before drafting a CLAUDE.md rule, the mulmoterminal-library skill asks whether a structure, a type, a lint or CI check, or a test could hold it instead, and offers an issue for that check first (v13.12.0)
 - The Library's Repeats kind lists the instructions typed 3 times or more in 2 conversations or more in the last 90 days, and Make a rule / Make a skill turns one into a CLAUDE.md rule or a skill after your approval (v13.3.0)
 - The Library's Tools kind lists the instruction files Claude Code loads in a directory, in its order with their @path imports, says which paths each names that are not there, and shows the settings.json files laid over each other with the file that set each value (v13.3.0)
 - The Library's Storage kind shows what each entry of ~/.claude and each project takes on disk, largest first, with temp-directory projects marked and what cleanupPeriodDays is set to (v13.3.0)

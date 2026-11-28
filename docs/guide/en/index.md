@@ -8,9 +8,9 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **13.11.0 is out.** Full-screen screens such as the Library get a row of tabs and come back as
-> you left them, and a Cmd press during Japanese input no longer types the text twice.
-> [Setup guide](v13.11.0.html)
+> **13.12.0 is out.** Each collection and feed you open gets its own screen tab with its name and
+> icon, and the Library's Resume no longer takes over a conversation open elsewhere.
+> [Setup guide](v13.12.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 

@@ -8,6 +8,34 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@13.12.0 — 2026-11-28
+
+> **Setup guide:** [13.12.0 — A tab for each collection and feed you open](https://receptron.github.io/mulmoterminal/guide/en/v13.12.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.12.0.html))
+
+### A tab per opened collection and feed, beside the index tab (#3600)
+
+Closes #3598. The screen tabs from #3578 keyed on the screen alone, so opening a second collection rewrote the one Collections tab. A tab now has a key: index routes and every other screen keep the screen, while `collectionDetail` / `feedDetail` are item tabs keyed by screen + project + slug (two projects' `/collections/tasks` are different collections, as in `pageKeyFor`). A new item tab goes after the last tab of its screen, an index tab before its screen's first item; revisiting a key moves that tab's path instead of adding one (`screenTabsModel.ts`). Item tabs take their title and icon from the list the index already reads (`/api/collections/list`, `/api/feeds`, with `?project=`) and show the slug until it answers (`screenTabItemLabels.ts`, `useScreenTabItemLabels.ts`): a list is read when a visit shows one of its tabs and on every visit until it has answered once; an answer replaces the previous one so renames and deletions arrive, a failed read keeps the last answer, and a visit during a read is owed one more read when it settles. Lookups use `Object.hasOwn`, so a slug such as `constructor` does not read the prototype. Rooms and Blueprints keep one tab each, since their sidebar would add a tab per click.
+
+### The Library asks whether a check can enforce a rule before drafting it (#3596)
+
+Closes #3595. Before the bundled `mulmoterminal-library` skill drafts a `CLAUDE.md` rule (`promote rule`, `repeat rule`, a tidy-up's `move`), it asks whether something that runs could hold it instead, strongest first: the structure, a type, a lint rule or CI check, a test, and the rule last. When one fits, the first candidate is an issue (or plan) for that check naming where it goes, the real mistake it must catch and what it must let through; the rule is offered only for what the check cannot hold. The Library entry in `features.md` (en/ja) says so.
+
+### Library Resume asks who holds a conversation the capped list does not reach (#3601)
+
+Closes #3343. Resume read `/api/sessions`, which is capped at the newest `SESSION_LIST_LIMIT` transcripts, and treated "not listed" as "free", so a conversation idle in another tab or device could be reopened by id and its original client sent `superseded`. `GET /api/sessions/occupancy?id=<id>` answers `attached` / `runningKey` for one id with no cap, built by the same `sessionOccupancyOf` as the list rows. The Library asks it only when the list was read and does not name the conversation (`needsOccupancy`); `libraryResume` refuses a held one, resumes a free one by `runningKey ?? id`, and resumes nothing on an unread answer or one about another id. The route is `NEVER_FORWARDED` for remote hosts.
+
+### A review finding holds the verdict only with evidence (#3591)
+
+Closes #3590. The bundled `mulmoterminal-review` skill gives a finding a sixth part, Evidence: a run (command and output), a static proof (the real entry point and caller and the code fact that makes the result wrong), or a quoted rule beside the contradicting line. A finding without it is reported as `UNVERIFIED` and counted as N, so it does not block LGTM; a REOPENING needs evidence too. `reviewPrompt()` in `server/routes/reviewLoop.ts` lists N beside P1/P2/P3, pinned by a spec.
+
+### Remote cells draw more Canvas cards from their host (#3592, #3597, #3599)
+
+Part of #3506, inactive unless remote hosts are configured. A remote cell's Canvas now draws documents (`presentDocument`), HTML pages (`presentHtml`), inline charts (`presentChart`), models (`presentShapeScript`), spreadsheets (`presentSpreadsheet`) and stories (`presentMulmoScript`) from the cell's host, read only. GuiPanel provides the card's host (`PLUGIN_HOST_KEY`) and the plugin runtime sends a remote card's dispatch to `/remote/<id>/api/plugin/<tool>`, opening none of this machine's `plugin:*:file:*` channels. The gateway forwards a plugin POST only when its `kind` is a listed read (`pluginReads` / `bodyKinds`), refusing saves, exports, generation, uploads and the agent's own call with 400; `kindFields` lists the fields a kind may carry, so a story's `save` that only reopens it passes and one carrying a script or beat does not. Movie and PDF bytes go through the byte proxy with the story's `root`.
+
+### A skill for verifying a change in a running MulmoTerminal (#3594)
+
+Closes #3593. Repo-local `.claude/skills/verify-mulmoterminal` with `scripts/verify-scratch.ts start | doctor | stop`: it starts the launcher from this checkout on a scratch HOME and explicit port, computes the tmux socket from that HOME with the server's own `homeScopeSuffix`, signals a process only once it is identified (recorded start time, command, log, instance entry, process group), and stops tmux only through the computed socket. `drive-shell.mjs` opens a Shell cell, types a marker and screenshots it. The decisions are in `scripts/verify-scratch-plan.ts`, pinned by a spec.
+
 ## mulmoterminal@13.11.0 — 2026-11-28
 
 > **Setup guide:** [13.11.0 — Tabs for the screens you opened, and Japanese input that no longer doubles](https://receptron.github.io/mulmoterminal/guide/en/v13.11.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v13.11.0.html))
