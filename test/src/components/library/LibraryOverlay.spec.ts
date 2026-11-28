@@ -90,11 +90,14 @@ vi.mock("../../../../src/composables/useNewTerminal", () => ({ openCellAt: (cell
 let resumableList: ResumableList = { sessions: [], cwd: null };
 let loadGate: Promise<void> = Promise.resolve();
 let listUnreadable = false;
+let heldElsewhere = false;
+let occupancyUnreadable = false;
 vi.mock("../../../../src/composables/useDirLists", () => ({
   readResumableList: async () => {
     await loadGate;
     return listUnreadable ? null : resumableList;
   },
+  readSessionOccupancy: async (id: string) => (occupancyUnreadable ? null : { id, attached: heldElsewhere, runningKey: null }),
 }));
 
 const openIds: string[] = [];
@@ -150,6 +153,8 @@ beforeEach(() => {
   loadGate = Promise.resolve();
   statusGate = Promise.resolve();
   listUnreadable = false;
+  heldElsewhere = false;
+  occupancyUnreadable = false;
   more = null;
   firstHasMore = false;
   pageFinished = 1;
@@ -260,6 +265,22 @@ describe("LibraryOverlay", () => {
 
   it("does not resume when it cannot check who holds the conversation", async () => {
     listUnreadable = true;
+    const wrapper = await mountLibrary();
+    await press("Enter");
+    expect(opened).toEqual([]);
+    expect(wrapper.find("[role=status]").text().length).toBeGreaterThan(0);
+  });
+
+  it("refuses a conversation held elsewhere that the capped list does not reach", async () => {
+    heldElsewhere = true;
+    const wrapper = await mountLibrary();
+    await press("Enter");
+    expect(opened).toEqual([]);
+    expect(wrapper.find("[role=status]").text().length).toBeGreaterThan(0);
+  });
+
+  it("does not resume a conversation outside the list when it cannot ask who holds it", async () => {
+    occupancyUnreadable = true;
     const wrapper = await mountLibrary();
     await press("Enter");
     expect(opened).toEqual([]);

@@ -245,3 +245,21 @@ export async function readResumableList(dir: string, agent: TerminalAgent): Prom
     return null;
   }
 }
+
+/** Who holds one session and what runs it, as a list row would say — for a session the capped list
+ *  may not reach (#3343). Null when it could not be read: that proves nothing about who holds it. */
+export type SessionOccupancyAnswer = Pick<ResumableSession, "id" | "attached" | "runningKey">;
+
+const isOccupancyAnswer = (body: unknown, id: string): body is SessionOccupancyAnswer =>
+  isRecord(body) && body.id === id && typeof body.attached === "boolean" && (body.runningKey === null || typeof body.runningKey === "string");
+
+export async function readSessionOccupancy(id: string): Promise<SessionOccupancyAnswer | null> {
+  try {
+    const res = await fetchWithTimeout(`/api/sessions/occupancy?id=${encodeURIComponent(id)}`);
+    if (!res.ok) return null;
+    const body = await jsonBody(res);
+    return isOccupancyAnswer(body, id) ? body : null;
+  } catch {
+    return null;
+  }
+}
