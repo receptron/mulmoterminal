@@ -79,6 +79,7 @@ export const NEVER_FORWARDED: Record<string, readonly string[]> = {
   ],
   "It ends processes beyond the one cell that asked.": ["POST /api/processes/kill", "POST /api/tmux/cleanup-orphans", "POST /api/worktrees/cleanup/remove"],
   "It types into a terminal on behalf of an agent, with no person at the keyboard.": ["POST /api/terminal/:sessionId/reply"],
+  "Only the Library asks it, and the Library lists this machine's own conversations.": ["GET /api/sessions/occupancy"],
 };
 
 // Not decided yet, so not forwarded. This list only shrinks: each phase 3 PR moves the routes it

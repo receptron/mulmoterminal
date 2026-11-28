@@ -8,6 +8,7 @@
 import path from "node:path";
 import { canonicalPath } from "../infra/fs/canonical-path.js";
 import { isSessionAttached, type SessionOccupancy } from "../../common/sessionOccupancy.js";
+import type { SessionRunning } from "../../common/sessionRunning.js";
 import { tmuxListSessionIds } from "../infra/process/tmux.js";
 import { isTerminalAgent, type TerminalAgent } from "../../common/sessionAgent.js";
 import { isProbeSessionId } from "../agents/probe/probe-session.js";
@@ -104,6 +105,13 @@ export async function survivorSnapshot(): Promise<Set<string>> {
  *  the id the row is drawn from would kill nothing. Pure, because it is the half that decides what
  *  a stop button is aimed at. */
 export const runningKeyOf = (keys: readonly string[], running: ReadonlySet<string>): string | null => keys.find((key) => running.has(key)) ?? null;
+
+/** The two facts a Claude list row carries about who holds and what runs it, for one id. The list
+ *  rows and the single-id occupancy route both build them here, so the two cannot disagree. */
+export const sessionOccupancyOf = (id: string, tmuxCounts: Map<string, number> | null, running: ReadonlySet<string>): SessionOccupancy & SessionRunning => ({
+  attached: sessionAttached(id, tmuxCounts),
+  runningKey: runningKeyOf([id], running),
+});
 
 // A plain shell parked in a worktree is deliberately NOT the worktree's session: it is a terminal
 // someone opened, not an agent editing the tree, and refusing the worktree on the strength of one

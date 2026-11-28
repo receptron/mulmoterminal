@@ -1,7 +1,7 @@
 // What Enter does in the Library (#3329): which conversation it resumes, as what, or why it will not;
 // and which keys the screen takes at all.
 import { describe, it, expect } from "vitest";
-import { libraryResume } from "../../../../src/components/library/libraryResume";
+import { libraryResume, needsOccupancy } from "../../../../src/components/library/libraryResume";
 import { libraryKeyAction, movedFromGap, movedIndex, type LibraryKeyEvent } from "../../../../src/components/library/libraryKeys";
 import type { LibraryConversation } from "../../../../common/library";
 import type { ResumableList } from "../../../../src/composables/useDirLists";
@@ -19,8 +19,38 @@ describe("libraryResume", () => {
     expect(libraryResume(conversation(), listed, [])).toEqual({ kind: "open", id: "tmux-1", cwd: "/real/w", account: "work" });
   });
 
-  it("resumes by its own id when the list was read and does not have it", () => {
-    expect(libraryResume(conversation(), list([], "/real/w"), [])).toEqual({ kind: "open", id: "abc", cwd: "/w", account: null });
+  describe("outside the capped list (#3343)", () => {
+    const free = { id: "abc", attached: false, runningKey: null };
+
+    it("resumes by its own id when nobody holds it", () => {
+      expect(libraryResume(conversation(), list([], "/real/w"), [], free)).toEqual({ kind: "open", id: "abc", cwd: "/w", account: null });
+    });
+
+    it("resumes by the key it is still running under", () => {
+      expect(libraryResume(conversation(), list([]), [], { ...free, runningKey: "tmux-1" })).toEqual({ kind: "open", id: "tmux-1", cwd: "/w", account: null });
+    });
+
+    it.each([
+      ["held by another client", { ...free, attached: true }, []],
+      ["open in this grid under its running key", { ...free, runningKey: "tmux-1" }, ["tmux-1"]],
+      ["open in this grid, unasked", null, ["abc"]],
+    ] as const)("refuses one %s", (_label, occupancy, open) => {
+      expect(libraryResume(conversation(), list([]), open, occupancy)).toEqual({ kind: "busy" });
+    });
+
+    it.each([
+      ["was not asked or could not be read", null],
+      ["is about another session", { ...free, id: "other" }],
+    ] as const)("resumes nothing when the answer %s", (_label, occupancy) => {
+      expect(libraryResume(conversation(), list([]), [], occupancy)).toEqual({ kind: "unchecked" });
+    });
+
+    it("asks only when the list was read and does not name the conversation", () => {
+      expect(needsOccupancy(conversation(), list([]))).toBe(true);
+      expect(needsOccupancy(conversation(), list([{ id: "abc", title: "T", mtime: 1 }]))).toBe(false);
+      expect(needsOccupancy(conversation(), null)).toBe(false);
+      expect(needsOccupancy(conversation({ cwd: null }), list([]))).toBe(false);
+    });
   });
 
   it("resumes nothing on a list that could not be read: it proves nothing about who holds the session", () => {
@@ -31,7 +61,6 @@ describe("libraryResume", () => {
     ["held by another client", list([{ id: "abc", title: "T", mtime: 1, attached: true }]), []],
     ["already open in this grid", list([{ id: "abc", title: "T", mtime: 1 }]), ["abc"]],
     ["open under its running key", list([{ id: "abc", title: "T", mtime: 1, runningKey: "tmux-1" }]), ["tmux-1"]],
-    ["open, though the list does not have it", list([]), ["abc"]],
   ] as const)("refuses a conversation %s", (_label, listed, open) => {
     expect(libraryResume(conversation(), listed, open)).toEqual({ kind: "busy" });
   });
