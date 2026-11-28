@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { router } from "../../../src/router/index";
 import ScreenTabs from "../../../src/components/ScreenTabs.vue";
@@ -16,7 +16,7 @@ const open = async (name: string) => {
 beforeEach(async () => {
   await router.push("/terminals");
   await flushPromises();
-  [...screenTabs.value].forEach((tab) => closeScreenTab(tab.screen));
+  [...screenTabs.value].forEach((tab) => closeScreenTab(tab.key));
   await flushPromises();
 });
 
@@ -86,7 +86,7 @@ describe("ScreenTabs", () => {
     await open("blueprintMarket");
     await open("wiki");
     await open("wikiGraph");
-    expect(screenTabs.value).toEqual([
+    expect(screenTabs.value.map(({ screen, path }) => ({ screen, path }))).toEqual([
       { screen: "blueprints", path: "/blueprints/market" },
       { screen: "wiki", path: "/wiki/graph" },
     ]);
@@ -104,6 +104,73 @@ describe("closing a tab from the keyboard", () => {
     await flushPromises();
     expect(document.activeElement?.getAttribute("aria-current")).toBe("page");
     expect(document.activeElement?.textContent).toContain(en.featureMenu.items.rooms.label);
+    w.unmount();
+  });
+});
+
+describe("a tab per collection and feed", () => {
+  const listed = (url: string): unknown =>
+    url.startsWith("/api/feeds")
+      ? { feeds: [{ slug: "hn", title: "Hacker News", icon: "newspaper" }] }
+      : { collections: [{ slug: "art", title: "Art collection", icon: "palette" }] };
+  const fetched: string[] = [];
+
+  beforeEach(() => {
+    fetched.length = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        fetched.push(url);
+        return new Response(JSON.stringify(listed(url)), { status: 200 });
+      }),
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const labels = (w: ReturnType<typeof mount>) => w.findAll("[data-testid=screen-tab] span.truncate").map((label) => label.text());
+  const openPath = async (fullPath: string) => {
+    const { path, query } = router.resolve(fullPath);
+    await router.push({ path, query, state: overlayOriginState() });
+    await flushPromises();
+  };
+
+  it("keeps the index and each opened collection and feed apart, each named by its list", async () => {
+    const w = mount(ScreenTabs);
+    await openPath("/collections");
+    await openPath("/feeds/hn");
+    await openPath("/collections/art");
+    await openPath("/collections/travel");
+    await openPath("/collections");
+    expect(labels(w)).toEqual([en.tips.toolbar.collections, "Art collection", "travel", "Hacker News"]);
+    expect(w.get("[aria-current=page] span.truncate").text()).toBe(en.tips.toolbar.collections);
+    w.unmount();
+  });
+
+  it("switches to an open collection's tab instead of adding another, and closes it alone", async () => {
+    const w = mount(ScreenTabs);
+    await openPath("/collections/art");
+    await openPath("/collections");
+    await openPath("/collections/art");
+    expect(labels(w)).toEqual([en.tips.toolbar.collections, "Art collection"]);
+    expect(w.get("[aria-current=page] span.truncate").text()).toBe("Art collection");
+    await w.findAll("[data-testid=screen-tab]")[0]?.trigger("click");
+    await flushPromises();
+    expect(here().path).toBe("/collections");
+    await w.get(`[aria-label="${en.screenTabs.close.replace("{screen}", "Art collection")}"]`).trigger("click");
+    await flushPromises();
+    expect(labels(w)).toEqual([en.tips.toolbar.collections]);
+    expect(here().path).toBe("/collections");
+    w.unmount();
+  });
+
+  it("reads a project's list with that project, once for the slugs it named", async () => {
+    const w = mount(ScreenTabs);
+    await openPath("/collections/art?project=p1");
+    await openPath("/collections/art");
+    await openPath("/collections/art?project=p1");
+    expect(labels(w)).toEqual(["Art collection", "Art collection"]);
+    expect(fetched.filter((url) => url.includes("project=p1"))).toHaveLength(1);
     w.unmount();
   });
 });

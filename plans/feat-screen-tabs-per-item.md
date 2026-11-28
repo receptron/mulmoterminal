@@ -1,0 +1,33 @@
+# A tab per opened collection and feed (#3598)
+
+## Problem
+
+The screen tabs (#3575) key on the screen alone, so `collectionDetail` shares the `collections`
+tab with the index: opening a second collection rewrites the one tab, and the first is gone. Feeds
+do the same.
+
+## Decision
+
+- A tab is keyed, not just screened. The index routes keep the screen as their key; a
+  `collectionDetail` / `feedDetail` route is an ITEM tab keyed by screen + project + slug.
+  The project is part of the key for the reason `pageKeyFor` gives in `useCollectionBrowse.ts`:
+  two projects' `/collections/tasks` are different collections.
+- A new item tab goes after the last tab of its screen; a new index tab goes before the first item
+  tab of its screen. Anything else is added last, as before.
+- Visiting a key already open moves that tab's path; it never adds a second tab.
+- An item tab shows the item's title and icon from the list endpoint its index already uses
+  (`/api/collections/list`, `/api/feeds`, with `?project=`), and the slug until that answers. A
+  list is asked for again only when an open tab names a slug it has not looked for yet, so a
+  collection created after the first read gets its name without a fetch loop.
+
+## Left out
+
+Rooms and Blueprints keep one tab: their list is a sidebar beside the open item, so a tab per
+item would add one on every sidebar click. The wiki is unchanged.
+
+## Files
+
+- `src/composables/screenTabsModel.ts` — `tabOfRoute`, keyed `visitTab` / `closeTab` (pure).
+- `src/composables/screenTabItemLabels.ts` — parsing a list response, which lists to read (pure).
+- `src/composables/useScreenTabItemLabels.ts` — the fetches and the cache.
+- `src/composables/useScreenTabs.ts`, `src/components/ScreenTabs.vue` — by key, item labels.
