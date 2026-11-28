@@ -42,3 +42,10 @@ export const inlineChartsOnly: RemoteCardRule = (result) => {
   if (!isValidChartDocument(document)) return null;
   return document.charts.every((chart) => chartSources(chart).length === 0) ? result : null;
 };
+
+/** Where a story's movie or PDF is fetched: this server's media route, or the host's through the
+ *  byte proxy. */
+export const mulmoScriptMediaPath = (host: string | null, query: { moviePath?: string; pdfPath?: string }): string => {
+  const params = new URLSearchParams(query.pdfPath ? { pdfPath: query.pdfPath } : { moviePath: query.moviePath ?? "" });
+  return bytesPath(host, `/api/mulmoscript/media?${params}`);
+};

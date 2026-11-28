@@ -39,6 +39,9 @@ export interface RemoteRoute {
   /** The JSON body's `kind` must be one of these: a route that reads and writes on one path is
    *  forwarded for its reads, and a body naming no kind is the agent's own call, not a view's. */
   bodyKinds?: readonly string[];
+  /** A kind of `bodyKinds` that reads only with these fields: its body carries no other key but `kind`.
+   *  Listed rather than banned, so a field the remote learns to write with is refused. */
+  kindFields?: Readonly<Record<string, readonly string[]>>;
 }
 
 // The Files pane's routes: rooted at the cell's directory, and a `path` never leaves it.
@@ -71,13 +74,14 @@ const repoWrite = (path: string, bodyWithin: readonly string[]): RemoteRoute => 
 });
 
 // A plugin view's dispatch, for the kinds that only read.
-const pluginReads = (toolName: string, bodyKinds: readonly string[]): RemoteRoute => ({
+const pluginReads = (toolName: string, bodyKinds: readonly string[], kindFields?: Readonly<Record<string, readonly string[]>>): RemoteRoute => ({
   method: "POST",
   path: `/api/plugin/${toolName}`,
   key: "none",
   access: "read",
   query: [],
   bodyKinds,
+  ...(kindFields ? { kindFields } : {}),
 });
 
 // The launch form's resume list: one agent's past conversations in a directory, read on its host.
@@ -155,6 +159,14 @@ export const REMOTE_ROUTES = {
   htmlReads: pluginReads("presentHtml", ["loadHtml"]),
   shapeReads: pluginReads("presentShapeScript", ["loadShape"]),
   spreadsheetReads: pluginReads("presentSpreadsheet", ["loadSpreadsheet"]),
+  // A story as it is on disk, its pictures, sounds and finished outputs, and what is generating;
+  // never a generation, which spends money on the host, nor an edit or an upload. `save` naming only a
+  // story reopens it; with a script it writes one.
+  mulmoScriptReads: pluginReads(
+    "presentMulmoScript",
+    ["save", "beatImage", "beatAudio", "beatMovie", "characterImage", "movieStatus", "pdfStatus", "pendingGenerations"],
+    { save: ["filePath", "root"] },
+  ),
 } as const satisfies Record<string, RemoteRoute>;
 
 export type RemoteRouteName = keyof typeof REMOTE_ROUTES;
@@ -183,6 +195,9 @@ export const REMOTE_BYTE_ROUTES = {
   // An HTML card's page, in the iframe; both mounts serve documents only, under their own sandbox.
   htmlArtifactPage: { method: "GET", path: "/artifacts/html/*", key: "none", access: "read", query: ["v", "r"] },
   htmlFilePage: { method: "GET", path: "/htmlfile/*", key: "none", access: "read", query: ["v", "r"] },
+  // A story's movie or PDF, for the card's download and clip player. The remote serves only a story
+  // file or an output one of its own dispatches named.
+  mulmoScriptMedia: { method: "GET", path: "/api/mulmoscript/media", key: "none", access: "read", query: ["moviePath", "pdfPath"] },
 } as const satisfies Record<string, RemoteRoute>;
 
 /** How a route is named in the census: its method and the path as the server mounts it. */

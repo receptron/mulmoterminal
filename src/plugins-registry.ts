@@ -4,7 +4,7 @@
 //       `plugin` carrying a viewComponent. Shared VERBATIM with MulmoClaude.
 //   - local:    in-tree plugins under plugins/<name>/index.ts (REGISTRATION export).
 // Mirrors MulmoClaude's src/tools/index.ts getPlugin().
-import { defineComponent, h, markRaw, provide, type Component } from "vue";
+import { defineComponent, h, inject, markRaw, provide, type Component } from "vue";
 import config from "../plugins/plugins.json";
 import { plugin as markdownPlugin } from "@mulmoclaude/markdown-plugin/vue";
 import { plugin as formPlugin } from "@mulmoclaude/form-plugin/vue";
@@ -18,12 +18,12 @@ import { plugin as brepPlugin } from "@gui-chat-plugin/brep/vue";
 import { plugin as jingleScriptPlugin } from "@gui-chat-plugin/jinglescript/vue";
 import { plugin as spreadsheetPlugin } from "@gui-chat-plugin/spreadsheet/vue";
 import { AccountingView } from "@mulmoclaude/accounting-plugin/vue";
-import { wrapWithPluginRuntime } from "./composables/pluginRuntime";
+import { PLUGIN_HOST_KEY, wrapWithPluginRuntime } from "./composables/pluginRuntime";
 import CollectionCardView from "./components/CollectionCardView.vue";
 import { documentIdentity, filePathIdentity, collectionIdentity } from "./utils/canvasIdentity";
 import type { StoryRootDirs } from "./utils/canvasCardPath";
 import { CANVAS_CARD_HEIGHT_VAR } from "./composables/useCanvasCardHeight";
-import { drawnAsIs, htmlPageOnHost, inlineChartsOnly, type RemoteCardRule } from "./components/remoteCanvasCards";
+import { drawnAsIs, htmlPageOnHost, inlineChartsOnly, mulmoScriptMediaPath, type RemoteCardRule } from "./components/remoteCanvasCards";
 // Import each package's compiled stylesheet as a STRING (?inline), not as a global
 // side-effect. GuiPanel injects it into a per-view Shadow DOM (see PluginFrame),
 // which encapsulates the plugin's Tailwind preflight so it can't clobber
@@ -60,9 +60,8 @@ import { MULMOSCRIPT_SCOPE } from "../common/fileChannel";
 // because aborting mid-body truncates the movie rather than failing the request.
 const MEDIA_FETCH_TIMEOUT_MS = 300_000;
 
-async function fetchMulmoMediaBlob(query: { moviePath?: string; pdfPath?: string }): Promise<Blob> {
-  const params = new URLSearchParams(query.pdfPath ? { pdfPath: query.pdfPath } : { moviePath: query.moviePath ?? "" });
-  const res = await fetchWithTimeout(`/api/mulmoscript/media?${params}`, undefined, MEDIA_FETCH_TIMEOUT_MS);
+async function fetchMulmoMediaBlob(host: string | null, query: { moviePath?: string; pdfPath?: string }): Promise<Blob> {
+  const res = await fetchWithTimeout(mulmoScriptMediaPath(host, query), undefined, MEDIA_FETCH_TIMEOUT_MS);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.blob();
 }
@@ -70,13 +69,14 @@ async function fetchMulmoMediaBlob(query: { moviePath?: string; pdfPath?: string
 // Provide the mulmoscript package's host-adapter injection around its View.
 // MulmoTerminal has no per-session generation indicator, so only fetchMediaBlob
 // is supplied; chatSessionId degrades gracefully (no session tagging).
-function withMulmoScriptHostAdapter(inner: Component): Component {
-  const adapter: MulmoScriptHostAdapter = { fetchMediaBlob: fetchMulmoMediaBlob };
+export function withMulmoScriptHostAdapter(inner: Component): Component {
   return markRaw(
     defineComponent({
       name: "MulmoScriptHostAdapter",
       inheritAttrs: false,
       setup(_props, { attrs, slots }) {
+        const host = inject(PLUGIN_HOST_KEY, () => null);
+        const adapter: MulmoScriptHostAdapter = { fetchMediaBlob: (query) => fetchMulmoMediaBlob(host(), query) };
         provide(MULMOSCRIPT_HOST_ADAPTER_KEY, adapter);
         return () => h(inner, attrs, slots);
       },
@@ -264,6 +264,8 @@ const PACKAGES: Record<string, Registration> = {
     // The story on disk (`stories/<name>.json`), so this collapses re-opens of ONE story rather
     // than distinct stories. See canvasIdentity.ts.
     identityOf: filePathIdentity,
+
+    onRemote: drawnAsIs,
   },
   "@gui-chat-plugin/jinglescript": {
     toolName: jingleScriptPlugin.toolDefinition.name,

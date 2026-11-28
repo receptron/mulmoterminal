@@ -98,7 +98,15 @@ function kindRefused(route: RemoteRoute, body: unknown): string | null {
   const kinds = route.bodyKinds;
   if (kinds === undefined) return null;
   const kind = isRecord(body) ? body.kind : undefined;
-  return typeof kind === "string" && kinds.includes(kind) ? null : `${route.path} forwards only kind ${kinds.join(" / ")}`;
+  if (!isRecord(body) || typeof kind !== "string" || !kinds.includes(kind)) return `${route.path} forwards only kind ${kinds.join(" / ")}`;
+  return fieldsRefused(route, kind, body);
+}
+
+function fieldsRefused(route: RemoteRoute, kind: string, body: Record<string, unknown>): string | null {
+  const fields = route.kindFields?.[kind];
+  if (fields === undefined) return null;
+  const extra = Object.keys(body).find((key) => key !== "kind" && !fields.includes(key));
+  return extra === undefined ? null : `${route.path} forwards kind ${kind} only with ${fields.join(" / ")}, not ${extra}`;
 }
 
 /** The forward for `method` on `pathname` (the remote's own `/api/…` path), or why not. `body` is the
