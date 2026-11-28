@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   finishedReading,
+  labelIn,
   listKeyOf,
   owedAnotherRead,
   parseItemList,
@@ -97,5 +98,20 @@ describe("reading a list", () => {
     expect(owed).toEqual(answered(["art"], true, true));
     expect(finishedReading(owed, {}).again).toBe(true);
     expect(startedReading(finishedReading(owed, {}))).toEqual({ labels: {}, reading: true, again: false });
+  });
+});
+
+describe("labelIn", () => {
+  it("is the answer's own entry for a slug, and null before an answer or for a slug it does not name", () => {
+    expect(labelIn(answered(["art"]), "art")).toEqual({ title: "ART", icon: "star" });
+    expect(labelIn(answered(["art"]), "travel")).toBeNull();
+    expect(labelIn(unanswered(), "art")).toBeNull();
+    expect(labelIn(undefined, "art")).toBeNull();
+  });
+
+  it("does not read the prototype for a slug named like one of its members", () => {
+    ["constructor", "toString", "hasOwnProperty", "__proto__", "valueOf"].forEach((slug) => expect(labelIn(answered(["art"]), slug), slug).toBeNull());
+    const own = parseItemList({ collections: [{ slug: "constructor", title: "Builders" }] }, "collections");
+    expect(labelIn({ labels: own, reading: false, again: false }, "constructor")).toEqual({ title: "Builders", icon: "" });
   });
 });

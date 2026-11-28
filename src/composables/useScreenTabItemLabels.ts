@@ -7,6 +7,7 @@ import type { PaletteScreen } from "./paletteScreens";
 import {
   LIST_FIELD,
   finishedReading,
+  labelIn,
   listKeyOf,
   owedAnotherRead,
   parseItemList,
@@ -63,6 +64,6 @@ export function useScreenTabItemLabels(): { labelOf: (tab: ScreenTab) => ItemLab
     // It follows the tabs alone, so lists are read once per visit and never in a loop.
     effectScope(true).run(() => watch(screenTabs, () => readForVisit(frontTabKey.value), { immediate: true }));
   }
-  const labelOf = (tab: ScreenTab): ItemLabel | null => (tab.item ? (lists.value[listKeyOf(tab.screen, tab.item)]?.labels?.[tab.item.slug] ?? null) : null);
+  const labelOf = (tab: ScreenTab): ItemLabel | null => (tab.item ? labelIn(lists.value[listKeyOf(tab.screen, tab.item)], tab.item.slug) : null);
   return { labelOf };
 }

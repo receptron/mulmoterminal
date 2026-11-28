@@ -47,6 +47,11 @@ export function parseItemList(body: unknown, field: string): Record<string, Item
   return Object.fromEntries(body[field].map(toLabel).filter((pair) => pair !== null));
 }
 
+/** What the list's last answer calls `slug`; only the answer's own entries count, so a slug such as
+ *  `constructor` does not read the object's prototype. */
+export const labelIn = (list: ItemList | undefined, slug: string): ItemLabel | null =>
+  list?.labels && Object.hasOwn(list.labels, slug) ? (list.labels[slug] ?? null) : null;
+
 /** A list while a read of it is in flight. */
 export const startedReading = (before: ItemList | undefined): ItemList => ({ labels: before?.labels ?? null, reading: true, again: false });
 
