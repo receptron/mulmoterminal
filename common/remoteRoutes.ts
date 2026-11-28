@@ -149,10 +149,12 @@ export const REMOTE_ROUTES = {
   museSessions: sessionList(AGENT_SESSION_LIST_PATHS.muse),
   copilotSessions: sessionList(AGENT_SESSION_LIST_PATHS.copilot),
   cursorSessions: sessionList(AGENT_SESSION_LIST_PATHS.cursor),
-  // A Canvas card's own reads: a document, and the source of an HTML page. Neither plugin roots its
-  // path, on the remote or here (CLAUDE.md, "Four surfaces open a file").
+  // A Canvas card's own reads: a document, the source of an HTML page, a model and a workbook. None
+  // of these plugins roots its path, on the remote or here (CLAUDE.md, "Four surfaces open a file").
   documentReads: pluginReads("presentDocument", ["loadDoc", "marpThemes", "bookmarkPattern"]),
   htmlReads: pluginReads("presentHtml", ["loadHtml"]),
+  shapeReads: pluginReads("presentShapeScript", ["loadShape"]),
+  spreadsheetReads: pluginReads("presentSpreadsheet", ["loadSpreadsheet"]),
 } as const satisfies Record<string, RemoteRoute>;
 
 export type RemoteRouteName = keyof typeof REMOTE_ROUTES;

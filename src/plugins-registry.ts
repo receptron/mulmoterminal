@@ -229,6 +229,7 @@ const PACKAGES: Record<string, Registration> = {
     // null here and keeps standing alone, which is correct: nothing identifies
     // it. See canvasIdentity.ts.
     identityOf: filePathIdentity,
+    onRemote: drawnAsIs,
   },
   "@gui-chat-plugin/brep": {
     toolName: brepPlugin.toolDefinition.name,
@@ -287,6 +288,7 @@ const PACKAGES: Record<string, Registration> = {
     css: spreadsheetCss,
     // The grid scrolls inside an h-full column with the cell editor pinned below it.
     height: CANVAS_CARD_HEIGHT,
+    onRemote: drawnAsIs,
   },
   // Keyed by the plugins.json `packages` entry (the cfg.packages loop below looks up
   // PACKAGES[name]). The collection engine + presentCollection tool moved to
