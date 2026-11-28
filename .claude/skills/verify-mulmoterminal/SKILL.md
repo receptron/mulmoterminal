@@ -30,6 +30,8 @@ node --import tsx scripts/verify-scratch.ts start --home "$H" --port "$P"
 
 It prints the URL, the launcher pid, the server log, and `socketPath`. That is the tmux socket this
 server will create, computed from `$H` the same way the server does (`server/config/home-scope.ts`).
+To keep the two in step, the server is given `$H` as an absolute real path and does NOT inherit
+`TMUX_TMPDIR`, so its sockets land under the real `/tmp`. The helper runs on macOS and Linux only.
 It refuses to start when:
 
 - `dist/` is older than `src/`. The page would be the previous build's, and "it works" would be about
@@ -48,9 +50,20 @@ cell covers terminal, pane and MCP checks.
 node --import tsx scripts/verify-scratch.ts doctor --home "$H"
 ```
 
-It exits non-zero unless the server answers, the launcher runs in THIS checkout, and the client build
-is fresh. `scratchTmuxRunning` stays false until the first cell opens. Run it again after anything
-that could have restarted the server.
+It exits non-zero unless all of these hold:
+
+- the server answers;
+- the launcher is the one `start` spawned (`launcherIsThisCheckouts`);
+- the server is identified as this scratch HOME's (`serverIsThisScratchHomes`);
+- the client build is fresh.
+
+`scratchTmuxRunning` stays false until the first cell opens. Run it again after anything that could
+have restarted the server.
+
+"Identified" is not "something answers on the port". Both processes must write to `$H/server.log`,
+which `start` opened for them; the live server writes to its terminal. The launcher must also have
+the start time recorded at spawn. The server must be in an entry it wrote under
+`$H/.mulmoterminal/instances/`, and in the launcher's process group.
 
 ## 3. Drive
 
@@ -102,11 +115,17 @@ node --import tsx scripts/verify-scratch.ts stop --home "$H"
 tmux -S "$(dirname <socketPath>)/mulmoterminal" ls | wc -l   # read-only: the live sessions are all still there
 ```
 
-`stop` signals the launcher it started only while that pid still runs in this checkout. It stops tmux
-only through the socket computed from `$H`. Any other socket — the live one, another scratch HOME's,
-a bare `-L` name — is refused (`scripts/verify-scratch-plan.ts`, pinned by
-`test/scripts/verify-scratch-plan.spec.ts`). It exits non-zero while the server still answers or its
+`stop` signals the launcher's process group only when the launcher or its server is identified as in
+§2. If neither is, it signals nothing: a stale or edited state file cannot aim it elsewhere. It sends
+SIGTERM, and SIGKILL if the port still answers after a grace period.
+
+It stops tmux only once nothing answers on the port, and only through the socket computed from `$H`.
+Any other socket — the live one, another scratch HOME's, a bare `-L` name — is refused. Every one of
+these decisions is in `scripts/verify-scratch-plan.ts`, pinned by
+`test/scripts/verify-scratch-plan.spec.ts`. It exits non-zero while the server still answers or its
 tmux still runs.
+
+If `start` gives up waiting for the server, it stops what it spawned before exiting.
 
 A socket FILE can outlive its server, so "the file is gone" is not the test. `stop` reports
 `scratchTmuxRunning`, from asking tmux.
