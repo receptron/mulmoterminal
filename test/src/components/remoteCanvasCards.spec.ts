@@ -74,6 +74,9 @@ describe("mulmoScriptMediaPath", () => {
     [null, {}, "/api/mulmoscript/media?moviePath="],
     ["lx", { moviePath: "/srv/p/out/a.mp4" }, "/remote/lx/bytes/api/mulmoscript/media?moviePath=%2Fsrv%2Fp%2Fout%2Fa.mp4"],
     ["lx", { moviePath: "m.mp4", pdfPath: "p.pdf" }, "/remote/lx/bytes/api/mulmoscript/media?pdfPath=p.pdf"],
+    [null, { moviePath: "stories/out/a.mp4", root: "ws-1" }, "/api/mulmoscript/media?moviePath=stories%2Fout%2Fa.mp4&root=ws-1"],
+    ["lx", { pdfPath: "stories/out/a.pdf", root: "ws-1" }, "/remote/lx/bytes/api/mulmoscript/media?pdfPath=stories%2Fout%2Fa.pdf&root=ws-1"],
+    [null, { moviePath: "a.mp4", root: undefined }, "/api/mulmoscript/media?moviePath=a.mp4"],
   ])("on %s, fetches %o from %s", (host, query, path) => {
     expect(mulmoScriptMediaPath(host, query)).toBe(path);
   });

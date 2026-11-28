@@ -227,6 +227,11 @@ refused at the gateway).
 - **The movie and PDF bytes** for the card's download and clip player: the host adapter fetches
   `/api/mulmoscript/media` through the byte proxy for a remote cell. A movie or PDF needs no
   sandbox there, but the remote's media route had no `nosniff`, so it now says so.
+- **The stories root travels with a media ref.** A ref is relative to its own root and the same
+  spelling exists in every root, so the adapter sends `root` and the media route resolves under it,
+  as MulmoClaude's does. Before this a named root's movie or PDF resolved under the default root,
+  on this machine as well.
+- The reads may create the remote's empty default stories directory, as its own page's reads do.
 - A picture or a sound arrives as a data URI in the JSON answer, so one larger than the JSON
   forward's cap does not show.
 

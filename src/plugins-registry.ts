@@ -23,7 +23,14 @@ import CollectionCardView from "./components/CollectionCardView.vue";
 import { documentIdentity, filePathIdentity, collectionIdentity } from "./utils/canvasIdentity";
 import type { StoryRootDirs } from "./utils/canvasCardPath";
 import { CANVAS_CARD_HEIGHT_VAR } from "./composables/useCanvasCardHeight";
-import { drawnAsIs, htmlPageOnHost, inlineChartsOnly, mulmoScriptMediaPath, type RemoteCardRule } from "./components/remoteCanvasCards";
+import {
+  drawnAsIs,
+  htmlPageOnHost,
+  inlineChartsOnly,
+  mulmoScriptMediaPath,
+  type MulmoScriptMediaQuery,
+  type RemoteCardRule,
+} from "./components/remoteCanvasCards";
 // Import each package's compiled stylesheet as a STRING (?inline), not as a global
 // side-effect. GuiPanel injects it into a per-view Shadow DOM (see PluginFrame),
 // which encapsulates the plugin's Tailwind preflight so it can't clobber
@@ -60,7 +67,7 @@ import { MULMOSCRIPT_SCOPE } from "../common/fileChannel";
 // because aborting mid-body truncates the movie rather than failing the request.
 const MEDIA_FETCH_TIMEOUT_MS = 300_000;
 
-async function fetchMulmoMediaBlob(host: string | null, query: { moviePath?: string; pdfPath?: string }): Promise<Blob> {
+async function fetchMulmoMediaBlob(host: string | null, query: MulmoScriptMediaQuery): Promise<Blob> {
   const res = await fetchWithTimeout(mulmoScriptMediaPath(host, query), undefined, MEDIA_FETCH_TIMEOUT_MS);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.blob();

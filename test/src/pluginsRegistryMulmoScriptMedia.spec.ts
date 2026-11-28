@@ -49,8 +49,8 @@ describe("the mulmoscript card's media", () => {
 
   it("fetches from the cell's host through the byte proxy for a remote cell", async () => {
     mountOn("lx");
-    await adapter?.fetchMediaBlob?.({ pdfPath: "stories/out/a.pdf" });
-    expect(fetched).toEqual(["/remote/lx/bytes/api/mulmoscript/media?pdfPath=stories%2Fout%2Fa.pdf"]);
+    await adapter?.fetchMediaBlob?.({ pdfPath: "stories/out/a.pdf", root: "ws-1" });
+    expect(fetched).toEqual(["/remote/lx/bytes/api/mulmoscript/media?pdfPath=stories%2Fout%2Fa.pdf&root=ws-1"]);
   });
 
   it("fetches from this server with no Canvas around it", async () => {

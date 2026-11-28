@@ -43,9 +43,17 @@ export const inlineChartsOnly: RemoteCardRule = (result) => {
   return document.charts.every((chart) => chartSources(chart).length === 0) ? result : null;
 };
 
+/** A story's movie or PDF, and the stories root its ref is relative to. */
+export interface MulmoScriptMediaQuery {
+  moviePath?: string;
+  pdfPath?: string;
+  root?: string | undefined;
+}
+
 /** Where a story's movie or PDF is fetched: this server's media route, or the host's through the
  *  byte proxy. */
-export const mulmoScriptMediaPath = (host: string | null, query: { moviePath?: string; pdfPath?: string }): string => {
+export const mulmoScriptMediaPath = (host: string | null, query: MulmoScriptMediaQuery): string => {
   const params = new URLSearchParams(query.pdfPath ? { pdfPath: query.pdfPath } : { moviePath: query.moviePath ?? "" });
+  if (query.root !== undefined) params.set("root", query.root);
   return bytesPath(host, `/api/mulmoscript/media?${params}`);
 };

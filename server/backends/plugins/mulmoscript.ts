@@ -543,7 +543,9 @@ export function mountMulmoScriptMediaRoute(app: Express): void {
       res.status(400).json({ error: "moviePath or pdfPath is required" });
       return;
     }
-    const resolved = ops.resolveStory(wirePath);
+    // A relative ref is relative to ITS stories root, so the root travels with it (as MulmoClaude's
+    // route reads it); without one it names the default root's file of that name.
+    const resolved = ops.resolveStory(wirePath, stringQuery(req, "root") ?? undefined);
     if (!resolved.ok) {
       res.status(failureStatus(resolved.code)).json({ error: resolved.error });
       return;

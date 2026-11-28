@@ -372,6 +372,7 @@ describe("decideForward: a story's media, as bytes", () => {
   it.each([
     [{ moviePath: "stories/out/a.mp4", cwd: "/x" }, "/api/mulmoscript/media?moviePath=stories%2Fout%2Fa.mp4"],
     [{ pdfPath: "/srv/p/output/a.pdf" }, "/api/mulmoscript/media?pdfPath=%2Fsrv%2Fp%2Foutput%2Fa.pdf"],
+    [{ moviePath: "stories/out/a.mp4", root: "ws-1" }, "/api/mulmoscript/media?moviePath=stories%2Fout%2Fa.mp4&root=ws-1"],
   ])("forwards %o", (query, path) => {
     expect(decideForward("GET", "/api/mulmoscript/media", query, REMOTE_BYTE_ROUTES)).toMatchObject({ kind: "forward", path });
   });

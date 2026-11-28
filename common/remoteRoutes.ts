@@ -197,7 +197,7 @@ export const REMOTE_BYTE_ROUTES = {
   htmlFilePage: { method: "GET", path: "/htmlfile/*", key: "none", access: "read", query: ["v", "r"] },
   // A story's movie or PDF, for the card's download and clip player. The remote serves only a story
   // file or an output one of its own dispatches named.
-  mulmoScriptMedia: { method: "GET", path: "/api/mulmoscript/media", key: "none", access: "read", query: ["moviePath", "pdfPath"] },
+  mulmoScriptMedia: { method: "GET", path: "/api/mulmoscript/media", key: "none", access: "read", query: ["moviePath", "pdfPath", "root"] },
 } as const satisfies Record<string, RemoteRoute>;
 
 /** How a route is named in the census: its method and the path as the server mounts it. */
