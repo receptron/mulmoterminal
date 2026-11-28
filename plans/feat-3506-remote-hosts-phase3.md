@@ -204,7 +204,21 @@ generated image, brep, jingle). This step draws three more, reading only:
   - A view's live refresh on a file change: the remote's `plugin:*:file:*` channels are not relayed,
     and this machine's channel of the same name is not opened for a remote card.
   - Saving from a card.
-  - Spreadsheets, scripts, shapes, collections and accounting.
+
+### Models and workbooks
+
+`presentShapeScript` and `presentSpreadsheet` draw the same way as a document: the view's dispatch
+reaches the host, and the gateway forwards only `loadShape` and `loadSpreadsheet`. A model or a
+workbook therefore shows the host's file, and an edit made in the card is not saved (the save is
+refused at the gateway).
+
+Still not drawn on a remote cell:
+
+- **MulmoScript stories.** The next step, on its own: many reads, plus the movie and PDF bytes the
+  view fetches outside the dispatch, while its generation kinds spend money on the host.
+- **Collections and accounting.** Both packages bind a card to a project scope, not to a host, and
+  neither exposes how a host could bind a card's requests to another server. They need a change in
+  the packages first.
 
 ## Out of scope
 

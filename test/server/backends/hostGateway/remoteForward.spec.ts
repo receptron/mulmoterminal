@@ -277,6 +277,8 @@ describe("decideForward: a Canvas card's reads", () => {
     ["/api/plugin/presentDocument", "marpThemes"],
     ["/api/plugin/presentDocument", "bookmarkPattern"],
     ["/api/plugin/presentHtml", "loadHtml"],
+    ["/api/plugin/presentShapeScript", "loadShape"],
+    ["/api/plugin/presentSpreadsheet", "loadSpreadsheet"],
   ])("forwards %s for %s", (path, kind) => {
     expect(decideForward("POST", path, { cwd: "/srv/p", x: "1" }, REMOTE_ROUTES, { kind, path: "/srv/p/a" })).toMatchObject({ kind: "forward", path });
   });
@@ -286,7 +288,10 @@ describe("decideForward: a Canvas card's reads", () => {
     ["a PDF export", "/api/plugin/presentDocument", { kind: "exportPdf", markdown: "x", filename: "a.pdf" }],
     ["an image fill", "/api/plugin/presentDocument", { kind: "fillImages", markdown: "x" }],
     ["a page save", "/api/plugin/presentHtml", { kind: "saveHtml", path: "a.html", html: "x" }],
+    ["a model save", "/api/plugin/presentShapeScript", { kind: "saveShape", path: "a.shape", script: "x" }],
+    ["a workbook save", "/api/plugin/presentSpreadsheet", { kind: "saveSpreadsheet", path: "a.xlsx", sheets: [] }],
     ["the other plugin's read", "/api/plugin/presentHtml", { kind: "loadDoc", path: "a.md" }],
+    ["a workbook read on the model's route", "/api/plugin/presentShapeScript", { kind: "loadSpreadsheet", path: "a.xlsx" }],
     ["the agent's own call", "/api/plugin/presentDocument", { markdown: "# hi", title: "t" }],
     ["a kind that is not text", "/api/plugin/presentDocument", { kind: ["loadDoc"] }],
     ["no body", "/api/plugin/presentDocument", undefined],
@@ -294,7 +299,7 @@ describe("decideForward: a Canvas card's reads", () => {
     expect(decideForward("POST", path, {}, REMOTE_ROUTES, body)).toMatchObject({ kind: "refuse", status: 400 });
   });
 
-  it.each(["/api/plugin/presentSpreadsheet", "/api/plugin/presentMulmoScript", "/api/plugin/manageCollection"])("forwards nothing of %s", (path) => {
+  it.each(["/api/plugin/presentMulmoScript", "/api/plugin/manageCollection", "/api/plugin/renderShapeScript"])("forwards nothing of %s", (path) => {
     expect(decideForward("POST", path, {}, REMOTE_ROUTES, { kind: "loadDoc" })).toMatchObject({ kind: "refuse", status: 404 });
   });
 

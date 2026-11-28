@@ -10,12 +10,14 @@ import { plugin as markdownPlugin } from "@mulmoclaude/markdown-plugin/vue";
 import { plugin as chartPlugin } from "@mulmoclaude/chart-plugin/vue";
 import { plugin as htmlPlugin } from "@mulmoclaude/html-plugin/vue";
 import { plugin as spreadsheetPlugin } from "@gui-chat-plugin/spreadsheet/vue";
+import { plugin as shapeScriptPlugin } from "@gui-chat-plugin/shapescript/vue";
+import { plugin as mulmoScriptPlugin } from "@mulmoclaude/mulmoscript-plugin/vue";
 import { plugin as collectionPlugin } from "@mulmoclaude/collection-plugin/vue";
 import { getPlugin } from "../../src/plugins-registry";
 import { drawnAsIs, htmlPageOnHost, inlineChartsOnly } from "../../src/components/remoteCanvasCards";
 
 const SELF_CONTAINED = [formPlugin, brepPlugin, jingleScriptPlugin, GenerateImagePlugin.plugin];
-const NOT = [spreadsheetPlugin, collectionPlugin];
+const NOT = [mulmoScriptPlugin, collectionPlugin];
 
 describe("the Views a remote cell's Canvas draws", () => {
   it.each(SELF_CONTAINED.map((p) => [p.toolDefinition.name, p] as const))("draws %s as is, its package's own View", (name, p) => {
@@ -26,6 +28,8 @@ describe("the Views a remote cell's Canvas draws", () => {
     [markdownPlugin.toolDefinition.name, drawnAsIs],
     [htmlPlugin.toolDefinition.name, htmlPageOnHost],
     [chartPlugin.toolDefinition.name, inlineChartsOnly],
+    [shapeScriptPlugin.toolDefinition.name, drawnAsIs],
+    [spreadsheetPlugin.toolDefinition.name, drawnAsIs],
   ])("draws %s by its own rule", (name, rule) => {
     expect(getPlugin(name)?.onRemote).toBe(rule);
   });
