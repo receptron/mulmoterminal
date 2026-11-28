@@ -531,6 +531,9 @@ export function mountMulmoScriptDispatchRoute(app: Express): void {
  *  symlink escapes are rejected by the ops' realpath containment. */
 export function mountMulmoScriptMediaRoute(app: Express): void {
   app.get("/api/mulmoscript/media", (req: Request, res: Response) => {
+    // A movie or PDF is never sniffed into a document, and a gateway forwards this route's bytes only
+    // when it says so (server/backends/hostGateway/remoteBytes.ts).
+    res.setHeader("X-Content-Type-Options", "nosniff");
     if (!ops) {
       res.status(503).json({ error: "mulmoScript backend not initialised" });
       return;
@@ -540,7 +543,9 @@ export function mountMulmoScriptMediaRoute(app: Express): void {
       res.status(400).json({ error: "moviePath or pdfPath is required" });
       return;
     }
-    const resolved = ops.resolveStory(wirePath);
+    // A relative ref is relative to ITS stories root, so the root travels with it (as MulmoClaude's
+    // route reads it); without one it names the default root's file of that name.
+    const resolved = ops.resolveStory(wirePath, stringQuery(req, "root") ?? undefined);
     if (!resolved.ok) {
       res.status(failureStatus(resolved.code)).json({ error: resolved.error });
       return;

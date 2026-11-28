@@ -212,10 +212,31 @@ reaches the host, and the gateway forwards only `loadShape` and `loadSpreadsheet
 workbook therefore shows the host's file, and an edit made in the card is not saved (the save is
 refused at the gateway).
 
+### Stories
+
+`presentMulmoScript` draws the same way, reading only:
+
+- **The dispatch:** the gateway forwards the kinds that read a story's pictures, sounds and finished
+  outputs (`beatImage`, `beatAudio`, `beatMovie`, `characterImage`, `movieStatus`, `pdfStatus`) and
+  what is generating (`pendingGenerations`). A generation spends money on the host and is refused,
+  as are an edit and an upload.
+- **`save` is both a read and a write.** Naming only a story it reopens the file, which the view does
+  on mount to show the story as it is on disk; with a script or a beat it writes. So the route lists
+  the fields `save` may carry (`kindFields`: `filePath`, `root`), and a body with any other key is
+  refused.
+- **The movie and PDF bytes** for the card's download and clip player: the host adapter fetches
+  `/api/mulmoscript/media` through the byte proxy for a remote cell. A movie or PDF needs no
+  sandbox there, but the remote's media route had no `nosniff`, so it now says so.
+- **The stories root travels with a media ref.** A ref is relative to its own root and the same
+  spelling exists in every root, so the adapter sends `root` and the media route resolves under it,
+  as MulmoClaude's does. Before this a named root's movie or PDF resolved under the default root,
+  on this machine as well.
+- The reads may create the remote's empty default stories directory, as its own page's reads do.
+- A picture or a sound arrives as a data URI in the JSON answer, so one larger than the JSON
+  forward's cap does not show.
+
 Still not drawn on a remote cell:
 
-- **MulmoScript stories.** The next step, on its own: many reads, plus the movie and PDF bytes the
-  view fetches outside the dispatch, while its generation kinds spend money on the host.
 - **Collections and accounting.** Both packages bind a card to a project scope, not to a host, and
   neither exposes how a host could bind a card's requests to another server. They need a change in
   the packages first.

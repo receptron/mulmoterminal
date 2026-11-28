@@ -129,6 +129,7 @@ describe("mulmoscript backend", () => {
     const res = await routeCall(app)(`/api/mulmoscript/media?${new URLSearchParams({ moviePath: "stories/__movies__/clip.mp4" })}`);
     expect(res.status).toBe(200);
     expect(res.text).toBe("movie-bytes");
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
   });
 
   it("media route 400s without a path, 404s missing files, and rejects traversal", async () => {

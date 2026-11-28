@@ -279,27 +279,57 @@ describe("decideForward: a Canvas card's reads", () => {
     ["/api/plugin/presentHtml", "loadHtml"],
     ["/api/plugin/presentShapeScript", "loadShape"],
     ["/api/plugin/presentSpreadsheet", "loadSpreadsheet"],
+    ...["beatImage", "beatAudio", "beatMovie", "characterImage", "movieStatus", "pdfStatus", "pendingGenerations"].map((kind) => [
+      "/api/plugin/presentMulmoScript",
+      kind,
+    ]),
   ])("forwards %s for %s", (path, kind) => {
     expect(decideForward("POST", path, { cwd: "/srv/p", x: "1" }, REMOTE_ROUTES, { kind, path: "/srv/p/a" })).toMatchObject({ kind: "forward", path });
   });
 
   it.each([
+    ["a story", { kind: "save", filePath: "stories/a.json" }],
+    ["a story under a root", { kind: "save", filePath: "stories/a.json", root: "talks" }],
+    ["nothing but the kind", { kind: "save" }],
+  ])("forwards the reopen of %s", (_name, body) => {
+    expect(decideForward("POST", "/api/plugin/presentMulmoScript", {}, REMOTE_ROUTES, body)).toMatchObject({ kind: "forward" });
+  });
+
+  const STORY_WRITES = [
+    "updateBeat",
+    "updateScript",
+    "renderBeat",
+    "renderCharacter",
+    "generateBeatAudio",
+    "generateMovie",
+    "generatePdf",
+    "uploadBeatImage",
+    "uploadCharacterImage",
+  ];
+  const refused: readonly (readonly [string, string, unknown])[] = [
     ["a save", "/api/plugin/presentDocument", { kind: "saveDoc", path: "a.md", markdown: "x" }],
     ["a PDF export", "/api/plugin/presentDocument", { kind: "exportPdf", markdown: "x", filename: "a.pdf" }],
     ["an image fill", "/api/plugin/presentDocument", { kind: "fillImages", markdown: "x" }],
     ["a page save", "/api/plugin/presentHtml", { kind: "saveHtml", path: "a.html", html: "x" }],
     ["a model save", "/api/plugin/presentShapeScript", { kind: "saveShape", path: "a.shape", script: "x" }],
     ["a workbook save", "/api/plugin/presentSpreadsheet", { kind: "saveSpreadsheet", path: "a.xlsx", sheets: [] }],
+    ...STORY_WRITES.map((kind) => [`a story's ${kind}`, "/api/plugin/presentMulmoScript", { kind, filePath: "stories/a.json", beatIndex: 0 }] as const),
+    ["a story saved with a script", "/api/plugin/presentMulmoScript", { kind: "save", script: { beats: [] }, filename: "a" }],
+    ["a story saved over a path", "/api/plugin/presentMulmoScript", { kind: "save", filePath: "stories/a.json", script: { beats: [] } }],
+    ["a beat replaced through a save", "/api/plugin/presentMulmoScript", { kind: "save", filePath: "stories/a.json", beatIndex: 0, beat: {} }],
+    ["a save carrying a field nobody listed", "/api/plugin/presentMulmoScript", { kind: "save", filePath: "stories/a.json", chatSessionId: "s" }],
+    ["a story the agent presents", "/api/plugin/presentMulmoScript", { script: {}, filename: "a" }],
     ["the other plugin's read", "/api/plugin/presentHtml", { kind: "loadDoc", path: "a.md" }],
     ["a workbook read on the model's route", "/api/plugin/presentShapeScript", { kind: "loadSpreadsheet", path: "a.xlsx" }],
     ["the agent's own call", "/api/plugin/presentDocument", { markdown: "# hi", title: "t" }],
     ["a kind that is not text", "/api/plugin/presentDocument", { kind: ["loadDoc"] }],
     ["no body", "/api/plugin/presentDocument", undefined],
-  ])("refuses %s", (_name, path, body) => {
+  ];
+  it.each(refused)("refuses %s", (_name, path, body) => {
     expect(decideForward("POST", path, {}, REMOTE_ROUTES, body)).toMatchObject({ kind: "refuse", status: 400 });
   });
 
-  it.each(["/api/plugin/presentMulmoScript", "/api/plugin/manageCollection", "/api/plugin/renderShapeScript"])("forwards nothing of %s", (path) => {
+  it.each(["/api/plugin/manageCollection", "/api/plugin/manageAccounting", "/api/plugin/renderShapeScript"])("forwards nothing of %s", (path) => {
     expect(decideForward("POST", path, {}, REMOTE_ROUTES, { kind: "loadDoc" })).toMatchObject({ kind: "refuse", status: 404 });
   });
 
@@ -334,5 +364,20 @@ describe("decideForward: an HTML card's page, as bytes", () => {
 
   it("is not a JSON route", () => {
     expect(decideForward("GET", "/artifacts/html/a.html", {})).toMatchObject({ kind: "refuse", status: 404 });
+  });
+});
+
+// A story's movie or PDF (#3506): only the two wire paths cross, and only as bytes.
+describe("decideForward: a story's media, as bytes", () => {
+  it.each([
+    [{ moviePath: "stories/out/a.mp4", cwd: "/x" }, "/api/mulmoscript/media?moviePath=stories%2Fout%2Fa.mp4"],
+    [{ pdfPath: "/srv/p/output/a.pdf" }, "/api/mulmoscript/media?pdfPath=%2Fsrv%2Fp%2Foutput%2Fa.pdf"],
+    [{ moviePath: "stories/out/a.mp4", root: "ws-1" }, "/api/mulmoscript/media?moviePath=stories%2Fout%2Fa.mp4&root=ws-1"],
+  ])("forwards %o", (query, path) => {
+    expect(decideForward("GET", "/api/mulmoscript/media", query, REMOTE_BYTE_ROUTES)).toMatchObject({ kind: "forward", path });
+  });
+
+  it("is not a JSON route", () => {
+    expect(decideForward("GET", "/api/mulmoscript/media", { moviePath: "a.mp4" })).toMatchObject({ kind: "refuse", status: 404 });
   });
 });
