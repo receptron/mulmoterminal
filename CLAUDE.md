@@ -77,8 +77,9 @@ When cleaning up a test server, only `tmux -S <absolute socket path> kill-server
   back to `/tmp/tmux-<uid>/`, where the live socket is.
 - **`tmux -L mulmoterminal …`** in any form — that IS the live server's name.
 
-To run a test server, start it with a scratch `HOME`; it then uses `-L mulmoterminal-<hash>`, and
-you take the socket path for cleanup from what it actually created under `/tmp/tmux-<uid>/`.
+To run a test server, use the `verify-mulmoterminal` skill (`.claude/skills/verify-mulmoterminal/`):
+its helper starts one on a scratch `HOME`, computes the `-L mulmoterminal-<hash>` socket that server
+creates, and stops only that socket and the launcher it started.
 
 ## Layout
 - `server/` — backend (PTY sessions, config, agents, backends). Ships user-facing skills in `server/skills/`.

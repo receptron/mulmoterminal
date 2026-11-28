@@ -111,7 +111,7 @@ export default [
     rules: { "vue/no-restricted-block": "off" },
   },
   {
-    files: ["server/**/*.{js,mjs}", "bin/**/*.js", "scripts/**/*.{js,mjs}", "blueprints/**/*.mjs"],
+    files: ["server/**/*.{js,mjs}", "bin/**/*.js", "scripts/**/*.{js,mjs}", "blueprints/**/*.mjs", ".claude/skills/**/*.mjs"],
     languageOptions: {
       globals: {
         ...globals.node,
@@ -122,8 +122,9 @@ export default [
     // The launcher's job is to run the user's installed CLIs — claude, gh, tmux,
     // codex, git — which have no portable absolute path and are found on PATH by
     // design. no-os-command-from-path fights that premise on every spawn, so it
-    // is off here rather than suppressed inline at each call.
-    files: ["bin/**/*.js"],
+    // is off here rather than suppressed inline at each call. The verify helper runs the same
+    // tmux (and lsof) against a server it started, so it is in the same position.
+    files: ["bin/**/*.js", "scripts/verify-scratch.ts"],
     rules: {
       "sonarjs/no-os-command-from-path": "off",
     },
