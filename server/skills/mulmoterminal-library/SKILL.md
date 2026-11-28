@@ -74,12 +74,46 @@ Before proposing, read what is already there (the memory folder, the `CLAUDE.md`
 the skills) so the proposal adds to it rather than repeats it. If the conversation holds nothing
 worth keeping as this target, say so and stop — that is a good answer.
 
+### Before a rule: can something enforce it instead?
+
+A line in a `CLAUDE.md` is read, not run. It is the weakest way to stop a mistake, and the more lines
+the file holds, the more of them get skimmed. So before drafting a `rule` — whether from `promote
+rule`, `repeat rule` or a tidy-up's `move` — ask what could hold it **mechanically** in the project the
+rule is about. Strongest first:
+
+1. **The structure itself** — an API, a file layout or a single function that makes the wrong thing
+   impossible to write.
+2. **A type** that refuses it.
+3. **A lint rule or CI check** whose message says how to fix it — often an existing rule to switch on.
+4. **A test** that goes red when it happens.
+5. **A rule in a `CLAUDE.md`** — last, for what none of the above can express: judgement, wording,
+   the order of steps in a workflow.
+
+When one of 1–4 can hold it, offer that as the **first** candidate. You do not write code or lint
+config here. So the candidate is an `issue` for the check, or a `plan` when this repository is the one
+the check belongs in, made exactly as those targets are — an issue's duplicate check and creation only
+after approval included. It names:
+
+- the check;
+- where it goes;
+- the real mistake from the conversation it must catch — the check is not done until it goes red on
+  that mistake;
+- what it must still let through.
+
+Offer the rule beside it only for the part the check cannot hold, or as the short **why** next to it.
+When nothing in 1–4 fits, say so in one line, with the reason, and draft the rule as before.
+
+A rule for the global `~/.claude/CLAUDE.md` covers every repository. A check lives in one, so it seldom
+replaces such a rule. Offer one there only when the rule is really about this project.
+
 ## 3. Show it, and ask
 
-Show **exactly** what will change: the file path and a diff (or the whole new file). Several
-candidates? Show them all and let the user pick (AskUserQuestion when it is available). Then put the
-chosen change, with its path and diff and the backup you will take, in your plan (ExitPlanMode): the
-user approving it is the yes. **Do not write anything before the user says yes.** If plan mode is
+Show **exactly** what will change: the file path and a diff (or the whole new file). For an issue,
+show the draft itself and what the duplicate search found — there is no file and no backup, and
+`gh issue create` runs only after the yes. Several candidates? Show them all and let the user pick
+(AskUserQuestion when it is available). Then put the chosen change in your plan (ExitPlanMode): its
+path, diff and the backup you will take, or for an issue the draft. The user approving it is the
+yes. **Do not write anything before the user says yes.** If plan mode is
 not on (the session was started some other way), ask for the yes explicitly instead.
 
 End the plan with one line telling the user to approve it with **"Yes, manually approve edits"**, not
@@ -128,7 +162,7 @@ Propose, each with its reason, only what the files and the code show:
 | merge | two or more memories say the same thing, or one corrects another. Keep the clearest name, combine the text, and point every `[[link]]` to a merged-away memory at the one kept (in every memory of the folder; not inside code) |
 | remove | a memory no longer holds: the file, function, flag or behaviour it describes is gone or changed — **check the code in this directory before saying so**, and quote what you found. A later memory or a `CLAUDE.md` that says the opposite counts too |
 | fix | what the health check reported: a memory missing from `MEMORY.md`, frontmatter missing `name`, `description` or `type`, a `[[link]]` to no memory, a `MEMORY.md` too long for Claude Code to read to the end (shorten its lines, never drop a memory from it) |
-| move | a standing rule ("always…", "never…") that belongs in a `CLAUDE.md`, or a procedure that belongs in a skill — the same as the `rule` and `skill` targets above, asking which layer or which skill |
+| move | a standing rule ("always…", "never…") that belongs in a `CLAUDE.md`, or a procedure that belongs in a skill — the same as the `rule` and `skill` targets above, asking which layer or which skill. A rule first goes through **Before a rule: can something enforce it instead?** |
 
 Keep `MEMORY.md` and the files in step: a memory removed or merged away loses its line, a new or
 renamed one gets one. If nothing is worth changing, say so and stop — that is a good answer. Then
