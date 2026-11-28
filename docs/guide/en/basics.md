@@ -272,7 +272,7 @@ both ends.
   The cell appears when you start something. For a plain shell in a terminal's directory, use
   *New terminal here* in its path menu.
   Up to **9 cells** per page; overflow moves to the next page (tab).
-- The ordering button shows the current mode and opens a menu of all three, with the current one checked — **auto** (attention-first: cells needing you float up), **manual** (arrange them yourself: each cell's move buttons, or in the roster drag a row by its header, or use its ⋮ menu), and **priority** (the order each project declares as `orderPriority` in its `.mulmoterminal.json`, see [Configuration](config.html#order-priority)).
+- The ordering button next to **+** chooses how cells are ordered: **Attention first** (cells that need you come first), **Manual** (the way you arrange them) or **Project priority** (by a rank you give each project). → [Cell order](ordering.html)
 
 ![Agents running in parallel](../images/grid-2x2.png)
 
