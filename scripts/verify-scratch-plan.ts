@@ -51,11 +51,11 @@ export const isSupportedPlatform = (platform: string): boolean => SUPPORTED_PLAT
 export function scratchSocketPath({ scratchHome, accountHome, tmuxSocketDir }: ScratchPaths): string | null {
   const suffix = homeScopeSuffix(scratchHome, accountHome);
   if (suffix === "") return null;
-  return path.join(tmuxSocketDir, `${SOCKET_BASE_NAME}${suffix}`);
+  return path.posix.join(tmuxSocketDir, `${SOCKET_BASE_NAME}${suffix}`);
 }
 
-/** Where tmux keeps `-L` sockets when TMUX_TMPDIR is unset: `<real /tmp>/tmux-<uid>`. */
-export const tmuxSocketDirFor = (realTmpDir: string, uid: number): string => path.join(realTmpDir, `tmux-${uid}`);
+/** Where tmux keeps `-L` sockets when TMUX_TMPDIR is unset: `<real /tmp>/tmux-<uid>`. POSIX paths: tmux has no other kind. */
+export const tmuxSocketDirFor = (realTmpDir: string, uid: number): string => path.posix.join(realTmpDir, `tmux-${uid}`);
 
 export type Decision = { ok: true } | { ok: false; reason: string };
 

@@ -189,7 +189,9 @@ function tmuxServerRunning(socketPath: string): boolean {
 function prepareHome(home: string): void {
   // The identity checks compare fd 1's path with this one, which a symlink would make differ.
   const log = logPathFor(home);
-  if (existsSync(log) && !lstatSync(log).isFile()) fail(`${log} exists and is not a regular file; remove it first`);
+  // lstat, not existsSync: existsSync follows a link and calls a dangling one absent.
+  const entry = lstatSync(log, { throwIfNoEntry: false });
+  if (entry !== undefined && !entry.isFile()) fail(`${log} exists and is not a regular file; remove it first`);
   mkdirSync(path.join(home, "work"), { recursive: true });
   const zshrc = path.join(home, ".zshrc");
   if (!existsSync(zshrc)) writeFileSync(zshrc, "PROMPT='%1~ $ '\n");

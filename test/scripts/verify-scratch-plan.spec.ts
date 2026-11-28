@@ -21,12 +21,12 @@ import {
 const ACCOUNT_HOME = "/Users/someone";
 const SOCKET_DIR = "/private/tmp/tmux-501";
 const paths: ScratchPaths = { scratchHome: "/private/tmp/verify-home", accountHome: ACCOUNT_HOME, tmuxSocketDir: SOCKET_DIR };
-const scratchSocket = path.join(SOCKET_DIR, `mulmoterminal${homeScopeSuffix(paths.scratchHome, ACCOUNT_HOME)}`);
+const scratchSocket = path.posix.join(SOCKET_DIR, `mulmoterminal${homeScopeSuffix(paths.scratchHome, ACCOUNT_HOME)}`);
 
 describe("scratchSocketPath", () => {
   it("is the name the server derives for that HOME, in the tmux socket directory", () => {
     expect(scratchSocketPath(paths)).toBe(scratchSocket);
-    expect(path.basename(scratchSocket)).toMatch(/^mulmoterminal-[0-9a-f]{16}$/);
+    expect(path.posix.basename(scratchSocket)).toMatch(/^mulmoterminal-[0-9a-f]{16}$/);
   });
 
   it("is null for the account's own home, whose server is the live one", () => {
@@ -45,11 +45,11 @@ describe("socketStopDecision", () => {
   });
 
   it.each([
-    ["the live server's socket", path.join(SOCKET_DIR, "mulmoterminal")],
-    ["the default tmux socket", path.join(SOCKET_DIR, "default")],
+    ["the live server's socket", path.posix.join(SOCKET_DIR, "mulmoterminal")],
+    ["the default tmux socket", path.posix.join(SOCKET_DIR, "default")],
     ["another scratch home's socket", scratchSocketPath({ ...paths, scratchHome: "/private/tmp/other-home" }) ?? ""],
-    ["the right name in another directory", path.join("/tmp/elsewhere", path.basename(scratchSocket))],
-    ["a bare -L name", path.basename(scratchSocket)],
+    ["the right name in another directory", path.posix.join("/tmp/elsewhere", path.posix.basename(scratchSocket))],
+    ["a bare -L name", path.posix.basename(scratchSocket)],
     ["an empty path", ""],
   ])("refuses %s", (_label, socketPath) => {
     expect(socketStopDecision(socketPath, paths).ok).toBe(false);
@@ -57,7 +57,7 @@ describe("socketStopDecision", () => {
 
   it("refuses everything when the scratch HOME is the account's own", () => {
     const live = { ...paths, scratchHome: ACCOUNT_HOME };
-    expect(socketStopDecision(path.join(SOCKET_DIR, "mulmoterminal"), live).ok).toBe(false);
+    expect(socketStopDecision(path.posix.join(SOCKET_DIR, "mulmoterminal"), live).ok).toBe(false);
   });
 });
 
