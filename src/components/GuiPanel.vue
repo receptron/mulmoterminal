@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onBeforeUnmount } from "vue";
+import { ref, computed, watch, nextTick, onBeforeUnmount, provide } from "vue";
 import { useSessionFeed } from "../composables/useSessionFeed";
 import { onToolGroupsAnnounced } from "../composables/useToolGroupsAnnounce";
 import { getPlugin } from "../plugins-registry";
@@ -18,6 +18,8 @@ import { pushCollectionSurface, popCollectionSurface, type CollectionSurface } f
 import { cachedProjectIdForCwd, projectIdForCwd } from "../composables/collectionProject";
 import { useI18n } from "vue-i18n";
 import { pathOnHost, sessionChannelOf } from "./remoteCell";
+import type { CanvasCardResult } from "./remoteCanvasCards";
+import { PLUGIN_HOST_KEY } from "../composables/pluginRuntime";
 
 const { t } = useI18n();
 
@@ -26,15 +28,7 @@ const { t } = useI18n();
 // pub/sub channel, history is replayed from /api/agent/toolResults/:id on (re)select.
 // Each result is rendered by its plugin's viewComponent (getPlugin(toolName)) — no
 // hard-coded type switch. See the spike doc.
-interface ToolResult {
-  uuid: string;
-  toolName: string;
-  title?: string;
-  message?: string;
-  data?: unknown;
-  jsonData?: unknown;
-  viewState?: unknown;
-}
+type ToolResult = CanvasCardResult;
 
 const props = defineProps<{
   sessionId: string | null;
@@ -53,8 +47,7 @@ const props = defineProps<{
   // panel is usable, which keeps the single view (where it always is) unchanged.
   unavailable?: "no-session" | "no-canvas-mcp" | null;
   /** The remote host the session runs on (#3506), null or absent for this machine. Its cards are read
-   *  there, and only a card that draws from the result alone is drawn: the rest read files and plugin
-   *  routes on that host. */
+   *  there, and a card is drawn only where its plugin says how it draws from there (`onRemote`). */
   host?: string | null;
 }>();
 const emit = defineEmits<{ toggleExpand: []; close: [] }>();
@@ -192,14 +185,18 @@ const cardKey = (result: ToolResult) => `${scopeId.value ?? ""}\u0000${result.uu
 // undefined three times — and a non-null assertion inside a template is invisible to
 // @typescript-eslint/no-non-null-assertion, which is on and catches the same thing in .ts (#1231).
 // Resolving here puts it where the compiler proves it instead.
-// A remote cell's card that reads its host's files or plugin routes is listed by name instead (#3506).
+// A remote cell's card is drawn from the result its plugin hands the view for that host, or listed by
+// name when it cannot be drawn here (#3506).
 const drawableCards = computed(() =>
   cards.value.flatMap((result) => {
     const plugin = getPlugin(result.toolName);
     if (!plugin) return [];
-    return [{ result, plugin, drawn: !props.host || plugin.selfContained === true }];
+    const shown = props.host ? (plugin.onRemote?.(result, props.host) ?? null) : result;
+    return [{ result, plugin, shown }];
   }),
 );
+// A view's own dispatch goes to the host its card came from.
+provide(PLUGIN_HOST_KEY, () => props.host ?? null);
 
 // Auto-follow. The pane never scrolled itself, so each new card landed below the fold and the
 // user had to go find it; collapsing above removes most of that, but a card can still arrive
@@ -440,8 +437,8 @@ const hasTools = computed(() => toolSections.value.some((section) => section.too
       </div>
       <!-- Guarded as well as cleared on session change: a stale view rendered under an
            "unavailable" heading would contradict it. -->
-      <template v-for="{ result, plugin, drawn } in unavailable ? [] : drawableCards" :key="cardKey(result)">
-        <div v-if="!drawn" data-testid="canvas-remote-card" class="text-[13px] text-dim [&+&]:mt-4 [&+&]:border-t [&+&]:border-border [&+&]:pt-4">
+      <template v-for="{ result, plugin, shown } in unavailable ? [] : drawableCards" :key="cardKey(result)">
+        <div v-if="shown === null" data-testid="canvas-remote-card" class="text-[13px] text-dim [&+&]:mt-4 [&+&]:border-t [&+&]:border-border [&+&]:pt-4">
           <code class="rounded-[4px] bg-subtle px-[5px] py-px">{{ result.title ?? result.toolName }}</code>
           <p class="mt-1">This card reads files on {{ host }}, which this Canvas does not draw yet. Open it in MulmoTerminal on {{ host }}.</p>
         </div>
@@ -454,7 +451,7 @@ const hasTools = computed(() => toolSections.value.some((section) => section.too
         >
           <component
             :is="plugin.viewComponent"
-            :selected-result="result"
+            :selected-result="shown"
             :send-text-message="sendTextMessage"
             @update-result="(update: Partial<ToolResult>) => onUpdateResult(result, update)"
           />

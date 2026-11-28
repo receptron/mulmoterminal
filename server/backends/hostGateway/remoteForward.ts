@@ -11,18 +11,27 @@ import { SESSION_ID_RE } from "../../config/env.js";
 
 export const REMOTE_PATH_MAX = 4096;
 const SESSION_SEGMENT = ":sid";
+const REST_SEGMENT = "*";
 
 export type ForwardDecision = { kind: "forward"; route: RemoteRoute; path: string } | { kind: "refuse"; status: 400 | 404; reason: string };
 
 const refuse = (status: 400 | 404, reason: string): ForwardDecision => ({ kind: "refuse", status, reason });
 
+const fills = (segment: string, given: string): boolean => (segment === SESSION_SEGMENT ? SESSION_ID_RE.test(given) : segment === given);
+
+// The remote decodes each segment and refuses one still naming a parent, so only the raw spelling is
+// held here.
+const isRestSegment = (given: string): boolean => given !== "" && given !== "." && given !== ".." && !given.includes("\0");
+
 /** The route's path with its session segments filled from `pathname`, or null when they differ. */
 function filledPath(route: RemoteRoute, pathname: string): string | null {
   const want = route.path.split("/");
   const got = pathname.split("/");
-  if (want.length !== got.length) return null;
-  const same = want.every((segment, i) => (segment === SESSION_SEGMENT ? SESSION_ID_RE.test(got[i] ?? "") : segment === got[i]));
-  return same ? pathname : null;
+  const rest = want.at(-1) === REST_SEGMENT;
+  const fixed = rest ? want.slice(0, -1) : want;
+  if (rest ? got.length <= fixed.length : got.length !== want.length) return null;
+  const same = fixed.every((segment, i) => fills(segment, got[i] ?? "")) && got.slice(fixed.length).every(isRestSegment);
+  return same && pathname.length <= REMOTE_PATH_MAX ? pathname : null;
 }
 
 const isCleanAbsolute = (value: string): boolean =>
@@ -84,6 +93,14 @@ function bodyEscape(route: RemoteRoute, cwd: string | null, body: unknown): stri
   return bad === undefined ? null : `${bad} must be an absolute path inside ${cwd ?? "the cwd"}`;
 }
 
+// A body for a route that forwards some of its kinds names one of them; no kind is no forward.
+function kindRefused(route: RemoteRoute, body: unknown): string | null {
+  const kinds = route.bodyKinds;
+  if (kinds === undefined) return null;
+  const kind = isRecord(body) ? body.kind : undefined;
+  return typeof kind === "string" && kinds.includes(kind) ? null : `${route.path} forwards only kind ${kinds.join(" / ")}`;
+}
+
 /** The forward for `method` on `pathname` (the remote's own `/api/…` path), or why not. `body` is the
  *  parsed JSON body, for a route whose body names a path. */
 export function decideForward(
@@ -97,7 +114,7 @@ export function decideForward(
   if (!matched) return refuse(404, `${method.toUpperCase()} ${pathname} is not forwarded to a remote host`);
   const result = forwardedQuery(matched, isRecord(query) ? query : {});
   if ("reason" in result) return refuse(400, result.reason);
-  const escape = bodyEscape(matched, result.params.get("cwd"), body);
+  const escape = bodyEscape(matched, result.params.get("cwd"), body) ?? kindRefused(matched, body);
   if (escape !== null) return refuse(400, escape);
   const search = result.params.toString();
   return { kind: "forward", route: matched, path: search ? `${pathname}?${search}` : pathname };

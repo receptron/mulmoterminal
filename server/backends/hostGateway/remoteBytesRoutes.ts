@@ -1,4 +1,5 @@
-// GET /remote/<id>/bytes/api/… — a file or rendered document from a remote host, as bytes (#3506).
+// GET /remote/<id>/bytes/… — a file, a rendered document or an HTML card's page from a remote host,
+// as bytes (#3506).
 //
 // The route is decided by the same table rules as the JSON forward (remoteForward.ts) against
 // REMOTE_BYTE_ROUTES, so a path stays inside the cell's directory. What comes back is checked by
@@ -21,7 +22,7 @@ export interface RemoteBytesDeps {
   fetchImpl?: typeof fetch;
 }
 
-const REMOTE_BYTES = /^\/remote\/[^/]+\/bytes\/api\//;
+const REMOTE_BYTES = /^\/remote\/[^/]+\/bytes\//;
 
 function refuse(res: Response, status: number, error: string): void {
   res.status(status).json({ error });

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { decideForward, REMOTE_PATH_MAX, staysInside } from "../../../../server/backends/hostGateway/remoteForward.js";
-import { REMOTE_ROUTES, type RemoteRoute } from "../../../../common/remoteRoutes.js";
+import { REMOTE_BYTE_ROUTES, REMOTE_ROUTES, type RemoteRoute } from "../../../../common/remoteRoutes.js";
 import { DROP_FILENAME_HEADER } from "../../../../common/dropUpload.js";
 import { AGENT_SESSION_LIST_PATHS } from "../../../../common/agentSessionList.js";
 
@@ -75,7 +75,8 @@ describe("decideForward: which requests cross", () => {
   it("ships a table whose every route decides to forward itself", () => {
     Object.values(REMOTE_ROUTES).forEach((route) => {
       const query = { ...(route.key === "cwd" ? { cwd: "/srv/p" } : {}), ...(namesSession(route.query) ? { session: SESSION, sessionId: SESSION } : {}) };
-      expect(decideForward(route.method, route.path.replace(":sid", SESSION), query)).toMatchObject({ kind: "forward", route });
+      const body = "bodyKinds" in route ? { kind: route.bodyKinds[0] } : undefined;
+      expect(decideForward(route.method, route.path.replace(":sid", SESSION), query, REMOTE_ROUTES, body)).toMatchObject({ kind: "forward", route });
     });
   });
 });
@@ -265,5 +266,68 @@ describe("staysInside", () => {
   });
   it("refuses an overlong value", () => {
     expect(staysInside("/srv/p", "a".repeat(REMOTE_PATH_MAX + 1))).toBe(false);
+  });
+});
+
+// A Canvas card's own reads (#3506): one path per plugin serves reads and writes, so only the kinds
+// that read cross, and a body naming no kind — the agent's own present call — does not.
+describe("decideForward: a Canvas card's reads", () => {
+  it.each([
+    ["/api/plugin/presentDocument", "loadDoc"],
+    ["/api/plugin/presentDocument", "marpThemes"],
+    ["/api/plugin/presentDocument", "bookmarkPattern"],
+    ["/api/plugin/presentHtml", "loadHtml"],
+  ])("forwards %s for %s", (path, kind) => {
+    expect(decideForward("POST", path, { cwd: "/srv/p", x: "1" }, REMOTE_ROUTES, { kind, path: "/srv/p/a" })).toMatchObject({ kind: "forward", path });
+  });
+
+  it.each([
+    ["a save", "/api/plugin/presentDocument", { kind: "saveDoc", path: "a.md", markdown: "x" }],
+    ["a PDF export", "/api/plugin/presentDocument", { kind: "exportPdf", markdown: "x", filename: "a.pdf" }],
+    ["an image fill", "/api/plugin/presentDocument", { kind: "fillImages", markdown: "x" }],
+    ["a page save", "/api/plugin/presentHtml", { kind: "saveHtml", path: "a.html", html: "x" }],
+    ["the other plugin's read", "/api/plugin/presentHtml", { kind: "loadDoc", path: "a.md" }],
+    ["the agent's own call", "/api/plugin/presentDocument", { markdown: "# hi", title: "t" }],
+    ["a kind that is not text", "/api/plugin/presentDocument", { kind: ["loadDoc"] }],
+    ["no body", "/api/plugin/presentDocument", undefined],
+  ])("refuses %s", (_name, path, body) => {
+    expect(decideForward("POST", path, {}, REMOTE_ROUTES, body)).toMatchObject({ kind: "refuse", status: 400 });
+  });
+
+  it.each(["/api/plugin/presentSpreadsheet", "/api/plugin/presentMulmoScript", "/api/plugin/manageCollection"])("forwards nothing of %s", (path) => {
+    expect(decideForward("POST", path, {}, REMOTE_ROUTES, { kind: "loadDoc" })).toMatchObject({ kind: "refuse", status: 404 });
+  });
+
+  it("forwards no GET of the read routes", () => {
+    expect(decideForward("GET", "/api/plugin/presentDocument", {})).toMatchObject({ kind: "refuse", status: 404 });
+  });
+});
+
+// An HTML card's page (#3506): the rest of the path is the page, held to clean segments, and only
+// the page's own version marks cross.
+describe("decideForward: an HTML card's page, as bytes", () => {
+  it.each([
+    ["/artifacts/html/2026/a%20b.html", { v: "3", r: "1", cwd: "/x" }, "/artifacts/html/2026/a%20b.html?v=3&r=1"],
+    ["/htmlfile/ws/docs/page.html", {}, "/htmlfile/ws/docs/page.html"],
+    ["/htmlfile/abs/srv/p/index.htm", { v: "2" }, "/htmlfile/abs/srv/p/index.htm?v=2"],
+  ])("forwards %s", (pathname, query, path) => {
+    expect(decideForward("GET", pathname, query, REMOTE_BYTE_ROUTES)).toMatchObject({ kind: "forward", path });
+  });
+
+  it.each([
+    ["the mount itself", "/artifacts/html"],
+    ["an empty rest", "/artifacts/html/"],
+    ["an empty segment", "/htmlfile/ws//a.html"],
+    ["a parent segment", "/artifacts/html/../secret.html"],
+    ["a current segment", "/htmlfile/abs/./a.html"],
+    ["a NUL", "/htmlfile/abs/a\0.html"],
+    ["a path past the cap", `/htmlfile/abs/${"a".repeat(REMOTE_PATH_MAX)}.html`],
+    ["another mount", "/artifacts/images/a.png"],
+  ])("refuses %s", (_name, pathname) => {
+    expect(decideForward("GET", pathname, {}, REMOTE_BYTE_ROUTES)).toMatchObject({ kind: "refuse", status: 404 });
+  });
+
+  it("is not a JSON route", () => {
+    expect(decideForward("GET", "/artifacts/html/a.html", {})).toMatchObject({ kind: "refuse", status: 404 });
   });
 });

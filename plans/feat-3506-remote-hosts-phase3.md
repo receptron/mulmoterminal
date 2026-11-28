@@ -179,6 +179,33 @@ actions, and talk needs handoff in both directions.
 - **The Linux container over `ssh -L`**, as in the phase 1 check, for the Files pane and a drop.
 - Name in each PR what was not exercised.
 
+## Canvas cards on a remote cell
+
+A card's view runs on the Mac and builds its requests itself, so the byte proxy alone did not draw
+it. Before this step a remote cell drew only the views that need nothing but the result (form,
+generated image, brep, jingle). This step draws three more, reading only:
+
+- **Documents (`presentDocument`) and HTML pages (`presentHtml`).**
+  - The plugin runtime takes the cell's host from the Canvas (`PLUGIN_HOST_KEY`), so a view's
+    dispatch goes to `/remote/<id>/api/plugin/<tool>`.
+  - The gateway forwards that POST only for the kinds that read: `loadDoc`, `marpThemes` and
+    `bookmarkPattern` for a document, and `loadHtml` for a page. A save, an export, an image fill,
+    or a body naming no kind (the agent's own present call) is refused (`bodyKinds`).
+  - Neither plugin roots its `path`, on the remote or here. That is the same reach the remote's
+    own page has.
+- **The HTML page itself.** The view is handed `previewUrl` on the byte proxy. `/artifacts/html/*`
+  and `/htmlfile/*` are byte routes, and their pages must carry the remote's sandbox, which allows
+  scripts and nothing more.
+- **Charts written inline (`presentChart`).** A chart that reads a spreadsheet range is still listed
+  by name: it would read the range and watch the workbook on this machine.
+- **Left as they are:**
+  - A picture a document links by relative path still resolves against this machine
+    (`/api/files/raw` with no `cwd`).
+  - A view's live refresh on a file change: the remote's `plugin:*:file:*` channels are not relayed,
+    and this machine's channel of the same name is not opened for a remote card.
+  - Saving from a card.
+  - Spreadsheets, scripts, shapes, collections and accounting.
+
 ## Out of scope
 
 - Collections and talk (after this plan).

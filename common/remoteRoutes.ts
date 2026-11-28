@@ -15,7 +15,8 @@ export type RemoteRouteMethod = "GET" | "POST" | "PUT" | "DELETE";
 
 export interface RemoteRoute {
   method: RemoteRouteMethod;
-  /** The remote's own path. A `:sid` segment is a session id. */
+  /** The remote's own path. A `:sid` segment is a session id; a final `*` is the rest of the path,
+   *  one or more segments, none of them empty, `.` or `..`. */
   path: string;
   /** cwd: the request names a directory, `query.cwd`, which the other paths stay inside.
    *  session: it names one session, by a `:sid` segment or else by `query.session` (or `sessionId`);
@@ -35,6 +36,9 @@ export interface RemoteRoute {
   /** The JSON body's fields naming a path, each an absolute path inside `cwd` when present. For a
    *  route that reads its directory from the body: the query's `cwd` is what the gateway pins it to. */
   bodyWithin?: readonly string[];
+  /** The JSON body's `kind` must be one of these: a route that reads and writes on one path is
+   *  forwarded for its reads, and a body naming no kind is the agent's own call, not a view's. */
+  bodyKinds?: readonly string[];
 }
 
 // The Files pane's routes: rooted at the cell's directory, and a `path` never leaves it.
@@ -64,6 +68,16 @@ const repoWrite = (path: string, bodyWithin: readonly string[]): RemoteRoute => 
   access: "write",
   query: ["cwd"],
   bodyWithin,
+});
+
+// A plugin view's dispatch, for the kinds that only read.
+const pluginReads = (toolName: string, bodyKinds: readonly string[]): RemoteRoute => ({
+  method: "POST",
+  path: `/api/plugin/${toolName}`,
+  key: "none",
+  access: "read",
+  query: [],
+  bodyKinds,
 });
 
 // The launch form's resume list: one agent's past conversations in a directory, read on its host.
@@ -135,6 +149,10 @@ export const REMOTE_ROUTES = {
   museSessions: sessionList(AGENT_SESSION_LIST_PATHS.muse),
   copilotSessions: sessionList(AGENT_SESSION_LIST_PATHS.copilot),
   cursorSessions: sessionList(AGENT_SESSION_LIST_PATHS.cursor),
+  // A Canvas card's own reads: a document, and the source of an HTML page. Neither plugin roots its
+  // path, on the remote or here (CLAUDE.md, "Four surfaces open a file").
+  documentReads: pluginReads("presentDocument", ["loadDoc", "marpThemes", "bookmarkPattern"]),
+  htmlReads: pluginReads("presentHtml", ["loadHtml"]),
 } as const satisfies Record<string, RemoteRoute>;
 
 export type RemoteRouteName = keyof typeof REMOTE_ROUTES;
@@ -150,15 +168,19 @@ const rendered = (route: string): RemoteRoute => ({
   within: ["path"],
 });
 
-/** What the gateway serves as BYTES under `/remote/<id>/bytes/api/…`, rather than as JSON: a file the
- *  Files pane shows as a picture, a PDF or media, and the documents it previews. Each response must
- *  carry the remote's own `nosniff`, and its `sandbox` policy unless it is a PDF or media, which the
- *  remote serves unsandboxed because a browser cannot open them sandboxed (server/backends/files). */
+/** What the gateway serves as BYTES under `/remote/<id>/bytes/…`, rather than as JSON: a file the
+ *  Files pane shows as a picture, a PDF or media, the documents it previews, and an HTML card's page.
+ *  Each response must carry the remote's own `nosniff`, and its `sandbox` policy unless it is a PDF
+ *  or media, which the remote serves unsandboxed because a browser cannot open them sandboxed
+ *  (server/backends/files). */
 export const REMOTE_BYTE_ROUTES = {
   filesRaw: { method: "GET", path: "/api/files/raw", key: "cwd", access: "read", query: ["cwd", "path"], within: ["path"] },
   filesMd: rendered("md"),
   filesTable: rendered("table"),
   filesJson: rendered("json"),
+  // An HTML card's page, in the iframe; both mounts serve documents only, under their own sandbox.
+  htmlArtifactPage: { method: "GET", path: "/artifacts/html/*", key: "none", access: "read", query: ["v", "r"] },
+  htmlFilePage: { method: "GET", path: "/htmlfile/*", key: "none", access: "read", query: ["v", "r"] },
 } as const satisfies Record<string, RemoteRoute>;
 
 /** How a route is named in the census: its method and the path as the server mounts it. */

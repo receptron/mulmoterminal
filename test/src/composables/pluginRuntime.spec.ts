@@ -212,3 +212,36 @@ describe("makeBrowserPluginRuntime locale", () => {
     expect(locale.value).toBe("ja");
   });
 });
+
+// #3506. A card from a remote cell's Canvas: its view's dispatch goes to the cell's host, read at each
+// call, and this machine's file channels, which name this machine's files, are not opened for it.
+describe("makeBrowserPluginRuntime on a card's host", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("dispatches to the host the card came from, as it is at the call", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    vi.stubGlobal("fetch", fetchMock);
+    let host: string | null = "lx";
+    const { dispatch } = makeBrowserPluginRuntime({ scope: "markdown", toolName: "presentDocument", host: () => host });
+    await dispatch({ kind: "loadDoc", path: "/srv/p/a.md" });
+    host = null;
+    await dispatch({ kind: "loadDoc", path: "a.md" });
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual(["/remote/lx/api/plugin/presentDocument", "/api/plugin/presentDocument"]);
+  });
+
+  it("opens no channel of this machine for a card on a remote host, and the usual one here", () => {
+    let host: string | null = "lx";
+    const { pubsub } = makeBrowserPluginRuntime({ scope: "markdown", toolName: "presentDocument", host: () => host });
+    const off = pubsub.subscribe("file:a.md", () => {});
+    expect(m.subscribe).not.toHaveBeenCalled();
+    expect(() => off()).not.toThrow();
+    host = null;
+    pubsub.subscribe("file:a.md", () => {});
+    expect(m.subscribe).toHaveBeenCalledWith("plugin:markdown:file:a.md", expect.any(Function));
+  });
+});

@@ -1,7 +1,6 @@
-// #3506. A remote cell's Canvas draws only a card whose View draws from the result alone; every other
-// View reads files, plugin routes or a runtime on this machine. The whole list, so marking another
-// View is a visible edit here — and each marked one is the package's own View, with no runtime
-// provider around it, which is what reaching nothing on this server rests on.
+// #3506. How each View draws on a remote cell's Canvas. The whole list, so giving another View a
+// rule is a visible edit here. A View drawn as is with no runtime around it reaches nothing on this
+// server; one with a runtime dispatches to the cell's host (pluginRuntime.ts).
 import { describe, it, expect } from "vitest";
 import { plugin as formPlugin } from "@mulmoclaude/form-plugin/vue";
 import { plugin as brepPlugin } from "@gui-chat-plugin/brep/vue";
@@ -13,17 +12,25 @@ import { plugin as htmlPlugin } from "@mulmoclaude/html-plugin/vue";
 import { plugin as spreadsheetPlugin } from "@gui-chat-plugin/spreadsheet/vue";
 import { plugin as collectionPlugin } from "@mulmoclaude/collection-plugin/vue";
 import { getPlugin } from "../../src/plugins-registry";
+import { drawnAsIs, htmlPageOnHost, inlineChartsOnly } from "../../src/components/remoteCanvasCards";
 
 const SELF_CONTAINED = [formPlugin, brepPlugin, jingleScriptPlugin, GenerateImagePlugin.plugin];
-const NOT = [markdownPlugin, chartPlugin, htmlPlugin, spreadsheetPlugin, collectionPlugin];
+const NOT = [spreadsheetPlugin, collectionPlugin];
 
 describe("the Views a remote cell's Canvas draws", () => {
-  it.each(SELF_CONTAINED.map((p) => [p.toolDefinition.name, p] as const))("draws %s, its package's own View", (name, p) => {
-    expect(getPlugin(name)?.selfContained).toBe(true);
+  it.each(SELF_CONTAINED.map((p) => [p.toolDefinition.name, p] as const))("draws %s as is, its package's own View", (name, p) => {
+    expect(getPlugin(name)?.onRemote).toBe(drawnAsIs);
     expect(getPlugin(name)?.viewComponent).toBe(p.viewComponent);
+  });
+  it.each([
+    [markdownPlugin.toolDefinition.name, drawnAsIs],
+    [htmlPlugin.toolDefinition.name, htmlPageOnHost],
+    [chartPlugin.toolDefinition.name, inlineChartsOnly],
+  ])("draws %s by its own rule", (name, rule) => {
+    expect(getPlugin(name)?.onRemote).toBe(rule);
   });
   it.each([...NOT.map((p) => p.toolDefinition.name), "manageAccounting"])("does not draw %s", (name) => {
     expect(getPlugin(name)).toBeDefined();
-    expect(getPlugin(name)?.selfContained).toBeUndefined();
+    expect(getPlugin(name)?.onRemote).toBeUndefined();
   });
 });
