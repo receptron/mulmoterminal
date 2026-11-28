@@ -86,7 +86,7 @@ export const NEVER_FORWARDED: Record<string, readonly string[]> = {
 // decides into the table or into NEVER_FORWARDED, and a route added to the server must go into one
 // of those rather than here.
 // Lower it as the list shrinks; raising it is the visible edit that adding a route here takes.
-export const UNDECIDED_CEILING = 204;
+export const UNDECIDED_CEILING = 203;
 export const UNDECIDED: readonly string[] = [
   "DELETE /api/collections/:slug",
   "DELETE /api/collections/:slug/items/:itemId",
@@ -114,7 +114,6 @@ export const UNDECIDED: readonly string[] = [
   "GET /api/blueprints/runs/:id/spec",
   "GET /api/blueprints/runs/:id/targets",
   "GET /api/collection-projects",
-  "GET /api/collections/:slug/detail",
   "GET /api/collections/:slug/remote-view",
   "GET /api/collections/:slug/remote-view/:viewId/items",
   "GET /api/collections/:slug/self-containment",

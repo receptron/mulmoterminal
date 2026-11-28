@@ -18,6 +18,7 @@ import { plugin as brepPlugin } from "@gui-chat-plugin/brep/vue";
 import { plugin as jingleScriptPlugin } from "@gui-chat-plugin/jinglescript/vue";
 import { plugin as spreadsheetPlugin } from "@gui-chat-plugin/spreadsheet/vue";
 import { AccountingView } from "@mulmoclaude/accounting-plugin/vue";
+import { withAccountingHost } from "./composables/accountingUi";
 import { PLUGIN_HOST_KEY, wrapWithPluginRuntime } from "./composables/pluginRuntime";
 import CollectionCardView from "./components/CollectionCardView.vue";
 import { documentIdentity, filePathIdentity, collectionIdentity } from "./utils/canvasIdentity";
@@ -322,6 +323,7 @@ const PACKAGES: Record<string, Registration> = {
     // The collection, by slug alone — NOT slug+itemId, and the same key reconcileCollectionCard
     // uses. See canvasIdentity.ts for both decisions.
     identityOf: collectionIdentity,
+    onRemote: drawnAsIs,
   },
 };
 
@@ -351,14 +353,16 @@ for (const [modulePath, mod] of Object.entries(localModules)) {
 // the server always registers manageAccounting (see server/host-tools.ts). So its View
 // registers unconditionally here rather than through the cfg.packages gate above. The
 // View needs no runtime wrap — it reads selectedResult.data directly and reaches the
-// host via its own configureAccountingHost DI (see composables/accountingUi.ts).
+// host via its own configureAccountingHost DI, or a remote cell's host through
+// withAccountingHost (see composables/accountingUi.ts).
 registry["manageAccounting"] = {
   toolName: "manageAccounting",
-  viewComponent: AccountingView,
+  viewComponent: withAccountingHost(AccountingView),
   css: accountingCss,
   // Full canvas app with an internal h-full layout — give it a fixed frame height
   // (like the collection/html cards) so that chain resolves.
   height: CANVAS_CARD_HEIGHT,
+  onRemote: drawnAsIs,
 };
 
 export function getPlugin(toolName: string): Registration | undefined {

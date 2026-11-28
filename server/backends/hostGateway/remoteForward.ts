@@ -11,17 +11,21 @@ import { SESSION_ID_RE } from "../../config/env.js";
 
 export const REMOTE_PATH_MAX = 4096;
 const SESSION_SEGMENT = ":sid";
+const SLUG_SEGMENT = ":slug";
 const REST_SEGMENT = "*";
 
 export type ForwardDecision = { kind: "forward"; route: RemoteRoute; path: string } | { kind: "refuse"; status: 400 | 404; reason: string };
 
 const refuse = (status: 400 | 404, reason: string): ForwardDecision => ({ kind: "refuse", status, reason });
 
-const fills = (segment: string, given: string): boolean => (segment === SESSION_SEGMENT ? SESSION_ID_RE.test(given) : segment === given);
-
 // The remote decodes each segment and refuses one still naming a parent, so only the raw spelling is
 // held here.
 const isRestSegment = (given: string): boolean => given !== "" && given !== "." && given !== ".." && !given.includes("\0");
+
+function fills(segment: string, given: string): boolean {
+  if (segment === SESSION_SEGMENT) return SESSION_ID_RE.test(given);
+  return segment === SLUG_SEGMENT ? isRestSegment(given) : segment === given;
+}
 
 /** The route's path with its session segments filled from `pathname`, or null when they differ. */
 function filledPath(route: RemoteRoute, pathname: string): string | null {
@@ -97,15 +101,16 @@ function bodyEscape(route: RemoteRoute, cwd: string | null, body: unknown): stri
 function kindRefused(route: RemoteRoute, body: unknown): string | null {
   const kinds = route.bodyKinds;
   if (kinds === undefined) return null;
-  const kind = isRecord(body) ? body.kind : undefined;
-  if (!isRecord(body) || typeof kind !== "string" || !kinds.includes(kind)) return `${route.path} forwards only kind ${kinds.join(" / ")}`;
-  return fieldsRefused(route, kind, body);
+  const field = route.bodyKindField ?? "kind";
+  const kind = isRecord(body) ? body[field] : undefined;
+  if (!isRecord(body) || typeof kind !== "string" || !kinds.includes(kind)) return `${route.path} forwards only ${field} ${kinds.join(" / ")}`;
+  return fieldsRefused(route, field, kind, body);
 }
 
-function fieldsRefused(route: RemoteRoute, kind: string, body: Record<string, unknown>): string | null {
+function fieldsRefused(route: RemoteRoute, field: string, kind: string, body: Record<string, unknown>): string | null {
   const fields = route.kindFields?.[kind];
   if (fields === undefined) return null;
-  const extra = Object.keys(body).find((key) => key !== "kind" && !fields.includes(key));
+  const extra = Object.keys(body).find((key) => key !== field && !fields.includes(key));
   return extra === undefined ? null : `${route.path} forwards kind ${kind} only with ${fields.join(" / ")}, not ${extra}`;
 }
 

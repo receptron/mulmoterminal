@@ -75,8 +75,10 @@ describe("decideForward: which requests cross", () => {
   it("ships a table whose every route decides to forward itself", () => {
     Object.values(REMOTE_ROUTES).forEach((route) => {
       const query = { ...(route.key === "cwd" ? { cwd: "/srv/p" } : {}), ...(namesSession(route.query) ? { session: SESSION, sessionId: SESSION } : {}) };
-      const body = "bodyKinds" in route ? { kind: route.bodyKinds[0] } : undefined;
-      expect(decideForward(route.method, route.path.replace(":sid", SESSION), query, REMOTE_ROUTES, body)).toMatchObject({ kind: "forward", route });
+      const kindField = "bodyKindField" in route ? route.bodyKindField : "kind";
+      const body = "bodyKinds" in route ? { [kindField]: route.bodyKinds[0] } : undefined;
+      const path = route.path.replace(":sid", SESSION).replace(":slug", "todos");
+      expect(decideForward(route.method, path, query, REMOTE_ROUTES, body)).toMatchObject({ kind: "forward", route });
     });
   });
 });
@@ -335,6 +337,70 @@ describe("decideForward: a Canvas card's reads", () => {
 
   it("forwards no GET of the read routes", () => {
     expect(decideForward("GET", "/api/plugin/presentDocument", {})).toMatchObject({ kind: "refuse", status: 404 });
+  });
+});
+
+// A collection card (#3506): its records, in the project the card names, and nothing it writes.
+describe("decideForward: a collection card's reads", () => {
+  it("forwards a collection's records with the project and nothing else of the query", () => {
+    expect(decideForward("GET", "/api/collections/todos/detail", { project: "p1", cwd: "/x", path: "/etc" })).toMatchObject({
+      kind: "forward",
+      path: "/api/collections/todos/detail?project=p1",
+    });
+    expect(decideForward("GET", "/api/collections/a%20b/detail", {})).toMatchObject({ kind: "forward", path: "/api/collections/a%20b/detail" });
+  });
+  it.each(["..", ".", "", "a\0b"])("refuses the slug %j", (slug) => {
+    expect(decideForward("GET", `/api/collections/${slug}/detail`, {})).toMatchObject({ kind: "refuse", status: 404 });
+  });
+  it.each([
+    ["GET", "/api/collections/list"],
+    ["GET", "/api/collections/todos"],
+    ["GET", "/api/collections/a/b/detail"],
+    ["POST", "/api/collections/todos/items"],
+    ["PUT", "/api/collections/todos/items/1"],
+    ["DELETE", "/api/collections/todos"],
+    ["POST", "/api/collections/todos/refresh"],
+    ["POST", "/api/collections/todos/view-token"],
+    ["GET", "/api/collections/todos/view-file"],
+  ])("forwards nothing of %s %s", (method, path) => {
+    expect(decideForward(method, path, {})).toMatchObject({ kind: "refuse", status: 404 });
+  });
+});
+
+// An accounting card (#3506): the operation is `action`, and `getReport` has a `kind` of its own.
+describe("decideForward: an accounting card's reads", () => {
+  it.each(["getBooks", "getAccounts", "getJournalEntries", "getOpeningBalances", "getReport", "getTimeSeries"])("forwards %s", (action) => {
+    expect(decideForward("POST", "/api/accounting", { x: "1" }, REMOTE_ROUTES, { action, bookId: "b", project: "p1" })).toMatchObject({
+      kind: "forward",
+      path: "/api/accounting",
+    });
+  });
+  it("reads the operation from action, not from a report's kind", () => {
+    expect(decideForward("POST", "/api/accounting", {}, REMOTE_ROUTES, { action: "getReport", kind: "balance" })).toMatchObject({ kind: "forward" });
+    expect(decideForward("POST", "/api/accounting", {}, REMOTE_ROUTES, { action: "addEntries", kind: "getBooks" })).toMatchObject({
+      kind: "refuse",
+      status: 400,
+    });
+  });
+  it.each([
+    "openBook",
+    "createBook",
+    "updateBook",
+    "deleteBook",
+    "upsertAccount",
+    "addEntries",
+    "voidEntry",
+    "setOpeningBalances",
+    "rebuildSnapshots",
+    "unknown",
+  ])("refuses %s", (action) => {
+    expect(decideForward("POST", "/api/accounting", {}, REMOTE_ROUTES, { action, bookId: "b" })).toMatchObject({ kind: "refuse", status: 400 });
+  });
+  it.each([undefined, {}, { action: ["getBooks"] }, "getBooks"])("refuses the body %j", (body) => {
+    expect(decideForward("POST", "/api/accounting", {}, REMOTE_ROUTES, body)).toMatchObject({ kind: "refuse", status: 400 });
+  });
+  it("forwards no GET of the dispatch", () => {
+    expect(decideForward("GET", "/api/accounting", {})).toMatchObject({ kind: "refuse", status: 404 });
   });
 });
 

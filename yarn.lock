@@ -2034,10 +2034,10 @@
   resolved "https://registry.yarnpkg.com/@mulmochat-plugin/ui-image/-/ui-image-0.4.1.tgz#8fd3b1c4ffe21e6bc22761ff48eac03306e0d345"
   integrity sha512-I3AqTIuQPsSMNxDON9UTxT2KO57HV6uUVotCIFskV0UqBMQrQ3FUu8J+qXRWDdjPyYaHoC8AJsi91TbNrOMwng==
 
-"@mulmoclaude/accounting-plugin@^6.0.1":
-  version "6.0.1"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/accounting-plugin/-/accounting-plugin-6.0.1.tgz#05a25592f56a8d5b0ed59d4657fd340c28d97b59"
-  integrity sha512-eYYnr5gpSluyEyCjhKupKuGVzkyE6BqCjBFqej+/KZMwmTqCC9CzVeSDzQqGZCnGb1b2RCQ4GjW+ZJ66bEpPeQ==
+"@mulmoclaude/accounting-plugin@^6.1.0":
+  version "6.1.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/accounting-plugin/-/accounting-plugin-6.1.0.tgz#943ae72c09e8bc62156928af9d9c24343a70f5c5"
+  integrity sha512-0CnERsMQbPFAml2wI15FRbyH/Bhc2nM+TGoLhcCQjFdYshGzuGD67aWP+oRK9AJXR7Ju1087YeqJfrHtbs1R0Q==
 
 "@mulmoclaude/chart-plugin@^6.0.1":
   version "6.0.1"
@@ -2048,10 +2048,10 @@
     echarts-gl "^2.1.0"
     echarts-stat "^1.2.0"
 
-"@mulmoclaude/collection-plugin@^7.1.0":
-  version "7.1.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/collection-plugin/-/collection-plugin-7.1.0.tgz#caf2cf3d4347bb6d5a38fd82c836f2b9afa59d57"
-  integrity sha512-CdHk4wW6RlG+EfbzClc5+t7gHSxwsGlNnIbz01BhS3FJaymUMVPPWLB/TOtGREOLSMRns/3wxCNtAZOs9Dqm+A==
+"@mulmoclaude/collection-plugin@^7.2.0":
+  version "7.2.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/collection-plugin/-/collection-plugin-7.2.0.tgz#5df444bd48f70328d91a6883f90c01c5e8f1f074"
+  integrity sha512-ZoVFmEv/L8vXwnwMAcL9iMhVstPfIjTmQwaQCV84NKIvdTLOL60ENzwQclIMtWgylwQoJNoUuCTd461Dkv5P9g==
   dependencies:
     vuedraggable "^4.1.0"
     zod "^4.6.7"
@@ -2061,15 +2061,15 @@
   resolved "https://registry.yarnpkg.com/@mulmoclaude/common/-/common-1.6.0.tgz#b20164c81ce1e4fadf7bb827b62a0719ff2d3e20"
   integrity sha512-pXVxlmI63AJtOTdDk81M2a9U6f5RcqfKoqgVbK+INm/OsN3hEWASCj8hFyiZSdQ0q2jzjPpGqcZI9JGbNQFRqQ==
 
-"@mulmoclaude/core@^7.3.0":
-  version "7.3.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-7.3.0.tgz#99a2d1b24a18e6f139b114bbe35c20abd5f81093"
-  integrity sha512-hh5uQOBcRF7Wg4x+Ce+2g4DZrlm8ZqM4MVKHl4wSRou9INnUgEUi6OgvriSJaA9bf0j8qQaxue1NNBNtDcdb5w==
+"@mulmoclaude/core@^7.3.1":
+  version "7.3.1"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-7.3.1.tgz#c6c050d48d46c8977b709e70666425b7bea2c9e9"
+  integrity sha512-fcw9JlnEgRu3ehpFBP88h26iMXPP2dswaXf0HwMg7KLMW+GMGPiexC0gno5LNeZbQP5mRfVLODFDIags46B0Vg==
   dependencies:
     "@duckdb/node-api" "^2.0.0-r.1"
     "@gui-chat-plugin/common" "^0.1.0"
     "@mulmoclaude/common" "^1.6.0"
-    "@mulmoclaude/markdown-utils" "^3.0.3"
+    "@mulmoclaude/markdown-utils" "^3.0.4"
     dompurify "^3.4.18"
     fast-xml-parser "^5.12.1"
     google-auth-library "^11.3.4"
@@ -2113,6 +2113,16 @@
     dompurify "^3.4.18"
     js-yaml "^5.5.0"
     marked "^18.2.0"
+
+"@mulmoclaude/markdown-utils@^3.0.4":
+  version "3.0.4"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/markdown-utils/-/markdown-utils-3.0.4.tgz#b0081620c6d66d69992f2e2baa60322d9169aa5f"
+  integrity sha512-u2WIxQXEQzFUJkPXdWSUgOqNl1FPC8VubfJrM+boTRENDpHAXsB/poLrxvrgN7xj58Cy982VURugil+nUquqlA==
+  dependencies:
+    "@mulmoclaude/common" "^1.6.0"
+    dompurify "^3.4.18"
+    js-yaml "^5.5.0"
+    marked "^18.3.0"
 
 "@mulmoclaude/mulmoscript-plugin@^7.0.1":
   version "7.0.1"

@@ -20,18 +20,25 @@ const isAppRouteDeps = (value: unknown): value is AppRouteDeps => isRecord(value
 
 interface Layer {
   route?: { path: unknown; methods: Record<string, boolean> };
+  handle?: unknown;
 }
 const isLayer = (value: unknown): value is Layer => isRecord(value);
+
+// A package's own router (`app.use(router)`) holds its routes one level down. Its paths are listed
+// as written, which is the path served only for a router mounted at the root; one mounted under a
+// path shows up as a route nothing decides, so the census still fails rather than passing it.
+const nestedStack = (handle: unknown): unknown => (isRecord(handle) || typeof handle === "function" ? Reflect.get(handle, "stack") : undefined);
+const routesOf = (stack: unknown): string[] =>
+  (Array.isArray(stack) ? stack : []).filter(isLayer).flatMap((layer) => {
+    const route = layer.route;
+    if (!route) return routesOf(nestedStack(layer.handle));
+    const path = String(route.path);
+    return Object.keys(route.methods).map((method) => routeSignature(method, path));
+  });
 
 const app = express();
 if (!isAppRouteDeps(stubDeps)) throw new Error("the stub deps are not an object");
 mountAppRoutes(app, stubDeps);
-const stack: unknown = app.router.stack;
-const routes = (Array.isArray(stack) ? stack : []).filter(isLayer).flatMap((layer) => {
-  const route = layer.route;
-  if (!route) return [];
-  const path = String(route.path);
-  return Object.keys(route.methods).map((method) => routeSignature(method, path));
-});
+const routes = routesOf(app.router.stack);
 process.stdout.write(`${JSON.stringify([...new Set(routes)])}\n`);
 process.exit(0);
