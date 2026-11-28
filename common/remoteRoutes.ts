@@ -6,6 +6,7 @@
 // A forwarded request reaches the remote with the power of the remote's own UI, so adding a row is
 // a decision about what a page on this machine may do there, not plumbing.
 
+import { ACCOUNTING_ACTIONS, ACCOUNTING_API } from "@mulmoclaude/accounting-plugin/shared";
 import { AGENT_SESSION_LIST_PATHS } from "./agentSessionList.js";
 import { DROP_FILENAME_HEADER } from "./dropUpload.js";
 import { MD_PREVIEW_EMBED_PARAM, MD_PREVIEW_TOKEN_PARAM } from "./mdPreviewMessage.js";
@@ -15,8 +16,8 @@ export type RemoteRouteMethod = "GET" | "POST" | "PUT" | "DELETE";
 
 export interface RemoteRoute {
   method: RemoteRouteMethod;
-  /** The remote's own path. A `:sid` segment is a session id; a final `*` is the rest of the path,
-   *  one or more segments, none of them empty, `.` or `..`. */
+  /** The remote's own path. A `:sid` segment is a session id; a `:slug` segment is one segment, and a
+   *  final `*` the rest of the path, one or more, none of them empty, `.` or `..`. */
   path: string;
   /** cwd: the request names a directory, `query.cwd`, which the other paths stay inside.
    *  session: it names one session, by a `:sid` segment or else by `query.session` (or `sessionId`);
@@ -39,6 +40,8 @@ export interface RemoteRoute {
   /** The JSON body's `kind` must be one of these: a route that reads and writes on one path is
    *  forwarded for its reads, and a body naming no kind is the agent's own call, not a view's. */
   bodyKinds?: readonly string[];
+  /** The body field `bodyKinds` names the values of, when it is not `kind`. */
+  bodyKindField?: string;
   /** A kind of `bodyKinds` that reads only with these fields: its body carries no other key but `kind`.
    *  Listed rather than banned, so a field the remote learns to write with is refused. */
   kindFields?: Readonly<Record<string, readonly string[]>>;
@@ -167,6 +170,27 @@ export const REMOTE_ROUTES = {
     ["save", "beatImage", "beatAudio", "beatMovie", "characterImage", "movieStatus", "pdfStatus", "pendingGenerations"],
     { save: ["filePath", "root"] },
   ),
+  // A collection card's records, read in the project the card was made in on its host. A record
+  // links to others by slug, which the card reads the same way.
+  collectionDetail: { method: "GET", path: "/api/collections/:slug/detail", key: "none", access: "read", query: ["project"] },
+  // An accounting card's books, read on its host. `getReport` carries a `kind` of its own, so the
+  // operation is read from `action`.
+  accountingReads: {
+    method: ACCOUNTING_API.dispatch.method,
+    path: ACCOUNTING_API.dispatch.path,
+    key: "none",
+    access: "read",
+    query: [],
+    bodyKindField: "action",
+    bodyKinds: [
+      ACCOUNTING_ACTIONS.getBooks,
+      ACCOUNTING_ACTIONS.getAccounts,
+      ACCOUNTING_ACTIONS.getJournalEntries,
+      ACCOUNTING_ACTIONS.getOpeningBalances,
+      ACCOUNTING_ACTIONS.getReport,
+      ACCOUNTING_ACTIONS.getTimeSeries,
+    ],
+  },
 } as const satisfies Record<string, RemoteRoute>;
 
 export type RemoteRouteName = keyof typeof REMOTE_ROUTES;

@@ -141,8 +141,9 @@ exercised.
 8. **The remote launch form catches up:** the worktree list and create, and the resume lists
    (`AGENT_SESSION_LIST_PATHS`).
 
-Collections and talk are left for after this plan: collections bring a second store and their own
-actions, and talk needs handoff in both directions.
+The collections pane and talk are left for after this plan: the pane brings a second store and its
+own actions (a Canvas card reads one collection, see below), and talk needs handoff in both
+directions.
 
 ## Tests
 
@@ -235,15 +236,38 @@ refused at the gateway).
 - A picture or a sound arrives as a data URI in the JSON answer, so one larger than the JSON
   forward's cap does not show.
 
-Still not drawn on a remote cell:
+### Collections and books
 
-- **Collections and accounting.** Both packages bind a card to a project scope, not to a host, and
-  neither exposes how a host could bind a card's requests to another server. They need a change in
-  the packages first.
+Both packages bound a card only to a project, not to a server, so they first had to let a host bind
+a card's subtree to its own connection (receptron/mulmoclaude#3688: `provideCollectionUi`,
+`provideAccountingHost`). With that, both draw reading only:
+
+- **A collection card** reads its records on the host, in the project the host stamped on the card
+  (an id on the host, which the host resolves). The gateway forwards only
+  `GET /api/collections/:slug/detail` with `project`. Everything else the binding offers acts on
+  this machine (its chats, its pins, its browse overlay) or writes on the host, so the card's
+  binding declines it here with the remote-cell message:
+  - a write (add, edit, delete, an action, a refresh, a calendar push) shows that message;
+  - the pins are never reconciled against the host's list, which would delete this machine's;
+  - a link out of the card does nothing, since the browse overlay shows this machine's collections;
+  - a field's picture or file does not show: the byte proxy reaches files only inside a cell's
+    directory, and a collection's are under its own root.
+  - The card's own Chat button types into the cell's terminal, as on any other card.
+- **An accounting card** reads its books on the host. Its requests name the operation in `action`
+  (a report carries a `kind` of its own), so the route reads `bodyKindField: "action"`; the gateway
+  forwards `getBooks`, `getAccounts`, `getJournalEntries`, `getOpeningBalances`, `getReport` and
+  `getTimeSeries`, and refuses every write, and `openBook`, the agent's own call. A provided host
+  names no project of this machine (the package treats a missing `projectScope` as none). A report
+  may write the host's snapshot cache, as its own page's reads do.
+- Neither card refreshes live: the host's `accounting:*` and collection channels are not relayed.
+- The route census now looks inside a package's own router (`app.use(router)`), which is where
+  `POST /api/accounting` is mounted; it found no other route there.
+
+Every card type is now drawn on a remote cell, reading only.
 
 ## Out of scope
 
-- Collections and talk (after this plan).
+- The collections pane and talk (after this plan).
 - The full-screen `/files` view for a remote host.
 - Tokens or TLS between the Mac and a remote, and non-loopback remotes.
 - **The inherited exposure of the tunnel port** to other local pages. The remote admits

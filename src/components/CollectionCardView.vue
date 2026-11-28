@@ -5,10 +5,12 @@
 // shadow root (resolved via getRootNode(), since PluginFrame mounts us inside one)
 // as the active teleport target while mounted. Without this, the modal would
 // teleport to <body>, escape the shadow root, and lose the injected plugin styles.
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { inject, onBeforeUnmount, onMounted, ref } from "vue";
 import type { ToolResult } from "gui-chat-protocol";
-import { plugin } from "@mulmoclaude/collection-plugin/vue";
-import { pushCollectionTeleportTarget, popCollectionTeleportTarget } from "../composables/collectionUi";
+import { collectionUi, plugin, provideCollectionUi } from "@mulmoclaude/collection-plugin/vue";
+import { pushCollectionTeleportTarget, popCollectionTeleportTarget, remoteCollectionUi } from "../composables/collectionUi";
+import { PLUGIN_HOST_KEY } from "../composables/pluginRuntime";
+import { isRemoteHost } from "./remoteCell";
 
 defineProps<{
   selectedResult: ToolResult | null;
@@ -17,6 +19,13 @@ defineProps<{
 const emit = defineEmits<{ updateResult: [result: ToolResult] }>();
 
 const ChatView = plugin.viewComponent;
+
+// A remote cell's card reads its records on the cell's host (#3506).
+const host = inject(PLUGIN_HOST_KEY, () => null);
+provideCollectionUi(() => {
+  const on = host();
+  return isRemoteHost(on) ? remoteCollectionUi(on) : collectionUi();
+});
 
 const rootEl = ref<HTMLElement>();
 let registered: HTMLElement | ShadowRoot | null = null;

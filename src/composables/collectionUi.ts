@@ -13,6 +13,7 @@
 // via @mulmoclaude/core/collection — see server/backends/collections/collections.ts), and state-based
 // navigation (useCollectionBrowse — the toolbar + browse overlay), and the live bell's
 // per-record severities (useNotifications → the Kanban accent).
+import { defineComponent } from "vue";
 import { configureCollectionUi } from "@mulmoclaude/collection-plugin/vue";
 import type {
   CollectionApiResult,
@@ -57,6 +58,7 @@ import { isRecord } from "../../common/isRecord";
 import { withProject } from "./collectionProject";
 import { activeCollectionNavSurface, activeCollectionProjectId } from "./collectionSurface";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
+import { pathOnHost, REMOTE_CELL_DECLINE_EN } from "../components/remoteCell";
 
 // ── Modal teleport target (Shadow DOM) ──
 // PluginFrame mounts each card inside a per-instance shadow root, but
@@ -74,6 +76,8 @@ export function popCollectionTeleportTarget(target: HTMLElement | ShadowRoot): v
   const i = teleportStack.lastIndexOf(target);
   if (i >= 0) teleportStack.splice(i, 1);
 }
+/** The innermost open Shadow root, or the body when none is open. */
+const collectionModalTarget = (): HTMLElement | ShadowRoot | "body" => teleportStack[teleportStack.length - 1] ?? "body";
 
 // The plugin package declares the generic — the collection package's `CollectionApiResult<T>` seam — so the PLUGIN chooses T and the host has to produce it from a body
 // nothing has checked. Unprovable by construction, exactly like gui-chat-protocol's `dispatch<T>`
@@ -380,8 +384,86 @@ export function makeCollectionUi(projectIdOf: () => string | null): HostBinding 
     // ── Shadow-DOM modal target ── the innermost open Shadow root, or the body when none is open.
     //    The package types this `string | HTMLElement | ShadowRoot` as of 1.2.3, so the value this
     //    host has always passed no longer needs a cast to be expressible (mulmoclaude#2721).
-    modalTeleportTarget: () => teleportStack[teleportStack.length - 1] ?? "body",
+    modalTeleportTarget: collectionModalTarget,
   };
+}
+
+// ── A card whose collection is on another machine (#3506) ──
+//
+// The card reads its records on the host and does nothing else. Everything else this binding offers
+// acts on THIS machine (its chats, its pins, its browse overlay) or writes on the host, so it is
+// declined here; the gateway forwards only the record read, so an entry that slipped through would
+// still be refused there.
+const REMOTE_DECLINE_STATUS = 403;
+const declinedRead = <T>(): Promise<CollectionApiResult<T>> => Promise.resolve({ ok: false, error: REMOTE_CELL_DECLINE_EN, status: REMOTE_DECLINE_STATUS });
+const declinedWrite = (): Promise<{ ok: false; error: string }> => Promise.resolve({ ok: false, error: REMOTE_CELL_DECLINE_EN });
+const doNothing = (): void => undefined;
+const NoPinToggle = defineComponent({ name: "NoPinToggle", inheritAttrs: false, render: () => null });
+
+const ON_ANOTHER_MACHINE: Omit<HostBinding, keyof typeof PROJECT_INDEPENDENT | "fetchCollectionDetail" | "withScope" | "modalTeleportTarget"> &
+  Pick<HostBinding, "pinToggle" | "routeSlug" | "routeSelectedId" | "isFeedRoute" | "setSelectedId" | "gotoIndex" | "gotoDetail" | "navigateToRecord"> = {
+  // The pane and the browse overlay show this machine's collections, so a link out of the card
+  // would open a different collection of the same name.
+  routeSlug: () => undefined,
+  routeSelectedId: () => undefined,
+  isFeedRoute: () => false,
+  setSelectedId: doNothing,
+  gotoIndex: doNothing,
+  gotoDetail: doNothing,
+  navigateToRecord: doNothing,
+  // The pins are this machine's file: reconciled against the host's list they would be deleted.
+  pinToggle: NoPinToggle,
+  reconcileShortcuts: () => Promise.resolve(),
+  unpin: () => Promise.resolve(false),
+  notifiedSeverities: () => new Map(),
+  startChat: doNothing,
+  startNewChatDraft: doNothing,
+  // A field's file is on the host, which the byte proxy reaches only inside a cell's directory.
+  imageSrc: (imageData) => (imageData.startsWith("data:") ? imageData : ""),
+  fileAssetUrl: () => null,
+  fileRoutePath: () => null,
+  mintViewToken: declinedRead,
+  fetchViewHtml: () => Promise.resolve({ ok: false, status: REMOTE_DECLINE_STATUS }),
+  fetchViewI18n: declinedRead,
+  buildViewSrcdoc: (html, boot) => buildCustomViewSrcdoc(html, boot),
+  listCollections: declinedRead,
+  listFeeds: declinedRead,
+  listRegistry: declinedRead,
+  importRegistry: declinedRead,
+  createItem: declinedRead,
+  updateItem: declinedRead,
+  deleteItem: declinedWrite,
+  deleteCollection: declinedWrite,
+  deleteFeed: declinedWrite,
+  deleteView: declinedWrite,
+  runItemAction: declinedRead,
+  runCollectionAction: declinedRead,
+  refreshCollection: declinedRead,
+  pushCalendarCollection: declinedRead,
+};
+
+function makeRemoteCollectionUi(host: string, projectId: string | null): HostBinding {
+  return {
+    ...PROJECT_INDEPENDENT,
+    ...ON_ANOTHER_MACHINE,
+    fetchCollectionDetail: (slug) =>
+      fetchJson<CollectionDetailResponse>(pathOnHost(host, withProject(`/api/collections/${encodeURIComponent(slug)}/detail`, projectId)), asDeclared),
+    // The card's scope is a project id on the host, which is the server that resolves it.
+    withScope: (scope: string) => makeRemoteCollectionUi(host, scope),
+    modalTeleportTarget: collectionModalTarget,
+  };
+}
+
+// One per host, so the package's per-binding cache of scoped bindings keeps its entries.
+const remoteBindings = new Map<string, HostBinding>();
+
+/** The binding for a card read on `host`, in the host's default project unless the card names one. */
+export function remoteCollectionUi(host: string): HostBinding {
+  const known = remoteBindings.get(host);
+  if (known) return known;
+  const made = makeRemoteCollectionUi(host, null);
+  remoteBindings.set(host, made);
+  return made;
 }
 
 // The GLOBAL binding: the project of whatever surface is being looked at, which is what every

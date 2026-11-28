@@ -17,7 +17,6 @@ import { getPlugin } from "../../src/plugins-registry";
 import { drawnAsIs, htmlPageOnHost, inlineChartsOnly } from "../../src/components/remoteCanvasCards";
 
 const SELF_CONTAINED = [formPlugin, brepPlugin, jingleScriptPlugin, GenerateImagePlugin.plugin];
-const NOT = [collectionPlugin];
 
 describe("the Views a remote cell's Canvas draws", () => {
   it.each(SELF_CONTAINED.map((p) => [p.toolDefinition.name, p] as const))("draws %s as is, its package's own View", (name, p) => {
@@ -31,11 +30,9 @@ describe("the Views a remote cell's Canvas draws", () => {
     [shapeScriptPlugin.toolDefinition.name, drawnAsIs],
     [spreadsheetPlugin.toolDefinition.name, drawnAsIs],
     [mulmoScriptPlugin.toolDefinition.name, drawnAsIs],
+    [collectionPlugin.toolDefinition.name, drawnAsIs],
+    ["manageAccounting", drawnAsIs],
   ])("draws %s by its own rule", (name, rule) => {
     expect(getPlugin(name)?.onRemote).toBe(rule);
-  });
-  it.each([...NOT.map((p) => p.toolDefinition.name), "manageAccounting"])("does not draw %s", (name) => {
-    expect(getPlugin(name)).toBeDefined();
-    expect(getPlugin(name)?.onRemote).toBeUndefined();
   });
 });

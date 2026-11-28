@@ -6,11 +6,14 @@
 //     view's own shadow root via the `?inline` string in plugins-registry.ts, so it
 //     can't leak the package's Tailwind preflight into MulmoTerminal's own UI.
 //   · locale is the display language (see localeTag below).
-import { configureAccountingHost } from "@mulmoclaude/accounting-plugin/vue";
-import type { ApiResult } from "@mulmoclaude/accounting-plugin/vue";
+import { defineComponent, h, inject, markRaw, type Component } from "vue";
+import { configureAccountingHost, provideAccountingHost } from "@mulmoclaude/accounting-plugin/vue";
+import type { AccountingTreeHost, ApiResult } from "@mulmoclaude/accounting-plugin/vue";
 import { fetchJson } from "../utils/fetchJson";
 import { usePubSub } from "./usePubSub";
 import { i18n } from "../i18n";
+import { isRemoteHost, pathOnHost } from "../components/remoteCell";
+import { PLUGIN_HOST_KEY } from "./pluginRuntime";
 
 const { subscribe } = usePubSub();
 
@@ -32,6 +35,29 @@ function apiCall<T = unknown>(path: string, opts: { method: "GET" | "POST" | "PU
     method: opts.method,
     ...(hasBody ? { headers: { "content-type": "application/json" }, body: JSON.stringify(opts.body) } : {}),
   });
+}
+
+/** A card's books read on `host` (#3506). Its book channels are not relayed from there, so the card
+ *  does not refresh when the books change. */
+export const remoteAccountingHost = (host: string): AccountingTreeHost => ({
+  apiCall: (path, opts) => apiCall(pathOnHost(host, path), opts),
+  subscribe: () => () => undefined,
+});
+
+// A remote cell's accounting card reads its books on the cell's host (#3506). The host is read once:
+// a card is drawn for one cell.
+export function withAccountingHost(inner: Component): Component {
+  return markRaw(
+    defineComponent({
+      name: "AccountingHost",
+      inheritAttrs: false,
+      setup(_props, { attrs, slots }) {
+        const host = inject(PLUGIN_HOST_KEY, () => null)();
+        if (isRemoteHost(host)) provideAccountingHost(remoteAccountingHost(host));
+        return () => h(inner, attrs, slots);
+      },
+    }),
+  );
 }
 
 configureAccountingHost({
