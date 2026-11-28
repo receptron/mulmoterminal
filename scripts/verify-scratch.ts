@@ -7,7 +7,7 @@
 //
 // Every decision is in verify-scratch-plan.ts; this file only observes and acts.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -207,8 +207,9 @@ async function launch(home: string, port: number): Promise<LauncherRecord> {
   const pid = child.pid ?? fail("the server process did not start");
   const facts = await launcherFactsOnceExeced(pid);
   if (facts === null) {
-    signalGroup(pid, "SIGKILL");
-    fail(`the launcher (pid ${pid}) never ran ${LAUNCHER_SCRIPT}; see ${path.join(home, "server.log")}`);
+    // Until the child has exited, its pid is still ours and cannot have been reused.
+    if (child.exitCode === null && child.signalCode === null) signalGroup(pid, "SIGKILL");
+    fail(`the launcher (pid ${pid}) never ran ${LAUNCHER_SCRIPT}; see ${logPathFor(home)}`);
   }
   return { pid, startedAt: facts.startedAt, command: facts.command };
 }
@@ -233,13 +234,27 @@ async function start(args: string[]): Promise<void> {
   if (clientBuildIsStale()) fail("dist/ is older than src/: run `yarn build` first, or the page you check is not this checkout's");
   if (await answers(port)) fail(`something already answers on port ${port}; it is not evidence about this checkout`);
   prepareHome(home);
-  const launcher = await launch(home, port);
-  writeFileSync(path.join(home, STATE_FILE), JSON.stringify({ launcher, port, socketPath }, null, 2));
-  if (!(await until(() => answers(port), READY_TIMEOUT_MS))) {
-    await signalUntilSilent(launcher.pid, port);
-    fail(`the server did not answer on ${port} and was stopped; see ${path.join(home, "server.log")}`);
+  const state: ScratchState = { launcher: await launch(home, port), port };
+  await recordOrAbandon(home, state, socketPath);
+  // Ready means OUR server answers: something else may have taken the port since the probe above.
+  const ready = await until(async () => (await answers(port)) && identify(home, state).serverPid !== null, READY_TIMEOUT_MS);
+  if (!ready) {
+    await stopIdentified(home, state);
+    fail(`this scratch server did not come up on ${port}; what could be identified was stopped; see ${logPathFor(home)}`);
   }
-  console.log(JSON.stringify({ url: `http://127.0.0.1:${port}/`, launcherPid: launcher.pid, socketPath, log: path.join(home, "server.log") }, null, 2));
+  console.log(JSON.stringify({ url: `http://127.0.0.1:${port}/`, launcherPid: state.launcher.pid, socketPath, log: logPathFor(home) }, null, 2));
+}
+
+// Without the state file no later `stop` can find what was started, so a failed write stops it now.
+async function recordOrAbandon(home: string, state: ScratchState, socketPath: string): Promise<void> {
+  const file = path.join(home, STATE_FILE);
+  try {
+    writeFileSync(`${file}.tmp`, JSON.stringify({ ...state, socketPath }, null, 2));
+    renameSync(`${file}.tmp`, file);
+  } catch (error) {
+    await stopIdentified(home, state);
+    fail(`could not write ${file} (${error instanceof Error ? error.message : String(error)}); what could be identified was stopped`);
+  }
 }
 
 async function doctor(args: string[]): Promise<void> {
@@ -266,12 +281,24 @@ function signalGroup(group: number, signal: NodeJS.Signals): void {
   }
 }
 
-/** SIGTERM to the launcher's group, then SIGKILL if the port still answers after the grace period. */
-async function signalUntilSilent(group: number, port: number): Promise<boolean> {
+function identifiedGroup(home: string, state: ScratchState): number | null {
+  const { launcherIdentified, serverPid } = identify(home, state);
+  return groupToSignal(launcherIdentified, serverPid, state.launcher.pid);
+}
+
+/**
+ * SIGTERM to the launcher's group once it is identified, then SIGKILL if the port still answers after
+ * the grace period — identified again first, since the group may have gone and its id been reused.
+ */
+async function stopIdentified(home: string, state: ScratchState): Promise<number | null> {
+  const group = identifiedGroup(home, state);
+  if (group === null) return null;
+  const quiet = async (): Promise<boolean> => !(await answers(state.port));
   signalGroup(group, "SIGTERM");
-  if (await until(async () => !(await answers(port)), STOP_GRACE_MS)) return true;
-  signalGroup(group, "SIGKILL");
-  return until(async () => !(await answers(port)), STOP_GRACE_MS);
+  if (await until(quiet, STOP_GRACE_MS)) return group;
+  if (identifiedGroup(home, state) === group) signalGroup(group, "SIGKILL");
+  await until(quiet, STOP_GRACE_MS);
+  return group;
 }
 
 async function stop(args: string[]): Promise<void> {
@@ -280,9 +307,7 @@ async function stop(args: string[]): Promise<void> {
   const socketPath = socketFor(home);
   const decision = socketStopDecision(socketPath, scratchPathsFor(home));
   if (!decision.ok) fail(`refusing to stop tmux: ${decision.reason}`);
-  const { launcherIdentified, serverPid } = identify(home, state);
-  const group = groupToSignal(launcherIdentified, serverPid, state.launcher.pid);
-  if (group !== null) await signalUntilSilent(group, state.port);
+  const group = await stopIdentified(home, state);
   const serverAnswers = await answers(state.port);
   const cleanup = tmuxCleanupDecision(serverAnswers);
   if (cleanup.ok && tmuxServerRunning(socketPath)) execFileSync("tmux", ["-S", socketPath, "kill-server"], { stdio: "ignore" });
