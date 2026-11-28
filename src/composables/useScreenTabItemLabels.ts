@@ -1,5 +1,6 @@
 // The titles and icons of the collections and feeds open in tabs, read from the same lists their
-// index pages show, per project, and again only when a tab names a slug not yet looked for.
+// index pages show, per project: again when a tab names a slug not yet looked for, and when a visit
+// shows an item's tab.
 import { effectScope, ref, watch } from "vue";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import { withProject } from "./collectionProject";
@@ -16,7 +17,7 @@ import {
   type ListRequest,
 } from "./screenTabItemLabels";
 import type { ScreenTab } from "./screenTabsModel";
-import { screenTabs } from "./useScreenTabs";
+import { frontTabKey, screenTabs } from "./useScreenTabs";
 
 const LIST_URL: Partial<Record<PaletteScreen, string>> = { collections: "/api/collections/list", feeds: "/api/feeds" };
 
@@ -39,11 +40,12 @@ async function read(request: ListRequest): Promise<void> {
   const labels = await readLabels(request);
   lists.value = { ...lists.value, [request.listKey]: finishedReading(lists.value[request.listKey], request.slugs, labels) };
   // A tab opened while this list was being read was skipped; a failed read waits for the next visit.
-  if (labels !== null) readWhatTabsName();
+  // Nothing counts as just shown here, or the tab in front would read its list forever.
+  if (labels !== null) readWhatTabsName(null);
 }
 
-function readWhatTabsName(): void {
-  listsToRead(screenTabs.value, lists.value).forEach((request) => void read(request));
+function readWhatTabsName(shownKey: string | null): void {
+  listsToRead(screenTabs.value, lists.value, shownKey).forEach((request) => void read(request));
 }
 
 let watching = false;
@@ -53,8 +55,8 @@ export function useScreenTabItemLabels(): { labelOf: (tab: ScreenTab) => ItemLab
   if (!watching) {
     watching = true;
     // Detached: a watch made in the strip's setup would stop when it unmounts, and never start again.
-    // It follows the tabs alone, so a list that keeps failing is retried per visit, never in a loop.
-    effectScope(true).run(() => watch(screenTabs, readWhatTabsName, { immediate: true }));
+    // It follows the tabs alone, so a list is read again once per visit (a rename, a failed read), never in a loop.
+    effectScope(true).run(() => watch(screenTabs, () => readWhatTabsName(frontTabKey.value), { immediate: true }));
   }
   const labelOf = (tab: ScreenTab): ItemLabel | null => (tab.item ? (lists.value[listKeyOf(tab.screen, tab.item)]?.labels[tab.item.slug] ?? null) : null);
   return { labelOf };

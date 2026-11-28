@@ -109,16 +109,18 @@ describe("closing a tab from the keyboard", () => {
 });
 
 describe("a tab per collection and feed", () => {
+  let artTitle = "Art collection";
   const listed = (url: string): unknown =>
     url.startsWith("/api/feeds")
       ? { feeds: [{ slug: "hn", title: "Hacker News", icon: "newspaper" }] }
-      : { collections: [{ slug: "art", title: "Art collection", icon: "palette" }] };
+      : { collections: [{ slug: "art", title: artTitle, icon: "palette" }] };
   const fetched: string[] = [];
   let failing = false;
 
   beforeEach(() => {
     fetched.length = 0;
     failing = false;
+    artTitle = "Art collection";
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -166,13 +168,27 @@ describe("a tab per collection and feed", () => {
     w.unmount();
   });
 
-  it("reads a project's list with that project, once for the slugs it named", async () => {
+  it("reads a project's list with that project, once per visit to one of its tabs and not in between", async () => {
     const w = mount(ScreenTabs);
     await openPath("/collections/art?project=p1");
     await openPath("/collections/art");
+    expect(fetched.filter((url) => url.includes("project=p1"))).toHaveLength(1);
     await openPath("/collections/art?project=p1");
     expect(labels(w)).toEqual(["Art collection", "Art collection"]);
-    expect(fetched.filter((url) => url.includes("project=p1"))).toHaveLength(1);
+    expect(fetched.filter((url) => url.includes("project=p1"))).toHaveLength(2);
+    w.unmount();
+  });
+
+  it("picks up a rename when the renamed item's tab is shown again", async () => {
+    const w = mount(ScreenTabs);
+    await openPath("/collections/art?project=p3");
+    await openPath("/collections?project=p3");
+    artTitle = "Paintings";
+    await openPath("/collections?project=p3");
+    expect(labels(w)).toEqual([en.tips.toolbar.collections, "Art collection"]);
+    await w.findAll("[data-testid=screen-tab]")[1]?.trigger("click");
+    await flushPromises();
+    expect(labels(w)).toEqual([en.tips.toolbar.collections, "Paintings"]);
     w.unmount();
   });
 

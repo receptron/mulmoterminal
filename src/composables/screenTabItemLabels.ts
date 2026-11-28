@@ -56,17 +56,19 @@ export function finishedReading(before: ItemList | undefined, slugs: readonly st
   return { labels: { ...settled.labels, ...labels }, lookedFor: new Set([...settled.lookedFor, ...slugs]), reading: false };
 }
 
-// A slug a read already looked for and did not find stays unnamed rather than being asked for forever.
-const wanted = (list: ItemList | undefined, slug: string): boolean =>
-  list === undefined || (!list.reading && !(slug in list.labels) && !list.lookedFor.has(slug));
+// A slug a read already looked for and did not find stays unnamed rather than being asked for forever,
+// except in the tab just shown: reading its list again there is what picks up a rename.
+const wanted = (list: ItemList | undefined, slug: string, shown: boolean): boolean =>
+  list === undefined || (!list.reading && (shown || (!(slug in list.labels) && !list.lookedFor.has(slug))));
 
-/** The lists to read now for `tabs`, each with every slug it is read to find. */
-export function listsToRead(tabs: readonly ScreenTab[], lists: Readonly<Record<string, ItemList>>): ListRequest[] {
+/** The lists to read now for `tabs`, each with every slug it is read to find. `shownKey` is the tab
+ *  a visit just put in front, whose list is read again whatever was read before. */
+export function listsToRead(tabs: readonly ScreenTab[], lists: Readonly<Record<string, ItemList>>, shownKey: string | null): ListRequest[] {
   const requests = new Map<string, ListRequest>();
-  tabs.forEach(({ screen, item }) => {
+  tabs.forEach(({ key, screen, item }) => {
     if (item === null || LIST_FIELD[screen] === undefined) return;
     const listKey = listKeyOf(screen, item);
-    if (!wanted(lists[listKey], item.slug)) return;
+    if (!wanted(lists[listKey], item.slug, key === shownKey)) return;
     const request = requests.get(listKey) ?? { listKey, screen, project: item.project, slugs: [] };
     requests.set(listKey, { ...request, slugs: [...request.slugs, item.slug] });
   });

@@ -41,7 +41,7 @@ describe("parseItemList", () => {
 describe("listsToRead", () => {
   it("reads one list per screen and project, for every slug the tabs name", () => {
     const index: ScreenTab = { ...tabAt("collections", {}), path: "/collections" };
-    expect(listsToRead([index, art, travel, artInP1, hn], {})).toEqual([
+    expect(listsToRead([index, art, travel, artInP1, hn], {}, null)).toEqual([
       { listKey: workspaceCollections, screen: "collections", project: null, slugs: ["art", "travel"] },
       { listKey: listKeyOf("collections", { slug: "x", project: "p1" }), screen: "collections", project: "p1", slugs: ["art"] },
       { listKey: listKeyOf("feeds", { slug: "x", project: null }), screen: "feeds", project: null, slugs: ["hn"] },
@@ -49,20 +49,27 @@ describe("listsToRead", () => {
   });
 
   it("reads nothing for named slugs, slugs already looked for, or a list being read", () => {
-    expect(listsToRead([art, travel], { [workspaceCollections]: list(["art", "travel"], ["art"]) })).toEqual([]);
-    expect(listsToRead([art, travel], { [workspaceCollections]: list([], ["art", "travel"]) })).toEqual([]);
-    expect(listsToRead([art], { [workspaceCollections]: list([], [], true) })).toEqual([]);
+    expect(listsToRead([art, travel], { [workspaceCollections]: list(["art", "travel"], ["art"]) }, null)).toEqual([]);
+    expect(listsToRead([art, travel], { [workspaceCollections]: list([], ["art", "travel"]) }, null)).toEqual([]);
+    expect(listsToRead([art], { [workspaceCollections]: list([], [], true) }, null)).toEqual([]);
   });
 
   it("reads a list again for a slug it has not looked for yet", () => {
-    expect(listsToRead([art, travel], { [workspaceCollections]: list(["art"], ["art"]) })).toEqual([
+    expect(listsToRead([art, travel], { [workspaceCollections]: list(["art"], ["art"]) }, null)).toEqual([
       { listKey: workspaceCollections, screen: "collections", project: null, slugs: ["travel"] },
     ]);
   });
 
+  it("reads the shown tab's list again, even for a slug already named, unless it is being read", () => {
+    const named = { [workspaceCollections]: list(["art", "travel"], ["art", "travel"]) };
+    expect(listsToRead([art, travel], named, art.key)).toEqual([{ listKey: workspaceCollections, screen: "collections", project: null, slugs: ["art"] }]);
+    expect(listsToRead([art, travel], named, "collections")).toEqual([]);
+    expect(listsToRead([art], { [workspaceCollections]: list(["art"], ["art"], true) }, art.key)).toEqual([]);
+  });
+
   it("reads nothing for tabs that are not items", () => {
     const tabs = ["collections", "feeds", "roomView", "skills"].map((name) => tabAt(name, { room: "r" }));
-    expect(listsToRead(tabs, {})).toEqual([]);
+    expect(listsToRead(tabs, {}, null)).toEqual([]);
   });
 });
 
@@ -78,7 +85,7 @@ describe("startedReading / finishedReading", () => {
   it("leaves a failed read's slugs to be read again on the next visit", () => {
     const failed = finishedReading(startedReading(list(["art"], ["art"])), ["travel"], null);
     expect(failed).toEqual(list(["art"], ["art"]));
-    expect(listsToRead([travel], { [workspaceCollections]: failed })).toEqual([
+    expect(listsToRead([travel], { [workspaceCollections]: failed }, null)).toEqual([
       { listKey: workspaceCollections, screen: "collections", project: null, slugs: ["travel"] },
     ]);
   });
