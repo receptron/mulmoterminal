@@ -30,7 +30,11 @@ it grows. Nothing in the skill asks whether the mistake could be stopped by some
 
 - **The skill does not write the check itself.** It writes memories, rules, plans, issues and skills
   after approval. A lint rule or test is code in someone's repository, and belongs in the issue → plan
-  → PR flow, so the candidate is an issue.
+  → PR flow. So the candidate is an issue, or a plan when the check belongs in this repository.
+- **An issue candidate is shown as a draft**, and step 3 now says so. It has no file and no backup,
+  and `gh issue create` runs only after the yes (Codex round 1).
+- **A global rule seldom has a check.** It covers every repository and a check lives in one, so the
+  skill offers a check there only when the rule is really about this project.
 - **"Goes red on the real mistake" is the condition for done.** A check that has never failed on the
   thing it was written for is not known to catch it.
 - **The rule can stay beside the check**, as its why, or for the part a check cannot express.

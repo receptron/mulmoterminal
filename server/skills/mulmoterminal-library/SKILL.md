@@ -90,7 +90,9 @@ rule is about. Strongest first:
    the order of steps in a workflow.
 
 When one of 1–4 can hold it, offer that as the **first** candidate. You do not write code or lint
-config here, so the candidate is an `issue` (or a `plan`) for the check. It names:
+config here. So the candidate is an `issue` for the check, or a `plan` when this repository is the one
+the check belongs in, made exactly as those targets are — an issue's duplicate check and creation only
+after approval included. It names:
 
 - the check;
 - where it goes;
@@ -101,12 +103,17 @@ config here, so the candidate is an `issue` (or a `plan`) for the check. It name
 Offer the rule beside it only for the part the check cannot hold, or as the short **why** next to it.
 When nothing in 1–4 fits, say so in one line, with the reason, and draft the rule as before.
 
+A rule for the global `~/.claude/CLAUDE.md` covers every repository. A check lives in one, so it seldom
+replaces such a rule. Offer one there only when the rule is really about this project.
+
 ## 3. Show it, and ask
 
-Show **exactly** what will change: the file path and a diff (or the whole new file). Several
-candidates? Show them all and let the user pick (AskUserQuestion when it is available). Then put the
-chosen change, with its path and diff and the backup you will take, in your plan (ExitPlanMode): the
-user approving it is the yes. **Do not write anything before the user says yes.** If plan mode is
+Show **exactly** what will change: the file path and a diff (or the whole new file). For an issue,
+show the draft itself and what the duplicate search found — there is no file and no backup, and
+`gh issue create` runs only after the yes. Several candidates? Show them all and let the user pick
+(AskUserQuestion when it is available). Then put the chosen change in your plan (ExitPlanMode): its
+path, diff and the backup you will take, or for an issue the draft. The user approving it is the
+yes. **Do not write anything before the user says yes.** If plan mode is
 not on (the session was started some other way), ask for the yes explicitly instead.
 
 End the plan with one line telling the user to approve it with **"Yes, manually approve edits"**, not
