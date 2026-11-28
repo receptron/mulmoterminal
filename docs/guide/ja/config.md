@@ -465,6 +465,9 @@ MulmoTerminal が `.mulmoterminal.json` を読み直すのは、**Claude の Wri
 するまで古いフォントのままです。
 ### グリッドでの並び位置（`orderPriority`） {#order-priority}
 
+> 3 つの並び順の違いと、設定画面から順位を付ける方法は [セルの並び順](ordering.html) へ。ここは
+> **設定キーとしての説明** です。
+
 `orderPriority` は、グリッドの **priority** 並び順における順位です。ツールバーの並び順ボタンの3つ目のモードで、
 auto（注目度順）と manual（移動ボタンで手動）と並びます。
 

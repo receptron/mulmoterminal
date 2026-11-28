@@ -477,6 +477,9 @@ file **by hand, from outside**, and an already-open terminal keeps the old font 
 browser tab.
 ### Where this project sits in the grid (`orderPriority`) {#order-priority}
 
+> How the three orders work, and how to rank projects from Settings, is in [Cell order](ordering.html).
+> This section is the **config key**.
+
 `orderPriority` gives the directory a rank in the grid's **priority** ordering — the third mode on the
 toolbar's ordering button, alongside auto (attention-first) and manual (the move buttons):
 

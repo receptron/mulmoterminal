@@ -291,6 +291,7 @@ npx mulmoterminal@latest    # → http://localhost:34567 が開く
 
 1. [はじめに — 起動するまで](getting-started.html)（**インストールと起動はここだけで完結**）
 2. [基本編 — グリッドで今できること](basics.html)
+   - [セルの並び順](ordering.html)（対応待ちを先に・手動・プロジェクトの優先度）
 3. [よくある質問（FAQ）](faq.html)（既存セッション・Windows・トークン代・他ツールとの違い）
 4. [応用編 — シナリオ別の使い方](scenarios.html)
 5. [機能一覧](features.html)（4 本柱で整理）

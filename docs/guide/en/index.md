@@ -267,6 +267,7 @@ installing Node.js / Claude Code / git / gh on macOS and Windows, the
 
 1. [Getting started — from zero to running](getting-started.html) (**install and launch, start to finish**)
 2. [Basics — what you can do in the grid](basics.html)
+   - [Cell order](ordering.html) (attention first, manual, project priority)
 3. [FAQ](faq.html) (existing sessions, Windows, token cost, how it compares)
 4. [Scenarios — workflows by example](scenarios.html)
 5. [Feature reference](features.html) (grouped by the four pillars)
