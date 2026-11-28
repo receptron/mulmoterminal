@@ -7,7 +7,7 @@
 //
 // Every decision is in verify-scratch-plan.ts; this file only observes and acts.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -187,6 +187,9 @@ function tmuxServerRunning(socketPath: string): boolean {
 // A shell cell's prompt is the account name and host by default, and it lands in every
 // screenshot taken of the cell; a short one keeps them out.
 function prepareHome(home: string): void {
+  // The identity checks compare fd 1's path with this one, which a symlink would make differ.
+  const log = logPathFor(home);
+  if (existsSync(log) && !lstatSync(log).isFile()) fail(`${log} exists and is not a regular file; remove it first`);
   mkdirSync(path.join(home, "work"), { recursive: true });
   const zshrc = path.join(home, ".zshrc");
   if (!existsSync(zshrc)) writeFileSync(zshrc, "PROMPT='%1~ $ '\n");
@@ -268,6 +271,7 @@ async function doctor(args: string[]): Promise<void> {
     clientBuildFresh: !clientBuildIsStale(),
     scratchTmuxRunning: tmuxServerRunning(socketFor(home)),
     socketPath: socketFor(home),
+    port: state.port,
   };
   console.log(JSON.stringify(report, null, 2));
   if (!report.serverAnswers || !report.launcherIsThisCheckouts || !report.serverIsThisScratchHomes || !report.clientBuildFresh) process.exit(1);

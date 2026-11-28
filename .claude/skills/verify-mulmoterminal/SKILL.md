@@ -74,7 +74,9 @@ copy: the Playwright MCP when it can launch a browser, or another checkout's `no
 node .claude/skills/verify-mulmoterminal/drive-shell.mjs <dir holding node_modules/playwright> "$H" "$H/shell.png"
 ```
 
-It reads the port and socket from `start`'s state file. It clicks `[data-testid=agent-picker-shell]`
+It runs `doctor` first and takes the port and socket from it, never from the state file. It refuses
+to drive unless `doctor` identifies this scratch server, so a stale or edited state file cannot aim it
+at the live server. It clicks `[data-testid=agent-picker-shell]`
 and then `[data-testid=cell-dir-go]`, types `echo VERIFY_MARKER_3593`, and saves a screenshot. Copy
 it as the start of your own drive script.
 

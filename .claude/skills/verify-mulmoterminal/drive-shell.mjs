@@ -2,17 +2,32 @@
 // a harmless marker, waits until tmux itself shows its output, and screenshots the page.
 //   node drive-shell.mjs <dir holding node_modules/playwright> <H> <screenshot.png>
 // The terminal is drawn on a canvas, so the page has no text to wait on: every wait is on tmux.
+// The port and socket come from `doctor`, which identifies the server and recomputes the socket,
+// never from the state file: a stale or edited one could point at the live server.
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const MARKER = "VERIFY_MARKER_3593";
 const STEP_TIMEOUT_MS = 15_000;
 const POLL_MS = 250;
 
+const CHECKOUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const [, , playwrightDir, home, shotPath] = process.argv;
-const { port, socketPath } = JSON.parse(readFileSync(path.join(home, ".verify-scratch.json"), "utf8"));
+
+// doctor exits non-zero unless the launcher and the server are identified as this scratch HOME's.
+function identifiedServer() {
+  const helper = path.join(CHECKOUT, "scripts", "verify-scratch.ts");
+  try {
+    return JSON.parse(execFileSync(process.execPath, ["--import", "tsx", helper, "doctor", "--home", home], { cwd: CHECKOUT, encoding: "utf8" }));
+  } catch {
+    console.error("drive-shell: doctor did not identify this scratch server; refusing to drive");
+    process.exit(1);
+  }
+}
+
+const { port, socketPath } = identifiedServer();
 const { chromium } = createRequire(`${playwrightDir}/`)("playwright");
 
 function tmux(...args) {
