@@ -74,6 +74,33 @@ Before proposing, read what is already there (the memory folder, the `CLAUDE.md`
 the skills) so the proposal adds to it rather than repeats it. If the conversation holds nothing
 worth keeping as this target, say so and stop — that is a good answer.
 
+### Before a rule: can something enforce it instead?
+
+A line in a `CLAUDE.md` is read, not run. It is the weakest way to stop a mistake, and the more lines
+the file holds, the more of them get skimmed. So before drafting a `rule` — whether from `promote
+rule`, `repeat rule` or a tidy-up's `move` — ask what could hold it **mechanically** in the project the
+rule is about. Strongest first:
+
+1. **The structure itself** — an API, a file layout or a single function that makes the wrong thing
+   impossible to write.
+2. **A type** that refuses it.
+3. **A lint rule or CI check** whose message says how to fix it — often an existing rule to switch on.
+4. **A test** that goes red when it happens.
+5. **A rule in a `CLAUDE.md`** — last, for what none of the above can express: judgement, wording,
+   the order of steps in a workflow.
+
+When one of 1–4 can hold it, offer that as the **first** candidate. You do not write code or lint
+config here, so the candidate is an `issue` (or a `plan`) for the check. It names:
+
+- the check;
+- where it goes;
+- the real mistake from the conversation it must catch — the check is not done until it goes red on
+  that mistake;
+- what it must still let through.
+
+Offer the rule beside it only for the part the check cannot hold, or as the short **why** next to it.
+When nothing in 1–4 fits, say so in one line, with the reason, and draft the rule as before.
+
 ## 3. Show it, and ask
 
 Show **exactly** what will change: the file path and a diff (or the whole new file). Several
@@ -128,7 +155,7 @@ Propose, each with its reason, only what the files and the code show:
 | merge | two or more memories say the same thing, or one corrects another. Keep the clearest name, combine the text, and point every `[[link]]` to a merged-away memory at the one kept (in every memory of the folder; not inside code) |
 | remove | a memory no longer holds: the file, function, flag or behaviour it describes is gone or changed — **check the code in this directory before saying so**, and quote what you found. A later memory or a `CLAUDE.md` that says the opposite counts too |
 | fix | what the health check reported: a memory missing from `MEMORY.md`, frontmatter missing `name`, `description` or `type`, a `[[link]]` to no memory, a `MEMORY.md` too long for Claude Code to read to the end (shorten its lines, never drop a memory from it) |
-| move | a standing rule ("always…", "never…") that belongs in a `CLAUDE.md`, or a procedure that belongs in a skill — the same as the `rule` and `skill` targets above, asking which layer or which skill |
+| move | a standing rule ("always…", "never…") that belongs in a `CLAUDE.md`, or a procedure that belongs in a skill — the same as the `rule` and `skill` targets above, asking which layer or which skill. A rule first goes through **Before a rule: can something enforce it instead?** |
 
 Keep `MEMORY.md` and the files in step: a memory removed or merged away loses its line, a new or
 renamed one gets one. If nothing is worth changing, say so and stop — that is a good answer. Then
